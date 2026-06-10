@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+
+# Expo / React Native
+.expo/
+dist/
+web-build/
+android/
+ios/
+
+# environment
+.env
+.env.*
+!.env.example
+
+# Supabase local temp
+supabase/.temp/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# system
+.DS_Store
+Thumbs.db
+
+# tests / coverage
+coverage/

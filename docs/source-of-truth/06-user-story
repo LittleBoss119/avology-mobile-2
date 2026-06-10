@@ -1,0 +1,1321 @@
+# User Stories Avology V2
+
+## Format Prioritas
+
+User story dalam Avology V2 menggunakan prioritas berikut:
+
+* **NAT 3 / Critical**: Wajib ada dalam MVP karena langsung berkaitan dengan kebutuhan utama sistem.
+* **NAT 2 / Standard**: Penting, tetapi masih bisa disederhanakan jika waktu pengembangan terbatas.
+* **NAT 1 / Optional**: Fitur pendukung atau pengembangan lanjutan.
+
+---
+
+# 1. Autentikasi dan Role Pengguna
+
+## US-01 Registrasi Pengguna
+
+Sebagai pengguna, saya ingin membuat akun agar dapat menggunakan aplikasi Avology sesuai identitas saya.
+
+### Aktor
+
+* Owner
+* Worker
+
+### Requirement Terkait
+
+* FR-01 Autentikasi Pengguna
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Aplikasi digunakan oleh pemilik kebun dan pekerja kebun, sehingga setiap pengguna perlu memiliki akun masing-masing.
+
+### Acceptance Criteria
+
+* Pengguna dapat mengisi data registrasi.
+* Sistem dapat membuat akun pengguna baru.
+* Sistem menyimpan data profil dasar pengguna.
+* Pengguna yang sudah terdaftar dapat melanjutkan ke proses login.
+
+---
+
+## US-02 Login Pengguna
+
+Sebagai pengguna, saya ingin masuk ke aplikasi agar dapat mengakses fitur sesuai role saya.
+
+### Aktor
+
+* Owner
+* Worker
+
+### Requirement Terkait
+
+* FR-01 Autentikasi Pengguna
+* FR-02 Role Pengguna
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner dan worker memiliki kebutuhan akses yang berbeda dalam operasional kebun.
+
+### Acceptance Criteria
+
+* Pengguna dapat login menggunakan akun yang sudah terdaftar.
+* Sistem mengarahkan pengguna ke halaman yang sesuai dengan status dan role.
+* Owner diarahkan ke area owner.
+* Worker aktif diarahkan ke area worker.
+* Worker pending tidak langsung dapat mengakses data kebun.
+
+---
+
+## US-03 Logout Pengguna
+
+Sebagai pengguna, saya ingin keluar dari akun agar akses aplikasi dapat dihentikan dengan aman.
+
+### Aktor
+
+* Owner
+* Worker
+
+### Requirement Terkait
+
+* FR-01 Autentikasi Pengguna
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Aplikasi digunakan pada perangkat mobile, sehingga pengguna perlu memiliki kendali untuk keluar dari akun.
+
+### Acceptance Criteria
+
+* Pengguna dapat menekan tombol logout.
+* Sistem menghapus sesi pengguna.
+* Pengguna diarahkan kembali ke halaman login.
+
+---
+
+# 2. Manajemen Kebun dan Keanggotaan
+
+## US-04 Owner Membuat Kebun
+
+Sebagai owner, saya ingin membuat data kebun agar data pohon, pekerja, jadwal, tugas, dan laporan dapat dikelola dalam satu ruang kerja.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-03 Manajemen Kebun
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+MS Farm memiliki operasional kebun yang membutuhkan pencatatan terstruktur dalam satu sistem.
+
+### Acceptance Criteria
+
+* Owner dapat membuat data kebun.
+* Sistem menyimpan informasi dasar kebun.
+* Sistem menjadikan kebun sebagai ruang kerja utama aplikasi.
+* Data operasional terhubung dengan kebun tersebut.
+
+---
+
+## US-05 Sistem Membuat Kode Bergabung Kebun
+
+Sebagai owner, saya ingin sistem menyediakan kode bergabung agar worker dapat mengajukan akses ke kebun saya.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-04 Kode Bergabung Kebun
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Operasional kebun melibatkan pekerja, sehingga pekerja perlu masuk ke ruang kerja kebun yang sama.
+
+### Acceptance Criteria
+
+* Sistem menghasilkan kode bergabung untuk kebun.
+* Owner dapat melihat kode bergabung kebun.
+* Kode tersebut dapat digunakan worker untuk mengajukan akses.
+
+---
+
+## US-06 Worker Mengajukan Bergabung ke Kebun
+
+Sebagai worker, saya ingin bergabung ke kebun menggunakan kode agar saya dapat menerima tugas dan membuat laporan lapangan.
+
+### Aktor
+
+* Worker
+
+### Requirement Terkait
+
+* FR-04 Kode Bergabung Kebun
+* FR-05 Persetujuan Worker
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Pekerja kebun menjalankan SOP operasional dan perlu terhubung dengan sistem milik owner.
+
+### Acceptance Criteria
+
+* Worker dapat memasukkan kode bergabung.
+* Sistem memvalidasi kode bergabung.
+* Sistem membuat status pengajuan worker menjadi pending.
+* Worker belum dapat mengakses data kebun sebelum disetujui owner.
+
+---
+
+## US-07 Owner Menyetujui Worker
+
+Sebagai owner, saya ingin menerima pengajuan worker agar pekerja yang sah dapat mengakses tugas dan fitur operasional kebun.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-05 Persetujuan Worker
+* FR-06 Manajemen Pekerja
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner perlu mengatur siapa saja yang terlibat dalam operasional kebun.
+
+### Acceptance Criteria
+
+* Owner dapat melihat daftar pengajuan worker.
+* Owner dapat menyetujui worker pending.
+* Status worker berubah menjadi active.
+* Worker aktif dapat mengakses fitur sesuai role worker.
+
+---
+
+## US-08 Owner Menolak Pengajuan Worker
+
+Sebagai owner, saya ingin menolak pengajuan worker agar pengguna yang tidak valid tidak dapat mengakses data kebun.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-05 Persetujuan Worker
+* FR-06 Manajemen Pekerja
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Data kebun perlu dibatasi hanya untuk pekerja yang benar-benar terlibat.
+
+### Acceptance Criteria
+
+* Owner dapat menolak worker pending.
+* Status worker berubah menjadi rejected.
+* Worker rejected tidak dapat mengakses data kebun.
+
+---
+
+## US-09 Owner Menghapus Worker dari Kebun
+
+Sebagai owner, saya ingin mengeluarkan worker dari kebun agar pekerja yang sudah tidak aktif tidak dapat lagi mengakses data kebun.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-06 Manajemen Pekerja
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Pekerja kebun dapat berubah, sehingga owner membutuhkan kontrol terhadap anggota kebun.
+
+### Acceptance Criteria
+
+* Owner dapat melihat daftar worker aktif.
+* Owner dapat mengeluarkan worker dari kebun.
+* Status worker berubah menjadi removed.
+* Worker removed tidak dapat mengakses data kebun.
+* Riwayat tugas dan laporan worker tetap tersimpan.
+
+---
+
+# 3. Manajemen Data Pohon
+
+## US-10 Owner Menambah Data Pohon
+
+Sebagai owner, saya ingin menambah data pohon agar setiap pohon alpukat dapat dicatat dan dipantau secara individual.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-07 Manajemen Data Pohon
+* FR-08 Identifikasi Pohon Individual
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Setiap pohon memiliki kondisi dan perkembangan berbeda, sehingga perlu pencatatan individual berdasarkan nomor atau posisi pohon.
+
+### Acceptance Criteria
+
+* Owner dapat menambahkan data pohon.
+* Sistem menyimpan kode pohon, baris, kolom, varietas, dan tanggal tanam.
+* Setiap pohon terhubung dengan kebun tertentu.
+* Pohon baru dapat muncul di daftar pohon.
+
+---
+
+## US-11 Owner Mengubah Data Pohon
+
+Sebagai owner, saya ingin mengubah data pohon agar informasi pohon tetap sesuai dengan kondisi lapangan.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-07 Manajemen Data Pohon
+* FR-08 Identifikasi Pohon Individual
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Data seperti varietas, lokasi, atau status pohon dapat perlu diperbaiki sesuai hasil pemantauan.
+
+### Acceptance Criteria
+
+* Owner dapat membuka form edit pohon.
+* Owner dapat mengubah data pohon.
+* Sistem menyimpan perubahan data.
+* Data terbaru tampil pada detail pohon.
+
+---
+
+## US-12 Owner Mengarsipkan Pohon
+
+Sebagai owner, saya ingin mengarsipkan pohon agar pohon yang tidak aktif atau tidak lagi digunakan tetap tidak mengganggu daftar utama tetapi riwayatnya tetap tersimpan.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-07 Manajemen Data Pohon
+* NFR-13 Reliabilitas Data Operasional
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Kebun pernah mengalami pohon mati akibat hama dan penyakit, sehingga data pohon yang tidak aktif tetap perlu dilacak sebagai riwayat.
+
+### Acceptance Criteria
+
+* Owner dapat mengarsipkan pohon.
+* Pohon yang diarsipkan tidak muncul di daftar utama.
+* Riwayat pohon tetap tersimpan.
+* Owner dapat melihat pohon arsip jika diperlukan.
+
+---
+
+## US-13 Owner atau Worker Melihat Detail Pohon
+
+Sebagai pengguna, saya ingin melihat detail pohon agar dapat mengetahui identitas, kondisi terbaru, fase terbaru, dan riwayat pohon tersebut.
+
+### Aktor
+
+* Owner
+* Worker
+
+### Requirement Terkait
+
+* FR-07 Manajemen Data Pohon
+* FR-08 Identifikasi Pohon Individual
+* FR-24 Riwayat Pohon
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner membutuhkan informasi cepat tentang pohon mana yang sakit, belum dirawat, atau perlu perhatian.
+
+### Acceptance Criteria
+
+* Pengguna dapat membuka detail pohon.
+* Sistem menampilkan identitas pohon.
+* Sistem menampilkan kondisi terbaru pohon.
+* Sistem menampilkan fase terbaru pohon.
+* Sistem menampilkan riwayat pohon.
+
+---
+
+# 4. Laporan Kondisi Pohon
+
+## US-14 Worker Mencatat Kondisi Pohon
+
+Sebagai worker, saya ingin mencatat kondisi pohon agar owner mengetahui kondisi terbaru pohon di lapangan.
+
+### Aktor
+
+* Worker
+
+### Requirement Terkait
+
+* FR-09 Laporan Kondisi Pohon
+* FR-10 Riwayat Kondisi Pohon
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner tidak selalu berada di kebun dan membutuhkan informasi pohon mana yang sakit atau membutuhkan tindakan.
+
+### Acceptance Criteria
+
+* Worker dapat memilih pohon yang dilaporkan.
+* Worker dapat memilih kategori kondisi.
+* Worker dapat menambahkan catatan singkat.
+* Sistem menyimpan laporan kondisi.
+* Sistem memperbarui kondisi terbaru pohon.
+
+---
+
+## US-15 Owner Mencatat Kondisi Pohon
+
+Sebagai owner, saya ingin mencatat kondisi pohon agar saya dapat memperbarui data pohon ketika melakukan pengecekan langsung.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-09 Laporan Kondisi Pohon
+* FR-10 Riwayat Kondisi Pohon
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner juga dapat melakukan pemantauan langsung terhadap pohon dan perlu mencatat temuan lapangan.
+
+### Acceptance Criteria
+
+* Owner dapat memilih pohon.
+* Owner dapat mencatat kondisi terbaru.
+* Sistem menyimpan laporan kondisi.
+* Sistem memperbarui kondisi terbaru pohon.
+
+---
+
+## US-16 Pengguna Melihat Riwayat Kondisi Pohon
+
+Sebagai pengguna, saya ingin melihat riwayat kondisi pohon agar dapat mengetahui perubahan kondisi pohon dari waktu ke waktu.
+
+### Aktor
+
+* Owner
+* Worker
+
+### Requirement Terkait
+
+* FR-10 Riwayat Kondisi Pohon
+* FR-24 Riwayat Pohon
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Riwayat kondisi penting untuk mengetahui apakah treatment berhasil atau kondisi pohon memburuk.
+
+### Acceptance Criteria
+
+* Pengguna dapat melihat daftar riwayat kondisi pohon.
+* Riwayat ditampilkan berdasarkan urutan waktu.
+* Setiap riwayat menampilkan tanggal, kondisi, pelapor, dan catatan.
+
+---
+
+# 5. Laporan Operasional Kebun
+
+## US-17 Worker Membuat Laporan Operasional Kebun
+
+Sebagai worker, saya ingin membuat laporan operasional kebun agar kejadian lapangan yang tidak terkait pohon tertentu tetap dapat diketahui owner.
+
+### Aktor
+
+* Worker
+
+### Requirement Terkait
+
+* FR-11 Laporan Operasional Kebun
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner tidak selalu berada di kebun dan membutuhkan informasi lapangan dari worker, termasuk kerusakan, kebutuhan, atau kondisi area kebun.
+
+### Acceptance Criteria
+
+* Worker dapat membuat laporan operasional.
+* Worker dapat memilih kategori laporan.
+* Worker dapat menambahkan lokasi atau catatan singkat.
+* Sistem menyimpan laporan dengan status baru.
+* Owner dapat melihat laporan yang masuk.
+
+---
+
+## US-18 Owner Melihat Laporan Operasional Kebun
+
+Sebagai owner, saya ingin melihat laporan operasional kebun agar saya dapat mengetahui kejadian atau kebutuhan lapangan.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-11 Laporan Operasional Kebun
+* FR-12 Tindak Lanjut Laporan Operasional
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner membutuhkan dashboard dan informasi ringkas untuk mengambil keputusan cepat meskipun tidak berada di lokasi kebun.
+
+### Acceptance Criteria
+
+* Owner dapat melihat daftar laporan operasional.
+* Owner dapat membuka detail laporan.
+* Sistem menampilkan kategori, lokasi, catatan, pelapor, tanggal, dan status laporan.
+
+---
+
+## US-19 Owner Mengubah Status Laporan Operasional
+
+Sebagai owner, saya ingin mengubah status laporan operasional agar setiap laporan dapat dipantau tindak lanjutnya.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-12 Tindak Lanjut Laporan Operasional
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Laporan lapangan perlu diproses agar tidak berhenti sebagai catatan pasif.
+
+### Acceptance Criteria
+
+* Owner dapat mengubah status laporan.
+* Status laporan dapat berupa baru, diproses, selesai, atau ditolak.
+* Sistem menyimpan perubahan status laporan.
+
+---
+
+## US-20 Owner Membuat Tugas dari Laporan Operasional
+
+Sebagai owner, saya ingin membuat tugas tindak lanjut dari laporan operasional agar worker dapat menangani masalah yang dilaporkan.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-12 Tindak Lanjut Laporan Operasional
+* FR-18 Pembuatan Tugas Worker
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner membutuhkan kemampuan untuk bereaksi terhadap laporan lapangan, misalnya kerusakan lahan, stok habis, atau kebutuhan pekerja.
+
+### Acceptance Criteria
+
+* Owner dapat membuat tugas dari detail laporan operasional.
+* Sistem membawa informasi laporan sebagai referensi tugas.
+* Owner dapat memilih worker dan tanggal tugas.
+* Tugas yang dibuat muncul pada daftar tugas worker.
+* Status laporan dapat berubah menjadi diproses.
+
+---
+
+# 6. SOP Perawatan
+
+## US-21 Owner Membuat SOP Perawatan
+
+Sebagai owner, saya ingin membuat SOP perawatan agar instruksi dan interval perawatan dapat digunakan sebagai template jadwal.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-13 SOP Perawatan
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Pemilik kebun membutuhkan sistem yang membantu menjaga jadwal treatment seperti penyemprotan, pemupukan, penyiraman, dan pengendalian gulma.
+
+### Acceptance Criteria
+
+* Owner dapat membuat SOP perawatan.
+* Owner dapat mengisi nama SOP.
+* Owner dapat memilih kategori SOP.
+* Owner dapat mengisi interval hari.
+* Owner dapat mengisi instruksi default.
+* Owner dapat menentukan target default.
+* Sistem menyimpan SOP sebagai template aktif.
+
+---
+
+## US-22 Owner Mengubah SOP Perawatan
+
+Sebagai owner, saya ingin mengubah SOP perawatan agar template tetap sesuai dengan kebutuhan operasional kebun.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-13 SOP Perawatan
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Treatment kebun dapat berubah berdasarkan kondisi hama, penyakit, pupuk, atau pengalaman lapangan.
+
+### Acceptance Criteria
+
+* Owner dapat membuka detail SOP.
+* Owner dapat mengubah data SOP.
+* Sistem menyimpan perubahan SOP.
+* Perubahan SOP digunakan untuk jadwal baru berikutnya.
+
+---
+
+## US-23 Owner Menonaktifkan SOP
+
+Sebagai owner, saya ingin menonaktifkan SOP agar template yang sudah tidak digunakan tidak muncul sebagai pilihan utama.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-13 SOP Perawatan
+
+### Prioritas
+
+NAT 2 / Standard
+
+### Dasar Wawancara
+
+Tidak semua treatment digunakan terus-menerus, sehingga owner perlu mengelola SOP yang aktif dan tidak aktif.
+
+### Acceptance Criteria
+
+* Owner dapat mengubah status SOP menjadi tidak aktif.
+* SOP tidak aktif tidak muncul sebagai pilihan utama saat membuat jadwal.
+* Riwayat jadwal lama yang menggunakan SOP tersebut tetap tersimpan.
+
+---
+
+## US-24 Sistem Menampilkan Acuan Jadwal Berikutnya dari SOP
+
+Sebagai owner, saya ingin melihat acuan jadwal berikutnya berdasarkan interval SOP agar saya tidak lupa melakukan treatment rutin.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-17 Acuan Jadwal Berikutnya Berdasarkan Interval SOP
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Pemilik mengakui treatment dapat mundur karena tidak ada pencatatan tanggal treatment sebelumnya.
+
+### Acceptance Criteria
+
+* Sistem membaca interval hari dari SOP.
+* Sistem membaca tanggal realisasi terakhir dari SOP terkait.
+* Sistem menghitung acuan tanggal berikutnya.
+* Sistem menampilkan status belum jatuh tempo, jatuh tempo hari ini, atau terlambat.
+* Sistem tidak otomatis membuat tugas tanpa konfirmasi owner.
+
+---
+
+# 7. Jadwal Perawatan dan Tugas Worker
+
+## US-25 Owner Membuat Jadwal dari SOP
+
+Sebagai owner, saya ingin membuat jadwal perawatan dari SOP agar instruksi dan kategori perawatan dapat terisi secara otomatis dari template.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-14 Jadwal Perawatan dari SOP
+* FR-16 Target Jadwal Perawatan
+* FR-18 Pembuatan Tugas Worker
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+SOP perawatan seperti penyemprotan, pemupukan, penyiraman, dan pengendalian gulma perlu dijalankan konsisten.
+
+### Acceptance Criteria
+
+* Owner dapat memilih SOP saat membuat jadwal.
+* Sistem mengisi kategori dan instruksi berdasarkan SOP.
+* Owner dapat menentukan tanggal, target, dan worker.
+* Owner dapat mengubah instruksi sebelum menyimpan jadwal.
+* Sistem membuat tugas untuk worker.
+
+---
+
+## US-26 Owner Membuat Jadwal Manual
+
+Sebagai owner, saya ingin membuat jadwal manual agar pekerjaan yang tidak sesuai SOP tetap dapat diberikan kepada worker.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-15 Jadwal Perawatan Manual
+* FR-16 Target Jadwal Perawatan
+* FR-18 Pembuatan Tugas Worker
+
+### Prioritas
+
+NAT 2 / Standard
+
+### Dasar Wawancara
+
+Operasional kebun tidak selalu berupa pekerjaan rutin, sehingga owner membutuhkan fleksibilitas membuat tugas khusus.
+
+### Acceptance Criteria
+
+* Owner dapat membuat jadwal tanpa memilih SOP.
+* Owner dapat menentukan kategori pekerjaan.
+* Owner dapat mengisi instruksi.
+* Owner dapat memilih tanggal, target, dan worker.
+* Sistem membuat tugas untuk worker.
+
+---
+
+## US-27 Owner Menentukan Target Jadwal
+
+Sebagai owner, saya ingin menentukan target jadwal agar tugas perawatan dapat diarahkan ke cakupan yang sesuai.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-16 Target Jadwal Perawatan
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Setiap pohon atau area kebun dapat memiliki kebutuhan berbeda, sehingga perawatan tidak selalu berlaku merata untuk semua pohon.
+
+### Acceptance Criteria
+
+* Owner dapat memilih target seluruh kebun.
+* Owner dapat memilih target baris tertentu.
+* Owner dapat memilih target kolom tertentu.
+* Owner dapat memilih target pohon tertentu.
+* Target tersimpan pada jadwal dan tugas.
+
+---
+
+## US-28 Worker Melihat Daftar Tugas
+
+Sebagai worker, saya ingin melihat daftar tugas agar saya tahu pekerjaan apa yang harus dilakukan.
+
+### Aktor
+
+* Worker
+
+### Requirement Terkait
+
+* FR-19 Daftar Tugas Worker
+* FR-26 Dashboard Worker
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Pekerja bertanggung jawab pada pekerjaan seperti siram, pupuk, semprot, dan gulma sehingga membutuhkan arahan kerja yang jelas.
+
+### Acceptance Criteria
+
+* Worker dapat melihat daftar tugas miliknya.
+* Worker dapat melihat tugas hari ini.
+* Worker dapat melihat tugas belum selesai.
+* Worker tidak dapat melihat tugas worker lain kecuali diizinkan sistem.
+
+---
+
+## US-29 Worker Melihat Detail Tugas
+
+Sebagai worker, saya ingin melihat detail tugas agar saya memahami pekerjaan, target, dan instruksi yang harus dilakukan.
+
+### Aktor
+
+* Worker
+
+### Requirement Terkait
+
+* FR-19 Daftar Tugas Worker
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Instruksi kerja harus jelas dan sederhana agar worker dapat menjalankan tugas dengan benar.
+
+### Acceptance Criteria
+
+* Worker dapat membuka detail tugas.
+* Sistem menampilkan kategori tugas.
+* Sistem menampilkan instruksi.
+* Sistem menampilkan target tugas.
+* Sistem menampilkan tanggal tugas.
+* Sistem menampilkan status tugas.
+
+---
+
+## US-30 Worker Menyelesaikan Tugas
+
+Sebagai worker, saya ingin menandai tugas sebagai selesai agar owner mengetahui bahwa pekerjaan sudah dilakukan.
+
+### Aktor
+
+* Worker
+
+### Requirement Terkait
+
+* FR-20 Realisasi Tugas Worker
+* FR-21 Riwayat Perawatan
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Pemilik membutuhkan pencatatan tanggal treatment agar jadwal berikutnya tidak mundur dan treatment dapat dilacak.
+
+### Acceptance Criteria
+
+* Worker dapat menandai tugas sebagai selesai.
+* Worker dapat menambahkan catatan singkat.
+* Sistem menyimpan tanggal realisasi.
+* Sistem menyimpan worker pelaksana.
+* Sistem memperbarui status tugas.
+* Realisasi masuk ke riwayat perawatan.
+
+---
+
+## US-31 Worker Menunda Tugas
+
+Sebagai worker, saya ingin menandai tugas sebagai tertunda agar owner mengetahui pekerjaan yang belum bisa diselesaikan.
+
+### Aktor
+
+* Worker
+
+### Requirement Terkait
+
+* FR-20 Realisasi Tugas Worker
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Kondisi lapangan dapat membuat pekerjaan tidak selalu selesai tepat waktu, sehingga status tugas perlu dicatat.
+
+### Acceptance Criteria
+
+* Worker dapat menandai tugas sebagai tertunda.
+* Worker dapat menambahkan alasan atau catatan singkat.
+* Sistem memperbarui status tugas menjadi tertunda.
+* Owner dapat melihat tugas yang tertunda.
+
+---
+
+# 8. Fase Pertumbuhan dan Monitoring Panen
+
+## US-32 Worker Mencatat Fase Pertumbuhan Pohon
+
+Sebagai worker, saya ingin mencatat fase pertumbuhan pohon agar perkembangan pohon dapat dipantau secara historis.
+
+### Aktor
+
+* Worker
+
+### Requirement Terkait
+
+* FR-22 Fase Pertumbuhan Pohon
+* FR-23 Riwayat Fase Pertumbuhan
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Tanggal berbunga dan fase berbuah penting sebagai acuan agar panen tidak hanya mengandalkan perkiraan fisik.
+
+### Acceptance Criteria
+
+* Worker dapat memilih pohon.
+* Worker dapat memilih fase pertumbuhan.
+* Worker dapat menambahkan catatan singkat.
+* Sistem menyimpan tanggal pencatatan fase.
+* Sistem memperbarui fase terbaru pohon.
+
+---
+
+## US-33 Owner Mencatat Fase Pertumbuhan Pohon
+
+Sebagai owner, saya ingin mencatat fase pertumbuhan pohon agar saya dapat memperbarui data perkembangan pohon saat melakukan pemantauan langsung.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-22 Fase Pertumbuhan Pohon
+* FR-23 Riwayat Fase Pertumbuhan
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner membutuhkan track record perkembangan tiap pohon karena setiap pohon memiliki produktivitas dan pertumbuhan yang berbeda.
+
+### Acceptance Criteria
+
+* Owner dapat memilih pohon.
+* Owner dapat memilih fase pertumbuhan.
+* Sistem menyimpan fase pertumbuhan.
+* Sistem memperbarui fase terbaru pohon.
+
+---
+
+## US-34 Pengguna Melihat Riwayat Fase Pertumbuhan
+
+Sebagai pengguna, saya ingin melihat riwayat fase pertumbuhan agar saya mengetahui perkembangan pohon dari waktu ke waktu.
+
+### Aktor
+
+* Owner
+* Worker
+
+### Requirement Terkait
+
+* FR-23 Riwayat Fase Pertumbuhan
+* FR-24 Riwayat Pohon
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Pencatatan fase membantu owner memahami perkembangan pohon, terutama fase berbunga dan berbuah.
+
+### Acceptance Criteria
+
+* Pengguna dapat melihat riwayat fase pertumbuhan pada detail pohon.
+* Riwayat ditampilkan berdasarkan tanggal.
+* Sistem menampilkan fase, tanggal, pencatat, dan catatan.
+
+---
+
+## US-35 Owner Melihat Pohon Berbunga atau Berbuah
+
+Sebagai owner, saya ingin melihat daftar pohon yang sedang berbunga atau berbuah agar saya dapat melakukan monitoring panen tanpa mengandalkan ingatan.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-23 Riwayat Fase Pertumbuhan
+* FR-25 Dashboard Owner
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Tanpa catatan fase berbunga dan berbuah, proses panen dapat bergantung pada perkiraan fisik dan berisiko memetik buah terlalu muda.
+
+### Acceptance Criteria
+
+* Sistem menampilkan jumlah pohon berbunga.
+* Sistem menampilkan jumlah pohon berbuah.
+* Owner dapat membuka daftar pohon berbunga atau berbuah.
+* Sistem tidak menampilkan fitur prediksi panen otomatis.
+
+---
+
+# 9. Riwayat Pohon
+
+## US-36 Pengguna Melihat Riwayat Terintegrasi Pohon
+
+Sebagai pengguna, saya ingin melihat riwayat terintegrasi pohon agar saya mengetahui kondisi, perawatan, dan fase pertumbuhan pohon dalam satu tampilan.
+
+### Aktor
+
+* Owner
+* Worker
+
+### Requirement Terkait
+
+* FR-24 Riwayat Pohon
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Pemilik membutuhkan track record treatment dan kondisi agar tidak lupa obat, treatment, atau kejadian yang pernah terjadi pada pohon.
+
+### Acceptance Criteria
+
+* Sistem menampilkan riwayat kondisi pohon.
+* Sistem menampilkan riwayat perawatan pohon.
+* Sistem menampilkan riwayat fase pohon.
+* Riwayat ditampilkan berdasarkan urutan waktu.
+* Setiap item riwayat menampilkan jenis aktivitas, tanggal, pelaku, dan catatan.
+
+---
+
+# 10. Dashboard
+
+## US-37 Owner Melihat Dashboard Kebun
+
+Sebagai owner, saya ingin melihat dashboard kebun agar saya dapat memahami kondisi penting kebun secara cepat.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-25 Dashboard Owner
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner membutuhkan dashboard yang bisa dipantau dalam waktu singkat untuk mengetahui pohon sakit, tugas belum selesai, laporan masuk, dan kebutuhan tindakan.
+
+### Acceptance Criteria
+
+Dashboard owner menampilkan:
+
+* total pohon
+* jumlah pohon sehat
+* jumlah pohon bermasalah
+* tugas hari ini
+* tugas belum selesai
+* laporan operasional baru
+* worker pending
+* pohon berbunga
+* pohon berbuah
+* SOP jatuh tempo atau terlambat
+
+---
+
+## US-38 Worker Melihat Dashboard Tugas
+
+Sebagai worker, saya ingin melihat dashboard tugas agar saya tahu pekerjaan dan aksi utama yang perlu dilakukan hari ini.
+
+### Aktor
+
+* Worker
+
+### Requirement Terkait
+
+* FR-26 Dashboard Worker
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Worker membutuhkan aplikasi yang sederhana, cepat, dan berbasis klik agar mudah digunakan di lapangan.
+
+### Acceptance Criteria
+
+Dashboard worker menampilkan:
+
+* tugas hari ini
+* tugas belum selesai
+* tugas selesai
+* shortcut lapor kondisi pohon
+* shortcut buat laporan operasional
+
+---
+
+# 11. Pembatasan Hak Akses
+
+## US-39 Owner Mengakses Fitur Pengelolaan Kebun
+
+Sebagai owner, saya ingin mengakses fitur pengelolaan kebun agar saya dapat mengatur data utama dan memantau operasional kebun.
+
+### Aktor
+
+* Owner
+
+### Requirement Terkait
+
+* FR-27 Pembatasan Fitur Berdasarkan Role
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Owner bertanggung jawab mengambil keputusan dan mengawasi operasional kebun.
+
+### Acceptance Criteria
+
+* Owner dapat mengelola kebun.
+* Owner dapat mengelola worker.
+* Owner dapat mengelola pohon.
+* Owner dapat mengelola SOP.
+* Owner dapat membuat jadwal.
+* Owner dapat melihat laporan.
+* Owner dapat melihat dashboard owner.
+
+---
+
+## US-40 Worker Mengakses Fitur Operasional Terbatas
+
+Sebagai worker, saya ingin hanya mengakses fitur operasional yang saya butuhkan agar penggunaan aplikasi tetap sederhana dan tidak membingungkan.
+
+### Aktor
+
+* Worker
+
+### Requirement Terkait
+
+* FR-27 Pembatasan Fitur Berdasarkan Role
+* NFR-01 Kemudahan Penggunaan
+* NFR-02 Input Minim Teks
+
+### Prioritas
+
+NAT 3 / Critical
+
+### Dasar Wawancara
+
+Aplikasi harus sederhana karena worker tidak akan menggunakan sistem jika input dan alurnya terlalu rumit.
+
+### Acceptance Criteria
+
+* Worker dapat melihat tugas.
+* Worker dapat menyelesaikan atau menunda tugas.
+* Worker dapat mencatat kondisi pohon.
+* Worker dapat mencatat fase pohon.
+* Worker dapat membuat laporan operasional.
+* Worker tidak dapat mengelola SOP.
+* Worker tidak dapat menghapus worker.
+* Worker tidak dapat menghapus kebun.
+
+---
+
+# 12. Ringkasan User Story
+
+| Kode  | User Story                                          | Aktor         | Prioritas |
+| ----- | --------------------------------------------------- | ------------- | --------- |
+| US-01 | Registrasi Pengguna                                 | Owner, Worker | NAT 3     |
+| US-02 | Login Pengguna                                      | Owner, Worker | NAT 3     |
+| US-03 | Logout Pengguna                                     | Owner, Worker | NAT 3     |
+| US-04 | Owner Membuat Kebun                                 | Owner         | NAT 3     |
+| US-05 | Sistem Membuat Kode Bergabung Kebun                 | Owner         | NAT 3     |
+| US-06 | Worker Mengajukan Bergabung ke Kebun                | Worker        | NAT 3     |
+| US-07 | Owner Menyetujui Worker                             | Owner         | NAT 3     |
+| US-08 | Owner Menolak Pengajuan Worker                      | Owner         | NAT 3     |
+| US-09 | Owner Menghapus Worker dari Kebun                   | Owner         | NAT 3     |
+| US-10 | Owner Menambah Data Pohon                           | Owner         | NAT 3     |
+| US-11 | Owner Mengubah Data Pohon                           | Owner         | NAT 3     |
+| US-12 | Owner Mengarsipkan Pohon                            | Owner         | NAT 3     |
+| US-13 | Owner atau Worker Melihat Detail Pohon              | Owner, Worker | NAT 3     |
+| US-14 | Worker Mencatat Kondisi Pohon                       | Worker        | NAT 3     |
+| US-15 | Owner Mencatat Kondisi Pohon                        | Owner         | NAT 3     |
+| US-16 | Pengguna Melihat Riwayat Kondisi Pohon              | Owner, Worker | NAT 3     |
+| US-17 | Worker Membuat Laporan Operasional Kebun            | Worker        | NAT 3     |
+| US-18 | Owner Melihat Laporan Operasional Kebun             | Owner         | NAT 3     |
+| US-19 | Owner Mengubah Status Laporan Operasional           | Owner         | NAT 3     |
+| US-20 | Owner Membuat Tugas dari Laporan Operasional        | Owner         | NAT 3     |
+| US-21 | Owner Membuat SOP Perawatan                         | Owner         | NAT 3     |
+| US-22 | Owner Mengubah SOP Perawatan                        | Owner         | NAT 3     |
+| US-23 | Owner Menonaktifkan SOP                             | Owner         | NAT 2     |
+| US-24 | Sistem Menampilkan Acuan Jadwal Berikutnya dari SOP | Owner         | NAT 3     |
+| US-25 | Owner Membuat Jadwal dari SOP                       | Owner         | NAT 3     |
+| US-26 | Owner Membuat Jadwal Manual                         | Owner         | NAT 2     |
+| US-27 | Owner Menentukan Target Jadwal                      | Owner         | NAT 3     |
+| US-28 | Worker Melihat Daftar Tugas                         | Worker        | NAT 3     |
+| US-29 | Worker Melihat Detail Tugas                         | Worker        | NAT 3     |
+| US-30 | Worker Menyelesaikan Tugas                          | Worker        | NAT 3     |
+| US-31 | Worker Menunda Tugas                                | Worker        | NAT 3     |
+| US-32 | Worker Mencatat Fase Pertumbuhan Pohon              | Worker        | NAT 3     |
+| US-33 | Owner Mencatat Fase Pertumbuhan Pohon               | Owner         | NAT 3     |
+| US-34 | Pengguna Melihat Riwayat Fase Pertumbuhan           | Owner, Worker | NAT 3     |
+| US-35 | Owner Melihat Pohon Berbunga atau Berbuah           | Owner         | NAT 3     |
+| US-36 | Pengguna Melihat Riwayat Terintegrasi Pohon         | Owner, Worker | NAT 3     |
+| US-37 | Owner Melihat Dashboard Kebun                       | Owner         | NAT 3     |
+| US-38 | Worker Melihat Dashboard Tugas                      | Worker        | NAT 3     |
+| US-39 | Owner Mengakses Fitur Pengelolaan Kebun             | Owner         | NAT 3     |
+| US-40 | Worker Mengakses Fitur Operasional Terbatas         | Worker        | NAT 3     |
+
+---
+
+# 13. Catatan Scope User Story
+
+User story ini tidak mencakup fitur berikut:
+
+* prediksi panen otomatis
+* machine learning
+* push notification
+* IoT atau sensor
+* API cuaca
+* chat owner-worker
+* akuntansi lengkap
+* laporan PDF otomatis
+* integrated farming
+* marketplace
+* grading buah
+* sistem kelompok tani
+
+Fitur tersebut disimpan sebagai pengembangan lanjutan dan tidak menjadi bagian MVP Avology V2.
