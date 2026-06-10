@@ -11,6 +11,7 @@ ios/
 # environment
 .env
 .env.*
+.env.test.local
 !.env.example
 
 # Supabase local temp
