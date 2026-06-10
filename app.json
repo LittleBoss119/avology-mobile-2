@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Avology V2",
+    "slug": "avology-mobile-v2",
+    "scheme": "avology",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"]
+  }
+}
