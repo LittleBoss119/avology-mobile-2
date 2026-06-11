@@ -9,7 +9,12 @@ export default function WorkerDashboardPlaceholderScreen() {
 
   return (
     <Screen
-      footer={<Button title="Profile" variant="secondary" onPress={() => router.push('/worker/profile')} />}
+      footer={
+        <>
+          <Button title="Pohon" onPress={() => router.push('/worker/trees')} />
+          <Button title="Profile" variant="secondary" onPress={() => router.push('/worker/profile')} />
+        </>
+      }
     >
       <PageIntro title="Worker Dashboard Placeholder" subtitle="Tugas dan data operasional belum dibuka di Iteration 1." />
       <Card>

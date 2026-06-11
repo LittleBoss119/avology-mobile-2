@@ -22,6 +22,10 @@ const friendlyMessages: Array<[string, string]> = [
   ['Only active owners can remove workers', 'Hanya owner aktif yang dapat mengeluarkan worker.'],
   ['Only active owners can view pending workers', 'Hanya owner aktif yang dapat melihat pengajuan worker.'],
   ['Only active owners can view active workers', 'Hanya owner aktif yang dapat melihat worker aktif.'],
+  ['trees_unique_code_per_farm', 'Kode pohon sudah digunakan di kebun ini.'],
+  ['Tree condition report tree must belong to the same farm', 'Pohon tidak terdaftar pada kebun yang dipilih.'],
+  ['Only active farm members can create tree condition reports', 'Hanya member aktif yang dapat membuat laporan kondisi pohon.'],
+  ['duplicate key value violates unique constraint', 'Data dengan kode yang sama sudah ada.'],
   ['Failed to fetch', 'Gagal memuat data. Periksa koneksi internet Anda.'],
   ['Network request failed', 'Gagal memuat data. Periksa koneksi internet Anda.'],
 ];

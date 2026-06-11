@@ -11,6 +11,7 @@ export default function OwnerDashboardPlaceholderScreen() {
     <Screen
       footer={
         <>
+          <Button title="Pohon" onPress={() => router.push('/owner/trees')} />
           <Button title="Kelola Worker" onPress={() => router.push('/owner/workers')} />
           <Button title="Profile" variant="secondary" onPress={() => router.push('/owner/profile')} />
         </>

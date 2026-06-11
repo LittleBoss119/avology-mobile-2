@@ -4,6 +4,14 @@ export type MemberRole = 'owner' | 'worker';
 
 export type MemberStatus = 'pending' | 'active' | 'rejected' | 'removed';
 
+export type TreeConditionStatus =
+  | 'healthy'
+  | 'needs_attention'
+  | 'pest_attacked'
+  | 'disease_indicated'
+  | 'damaged'
+  | 'dead';
+
 export type ServiceError = {
   message: string;
   code?: string;
@@ -60,6 +68,84 @@ export type WorkerMembership = {
   status: MemberStatus;
   createdAt?: string;
   joinedAt?: string | null;
+};
+
+export type Tree = {
+  id: UUID;
+  farmId: UUID;
+  treeCode: string;
+  rowPosition: string | null;
+  columnPosition: string | null;
+  variety: string | null;
+  plantedAt: string | null;
+  currentCondition: TreeConditionStatus;
+  currentGrowthPhase: string | null;
+  isArchived: boolean;
+  createdAt?: string;
+  updatedAt?: string | null;
+};
+
+export type TreeConditionReport = {
+  id: UUID;
+  farmId: UUID;
+  treeId: UUID;
+  reportedBy: UUID;
+  conditionStatus: TreeConditionStatus;
+  note: string | null;
+  reportedAt: string;
+};
+
+export type GetTreesInput = {
+  farmId: UUID;
+  search?: string;
+  condition?: TreeConditionStatus | 'all';
+  growthPhase?: string | 'all';
+  archived?: boolean;
+};
+
+export type GetTreeDetailInput = {
+  treeId: UUID;
+};
+
+export type CreateTreeInput = {
+  farmId: UUID;
+  treeCode: string;
+  rowPosition?: string | null;
+  columnPosition?: string | null;
+  variety?: string | null;
+  plantedAt?: string | null;
+};
+
+export type CreateTreeData = {
+  treeId: UUID;
+};
+
+export type UpdateTreeInput = {
+  treeId: UUID;
+  treeCode?: string;
+  rowPosition?: string | null;
+  columnPosition?: string | null;
+  variety?: string | null;
+  plantedAt?: string | null;
+};
+
+export type TreeArchiveInput = {
+  treeId: UUID;
+};
+
+export type CreateTreeConditionReportInput = {
+  farmId: UUID;
+  treeId: UUID;
+  conditionStatus: TreeConditionStatus;
+  note?: string | null;
+};
+
+export type CreateTreeConditionReportData = {
+  reportId: UUID;
+};
+
+export type GetTreeConditionReportsInput = {
+  treeId: UUID;
 };
 
 export type RegisterUserInput = {

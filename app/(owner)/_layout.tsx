@@ -24,6 +24,11 @@ export default function OwnerLayout() {
       }}
     >
       <Stack.Screen name="owner/index" options={{ title: 'Owner' }} />
+      <Stack.Screen name="owner/trees/index" options={{ title: 'Pohon' }} />
+      <Stack.Screen name="owner/trees/create" options={{ title: 'Tambah Pohon' }} />
+      <Stack.Screen name="owner/trees/[treeId]" options={{ title: 'Detail Pohon' }} />
+      <Stack.Screen name="owner/trees/[treeId]/edit" options={{ title: 'Edit Tree' }} />
+      <Stack.Screen name="owner/trees/[treeId]/report" options={{ title: 'Catat Kondisi' }} />
       <Stack.Screen name="owner/workers" options={{ title: 'Worker Management' }} />
       <Stack.Screen name="owner/profile" options={{ title: 'Profile' }} />
     </Stack>
