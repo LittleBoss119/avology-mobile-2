@@ -1,0 +1,541 @@
+import { router, useLocalSearchParams } from 'expo-router';
+import React from 'react';
+import { Alert, Text, TextInput, View } from 'react-native';
+
+import {
+  careSopTargetOptions,
+  formatCareCategory,
+  formatCareSOPTarget,
+  ScheduleReferenceSummary,
+} from '../../../../../src/components/care-sop-components';
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorBanner,
+  Field,
+  LoadingState,
+  MetaRow,
+  PageIntro,
+  Screen,
+} from '../../../../../src/components/ui';
+import { useAuth } from '../../../../../src/context/auth-context';
+import { createScheduleFromSOP } from '../../../../../src/services/careScheduleService';
+import {
+  getCareSOPDetail,
+  getCareSOPNextScheduleReference,
+} from '../../../../../src/services/careSopService';
+import { getActiveWorkers } from '../../../../../src/services/memberService';
+import { getTrees } from '../../../../../src/services/treeService';
+import type {
+  CareSOP,
+  CareSOPDefaultTargetType,
+  CareSOPNextScheduleReference,
+  Tree,
+  WorkerMembership,
+} from '../../../../../src/types/domain';
+import { formatTreeLocation } from '../../../../../src/utils/treeFormat';
+
+type ScheduleFormValues = {
+  assignedWorkerIds: string[];
+  instruction: string;
+  scheduledDate: string;
+  targetColumn: string;
+  targetRow: string;
+  targetTreeId: string;
+  targetType: CareSOPDefaultTargetType;
+};
+
+const initialValues: ScheduleFormValues = {
+  assignedWorkerIds: [],
+  instruction: '',
+  scheduledDate: '',
+  targetColumn: '',
+  targetRow: '',
+  targetTreeId: '',
+  targetType: 'farm',
+};
+
+export default function CreateScheduleFromSOPScreen() {
+  const { currentFarm } = useAuth();
+  const { sopId } = useLocalSearchParams<{ sopId: string }>();
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [reference, setReference] = React.useState<CareSOPNextScheduleReference | null>(null);
+  const [sop, setSop] = React.useState<CareSOP | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [trees, setTrees] = React.useState<Tree[]>([]);
+  const [values, setValues] = React.useState<ScheduleFormValues>(initialValues);
+  const [workers, setWorkers] = React.useState<WorkerMembership[]>([]);
+
+  const farmId = currentFarm?.farmId;
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function loadData() {
+      const normalizedSopId = sopId?.trim();
+
+      if (!farmId) {
+        setError('Data kebun aktif tidak ditemukan.');
+        setLoading(false);
+        return;
+      }
+
+      if (!normalizedSopId) {
+        setError('SOP ID tidak ditemukan.');
+        setLoading(false);
+        return;
+      }
+
+      setError(null);
+
+      const sopResult = await getCareSOPDetail({ sopId: normalizedSopId });
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (sopResult.error) {
+        setError(sopResult.error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!sopResult.data.isActive) {
+        setError('SOP nonaktif tidak dapat digunakan untuk membuat jadwal.');
+      }
+
+      setSop(sopResult.data);
+
+      const [referenceResult, workersResult, treesResult] = await Promise.all([
+        getCareSOPNextScheduleReference({ sopId: normalizedSopId }),
+        getActiveWorkers(farmId),
+        getTrees({
+          archived: false,
+          farmId,
+        }),
+      ]);
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (referenceResult.error) {
+        setReference(null);
+      } else {
+        setReference(referenceResult.data);
+      }
+
+      if (workersResult.error) {
+        setError(workersResult.error.message);
+        setWorkers([]);
+      } else {
+        setWorkers(workersResult.data);
+      }
+
+      if (treesResult.error) {
+        setError(treesResult.error.message);
+        setTrees([]);
+      } else {
+        setTrees(treesResult.data);
+      }
+
+      setValues({
+        assignedWorkerIds: [],
+        instruction: sopResult.data.defaultInstruction ?? '',
+        scheduledDate:
+          referenceResult.error || !referenceResult.data.nextDueDate
+            ? getTodayIsoDate()
+            : referenceResult.data.nextDueDate,
+        targetColumn: sopResult.data.defaultTargetColumn ?? '',
+        targetRow: sopResult.data.defaultTargetRow ?? '',
+        targetTreeId: sopResult.data.defaultTargetTreeId ?? '',
+        targetType: sopResult.data.defaultTargetType,
+      });
+      setLoading(false);
+    }
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [farmId, sopId]);
+
+  function updateValue(field: keyof ScheduleFormValues, value: string | string[]) {
+    setValues((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function updateTargetType(targetType: CareSOPDefaultTargetType) {
+    setValues((current) => ({
+      ...current,
+      targetColumn: targetType === 'column' ? current.targetColumn : '',
+      targetRow: targetType === 'row' ? current.targetRow : '',
+      targetTreeId: targetType === 'tree' ? current.targetTreeId : '',
+      targetType,
+    }));
+  }
+
+  function toggleWorker(workerId: string) {
+    setValues((current) => {
+      const isSelected = current.assignedWorkerIds.includes(workerId);
+
+      return {
+        ...current,
+        assignedWorkerIds: isSelected
+          ? current.assignedWorkerIds.filter((selectedId) => selectedId !== workerId)
+          : [...current.assignedWorkerIds, workerId],
+      };
+    });
+  }
+
+  async function handleSubmit() {
+    if (!farmId) {
+      setError('Data kebun aktif tidak ditemukan.');
+      return;
+    }
+
+    if (!sop) {
+      setError('Data SOP tidak ditemukan.');
+      return;
+    }
+
+    if (!sop.isActive) {
+      setError('SOP nonaktif tidak dapat digunakan untuk membuat jadwal.');
+      return;
+    }
+
+    const validation = validateValues(values);
+
+    if (validation instanceof Error) {
+      setError(validation.message);
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    const result = await createScheduleFromSOP({
+      assignedWorkerIds: values.assignedWorkerIds,
+      farmId,
+      instruction: values.instruction,
+      scheduledDate: values.scheduledDate,
+      sopId: sop.id,
+      targetColumn: values.targetType === 'column' ? values.targetColumn : null,
+      targetRow: values.targetType === 'row' ? values.targetRow : null,
+      targetTreeId: values.targetType === 'tree' ? values.targetTreeId : null,
+      targetType: values.targetType,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setSubmitting(false);
+      return;
+    }
+
+    setSubmitting(false);
+    Alert.alert(
+      'Jadwal dibuat',
+      `${result.data.taskIds.length} tugas worker berhasil dibuat dari SOP.`,
+      [
+        {
+          text: 'OK',
+          onPress: () => router.replace(`/owner/sops/${sop.id}`),
+        },
+      ]
+    );
+  }
+
+  if (loading) {
+    return <LoadingState message="Menyiapkan jadwal dari SOP..." />;
+  }
+
+  if (!sop) {
+    return (
+      <Screen footer={<Button title="Kembali" variant="secondary" onPress={() => router.back()} />}>
+        <PageIntro title="Buat Jadwal" subtitle="Data SOP tidak dapat dimuat." />
+        <ErrorBanner message={error} />
+        <EmptyState title="SOP tidak ditemukan" subtitle="SOP mungkin tidak tersedia atau akses ditolak." />
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen
+      footer={
+        <>
+          <Button
+            title="Buat Jadwal dan Tugas"
+            disabled={!sop.isActive}
+            loading={submitting}
+            onPress={handleSubmit}
+          />
+          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
+        </>
+      }
+    >
+      <PageIntro title="Buat Jadwal" subtitle="Gunakan SOP sebagai dasar jadwal dan tugas worker." />
+      <ErrorBanner message={error} />
+
+      <Card>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+          {sop.name}
+        </Text>
+        <MetaRow label="Kategori" value={formatCareCategory(sop.category)} />
+        <MetaRow label="Target SOP" value={formatCareSOPTarget(sop)} />
+        <MetaRow label="Status SOP" value={sop.isActive ? 'Aktif' : 'Nonaktif'} />
+      </Card>
+
+      {reference ? (
+        <Card>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+            Acuan Jadwal
+          </Text>
+          <ScheduleReferenceSummary reference={reference} />
+        </Card>
+      ) : null}
+
+      <Field
+        label="Tanggal jadwal *"
+        onChangeText={(value) => updateValue('scheduledDate', value)}
+        placeholder="YYYY-MM-DD"
+        value={values.scheduledDate}
+      />
+
+      <WorkerPicker
+        selectedWorkerIds={values.assignedWorkerIds}
+        workers={workers}
+        onToggle={toggleWorker}
+      />
+
+      <TargetPicker
+        onTargetTypeChange={updateTargetType}
+        onValueChange={updateValue}
+        trees={trees}
+        values={values}
+      />
+
+      <TextArea
+        label="Instruksi"
+        onChangeText={(value) => updateValue('instruction', value)}
+        placeholder="Instruksi kerja untuk worker"
+        value={values.instruction}
+      />
+    </Screen>
+  );
+}
+
+function WorkerPicker({
+  onToggle,
+  selectedWorkerIds,
+  workers,
+}: {
+  onToggle: (workerId: string) => void;
+  selectedWorkerIds: string[];
+  workers: WorkerMembership[];
+}) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+        Worker aktif *
+      </Text>
+      {workers.length === 0 ? (
+        <EmptyState title="Belum ada worker aktif" subtitle="Setujui worker terlebih dahulu sebelum membuat tugas." />
+      ) : (
+        <View style={{ gap: 8 }}>
+          {workers.map((worker) => (
+            <Button
+              key={worker.userId}
+              title={worker.fullName}
+              variant={selectedWorkerIds.includes(worker.userId) ? 'primary' : 'secondary'}
+              onPress={() => onToggle(worker.userId)}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function TargetPicker({
+  onTargetTypeChange,
+  onValueChange,
+  trees,
+  values,
+}: {
+  onTargetTypeChange: (targetType: CareSOPDefaultTargetType) => void;
+  onValueChange: (field: keyof ScheduleFormValues, value: string | string[]) => void;
+  trees: Tree[];
+  values: ScheduleFormValues;
+}) {
+  return (
+    <View style={{ gap: 12 }}>
+      <OptionGroup
+        label="Target jadwal *"
+        options={careSopTargetOptions.map((targetType) => ({
+          label: formatTargetType(targetType),
+          value: targetType,
+        }))}
+        selectedValue={values.targetType}
+        onSelect={onTargetTypeChange}
+      />
+
+      {values.targetType === 'row' ? (
+        <Field
+          label="Baris target *"
+          onChangeText={(value) => onValueChange('targetRow', value)}
+          placeholder="Contoh: A"
+          value={values.targetRow}
+        />
+      ) : null}
+
+      {values.targetType === 'column' ? (
+        <Field
+          label="Kolom target *"
+          onChangeText={(value) => onValueChange('targetColumn', value)}
+          placeholder="Contoh: 1"
+          value={values.targetColumn}
+        />
+      ) : null}
+
+      {values.targetType === 'tree' ? (
+        <View style={{ gap: 8 }}>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+            Pohon target *
+          </Text>
+          {trees.length === 0 ? (
+            <EmptyState title="Belum ada pohon aktif" subtitle="Tambahkan pohon sebelum membuat jadwal per pohon." />
+          ) : (
+            <View style={{ gap: 8 }}>
+              {trees.map((tree) => (
+                <Button
+                  key={tree.id}
+                  title={`${tree.treeCode} - ${formatTreeLocation(tree)}`}
+                  variant={values.targetTreeId === tree.id ? 'primary' : 'secondary'}
+                  onPress={() => onValueChange('targetTreeId', tree.id)}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function OptionGroup<TValue extends string>({
+  label,
+  onSelect,
+  options,
+  selectedValue,
+}: {
+  label: string;
+  onSelect: (value: TValue) => void;
+  options: Array<{ label: string; value: TValue }>;
+  selectedValue: TValue;
+}) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+        {label}
+      </Text>
+      <View style={{ gap: 8 }}>
+        {options.map((option) => (
+          <Button
+            key={option.value}
+            title={option.label}
+            variant={selectedValue === option.value ? 'primary' : 'secondary'}
+            onPress={() => onSelect(option.value)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function TextArea({
+  label,
+  onChangeText,
+  placeholder,
+  value,
+}: {
+  label: string;
+  onChangeText: (value: string) => void;
+  placeholder?: string;
+  value: string;
+}) {
+  return (
+    <View style={{ gap: 7 }}>
+      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+        {label}
+      </Text>
+      <TextInput
+        multiline
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#94A098"
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderColor: '#DDE4DA',
+          borderCurve: 'continuous',
+          borderRadius: 8,
+          borderWidth: 1,
+          color: '#1E2A24',
+          fontSize: 16,
+          minHeight: 104,
+          paddingHorizontal: 14,
+          paddingTop: 12,
+          textAlignVertical: 'top',
+        }}
+        value={value}
+      />
+    </View>
+  );
+}
+
+function validateValues(values: ScheduleFormValues): Error | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(values.scheduledDate.trim())) {
+    return new Error('Tanggal jadwal harus memakai format YYYY-MM-DD.');
+  }
+
+  if (values.assignedWorkerIds.length === 0) {
+    return new Error('Pilih minimal satu worker aktif.');
+  }
+
+  if (values.targetType === 'row' && !values.targetRow.trim()) {
+    return new Error('Baris target wajib diisi.');
+  }
+
+  if (values.targetType === 'column' && !values.targetColumn.trim()) {
+    return new Error('Kolom target wajib diisi.');
+  }
+
+  if (values.targetType === 'tree' && !values.targetTreeId.trim()) {
+    return new Error('Pohon target wajib dipilih.');
+  }
+
+  return null;
+}
+
+function formatTargetType(targetType: CareSOPDefaultTargetType): string {
+  const labels: Record<CareSOPDefaultTargetType, string> = {
+    column: 'Kolom',
+    farm: 'Seluruh kebun',
+    row: 'Baris',
+    tree: 'Pohon',
+  };
+
+  return labels[targetType];
+}
+
+function getTodayIsoDate(): string {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
