@@ -11,6 +11,7 @@ export default function WorkerDashboardPlaceholderScreen() {
     <Screen
       footer={
         <>
+          <Button title="Tugas Saya" onPress={() => router.push('/worker/tasks')} />
           <Button title="Pohon" onPress={() => router.push('/worker/trees')} />
           <Button title="Profile" variant="secondary" onPress={() => router.push('/worker/profile')} />
         </>

@@ -1,16 +1,39 @@
 import { supabase } from '../lib/supabase';
 import type {
   CareCategory,
+  CareSchedule,
+  CareScheduleDetail,
   CareSOPDefaultTargetType,
+  CareTask,
+  CreateManualScheduleData,
+  CreateManualScheduleInput,
   CreateScheduleFromSOPData,
   CreateScheduleFromSOPInput,
+  GetCareScheduleDetailInput,
+  GetCareSchedulesInput,
   MemberRole,
   MemberStatus,
   ServiceResult,
   SuccessData,
+  TargetType,
+  TaskStatus,
   UUID,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
+
+const CARE_SCHEDULE_SELECT =
+  'id, farm_id, care_sop_id, title, category, scheduled_date, target_type, target_row, target_column, target_tree_id, custom_target_note, instruction, created_by, created_at, updated_at';
+
+const CARE_TASK_SELECT =
+  'id, farm_id, care_schedule_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, created_at, updated_at';
+
+const careCategories: CareCategory[] = [
+  'watering',
+  'fertilizing',
+  'spraying',
+  'weeding',
+  'other',
+];
 
 type CareSOPScheduleSourceRow = {
   id: string;
@@ -38,6 +61,44 @@ type ActiveWorkerPickerRow = {
 type ScheduleTaskRpcRow = {
   schedule_id: string;
   task_id: string;
+};
+
+type CareScheduleRow = {
+  id: string;
+  farm_id: string;
+  care_sop_id: string | null;
+  title: string;
+  category: CareCategory;
+  scheduled_date: string;
+  target_type: TargetType;
+  target_row: string | null;
+  target_column: string | null;
+  target_tree_id: string | null;
+  custom_target_note: string | null;
+  instruction: string | null;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string | null;
+};
+
+type CareTaskRow = {
+  id: string;
+  farm_id: string;
+  care_schedule_id: string | null;
+  assigned_to: string;
+  assigned_by: string;
+  title: string;
+  category: CareCategory | null;
+  instruction: string | null;
+  target_type: TargetType;
+  target_row: string | null;
+  target_column: string | null;
+  target_tree_id: string | null;
+  custom_target_note: string | null;
+  due_date: string;
+  status: TaskStatus;
+  created_at?: string;
+  updated_at?: string | null;
 };
 
 type ScheduleInsertRow = {
@@ -76,6 +137,14 @@ type NormalizedTarget = {
   targetRow: string | null;
   targetColumn: string | null;
   targetTreeId: string | null;
+};
+
+type NormalizedManualTarget = {
+  targetType: TargetType;
+  targetRow: string | null;
+  targetColumn: string | null;
+  targetTreeId: string | null;
+  customTargetNote: string | null;
 };
 
 export async function createScheduleFromSOP(
@@ -150,6 +219,161 @@ export async function createScheduleFromSOP(
     sop: sopResult.data,
     target,
     workerIds,
+  });
+}
+
+export async function createManualSchedule(
+  input: CreateManualScheduleInput
+): Promise<ServiceResult<CreateManualScheduleData>> {
+  const title = normalizeOptionalText(input.title);
+
+  if (!title) {
+    return fail(new Error('Judul jadwal wajib diisi.'));
+  }
+
+  const category = validateCareCategory(input.category);
+
+  if (category instanceof Error) {
+    return fail(category);
+  }
+
+  const scheduledDate = normalizeScheduleDate(input.scheduledDate);
+
+  if (scheduledDate instanceof Error) {
+    return fail(scheduledDate);
+  }
+
+  const workerIds = normalizeWorkerIds([input.assignedWorkerId]);
+
+  if (workerIds instanceof Error) {
+    return fail(workerIds);
+  }
+
+  const target = normalizeManualTarget({
+    customTargetNote: input.customTargetNote,
+    targetColumn: input.targetColumn,
+    targetRow: input.targetRow,
+    targetTreeId: input.targetTreeId,
+    targetType: input.targetType,
+  });
+
+  if (target instanceof Error) {
+    return fail(target);
+  }
+
+  const accessResult = await ensureActiveOwner(
+    input.farmId,
+    'Hanya owner aktif yang dapat membuat jadwal manual.'
+  );
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  const workersResult = await ensureActiveWorkers(input.farmId, workerIds);
+
+  if (workersResult.error) {
+    return fail(workersResult.error);
+  }
+
+  const { data, error } = await supabase.rpc('create_manual_schedule', {
+    p_assigned_worker_id: workerIds[0],
+    p_category: category,
+    p_custom_target_note: target.customTargetNote,
+    p_farm_id: input.farmId,
+    p_instruction: normalizeOptionalText(input.instruction),
+    p_scheduled_date: scheduledDate,
+    p_target_column: target.targetColumn,
+    p_target_row: target.targetRow,
+    p_target_tree_id: target.targetTreeId,
+    p_target_type: target.targetType,
+    p_title: title,
+  });
+
+  if (error) {
+    return fail(error, 'Gagal membuat jadwal manual dan tugas worker.');
+  }
+
+  const row = ((data ?? []) as ScheduleTaskRpcRow[])[0];
+
+  if (!row?.schedule_id || !row.task_id) {
+    return fail(new Error('RPC create_manual_schedule tidak mengembalikan schedule dan task.'));
+  }
+
+  return ok({
+    scheduleId: row.schedule_id,
+    taskId: row.task_id,
+  });
+}
+
+export async function getCareSchedules(
+  input: GetCareSchedulesInput
+): Promise<ServiceResult<CareSchedule[]>> {
+  const accessResult = await ensureActiveOwner(
+    input.farmId,
+    'Hanya owner aktif yang dapat melihat jadwal perawatan.'
+  );
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  const { data, error } = await supabase
+    .from('care_schedules')
+    .select(CARE_SCHEDULE_SELECT)
+    .eq('farm_id', input.farmId)
+    .order('scheduled_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .returns<CareScheduleRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat daftar jadwal perawatan.');
+  }
+
+  return ok((data ?? []).map(mapCareSchedule));
+}
+
+export async function getCareScheduleDetail(
+  input: GetCareScheduleDetailInput
+): Promise<ServiceResult<CareScheduleDetail>> {
+  const scheduleResult = await supabase
+    .from('care_schedules')
+    .select(CARE_SCHEDULE_SELECT)
+    .eq('id', input.scheduleId)
+    .maybeSingle<CareScheduleRow>();
+
+  if (scheduleResult.error) {
+    return fail(scheduleResult.error, 'Gagal memuat detail jadwal perawatan.');
+  }
+
+  if (!scheduleResult.data) {
+    return fail(new Error('Jadwal perawatan tidak ditemukan atau tidak dapat diakses.'));
+  }
+
+  const accessResult = await ensureActiveOwner(
+    scheduleResult.data.farm_id,
+    'Hanya owner aktif yang dapat melihat jadwal perawatan.'
+  );
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  const tasksResult = await supabase
+    .from('care_tasks')
+    .select(CARE_TASK_SELECT)
+    .eq('care_schedule_id', input.scheduleId)
+    .order('due_date', { ascending: true })
+    .order('created_at', { ascending: true })
+    .returns<CareTaskRow[]>();
+
+  if (tasksResult.error) {
+    return fail(tasksResult.error, 'Gagal memuat tugas dari jadwal.');
+  }
+
+  return ok({
+    ...mapCareSchedule(scheduleResult.data),
+    tasks: (tasksResult.data ?? []).map(mapCareTask),
   });
 }
 
@@ -292,7 +516,10 @@ async function getActiveCareSOPForSchedule(
   return ok(data);
 }
 
-async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessData>> {
+async function ensureActiveOwner(
+  farmId: UUID,
+  forbiddenMessage = 'Hanya owner aktif yang dapat membuat jadwal dari SOP.'
+): Promise<ServiceResult<SuccessData>> {
   const membershipResult = await getCurrentUserMembership(farmId);
 
   if (membershipResult.error) {
@@ -300,12 +527,24 @@ async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessDat
   }
 
   if (membershipResult.data?.role !== 'owner' || membershipResult.data.status !== 'active') {
-    return fail(new Error('Hanya owner aktif yang dapat membuat jadwal dari SOP.'));
+    return fail(new Error(forbiddenMessage));
   }
 
   return ok({
     success: true,
   });
+}
+
+function validateCareCategory(category: CareCategory | undefined | null): CareCategory | Error {
+  if (!category) {
+    return new Error('Kategori jadwal wajib dipilih.');
+  }
+
+  if (!careCategories.includes(category)) {
+    return new Error('Kategori jadwal tidak valid.');
+  }
+
+  return category;
 }
 
 async function ensureActiveWorkers(
@@ -477,6 +716,136 @@ function normalizeTarget(input: {
     targetRow: null,
     targetTreeId: treeId,
     targetType: 'tree',
+  };
+}
+
+function normalizeManualTarget(input: {
+  targetType: TargetType | string | null | undefined;
+  targetRow?: string | null;
+  targetColumn?: string | null;
+  targetTreeId?: string | null;
+  customTargetNote?: string | null;
+}): NormalizedManualTarget | Error {
+  if (!input.targetType) {
+    return new Error('Target jadwal wajib dipilih.');
+  }
+
+  if (!['farm', 'row', 'column', 'tree', 'custom'].includes(input.targetType)) {
+    return new Error('Target jadwal tidak valid.');
+  }
+
+  if (input.targetType === 'farm') {
+    return {
+      customTargetNote: null,
+      targetColumn: null,
+      targetRow: null,
+      targetTreeId: null,
+      targetType: 'farm',
+    };
+  }
+
+  if (input.targetType === 'row') {
+    const row = normalizeOptionalText(input.targetRow);
+
+    if (!row) {
+      return new Error('Baris target wajib diisi.');
+    }
+
+    return {
+      customTargetNote: null,
+      targetColumn: null,
+      targetRow: row,
+      targetTreeId: null,
+      targetType: 'row',
+    };
+  }
+
+  if (input.targetType === 'column') {
+    const column = normalizeOptionalText(input.targetColumn);
+
+    if (!column) {
+      return new Error('Kolom target wajib diisi.');
+    }
+
+    return {
+      customTargetNote: null,
+      targetColumn: column,
+      targetRow: null,
+      targetTreeId: null,
+      targetType: 'column',
+    };
+  }
+
+  if (input.targetType === 'tree') {
+    const treeId = normalizeOptionalText(input.targetTreeId);
+
+    if (!treeId) {
+      return new Error('Pohon target wajib dipilih.');
+    }
+
+    return {
+      customTargetNote: null,
+      targetColumn: null,
+      targetRow: null,
+      targetTreeId: treeId,
+      targetType: 'tree',
+    };
+  }
+
+  const customTargetNote = normalizeOptionalText(input.customTargetNote);
+
+  if (!customTargetNote) {
+    return new Error('Catatan target custom wajib diisi.');
+  }
+
+  return {
+    customTargetNote,
+    targetColumn: null,
+    targetRow: null,
+    targetTreeId: null,
+    targetType: 'custom',
+  };
+}
+
+function mapCareSchedule(row: CareScheduleRow): CareSchedule {
+  return {
+    careSopId: row.care_sop_id,
+    category: row.category,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+    customTargetNote: row.custom_target_note,
+    farmId: row.farm_id,
+    id: row.id,
+    instruction: row.instruction,
+    scheduledDate: row.scheduled_date,
+    targetColumn: row.target_column,
+    targetRow: row.target_row,
+    targetTreeId: row.target_tree_id,
+    targetType: row.target_type,
+    title: row.title,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapCareTask(row: CareTaskRow): CareTask {
+  return {
+    assignedBy: row.assigned_by,
+    assignedTo: row.assigned_to,
+    careScheduleId: row.care_schedule_id,
+    category: row.category,
+    createdAt: row.created_at,
+    customTargetNote: row.custom_target_note,
+    dueDate: row.due_date,
+    farmId: row.farm_id,
+    id: row.id,
+    instruction: row.instruction,
+    status: row.status,
+    targetColumn: row.target_column,
+    targetRow: row.target_row,
+    targetTreeId: row.target_tree_id,
+    targetType: row.target_type,
+    title: row.title,
+    updatedAt: row.updated_at,
   };
 }
 

@@ -13,6 +13,8 @@ export default function OwnerDashboardPlaceholderScreen() {
         <>
           <Button title="Pohon" onPress={() => router.push('/owner/trees')} />
           <Button title="SOP Perawatan" onPress={() => router.push('/owner/sops')} />
+          <Button title="Jadwal Perawatan" onPress={() => router.push('/owner/schedules')} />
+          <Button title="Tugas Worker" onPress={() => router.push('/owner/tasks')} />
           <Button title="Kelola Worker" onPress={() => router.push('/owner/workers')} />
           <Button title="Profile" variant="secondary" onPress={() => router.push('/owner/profile')} />
         </>

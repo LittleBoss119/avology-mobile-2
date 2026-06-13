@@ -30,6 +30,10 @@ export type CareSOPNextScheduleStatus =
   | 'due_today'
   | 'overdue';
 
+export type TaskStatus = 'pending' | 'completed' | 'postponed';
+
+export type ActivityStatus = 'completed' | 'postponed';
+
 export type ServiceError = {
   message: string;
   code?: string;
@@ -157,6 +161,44 @@ export type CareSchedule = {
   updatedAt?: string | null;
 };
 
+export type CareTask = {
+  id: UUID;
+  farmId: UUID;
+  careScheduleId: UUID | null;
+  assignedTo: UUID;
+  assignedBy: UUID;
+  title: string;
+  category: CareCategory | null;
+  instruction: string | null;
+  targetType: TargetType;
+  targetRow: string | null;
+  targetColumn: string | null;
+  targetTreeId: UUID | null;
+  customTargetNote: string | null;
+  dueDate: string;
+  status: TaskStatus;
+  createdAt?: string;
+  updatedAt?: string | null;
+};
+
+export type CareActivity = {
+  id: UUID;
+  farmId: UUID;
+  careTaskId: UUID;
+  performedBy: UUID;
+  status: ActivityStatus;
+  note: string | null;
+  performedAt: string;
+};
+
+export type CareScheduleDetail = CareSchedule & {
+  tasks: CareTask[];
+};
+
+export type CareTaskDetail = CareTask & {
+  activities: CareActivity[];
+};
+
 export type GetTreesInput = {
   farmId: UUID;
   search?: string;
@@ -271,6 +313,63 @@ export type CreateScheduleFromSOPInput = {
 export type CreateScheduleFromSOPData = {
   scheduleId: UUID;
   taskIds: UUID[];
+};
+
+export type GetCareSchedulesInput = {
+  farmId: UUID;
+};
+
+export type GetCareScheduleDetailInput = {
+  scheduleId: UUID;
+};
+
+export type CreateManualScheduleInput = {
+  farmId: UUID;
+  title: string;
+  category: CareCategory;
+  scheduledDate: string;
+  assignedWorkerId: UUID;
+  targetType: TargetType;
+  targetRow?: string | null;
+  targetColumn?: string | null;
+  targetTreeId?: UUID | null;
+  customTargetNote?: string | null;
+  instruction?: string | null;
+};
+
+export type CreateManualScheduleData = {
+  scheduleId: UUID;
+  taskId: UUID;
+};
+
+export type GetWorkerTasksInput = {
+  farmId: UUID;
+};
+
+export type GetFarmTasksInput = {
+  farmId: UUID;
+};
+
+export type GetTaskDetailInput = {
+  taskId: UUID;
+};
+
+export type CompleteTaskInput = {
+  taskId: UUID;
+  note?: string | null;
+};
+
+export type CompleteTaskData = {
+  activityId: UUID;
+};
+
+export type PostponeTaskInput = {
+  taskId: UUID;
+  note: string;
+};
+
+export type PostponeTaskData = {
+  activityId: UUID;
 };
 
 export type RegisterUserInput = {
