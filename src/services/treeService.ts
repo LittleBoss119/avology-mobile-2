@@ -4,6 +4,7 @@ import type {
   CreateTreeInput,
   GetTreeDetailInput,
   GetTreesInput,
+  GrowthPhase,
   MemberRole,
   MemberStatus,
   ServiceResult,
@@ -28,7 +29,7 @@ type TreeRow = {
   variety: string | null;
   planted_at: string | null;
   current_condition: TreeConditionStatus;
-  current_growth_phase: string | null;
+  current_growth_phase: GrowthPhase | null;
   is_archived: boolean;
   created_at?: string;
   updated_at?: string | null;

@@ -12,6 +12,13 @@ export type TreeConditionStatus =
   | 'damaged'
   | 'dead';
 
+export type GrowthPhase =
+  | 'initial_planting'
+  | 'vegetative'
+  | 'flowering'
+  | 'fruiting'
+  | 'harvesting';
+
 export type CareCategory =
   | 'watering'
   | 'fertilizing'
@@ -116,7 +123,7 @@ export type Tree = {
   variety: string | null;
   plantedAt: string | null;
   currentCondition: TreeConditionStatus;
-  currentGrowthPhase: string | null;
+  currentGrowthPhase: GrowthPhase | null;
   isArchived: boolean;
   createdAt?: string;
   updatedAt?: string | null;
@@ -130,6 +137,28 @@ export type TreeConditionReport = {
   conditionStatus: TreeConditionStatus;
   note: string | null;
   reportedAt: string;
+};
+
+export type GrowthPhaseRecord = {
+  id: UUID;
+  farmId: UUID;
+  treeId: UUID;
+  recordedBy: UUID;
+  phase: GrowthPhase;
+  note: string | null;
+  recordedAt: string;
+};
+
+export type TreeHistoryType = 'condition' | 'phase' | 'care';
+
+export type TreeHistoryItem = {
+  treeId: UUID;
+  farmId: UUID;
+  historyType: TreeHistoryType;
+  title: string;
+  description: string | null;
+  actorId: UUID;
+  happenedAt: string;
 };
 
 export type OperationalReport = {
@@ -231,7 +260,7 @@ export type GetTreesInput = {
   farmId: UUID;
   search?: string;
   condition?: TreeConditionStatus | 'all';
-  growthPhase?: string | 'all';
+  growthPhase?: GrowthPhase | 'all';
   archived?: boolean;
 };
 
@@ -277,6 +306,29 @@ export type CreateTreeConditionReportData = {
 };
 
 export type GetTreeConditionReportsInput = {
+  treeId: UUID;
+};
+
+export type CreateGrowthPhaseRecordInput = {
+  farmId: UUID;
+  treeId: UUID;
+  phase: GrowthPhase;
+  note?: string | null;
+};
+
+export type CreateGrowthPhaseRecordData = {
+  recordId: UUID;
+};
+
+export type GetGrowthPhaseRecordsInput = {
+  treeId: UUID;
+};
+
+export type GetFloweringAndFruitingTreesInput = {
+  farmId: UUID;
+};
+
+export type GetTreeHistoryInput = {
   treeId: UUID;
 };
 

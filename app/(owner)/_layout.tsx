@@ -24,11 +24,13 @@ export default function OwnerLayout() {
       }}
     >
       <Stack.Screen name="owner/index" options={{ title: 'Owner' }} />
+      <Stack.Screen name="owner/growth-monitoring" options={{ title: 'Monitoring Fase' }} />
       <Stack.Screen name="owner/trees/index" options={{ title: 'Pohon' }} />
       <Stack.Screen name="owner/trees/create" options={{ title: 'Tambah Pohon' }} />
       <Stack.Screen name="owner/trees/[treeId]" options={{ title: 'Detail Pohon' }} />
       <Stack.Screen name="owner/trees/[treeId]/edit" options={{ title: 'Edit Tree' }} />
       <Stack.Screen name="owner/trees/[treeId]/report" options={{ title: 'Catat Kondisi' }} />
+      <Stack.Screen name="owner/trees/[treeId]/phase" options={{ title: 'Catat Fase' }} />
       <Stack.Screen name="owner/sops/index" options={{ title: 'SOP Perawatan' }} />
       <Stack.Screen name="owner/sops/create" options={{ title: 'Tambah SOP' }} />
       <Stack.Screen name="owner/sops/[sopId]" options={{ title: 'Detail SOP' }} />

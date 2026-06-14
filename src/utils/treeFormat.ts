@@ -1,4 +1,4 @@
-import type { TreeConditionStatus } from '../types/domain';
+import type { GrowthPhase, TreeConditionStatus } from '../types/domain';
 
 export const treeConditionStatusLabels: Record<TreeConditionStatus, string> = {
   healthy: 'Sehat',
@@ -9,10 +9,22 @@ export const treeConditionStatusLabels: Record<TreeConditionStatus, string> = {
   dead: 'Mati',
 };
 
+export const growthPhaseLabels: Record<GrowthPhase, string> = {
+  initial_planting: 'Awal Tanam',
+  vegetative: 'Vegetatif',
+  flowering: 'Berbunga',
+  fruiting: 'Berbuah',
+  harvesting: 'Panen',
+};
+
 export type TreeArchiveStatus = 'active' | 'archived';
 
 export function formatTreeConditionStatus(status: TreeConditionStatus): string {
   return treeConditionStatusLabels[status];
+}
+
+export function formatGrowthPhase(phase?: GrowthPhase | null): string {
+  return phase ? growthPhaseLabels[phase] : 'Belum dicatat';
 }
 
 export function formatTreeLocation({

@@ -1,8 +1,15 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import type { Tree, TreeConditionReport, TreeConditionStatus } from '../types/domain';
-import { formatTreeConditionStatus, formatTreeLocation } from '../utils/treeFormat';
+import type {
+  GrowthPhase,
+  Tree,
+  TreeConditionReport,
+  TreeConditionStatus,
+  TreeHistoryItem,
+  TreeHistoryType,
+} from '../types/domain';
+import { formatGrowthPhase, formatTreeConditionStatus, formatTreeLocation } from '../utils/treeFormat';
 import { Card, EmptyState, Field, MetaRow } from './ui';
 
 export type TreeFormValues = {
@@ -28,6 +35,10 @@ export type ConditionStatusBadgeProps = {
   status: TreeConditionStatus;
 };
 
+export type GrowthPhaseBadgeProps = {
+  phase: GrowthPhase;
+};
+
 export type ConditionReportListItem = Omit<TreeConditionReport, 'reportedBy'> & {
   reportedBy?: string | null;
 };
@@ -40,6 +51,10 @@ export type ConditionReportListProps = {
   reports: ConditionReportListItem[];
   emptyTitle?: string;
   emptySubtitle?: string;
+};
+
+export type TreeHistoryTimelineProps = {
+  history: TreeHistoryItem[];
 };
 
 export function TreeCard({ children, onPress, tree }: TreeCardProps) {
@@ -62,7 +77,7 @@ export function TreeCard({ children, onPress, tree }: TreeCardProps) {
 
       <MetaRow label="Varietas" value={tree.variety} />
       {tree.currentGrowthPhase ? (
-        <MetaRow label="Fase saat ini" value={tree.currentGrowthPhase} />
+        <MetaRow label="Fase saat ini" value={formatGrowthPhase(tree.currentGrowthPhase)} />
       ) : null}
       {children}
     </Card>
@@ -125,6 +140,12 @@ export function ConditionStatusBadge({ status }: ConditionStatusBadgeProps) {
   return <SmallBadge label={formatTreeConditionStatus(status)} tone={tone} />;
 }
 
+export function GrowthPhaseBadge({ phase }: GrowthPhaseBadgeProps) {
+  const tone = getGrowthPhaseTone(phase);
+
+  return <SmallBadge label={formatGrowthPhase(phase)} tone={tone} />;
+}
+
 export function ConditionReportList({
   emptySubtitle = 'Laporan kondisi yang dibuat owner atau worker aktif akan muncul di sini.',
   emptyTitle = 'Belum ada laporan kondisi',
@@ -143,6 +164,25 @@ export function ConditionReportList({
   );
 }
 
+export function TreeHistoryTimeline({ history }: TreeHistoryTimelineProps) {
+  if (history.length === 0) {
+    return (
+      <EmptyState
+        title="Belum ada riwayat pohon"
+        subtitle="Riwayat kondisi, fase pertumbuhan, dan aktivitas perawatan pohon akan muncul di sini."
+      />
+    );
+  }
+
+  return (
+    <View style={{ gap: 12 }}>
+      {history.map((item) => (
+        <TreeHistoryTimelineItem key={`${item.historyType}-${item.happenedAt}-${item.title}`} item={item} />
+      ))}
+    </View>
+  );
+}
+
 export function ConditionReportItem({ report }: ConditionReportItemProps) {
   return (
     <Card>
@@ -154,6 +194,21 @@ export function ConditionReportItem({ report }: ConditionReportItemProps) {
       </View>
       <MetaRow label="Catatan" value={report.note || 'Catatan belum diisi'} />
       {report.reportedBy ? <MetaRow label="Dilaporkan oleh" value={report.reportedBy} /> : null}
+    </Card>
+  );
+}
+
+function TreeHistoryTimelineItem({ item }: { item: TreeHistoryItem }) {
+  return (
+    <Card>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+        <SmallBadge label={formatHistoryType(item.historyType)} tone={getHistoryTone(item.historyType)} />
+        <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
+          {formatDateTime(item.happenedAt)}
+        </Text>
+      </View>
+      <MetaRow label="Judul" value={formatHistoryTitle(item)} />
+      <MetaRow label="Catatan" value={item.description || 'Catatan belum diisi'} />
     </Card>
   );
 }
@@ -219,6 +274,75 @@ function getConditionTone(status: TreeConditionStatus): BadgeTone {
   }
 
   return 'danger';
+}
+
+function getGrowthPhaseTone(phase: GrowthPhase): BadgeTone {
+  if (phase === 'flowering') {
+    return 'warning';
+  }
+
+  if (phase === 'fruiting') {
+    return 'success';
+  }
+
+  return 'muted';
+}
+
+function getHistoryTone(type: TreeHistoryType): BadgeTone {
+  if (type === 'condition') {
+    return 'warning';
+  }
+
+  if (type === 'phase') {
+    return 'success';
+  }
+
+  return 'muted';
+}
+
+function formatHistoryType(type: TreeHistoryType): string {
+  if (type === 'condition') {
+    return 'Kondisi';
+  }
+
+  if (type === 'phase') {
+    return 'Fase';
+  }
+
+  return 'Perawatan';
+}
+
+function formatHistoryTitle(item: TreeHistoryItem): string {
+  if (item.historyType === 'condition' && isTreeConditionStatus(item.title)) {
+    return formatTreeConditionStatus(item.title);
+  }
+
+  if (item.historyType === 'phase' && isGrowthPhase(item.title)) {
+    return formatGrowthPhase(item.title);
+  }
+
+  return item.title;
+}
+
+function isTreeConditionStatus(value: string): value is TreeConditionStatus {
+  return [
+    'healthy',
+    'needs_attention',
+    'pest_attacked',
+    'disease_indicated',
+    'damaged',
+    'dead',
+  ].includes(value);
+}
+
+function isGrowthPhase(value: string): value is GrowthPhase {
+  return [
+    'initial_planting',
+    'vegetative',
+    'flowering',
+    'fruiting',
+    'harvesting',
+  ].includes(value);
 }
 
 function formatDateTime(value: string): string {

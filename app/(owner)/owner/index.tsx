@@ -12,6 +12,7 @@ export default function OwnerDashboardPlaceholderScreen() {
       footer={
         <>
           <Button title="Pohon" onPress={() => router.push('/owner/trees')} />
+          <Button title="Monitoring Fase" onPress={() => router.push('/owner/growth-monitoring')} />
           <Button title="SOP Perawatan" onPress={() => router.push('/owner/sops')} />
           <Button title="Jadwal Perawatan" onPress={() => router.push('/owner/schedules')} />
           <Button title="Tugas Worker" onPress={() => router.push('/owner/tasks')} />

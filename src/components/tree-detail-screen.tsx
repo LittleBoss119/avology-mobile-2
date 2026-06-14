@@ -3,10 +3,16 @@ import React from 'react';
 import { Alert, Text } from 'react-native';
 
 import { getTreeConditionReports } from '../services/conditionReportService';
+import { getTreeHistory } from '../services/historyService';
 import { archiveTree, getTreeDetail, restoreTree } from '../services/treeService';
-import type { Tree, TreeConditionReport } from '../types/domain';
-import { formatTreeArchiveStatus } from '../utils/treeFormat';
-import { ConditionReportList, ConditionStatusBadge } from './tree-components';
+import type { Tree, TreeConditionReport, TreeHistoryItem } from '../types/domain';
+import { formatGrowthPhase, formatTreeArchiveStatus } from '../utils/treeFormat';
+import {
+  ConditionReportList,
+  ConditionStatusBadge,
+  GrowthPhaseBadge,
+  TreeHistoryTimeline,
+} from './tree-components';
 import {
   Button,
   Card,
@@ -31,6 +37,7 @@ export function TreeDetailScreen({
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
+  const [history, setHistory] = React.useState<TreeHistoryItem[]>([]);
   const [reports, setReports] = React.useState<TreeConditionReport[]>([]);
   const [tree, setTree] = React.useState<Tree | null>(null);
 
@@ -38,6 +45,7 @@ export function TreeDetailScreen({
     if (!treeId) {
       setError('Tree ID tidak ditemukan.');
       setTree(null);
+      setHistory([]);
       setReports([]);
       return;
     }
@@ -49,6 +57,7 @@ export function TreeDetailScreen({
     if (treeResult.error) {
       setError(treeResult.error.message);
       setTree(null);
+      setHistory([]);
       setReports([]);
       return;
     }
@@ -56,19 +65,30 @@ export function TreeDetailScreen({
     if (mode === 'worker' && treeResult.data.isArchived) {
       setError('Pohon archived tidak tersedia untuk worker.');
       setTree(null);
+      setHistory([]);
       setReports([]);
       return;
     }
 
     setTree(treeResult.data);
 
-    const reportsResult = await getTreeConditionReports({ treeId });
+    const [reportsResult, historyResult] = await Promise.all([
+      getTreeConditionReports({ treeId }),
+      getTreeHistory({ treeId }),
+    ]);
 
     if (reportsResult.error) {
       setError(reportsResult.error.message);
       setReports([]);
     } else {
       setReports(reportsResult.data);
+    }
+
+    if (historyResult.error) {
+      setError(historyResult.error.message);
+      setHistory([]);
+    } else {
+      setHistory(historyResult.data);
     }
   }, [mode, treeId]);
 
@@ -155,6 +175,7 @@ export function TreeDetailScreen({
         mode === 'owner' ? (
           <>
             <Button title="Catat Kondisi" onPress={() => router.push(`${basePath}/${tree.id}/report`)} />
+            <Button title="Catat Fase" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
             <Button title="Edit Tree" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/edit`)} />
             <Button
               title={tree.isArchived ? 'Pulihkan' : 'Arsipkan'}
@@ -167,12 +188,13 @@ export function TreeDetailScreen({
         ) : (
           <>
             <Button title="Catat Kondisi" onPress={() => router.push(`${basePath}/${tree.id}/report`)} />
+            <Button title="Catat Fase" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
             <Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />
           </>
         )
       }
     >
-      <PageIntro title={tree.treeCode} subtitle="Detail pohon dan riwayat laporan kondisi." />
+      <PageIntro title={tree.treeCode} subtitle="Detail pohon, fase terbaru, dan riwayat pohon." />
       <ErrorBanner message={error} />
 
       <Card>
@@ -182,14 +204,26 @@ export function TreeDetailScreen({
         <MetaRow label="Varietas" value={tree.variety} />
         <MetaRow label="Tanggal tanam" value={tree.plantedAt} />
         <MetaRow label="Status arsip" value={formatTreeArchiveStatus(tree.isArchived)} />
+        <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
+          Fase saat ini
+        </Text>
         {tree.currentGrowthPhase ? (
-          <MetaRow label="Fase saat ini" value={tree.currentGrowthPhase} />
-        ) : null}
+          <GrowthPhaseBadge phase={tree.currentGrowthPhase} />
+        ) : (
+          <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '600' }}>
+            {formatGrowthPhase(tree.currentGrowthPhase)}
+          </Text>
+        )}
         <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
           Kondisi saat ini
         </Text>
         <ConditionStatusBadge status={tree.currentCondition} />
       </Card>
+
+      <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
+        Timeline Riwayat
+      </Text>
+      <TreeHistoryTimeline history={history} />
 
       <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
         Riwayat Kondisi
