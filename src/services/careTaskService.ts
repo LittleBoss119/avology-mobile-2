@@ -5,6 +5,8 @@ import type {
   CareCategory,
   CareTask,
   CareTaskDetail,
+  CreateTaskFromOperationalReportData,
+  CreateTaskFromOperationalReportInput,
   CompleteTaskData,
   CompleteTaskInput,
   GetFarmTasksInput,
@@ -23,7 +25,7 @@ import type {
 import { fail, ok } from '../utils/serviceResult';
 
 const CARE_TASK_SELECT =
-  'id, farm_id, care_schedule_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, created_at, updated_at';
+  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, created_at, updated_at';
 
 const CARE_ACTIVITY_SELECT =
   'id, farm_id, care_task_id, performed_by, status, note, performed_at';
@@ -32,6 +34,7 @@ type CareTaskRow = {
   id: string;
   farm_id: string;
   care_schedule_id: string | null;
+  operational_report_id: string | null;
   assigned_to: string;
   assigned_by: string;
   title: string;
@@ -61,6 +64,11 @@ type CareActivityRow = {
 type MembershipRow = {
   role: MemberRole;
   status: MemberStatus;
+};
+
+type OperationalReportSourceRow = {
+  id: string;
+  farm_id: string;
 };
 
 export async function getWorkerTasks(
@@ -158,6 +166,101 @@ export async function getTaskDetail(
   });
 }
 
+export async function createTaskFromOperationalReport(
+  input: CreateTaskFromOperationalReportInput
+): Promise<ServiceResult<CreateTaskFromOperationalReportData>> {
+  const reportId = normalizeRequiredText(
+    input.operationalReportId,
+    'Laporan operasional tidak ditemukan.'
+  );
+
+  if (reportId instanceof Error) {
+    return fail(reportId);
+  }
+
+  const workerId = normalizeRequiredText(
+    input.assignedWorkerId,
+    'Worker aktif wajib dipilih.'
+  );
+
+  if (workerId instanceof Error) {
+    return fail(workerId);
+  }
+
+  const dueDate = normalizeTaskDate(input.dueDate);
+
+  if (dueDate instanceof Error) {
+    return fail(dueDate);
+  }
+
+  const title = normalizeRequiredText(input.title, 'Judul tugas wajib diisi.');
+
+  if (title instanceof Error) {
+    return fail(title);
+  }
+
+  const target = normalizeTaskTarget({
+    customTargetNote: input.customTargetNote,
+    targetColumn: input.targetColumn,
+    targetRow: input.targetRow,
+    targetTreeId: input.targetTreeId,
+    targetType: input.targetType,
+  });
+
+  if (target instanceof Error) {
+    return fail(target);
+  }
+
+  const reportResult = await getAccessibleOperationalReportSource(reportId);
+
+  if (reportResult.error) {
+    return fail(reportResult.error);
+  }
+
+  const accessResult = await ensureActiveOwner(
+    reportResult.data.farm_id,
+    'Hanya owner aktif yang dapat membuat tindak lanjut laporan operasional.'
+  );
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  const { data, error } = await supabase.rpc('create_task_from_operational_report', {
+    p_assigned_worker_id: workerId,
+    p_custom_target_note: target.customTargetNote,
+    p_due_date: dueDate,
+    p_instruction: normalizeOptionalText(input.instruction),
+    p_operational_report_id: reportId,
+    p_target_column: target.targetColumn,
+    p_target_row: target.targetRow,
+    p_target_tree_id: target.targetTreeId,
+    p_target_type: target.targetType,
+    p_title: title,
+  });
+
+  if (error) {
+    return fail(error, 'Gagal membuat tugas tindak lanjut laporan operasional.');
+  }
+
+  if (!data) {
+    return fail(new Error('RPC create_task_from_operational_report tidak mengembalikan task id.'));
+  }
+
+  const statusResult = await supabase.rpc('update_operational_report_status', {
+    p_operational_report_id: reportId,
+    p_status: 'in_progress',
+  });
+
+  if (statusResult.error) {
+    return fail(statusResult.error, 'Task dibuat, tetapi status laporan gagal diperbarui.');
+  }
+
+  return ok({
+    taskId: data as UUID,
+  });
+}
+
 export async function completeTask(
   input: CompleteTaskInput
 ): Promise<ServiceResult<CompleteTaskData>> {
@@ -206,7 +309,10 @@ export async function postponeTask(
   });
 }
 
-async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessData>> {
+async function ensureActiveOwner(
+  farmId: UUID,
+  forbiddenMessage = 'Hanya owner aktif yang dapat melihat tugas kebun.'
+): Promise<ServiceResult<SuccessData>> {
   const membershipResult = await getCurrentUserMembership(farmId);
 
   if (membershipResult.error) {
@@ -214,12 +320,32 @@ async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessDat
   }
 
   if (membershipResult.data?.role !== 'owner' || membershipResult.data.status !== 'active') {
-    return fail(new Error('Hanya owner aktif yang dapat melihat tugas kebun.'));
+    return fail(new Error(forbiddenMessage));
   }
 
   return ok({
     success: true,
   });
+}
+
+async function getAccessibleOperationalReportSource(
+  operationalReportId: UUID
+): Promise<ServiceResult<OperationalReportSourceRow>> {
+  const { data, error } = await supabase
+    .from('operational_reports')
+    .select('id, farm_id')
+    .eq('id', operationalReportId)
+    .maybeSingle<OperationalReportSourceRow>();
+
+  if (error) {
+    return fail(error, 'Gagal memeriksa laporan operasional.');
+  }
+
+  if (!data) {
+    return fail(new Error('Laporan operasional tidak ditemukan atau tidak dapat diakses.'));
+  }
+
+  return ok(data);
 }
 
 async function ensureActiveWorker(farmId: UUID): Promise<ServiceResult<SuccessData>> {
@@ -324,6 +450,7 @@ function mapCareTask(row: CareTaskRow): CareTask {
     farmId: row.farm_id,
     id: row.id,
     instruction: row.instruction,
+    operationalReportId: row.operational_report_id,
     status: row.status,
     targetColumn: row.target_column,
     targetRow: row.target_row,
@@ -346,9 +473,137 @@ function mapCareActivity(row: CareActivityRow): CareActivity {
   };
 }
 
+function normalizeRequiredText(value: string, message: string): string | Error {
+  const normalized = value.trim();
+  return normalized ? normalized : new Error(message);
+}
+
+function normalizeTaskDate(value: string): string | Error {
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return new Error('Tanggal jatuh tempo wajib diisi.');
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return new Error('Tanggal jatuh tempo harus memakai format YYYY-MM-DD.');
+  }
+
+  const date = new Date(`${normalized}T00:00:00`);
+
+  if (Number.isNaN(date.getTime()) || toLocalIsoDate(date) !== normalized) {
+    return new Error('Tanggal jatuh tempo tidak valid.');
+  }
+
+  return normalized;
+}
+
+function normalizeTaskTarget(input: {
+  targetType: TargetType | string | null | undefined;
+  targetRow?: string | null;
+  targetColumn?: string | null;
+  targetTreeId?: string | null;
+  customTargetNote?: string | null;
+}):
+  | {
+      targetType: TargetType;
+      targetRow: string | null;
+      targetColumn: string | null;
+      targetTreeId: string | null;
+      customTargetNote: string | null;
+    }
+  | Error {
+  if (!input.targetType) {
+    return new Error('Target tugas wajib dipilih.');
+  }
+
+  if (!['farm', 'row', 'column', 'tree', 'custom'].includes(input.targetType)) {
+    return new Error('Target tugas tidak valid.');
+  }
+
+  if (input.targetType === 'farm') {
+    return {
+      customTargetNote: null,
+      targetColumn: null,
+      targetRow: null,
+      targetTreeId: null,
+      targetType: 'farm',
+    };
+  }
+
+  if (input.targetType === 'row') {
+    const row = normalizeOptionalText(input.targetRow);
+
+    if (!row) {
+      return new Error('Baris target wajib diisi.');
+    }
+
+    return {
+      customTargetNote: null,
+      targetColumn: null,
+      targetRow: row,
+      targetTreeId: null,
+      targetType: 'row',
+    };
+  }
+
+  if (input.targetType === 'column') {
+    const column = normalizeOptionalText(input.targetColumn);
+
+    if (!column) {
+      return new Error('Kolom target wajib diisi.');
+    }
+
+    return {
+      customTargetNote: null,
+      targetColumn: column,
+      targetRow: null,
+      targetTreeId: null,
+      targetType: 'column',
+    };
+  }
+
+  if (input.targetType === 'tree') {
+    const treeId = normalizeOptionalText(input.targetTreeId);
+
+    if (!treeId) {
+      return new Error('Pohon target wajib dipilih.');
+    }
+
+    return {
+      customTargetNote: null,
+      targetColumn: null,
+      targetRow: null,
+      targetTreeId: treeId,
+      targetType: 'tree',
+    };
+  }
+
+  const customTargetNote = normalizeOptionalText(input.customTargetNote);
+
+  if (!customTargetNote) {
+    return new Error('Catatan target custom wajib diisi.');
+  }
+
+  return {
+    customTargetNote,
+    targetColumn: null,
+    targetRow: null,
+    targetTreeId: null,
+    targetType: 'custom',
+  };
+}
+
 function normalizeOptionalText(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function toLocalIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function isMissingSessionError(error: { message?: string; name?: string }): boolean {

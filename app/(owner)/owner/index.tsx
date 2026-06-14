@@ -15,6 +15,7 @@ export default function OwnerDashboardPlaceholderScreen() {
           <Button title="SOP Perawatan" onPress={() => router.push('/owner/sops')} />
           <Button title="Jadwal Perawatan" onPress={() => router.push('/owner/schedules')} />
           <Button title="Tugas Worker" onPress={() => router.push('/owner/tasks')} />
+          <Button title="Laporan Operasional" onPress={() => router.push('/owner/reports')} />
           <Button title="Kelola Worker" onPress={() => router.push('/owner/workers')} />
           <Button title="Profile" variant="secondary" onPress={() => router.push('/owner/profile')} />
         </>

@@ -39,6 +39,9 @@ export default function OwnerLayout() {
       <Stack.Screen name="owner/schedules/[scheduleId]" options={{ title: 'Detail Jadwal' }} />
       <Stack.Screen name="owner/tasks/index" options={{ title: 'Tugas Worker' }} />
       <Stack.Screen name="owner/tasks/[taskId]" options={{ title: 'Detail Tugas' }} />
+      <Stack.Screen name="owner/reports/index" options={{ title: 'Laporan Operasional' }} />
+      <Stack.Screen name="owner/reports/[reportId]" options={{ title: 'Detail Laporan' }} />
+      <Stack.Screen name="owner/reports/[reportId]/task" options={{ title: 'Buat Task' }} />
       <Stack.Screen name="owner/workers" options={{ title: 'Worker Management' }} />
       <Stack.Screen name="owner/profile" options={{ title: 'Profile' }} />
     </Stack>

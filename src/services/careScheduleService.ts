@@ -25,7 +25,7 @@ const CARE_SCHEDULE_SELECT =
   'id, farm_id, care_sop_id, title, category, scheduled_date, target_type, target_row, target_column, target_tree_id, custom_target_note, instruction, created_by, created_at, updated_at';
 
 const CARE_TASK_SELECT =
-  'id, farm_id, care_schedule_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, created_at, updated_at';
+  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, created_at, updated_at';
 
 const careCategories: CareCategory[] = [
   'watering',
@@ -85,6 +85,7 @@ type CareTaskRow = {
   id: string;
   farm_id: string;
   care_schedule_id: string | null;
+  operational_report_id: string | null;
   assigned_to: string;
   assigned_by: string;
   title: string;
@@ -839,6 +840,7 @@ function mapCareTask(row: CareTaskRow): CareTask {
     farmId: row.farm_id,
     id: row.id,
     instruction: row.instruction,
+    operationalReportId: row.operational_report_id,
     status: row.status,
     targetColumn: row.target_column,
     targetRow: row.target_row,

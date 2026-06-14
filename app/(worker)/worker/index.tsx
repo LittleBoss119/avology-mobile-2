@@ -13,6 +13,7 @@ export default function WorkerDashboardPlaceholderScreen() {
         <>
           <Button title="Tugas Saya" onPress={() => router.push('/worker/tasks')} />
           <Button title="Pohon" onPress={() => router.push('/worker/trees')} />
+          <Button title="Laporan Operasional" onPress={() => router.push('/worker/reports')} />
           <Button title="Profile" variant="secondary" onPress={() => router.push('/worker/profile')} />
         </>
       }

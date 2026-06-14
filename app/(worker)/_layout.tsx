@@ -29,6 +29,8 @@ export default function WorkerLayout() {
       <Stack.Screen name="worker/trees/[treeId]/report" options={{ title: 'Catat Kondisi' }} />
       <Stack.Screen name="worker/tasks/index" options={{ title: 'Tugas Saya' }} />
       <Stack.Screen name="worker/tasks/[taskId]" options={{ title: 'Detail Tugas' }} />
+      <Stack.Screen name="worker/reports/index" options={{ title: 'Laporan' }} />
+      <Stack.Screen name="worker/reports/create" options={{ title: 'Buat Laporan' }} />
       <Stack.Screen name="worker/profile" options={{ title: 'Profile' }} />
     </Stack>
   );

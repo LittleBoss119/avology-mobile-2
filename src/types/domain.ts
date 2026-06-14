@@ -19,6 +19,21 @@ export type CareCategory =
   | 'weeding'
   | 'other';
 
+export type OperationalReportCategory =
+  | 'land_damage'
+  | 'broken_tool'
+  | 'out_of_stock'
+  | 'area_pest_disease'
+  | 'disaster_weather'
+  | 'worker_need'
+  | 'other';
+
+export type OperationalReportStatus =
+  | 'new'
+  | 'in_progress'
+  | 'resolved'
+  | 'rejected';
+
 export type TargetType = 'farm' | 'row' | 'column' | 'tree' | 'custom';
 
 export type CareSOPDefaultTargetType = Exclude<TargetType, 'custom'>;
@@ -117,6 +132,18 @@ export type TreeConditionReport = {
   reportedAt: string;
 };
 
+export type OperationalReport = {
+  id: UUID;
+  farmId: UUID;
+  reportedBy: UUID;
+  category: OperationalReportCategory;
+  locationNote: string | null;
+  description: string | null;
+  status: OperationalReportStatus;
+  createdAt: string;
+  updatedAt?: string | null;
+};
+
 export type CareSOP = {
   id: UUID;
   farmId: UUID;
@@ -165,6 +192,7 @@ export type CareTask = {
   id: UUID;
   farmId: UUID;
   careScheduleId: UUID | null;
+  operationalReportId: UUID | null;
   assignedTo: UUID;
   assignedBy: UUID;
   title: string;
@@ -250,6 +278,32 @@ export type CreateTreeConditionReportData = {
 
 export type GetTreeConditionReportsInput = {
   treeId: UUID;
+};
+
+export type CreateOperationalReportInput = {
+  farmId: UUID;
+  category: OperationalReportCategory;
+  locationNote?: string | null;
+  description?: string | null;
+};
+
+export type CreateOperationalReportData = {
+  reportId: UUID;
+};
+
+export type GetOperationalReportsInput = {
+  farmId: UUID;
+  status?: OperationalReportStatus | 'all';
+  category?: OperationalReportCategory | 'all';
+};
+
+export type GetOperationalReportDetailInput = {
+  operationalReportId: UUID;
+};
+
+export type UpdateOperationalReportStatusInput = {
+  operationalReportId: UUID;
+  status: OperationalReportStatus;
 };
 
 export type GetCareSOPsInput = {
@@ -370,6 +424,23 @@ export type PostponeTaskInput = {
 
 export type PostponeTaskData = {
   activityId: UUID;
+};
+
+export type CreateTaskFromOperationalReportInput = {
+  operationalReportId: UUID;
+  assignedWorkerId: UUID;
+  dueDate: string;
+  title: string;
+  instruction?: string | null;
+  targetType: TargetType;
+  targetRow?: string | null;
+  targetColumn?: string | null;
+  targetTreeId?: UUID | null;
+  customTargetNote?: string | null;
+};
+
+export type CreateTaskFromOperationalReportData = {
+  taskId: UUID;
 };
 
 export type RegisterUserInput = {

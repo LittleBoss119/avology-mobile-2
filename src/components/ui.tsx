@@ -17,6 +17,7 @@ const colors = {
   border: '#DDE4DA',
   primary: '#2F6F4E',
   primaryPressed: '#25583E',
+  successSurface: '#E7F6EC',
   danger: '#B42318',
   dangerSurface: '#FEE4E2',
 };
@@ -198,6 +199,28 @@ export function ErrorBanner({ message }: { message?: string | null }) {
       }}
     >
       <Text selectable style={{ color: colors.danger, lineHeight: 20 }}>
+        {message}
+      </Text>
+    </View>
+  );
+}
+
+export function SuccessBanner({ message }: { message?: string | null }) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors.successSurface,
+        borderColor: '#A6D9B8',
+        borderRadius: 8,
+        borderWidth: 1,
+        padding: 12,
+      }}
+    >
+      <Text selectable style={{ color: colors.primary, lineHeight: 20 }}>
         {message}
       </Text>
     </View>
