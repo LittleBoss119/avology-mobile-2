@@ -1,17 +1,42 @@
-import { Redirect, Stack } from 'expo-router';
+import { Redirect, Stack, useFocusEffect, usePathname } from 'expo-router';
+import React from 'react';
 
 import { LoadingState } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
+import { getHomeRoute, isAllowedOnboardingRoute } from '../../src/utils/routeGuard';
 
 export default function OnboardingLayout() {
-  const { initializing, profile } = useAuth();
+  const { currentFarm, initializing, profile, refresh } = useAuth();
+  const [checkingAccess, setCheckingAccess] = React.useState(false);
+  const pathname = usePathname();
 
-  if (initializing) {
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+
+      setCheckingAccess(true);
+      refresh().finally(() => {
+        if (isActive) {
+          setCheckingAccess(false);
+        }
+      });
+
+      return () => {
+        isActive = false;
+      };
+    }, [refresh])
+  );
+
+  if (initializing || checkingAccess) {
     return <LoadingState message="Memeriksa sesi..." />;
   }
 
   if (!profile) {
     return <Redirect href="/get-started" />;
+  }
+
+  if (!isAllowedOnboardingRoute(pathname, profile, currentFarm)) {
+    return <Redirect href={getHomeRoute(profile, currentFarm)} />;
   }
 
   return (

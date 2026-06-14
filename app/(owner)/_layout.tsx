@@ -1,13 +1,32 @@
-import { Redirect, Stack } from 'expo-router';
+import { Redirect, Stack, useFocusEffect } from 'expo-router';
+import React from 'react';
 
 import { LoadingState } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
 import { getHomeRoute, isOwnerActive } from '../../src/utils/routeGuard';
 
 export default function OwnerLayout() {
-  const { currentFarm, initializing, profile } = useAuth();
+  const { currentFarm, initializing, profile, refresh } = useAuth();
+  const [checkingAccess, setCheckingAccess] = React.useState(false);
 
-  if (initializing) {
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+
+      setCheckingAccess(true);
+      refresh().finally(() => {
+        if (isActive) {
+          setCheckingAccess(false);
+        }
+      });
+
+      return () => {
+        isActive = false;
+      };
+    }, [refresh])
+  );
+
+  if (initializing || checkingAccess) {
     return <LoadingState message="Memeriksa akses owner..." />;
   }
 
@@ -28,7 +47,7 @@ export default function OwnerLayout() {
       <Stack.Screen name="owner/trees/index" options={{ title: 'Pohon' }} />
       <Stack.Screen name="owner/trees/create" options={{ title: 'Tambah Pohon' }} />
       <Stack.Screen name="owner/trees/[treeId]" options={{ title: 'Detail Pohon' }} />
-      <Stack.Screen name="owner/trees/[treeId]/edit" options={{ title: 'Edit Tree' }} />
+      <Stack.Screen name="owner/trees/[treeId]/edit" options={{ title: 'Edit Pohon' }} />
       <Stack.Screen name="owner/trees/[treeId]/report" options={{ title: 'Catat Kondisi' }} />
       <Stack.Screen name="owner/trees/[treeId]/phase" options={{ title: 'Catat Fase' }} />
       <Stack.Screen name="owner/sops/index" options={{ title: 'SOP Perawatan' }} />
@@ -43,7 +62,7 @@ export default function OwnerLayout() {
       <Stack.Screen name="owner/tasks/[taskId]" options={{ title: 'Detail Tugas' }} />
       <Stack.Screen name="owner/reports/index" options={{ title: 'Laporan Operasional' }} />
       <Stack.Screen name="owner/reports/[reportId]" options={{ title: 'Detail Laporan' }} />
-      <Stack.Screen name="owner/reports/[reportId]/task" options={{ title: 'Buat Task' }} />
+      <Stack.Screen name="owner/reports/[reportId]/task" options={{ title: 'Buat Tugas' }} />
       <Stack.Screen name="owner/workers" options={{ title: 'Worker Management' }} />
       <Stack.Screen name="owner/profile" options={{ title: 'Profile' }} />
     </Stack>

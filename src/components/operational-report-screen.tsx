@@ -355,7 +355,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     const normalizedReportId = reportId?.trim();
 
     if (!normalizedReportId) {
-      setError('Report ID tidak ditemukan.');
+      setError('Data laporan tidak ditemukan.');
       setReport(null);
       setWorkerNames({});
       return;
@@ -442,7 +442,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
       footer={
         <>
           <Button
-            title="Create Task From Report"
+            title="Buat Tugas Tindak Lanjut"
             onPress={() => router.push(`/owner/reports/${report.id}/task`)}
           />
           <Button title="Kembali ke Laporan" variant="secondary" onPress={() => router.replace('/owner/reports')} />
@@ -529,7 +529,7 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
       const normalizedReportId = reportId?.trim();
 
       if (!normalizedReportId) {
-        setError('Report ID tidak ditemukan.');
+        setError('Data laporan tidak ditemukan.');
         setLoading(false);
         return;
       }
@@ -648,12 +648,12 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
     <Screen
       footer={
         <>
-          <Button title="Buat Task" loading={submitting} onPress={handleSubmit} />
+          <Button title="Buat Tugas" loading={submitting} onPress={handleSubmit} />
           <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
         </>
       }
     >
-      <PageIntro title="Create Task From Report" subtitle="Buat tugas tindak lanjut untuk worker aktif." />
+      <PageIntro title="Buat Tugas Tindak Lanjut" subtitle="Buat tugas tindak lanjut untuk worker aktif." />
       <ErrorBanner message={error} />
 
       {report ? (
@@ -812,7 +812,7 @@ function WorkerPicker({
         Worker aktif *
       </Text>
       {workers.length === 0 ? (
-        <EmptyState title="Belum ada worker aktif" subtitle="Setujui worker terlebih dahulu sebelum membuat task." />
+        <EmptyState title="Belum ada worker aktif" subtitle="Setujui worker terlebih dahulu sebelum membuat tugas." />
       ) : (
         <View style={{ gap: 8 }}>
           {workers.map((worker) => (
@@ -888,7 +888,7 @@ function TaskTargetPicker({
             Pohon target *
           </Text>
           {trees.length === 0 ? (
-            <EmptyState title="Belum ada pohon aktif" subtitle="Tambahkan pohon sebelum membuat task per pohon." />
+            <EmptyState title="Belum ada pohon aktif" subtitle="Tambahkan pohon sebelum membuat tugas per pohon." />
           ) : (
             <View style={{ gap: 8 }}>
               {trees.map((tree) => (

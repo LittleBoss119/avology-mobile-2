@@ -29,6 +29,8 @@ export default function OwnerTreeListScreen() {
 
   const loadTrees = React.useCallback(async () => {
     if (!farmId) {
+      setError('Data kebun aktif tidak ditemukan.');
+      setTrees([]);
       return;
     }
 
@@ -85,7 +87,7 @@ export default function OwnerTreeListScreen() {
 
       {trees.length === 0 ? (
         <EmptyState
-          title={archived ? 'Belum ada pohon archived' : 'Belum ada pohon aktif'}
+          title={archived ? 'Belum ada pohon diarsipkan' : 'Belum ada pohon aktif'}
           subtitle={
             archived
               ? 'Pohon yang diarsipkan owner akan muncul di sini.'
@@ -129,7 +131,7 @@ function TreeArchiveFilter({
         </View>
         <View style={{ flex: 1 }}>
           <Button
-            title="Archived"
+            title="Diarsipkan"
             variant={archived ? 'primary' : 'secondary'}
             onPress={() => onChange(true)}
           />

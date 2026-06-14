@@ -1,13 +1,32 @@
-import { Redirect, Stack } from 'expo-router';
+import { Redirect, Stack, useFocusEffect } from 'expo-router';
+import React from 'react';
 
 import { LoadingState } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
 import { getHomeRoute, isWorkerActive } from '../../src/utils/routeGuard';
 
 export default function WorkerLayout() {
-  const { currentFarm, initializing, profile } = useAuth();
+  const { currentFarm, initializing, profile, refresh } = useAuth();
+  const [checkingAccess, setCheckingAccess] = React.useState(false);
 
-  if (initializing) {
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+
+      setCheckingAccess(true);
+      refresh().finally(() => {
+        if (isActive) {
+          setCheckingAccess(false);
+        }
+      });
+
+      return () => {
+        isActive = false;
+      };
+    }, [refresh])
+  );
+
+  if (initializing || checkingAccess) {
     return <LoadingState message="Memeriksa akses worker..." />;
   }
 

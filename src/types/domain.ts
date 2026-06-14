@@ -256,6 +256,25 @@ export type CareTaskDetail = CareTask & {
   activities: CareActivity[];
 };
 
+export type OwnerDashboardSummary = {
+  totalTrees: number;
+  healthyTrees: number;
+  problemTrees: number;
+  todayTasks: number;
+  unfinishedTasks: number;
+  newOperationalReports: number;
+  pendingWorkers: number;
+  floweringTrees: number;
+  fruitingTrees: number;
+  dueOrOverdueSops: number;
+};
+
+export type WorkerDashboardSummary = {
+  todayTasks: number;
+  unfinishedTasks: number;
+  completedTasks: number;
+};
+
 export type GetTreesInput = {
   farmId: UUID;
   search?: string;
@@ -330,6 +349,15 @@ export type GetFloweringAndFruitingTreesInput = {
 
 export type GetTreeHistoryInput = {
   treeId: UUID;
+};
+
+export type GetOwnerDashboardSummaryInput = {
+  farmId: UUID;
+};
+
+export type GetWorkerDashboardSummaryInput = {
+  farmId: UUID;
+  userId: UUID;
 };
 
 export type CreateOperationalReportInput = {

@@ -43,7 +43,7 @@ export function TreeDetailScreen({
 
   const loadDetail = React.useCallback(async () => {
     if (!treeId) {
-      setError('Tree ID tidak ditemukan.');
+      setError('Data pohon tidak ditemukan.');
       setTree(null);
       setHistory([]);
       setReports([]);
@@ -63,7 +63,7 @@ export function TreeDetailScreen({
     }
 
     if (mode === 'worker' && treeResult.data.isArchived) {
-      setError('Pohon archived tidak tersedia untuk worker.');
+      setError('Pohon yang diarsipkan tidak tersedia untuk worker.');
       setTree(null);
       setHistory([]);
       setReports([]);
@@ -176,7 +176,7 @@ export function TreeDetailScreen({
           <>
             <Button title="Catat Kondisi" onPress={() => router.push(`${basePath}/${tree.id}/report`)} />
             <Button title="Catat Fase" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
-            <Button title="Edit Tree" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/edit`)} />
+            <Button title="Edit Pohon" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/edit`)} />
             <Button
               title={tree.isArchived ? 'Pulihkan' : 'Arsipkan'}
               variant={tree.isArchived ? 'secondary' : 'danger'}

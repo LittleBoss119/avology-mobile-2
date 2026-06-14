@@ -35,7 +35,7 @@ export function TreeGrowthPhaseRecordScreen({
 
     async function loadTree() {
       if (!treeId) {
-        setError('Tree ID tidak ditemukan.');
+        setError('Data pohon tidak ditemukan.');
         setLoading(false);
         return;
       }
@@ -54,7 +54,7 @@ export function TreeGrowthPhaseRecordScreen({
       }
 
       if (basePath === '/worker/trees' && result.data.isArchived) {
-        setError('Pohon archived tidak tersedia untuk worker.');
+        setError('Pohon yang diarsipkan tidak tersedia untuk worker.');
         setLoading(false);
         return;
       }

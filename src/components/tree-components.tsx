@@ -71,7 +71,7 @@ export function TreeCard({ children, onPress, tree }: TreeCardProps) {
         </View>
         <View style={{ alignItems: 'flex-end', gap: 6 }}>
           <ConditionStatusBadge status={tree.currentCondition} />
-          {tree.isArchived ? <SmallBadge label="Archived" tone="muted" /> : null}
+          {tree.isArchived ? <SmallBadge label="Diarsipkan" tone="muted" /> : null}
         </View>
       </View>
 

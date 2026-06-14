@@ -28,6 +28,8 @@ export default function WorkerTreeListScreen() {
 
   const loadTrees = React.useCallback(async () => {
     if (!farmId) {
+      setError('Data kebun aktif tidak ditemukan.');
+      setTrees([]);
       return;
     }
 

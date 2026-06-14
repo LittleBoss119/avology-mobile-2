@@ -37,7 +37,7 @@ export default function WorkerTaskDetailScreen() {
     const normalizedTaskId = taskId?.trim();
 
     if (!normalizedTaskId) {
-      setError('Task ID tidak ditemukan.');
+      setError('Data tugas tidak ditemukan.');
       setTask(null);
       return;
     }

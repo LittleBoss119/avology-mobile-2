@@ -43,7 +43,7 @@ export default function OwnerTaskDetailScreen() {
     const normalizedTaskId = taskId?.trim();
 
     if (!normalizedTaskId) {
-      setError('Task ID tidak ditemukan.');
+      setError('Data tugas tidak ditemukan.');
       setTask(null);
       setSchedule(null);
       setWorkerNames({});
@@ -140,11 +140,11 @@ export default function OwnerTaskDetailScreen() {
 
       <Card>
         <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          Sumber Task
+          Sumber Tugas
         </Text>
         {task.careScheduleId ? (
           <>
-            <MetaRow label="Tipe sumber" value="Care schedule" />
+            <MetaRow label="Tipe sumber" value="Jadwal perawatan" />
             <MetaRow label="Judul jadwal" value={schedule?.title ?? task.careScheduleId} />
             <MetaRow label="Tanggal jadwal" value={schedule?.scheduledDate} />
             <Button
@@ -155,7 +155,7 @@ export default function OwnerTaskDetailScreen() {
           </>
         ) : (
           <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-            Task tidak terhubung ke jadwal perawatan.
+            Tugas tidak terhubung ke jadwal perawatan.
           </Text>
         )}
       </Card>

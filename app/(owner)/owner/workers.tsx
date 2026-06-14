@@ -1,3 +1,4 @@
+import { useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
@@ -34,6 +35,9 @@ export default function WorkerManagementScreen() {
 
   const loadWorkers = React.useCallback(async () => {
     if (!farmId) {
+      setError('Data kebun aktif tidak ditemukan.');
+      setPendingWorkers([]);
+      setActiveWorkers([]);
       return;
     }
 
@@ -58,9 +62,12 @@ export default function WorkerManagementScreen() {
     }
   }, [farmId]);
 
-  React.useEffect(() => {
-    loadWorkers().finally(() => setLoading(false));
-  }, [loadWorkers]);
+  useFocusEffect(
+    React.useCallback(() => {
+      setLoading(true);
+      loadWorkers().finally(() => setLoading(false));
+    }, [loadWorkers])
+  );
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -114,14 +121,14 @@ export default function WorkerManagementScreen() {
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
                 <Button
-                  title="Approve"
+                  title="Setujui"
                   loading={actionId === `approve:${worker.membershipId}`}
                   onPress={() => handleAction(worker.membershipId, 'approve')}
                 />
               </View>
               <View style={{ flex: 1 }}>
                 <Button
-                  title="Reject"
+                  title="Tolak"
                   variant="danger"
                   loading={actionId === `reject:${worker.membershipId}`}
                   onPress={() => handleAction(worker.membershipId, 'reject')}
@@ -139,7 +146,7 @@ export default function WorkerManagementScreen() {
         activeWorkers.map((worker) => (
           <WorkerCard key={worker.membershipId} worker={worker}>
             <Button
-              title="Remove"
+              title="Nonaktifkan"
               variant="danger"
               loading={actionId === `remove:${worker.membershipId}`}
               onPress={() => handleAction(worker.membershipId, 'remove')}
@@ -170,8 +177,19 @@ function WorkerCard({
     <Card>
       <MetaRow label="Nama" value={worker.fullName} />
       <MetaRow label="Nomor HP" value={worker.phone} />
-      <MetaRow label="Status" value={worker.status} />
+      <MetaRow label="Status" value={formatMembershipStatus(worker.status)} />
       {children}
     </Card>
   );
+}
+
+function formatMembershipStatus(status: WorkerMembership['status']): string {
+  const labels: Record<WorkerMembership['status'], string> = {
+    active: 'Aktif',
+    pending: 'Menunggu approval',
+    rejected: 'Ditolak',
+    removed: 'Dinonaktifkan',
+  };
+
+  return labels[status];
 }
