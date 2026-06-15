@@ -1,14 +1,24 @@
-import { Redirect, Stack, useFocusEffect, usePathname } from 'expo-router';
+import { router, Stack, useFocusEffect, usePathname } from 'expo-router';
 import React from 'react';
 
 import { LoadingState } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
-import { getHomeRoute, isAllowedOnboardingRoute } from '../../src/utils/routeGuard';
+import {
+  logAccessGuardDecision,
+  resolveAccessRoute,
+  shouldRedirectAccess,
+} from '../../src/utils/routeGuard';
 
 export default function OnboardingLayout() {
   const { currentFarm, initializing, profile, refresh } = useAuth();
   const [checkingAccess, setCheckingAccess] = React.useState(false);
   const pathname = usePathname();
+  const loading = initializing || checkingAccess;
+  const targetRoute = resolveAccessRoute({ session: profile, membership: currentFarm });
+  const sessionUserId = profile?.id ?? null;
+  const membershipKey = currentFarm
+    ? `${currentFarm.membershipId}:${currentFarm.role}:${currentFarm.status}`
+    : 'none';
 
   useFocusEffect(
     React.useCallback(() => {
@@ -27,16 +37,28 @@ export default function OnboardingLayout() {
     }, [refresh])
   );
 
-  if (initializing || checkingAccess) {
+  React.useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    const shouldRedirect = shouldRedirectAccess(pathname, targetRoute, currentFarm);
+
+    logAccessGuardDecision({
+      currentPathname: pathname,
+      membership: currentFarm,
+      redirect: shouldRedirect,
+      session: profile,
+      targetRoute,
+    });
+
+    if (shouldRedirect) {
+      router.replace(targetRoute);
+    }
+  }, [loading, membershipKey, pathname, sessionUserId, targetRoute]);
+
+  if (loading) {
     return <LoadingState message="Memeriksa sesi..." />;
-  }
-
-  if (!profile) {
-    return <Redirect href="/get-started" />;
-  }
-
-  if (!isAllowedOnboardingRoute(pathname, profile, currentFarm)) {
-    return <Redirect href={getHomeRoute(profile, currentFarm)} />;
   }
 
   return (

@@ -8,8 +8,11 @@ export default function OnboardingDecisionScreen() {
   const { error, profile, signOut } = useAuth();
 
   async function handleLogout() {
-    await signOut();
-    router.replace('/get-started');
+    const signOutError = await signOut();
+
+    if (!signOutError) {
+      router.replace('/get-started');
+    }
   }
 
   return (

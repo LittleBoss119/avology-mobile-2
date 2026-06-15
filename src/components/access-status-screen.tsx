@@ -28,15 +28,26 @@ export function AccessStatusScreen({
 
   async function handleLogout() {
     setLoggingOut(true);
-    await signOut();
+    const signOutError = await signOut();
     setLoggingOut(false);
-    router.replace('/get-started');
+
+    if (!signOutError) {
+      router.replace('/get-started');
+    }
   }
+
+  const canReturnToAccessFlow = currentFarm.status === 'rejected' || currentFarm.status === 'removed';
 
   return (
     <Screen
       footer={
         <>
+          {canReturnToAccessFlow ? (
+            <>
+              <Button title="Kembali ke Pilih Akses" variant="secondary" onPress={() => router.push('/onboarding')} />
+              <Button title="Gabung Kebun Lagi" variant="secondary" onPress={() => router.push('/join-farm')} />
+            </>
+          ) : null}
           <Button title="Refresh Status" loading={refreshing} onPress={handleRefresh} />
           <Button title="Logout" variant="secondary" loading={loggingOut} onPress={handleLogout} />
         </>
