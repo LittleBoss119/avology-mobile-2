@@ -23,10 +23,9 @@ type DashboardStat = {
 };
 
 export default function OwnerDashboardScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [summary, setSummary] = React.useState<OwnerDashboardSummary | null>(null);
 
   const farmId = currentFarm?.farmId;
@@ -58,15 +57,8 @@ export default function OwnerDashboardScreen() {
     }, [loadDashboard])
   );
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadDashboard();
-    setRefreshing(false);
-  }
-
   if (loading) {
-    return <LoadingState message="Memuat dashboard owner..." />;
+    return <LoadingState message="Memuat dashboard pemilik..." />;
   }
 
   const stats = summary ? buildStats(summary) : [];
@@ -78,18 +70,17 @@ export default function OwnerDashboardScreen() {
         <>
           <Button title="Pohon" onPress={() => router.push('/owner/trees')} />
           <Button title="Jadwal/Tugas" onPress={() => router.push('/owner/schedules')} />
-          <Button title="Tugas Worker" variant="secondary" onPress={() => router.push('/owner/tasks')} />
+          <Button title="Tugas Pekerja" variant="secondary" onPress={() => router.push('/owner/tasks')} />
           <Button title="Laporan Operasional" onPress={() => router.push('/owner/reports')} />
-          <Button title="Worker Management" onPress={() => router.push('/owner/workers')} />
+          <Button title="Manajemen Pekerja" onPress={() => router.push('/owner/workers')} />
           <Button title="SOP Perawatan" onPress={() => router.push('/owner/sops')} />
           <Button title="Monitoring Fase" onPress={() => router.push('/owner/growth-monitoring')} />
-          <Button title="Profile" variant="secondary" onPress={() => router.push('/owner/profile')} />
-          <Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />
+          <Button title="Profil" variant="secondary" onPress={() => router.push('/owner/profile')} />
         </>
       }
     >
       <PageIntro
-        title="Owner Dashboard"
+        title="Dashboard Pemilik"
         subtitle="Ringkasan kondisi kebun dan pekerjaan yang perlu diperhatikan."
       />
       <ErrorBanner message={error} />
@@ -105,7 +96,7 @@ export default function OwnerDashboardScreen() {
       {isEmpty ? (
         <EmptyState
           title="Belum ada data operasional"
-          subtitle="Ringkasan akan terisi setelah pohon, tugas, laporan, worker, atau SOP dibuat."
+          subtitle="Ringkasan akan terisi setelah pohon, tugas, laporan, pekerja, atau SOP dibuat."
         />
       ) : null}
 
@@ -118,7 +109,7 @@ export default function OwnerDashboardScreen() {
       ) : error ? (
         <EmptyState
           title="Dashboard belum dapat ditampilkan"
-          subtitle="Gunakan tombol refresh setelah koneksi atau akses kebun kembali tersedia."
+          subtitle="Muat ulang halaman setelah koneksi atau akses kebun kembali tersedia."
         />
       ) : null}
     </Screen>
@@ -168,7 +159,7 @@ function buildStats(summary: OwnerDashboardSummary): DashboardStat[] {
       value: summary.newOperationalReports,
     },
     {
-      label: 'Pengajuan Worker Pending',
+      label: 'Pengajuan Pekerja Menunggu',
       tone: summary.pendingWorkers > 0 ? 'danger' : 'muted',
       value: summary.pendingWorkers,
     },

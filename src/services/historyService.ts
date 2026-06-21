@@ -59,7 +59,7 @@ export async function getTreeHistory(
   if (error) {
     if (isMissingHistoryViewError(error)) {
       return fail(
-        new Error('Tree history view belum tersedia. Jalankan migration tree_history_view sebelum memakai riwayat pohon terintegrasi.')
+        new Error('Riwayat pohon belum tersedia. Jalankan pembaruan database sebelum memakai riwayat pohon terintegrasi.')
       );
     }
 
@@ -101,7 +101,7 @@ async function ensureActiveOwnerOrWorker(farmId: UUID): Promise<ServiceResult<Su
     membership.status !== 'active' ||
     (membership.role !== 'owner' && membership.role !== 'worker')
   ) {
-    return fail(new Error('Hanya owner atau worker aktif yang dapat mengakses riwayat pohon.'));
+    return fail(new Error('Hanya pemilik atau pekerja aktif yang dapat mengakses riwayat pohon.'));
   }
 
   return ok({

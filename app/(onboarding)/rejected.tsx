@@ -4,7 +4,7 @@ export default function RejectedScreen() {
   return (
     <AccessStatusScreen
       title="Akses Ditolak"
-      subtitle="Pengajuan worker ditolak oleh owner. Akun ini tidak dapat mengakses data kebun."
+      subtitle="Pengajuan pekerja ditolak oleh pemilik. Akun ini tidak dapat mengakses data kebun."
     />
   );
 }

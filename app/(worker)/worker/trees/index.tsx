@@ -3,24 +3,15 @@ import React from 'react';
 import { View } from 'react-native';
 
 import { TreeCard } from '../../../../src/components/tree-components';
-import {
-  Button,
-  EmptyState,
-  ErrorBanner,
-  Field,
-  LoadingState,
-  PageIntro,
-  Screen,
-} from '../../../../src/components/ui';
+import { EmptyState, ErrorBanner, Field, LoadingState, PageIntro, Screen } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getTrees } from '../../../../src/services/treeService';
 import type { Tree } from '../../../../src/types/domain';
 
 export default function WorkerTreeListScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [trees, setTrees] = React.useState<Tree[]>([]);
 
@@ -54,19 +45,12 @@ export default function WorkerTreeListScreen() {
     loadTrees().finally(() => setLoading(false));
   }, [loadTrees]);
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadTrees();
-    setRefreshing(false);
-  }
-
   if (loading) {
     return <LoadingState message="Memuat pohon..." />;
   }
 
   return (
-    <Screen footer={<Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />}>
+    <Screen>
       <PageIntro title="Pohon" subtitle="Lihat pohon aktif dan buka detail untuk laporan kondisi." />
       <ErrorBanner message={error} />
       <Field

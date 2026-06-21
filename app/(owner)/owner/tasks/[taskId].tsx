@@ -117,13 +117,13 @@ export default function OwnerTaskDetailScreen() {
 
   return (
     <Screen footer={<Button title="Kembali ke Tugas" variant="secondary" onPress={() => router.replace('/owner/tasks')} />}>
-      <PageIntro title={task.title} subtitle="Detail tugas worker dan riwayat realisasi." />
+      <PageIntro title={task.title} subtitle="Detail tugas pekerja dan riwayat realisasi." />
       <ErrorBanner message={error} />
 
       <Card>
         <MetaRow label="Judul" value={task.title} />
         <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
-        <MetaRow label="Worker" value={workerNames[task.assignedTo] ?? task.assignedTo} />
+        <MetaRow label="Pekerja" value={workerNames[task.assignedTo] ?? 'Pekerja tidak tersedia'} />
         <MetaRow label="Jatuh tempo" value={task.dueDate} />
         <MetaRow label="Status" value={formatTaskStatus(task.status)} />
         <MetaRow label="Target" value={formatCareTarget(task)} />
@@ -145,7 +145,7 @@ export default function OwnerTaskDetailScreen() {
         {task.careScheduleId ? (
           <>
             <MetaRow label="Tipe sumber" value="Jadwal perawatan" />
-            <MetaRow label="Judul jadwal" value={schedule?.title ?? task.careScheduleId} />
+            <MetaRow label="Judul jadwal" value={schedule?.title ?? 'Jadwal terkait'} />
             <MetaRow label="Tanggal jadwal" value={schedule?.scheduledDate} />
             <Button
               title="Buka Jadwal"
@@ -164,7 +164,7 @@ export default function OwnerTaskDetailScreen() {
         Realisasi
       </Text>
       {task.activities.length === 0 ? (
-        <EmptyState title="Belum ada realisasi" subtitle="Worker belum menyelesaikan atau menunda tugas ini." />
+        <EmptyState title="Belum ada realisasi" subtitle="Pekerja belum menyelesaikan atau menunda tugas ini." />
       ) : (
         <View style={{ gap: 12 }}>
           {task.activities.map((activity) => (
@@ -183,7 +183,7 @@ export default function OwnerTaskDetailScreen() {
 function formatActivityStatus(status: ActivityStatus): string {
   const labels: Record<ActivityStatus, string> = {
     completed: 'Selesai',
-    postponed: 'Ditunda',
+    postponed: 'Tertunda',
   };
 
   return labels[status];

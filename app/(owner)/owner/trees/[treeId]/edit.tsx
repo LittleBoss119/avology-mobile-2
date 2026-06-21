@@ -25,7 +25,7 @@ export default function OwnerEditTreeScreen() {
 
     async function loadTree() {
       if (!treeId) {
-        setError('Tree ID tidak ditemukan.');
+        setError('Data pohon tidak ditemukan.');
         setLoading(false);
         return;
       }
@@ -65,7 +65,7 @@ export default function OwnerEditTreeScreen() {
     const treeCode = values.treeCode.trim();
 
     if (!normalizedTreeId) {
-      setError('Tree ID tidak ditemukan.');
+      setError('Data pohon tidak ditemukan.');
       return;
     }
 
@@ -114,7 +114,7 @@ export default function OwnerEditTreeScreen() {
         </>
       }
     >
-      <PageIntro title="Edit Tree" subtitle="Perbarui identitas dan lokasi pohon." />
+      <PageIntro title="Edit Pohon" subtitle="Perbarui identitas dan lokasi pohon." />
       <ErrorBanner message={error} />
       <TreeForm values={values} onChange={setValues} />
     </Screen>

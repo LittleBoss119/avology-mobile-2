@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import React from 'react';
 
 import { useAuth } from '../context/auth-context';
+import { formatMemberStatus, formatRole } from '../utils/displayFormat';
 import { Button, Card, ErrorBanner, LoadingState, MetaRow, PageIntro, Screen } from './ui';
 
 export function AccessStatusScreen({
@@ -16,7 +17,7 @@ export function AccessStatusScreen({
   const [loggingOut, setLoggingOut] = React.useState(false);
 
   if (!currentFarm) {
-    return <LoadingState message="Memuat status membership..." />;
+    return <LoadingState message="Memuat status akses..." />;
   }
 
   async function handleRefresh() {
@@ -48,16 +49,16 @@ export function AccessStatusScreen({
               <Button title="Gabung Kebun Lagi" variant="secondary" onPress={() => router.push('/join-farm')} />
             </>
           ) : null}
-          <Button title="Refresh Status" loading={refreshing} onPress={handleRefresh} />
-          <Button title="Logout" variant="secondary" loading={loggingOut} onPress={handleLogout} />
+          <Button title="Cek Status" variant="secondary" size="small" loading={refreshing} onPress={handleRefresh} />
+          <Button title="Keluar" variant="secondary" loading={loggingOut} onPress={handleLogout} />
         </>
       }
     >
       <PageIntro title={title} subtitle={subtitle} />
       <ErrorBanner message={error?.message} />
       <Card>
-        <MetaRow label="Role" value={currentFarm.role} />
-        <MetaRow label="Status" value={currentFarm.status} />
+        <MetaRow label="Peran" value={formatRole(currentFarm.role)} />
+        <MetaRow label="Status" value={formatMemberStatus(currentFarm.status)} />
       </Card>
     </Screen>
   );

@@ -58,7 +58,7 @@ export default function WorkerLayout() {
   }, [loading, membershipKey, pathname, sessionUserId, targetRoute]);
 
   if (loading) {
-    return <LoadingState message="Memeriksa akses worker..." />;
+    return <LoadingState message="Memeriksa akses pekerja..." />;
   }
 
   return (
@@ -69,7 +69,7 @@ export default function WorkerLayout() {
         contentStyle: { backgroundColor: '#F6F7F2' },
       }}
     >
-      <Stack.Screen name="worker/index" options={{ title: 'Worker' }} />
+      <Stack.Screen name="worker/index" options={{ title: 'Pekerja' }} />
       <Stack.Screen name="worker/trees/index" options={{ title: 'Pohon' }} />
       <Stack.Screen name="worker/trees/[treeId]" options={{ title: 'Detail Pohon' }} />
       <Stack.Screen name="worker/trees/[treeId]/report" options={{ title: 'Catat Kondisi' }} />
@@ -78,7 +78,7 @@ export default function WorkerLayout() {
       <Stack.Screen name="worker/tasks/[taskId]" options={{ title: 'Detail Tugas' }} />
       <Stack.Screen name="worker/reports/index" options={{ title: 'Laporan' }} />
       <Stack.Screen name="worker/reports/create" options={{ title: 'Buat Laporan' }} />
-      <Stack.Screen name="worker/profile" options={{ title: 'Profile' }} />
+      <Stack.Screen name="worker/profile" options={{ title: 'Profil' }} />
     </Stack>
   );
 }

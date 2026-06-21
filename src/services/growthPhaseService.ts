@@ -164,7 +164,7 @@ export async function getFloweringAndFruitingTrees(
     .returns<TreeRow[]>();
 
   if (error) {
-    return fail(error, 'Gagal memuat monitoring fase flowering dan fruiting.');
+    return fail(error, 'Gagal memuat monitoring fase berbunga dan berbuah.');
   }
 
   return ok((data ?? []).map(mapTree));
@@ -178,7 +178,7 @@ async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessDat
   }
 
   if (membershipResult.data?.role !== 'owner' || membershipResult.data.status !== 'active') {
-    return fail(new Error('Hanya owner aktif yang dapat mengakses monitoring fase.'));
+    return fail(new Error('Hanya pemilik aktif yang dapat mengakses monitoring fase.'));
   }
 
   return ok({
@@ -218,7 +218,7 @@ async function ensureActiveOwnerOrWorker(farmId: UUID): Promise<ServiceResult<Su
     membership.status !== 'active' ||
     (membership.role !== 'owner' && membership.role !== 'worker')
   ) {
-    return fail(new Error('Hanya owner atau worker aktif yang dapat mengakses fase pertumbuhan.'));
+    return fail(new Error('Hanya pemilik atau pekerja aktif yang dapat mengakses fase pertumbuhan.'));
   }
 
   return ok({

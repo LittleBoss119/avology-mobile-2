@@ -60,7 +60,7 @@ export async function getPendingWorkers(
   });
 
   if (error) {
-    return fail(error, 'Gagal memuat pengajuan worker.');
+    return fail(error, 'Gagal memuat pengajuan pekerja.');
   }
 
   return ok(((data ?? []) as PendingWorkerRow[]).map(mapPendingWorker));
@@ -74,7 +74,7 @@ export async function getActiveWorkers(
   });
 
   if (error) {
-    return fail(error, 'Gagal memuat worker aktif.');
+    return fail(error, 'Gagal memuat pekerja aktif.');
   }
 
   return ok(((data ?? []) as ActiveWorkerRow[]).map(mapActiveWorker));
@@ -83,19 +83,19 @@ export async function getActiveWorkers(
 export async function approveWorker(
   input: MembershipActionInput
 ): Promise<ServiceResult<SuccessData>> {
-  return updateWorkerMembership('approve_worker', input.membershipId, 'Gagal menyetujui worker.');
+  return updateWorkerMembership('approve_worker', input.membershipId, 'Gagal menyetujui pekerja.');
 }
 
 export async function rejectWorker(
   input: MembershipActionInput
 ): Promise<ServiceResult<SuccessData>> {
-  return updateWorkerMembership('reject_worker', input.membershipId, 'Gagal menolak worker.');
+  return updateWorkerMembership('reject_worker', input.membershipId, 'Gagal menolak pekerja.');
 }
 
 export async function removeWorker(
   input: MembershipActionInput
 ): Promise<ServiceResult<SuccessData>> {
-  return updateWorkerMembership('remove_worker', input.membershipId, 'Gagal mengeluarkan worker.');
+  return updateWorkerMembership('remove_worker', input.membershipId, 'Gagal mengeluarkan pekerja.');
 }
 
 async function updateWorkerMembership(

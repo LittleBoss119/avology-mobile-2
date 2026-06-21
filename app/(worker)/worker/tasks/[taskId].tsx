@@ -252,7 +252,7 @@ function TextArea({
 function formatActivityStatus(status: ActivityStatus): string {
   const labels: Record<ActivityStatus, string> = {
     completed: 'Selesai',
-    postponed: 'Ditunda',
+    postponed: 'Tertunda',
   };
 
   return labels[status];

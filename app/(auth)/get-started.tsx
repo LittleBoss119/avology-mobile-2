@@ -9,20 +9,20 @@ export default function GetStartedScreen() {
       footer={
         <>
           <Button title="Buat Akun" onPress={() => router.push('/register')} />
-          <Button title="Login" variant="secondary" onPress={() => router.push('/login')} />
+          <Button title="Masuk" variant="secondary" onPress={() => router.push('/login')} />
         </>
       }
     >
       <PageIntro
         title="Avology"
-        subtitle="Kelola akses kebun alpukat MS Farm dari akun owner dan worker."
+        subtitle="Kelola operasional kebun alpukat MS Farm dari satu aplikasi mobile."
       />
       <Card>
         <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          Iteration 1
+          Operasional kebun alpukat
         </Text>
         <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-          Fokus saat ini: auth, pembuatan kebun, join worker, dan pengelolaan membership.
+          Pantau pohon, tugas perawatan, laporan lapangan, dan akses pekerja dengan alur yang sederhana.
         </Text>
       </Card>
     </Screen>

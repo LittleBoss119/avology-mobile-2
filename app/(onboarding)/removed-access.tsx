@@ -4,7 +4,7 @@ export default function RemovedAccessScreen() {
   return (
     <AccessStatusScreen
       title="Akses Dinonaktifkan"
-      subtitle="Membership worker sudah dinonaktifkan. Data operasional kebun tetap tidak dapat diakses."
+      subtitle="Akses pekerja sudah dinonaktifkan. Data operasional kebun tetap tidak dapat diakses."
     />
   );
 }

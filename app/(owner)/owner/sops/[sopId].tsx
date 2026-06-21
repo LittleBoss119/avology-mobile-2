@@ -37,7 +37,7 @@ export default function CareSOPDetailScreen() {
     const normalizedSopId = sopId?.trim();
 
     if (!normalizedSopId) {
-      setError('SOP ID tidak ditemukan.');
+      setError('Data SOP tidak ditemukan.');
       setSop(null);
       setReference(null);
       return;

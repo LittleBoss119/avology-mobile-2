@@ -36,7 +36,7 @@ export default function EditCareSOPScreen() {
       const normalizedSopId = sopId?.trim();
 
       if (!normalizedSopId) {
-        setError('SOP ID tidak ditemukan.');
+        setError('Data SOP tidak ditemukan.');
         setLoading(false);
         return;
       }
@@ -96,7 +96,7 @@ export default function EditCareSOPScreen() {
     const normalizedSopId = sopId?.trim();
 
     if (!normalizedSopId) {
-      setError('SOP ID tidak ditemukan.');
+      setError('Data SOP tidak ditemukan.');
       return;
     }
 

@@ -33,12 +33,12 @@ export default function LoginScreen() {
     <Screen
       footer={
         <>
-          <Button title="Login" loading={submitting} onPress={handleSubmit} />
+          <Button title="Masuk" loading={submitting} onPress={handleSubmit} />
           <Button title="Buat akun baru" variant="secondary" onPress={() => router.replace('/register')} />
         </>
       }
     >
-      <PageIntro title="Login" subtitle="Masuk untuk melanjutkan ke area owner atau worker." />
+      <PageIntro title="Masuk" subtitle="Masuk untuk melanjutkan ke area pemilik atau pekerja." />
       <ErrorBanner message={error} />
       <Field label="Email" value={email} onChangeText={setEmail} placeholder="nama@email.com" keyboardType="email-address" />
       <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />

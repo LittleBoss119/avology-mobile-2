@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../../../src/context/auth-context';
 import { getWorkerDashboardSummary } from '../../../src/services/dashboardService';
 import type { WorkerDashboardSummary } from '../../../src/types/domain';
+import { formatMemberStatus } from '../../../src/utils/displayFormat';
 
 type WorkerStat = {
   label: string;
@@ -29,10 +30,9 @@ type Shortcut = {
 };
 
 export default function WorkerDashboardScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [summary, setSummary] = React.useState<WorkerDashboardSummary | null>(null);
 
   const farmId = currentFarm?.farmId;
@@ -40,7 +40,7 @@ export default function WorkerDashboardScreen() {
 
   const loadDashboard = React.useCallback(async () => {
     if (!farmId || !userId) {
-      setError('Data worker aktif tidak ditemukan.');
+      setError('Data pekerja aktif tidak ditemukan.');
       setSummary(null);
       return;
     }
@@ -68,15 +68,8 @@ export default function WorkerDashboardScreen() {
     }, [loadDashboard])
   );
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadDashboard();
-    setRefreshing(false);
-  }
-
   if (loading) {
-    return <LoadingState message="Memuat dashboard worker..." />;
+    return <LoadingState message="Memuat dashboard pekerja..." />;
   }
 
   const stats = summary ? buildStats(summary) : [];
@@ -86,12 +79,11 @@ export default function WorkerDashboardScreen() {
     <Screen
       footer={
         <>
-          <Button title="Profile" variant="secondary" onPress={() => router.push('/worker/profile')} />
-          <Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />
+          <Button title="Profil" variant="secondary" onPress={() => router.push('/worker/profile')} />
         </>
       }
     >
-      <PageIntro title="Worker Dashboard" subtitle="Tugas dan laporan lapangan." />
+      <PageIntro title="Dashboard Pekerja" subtitle="Tugas dan laporan lapangan." />
       <ErrorBanner message={error} />
 
       <Card>
@@ -99,13 +91,13 @@ export default function WorkerDashboardScreen() {
           Kebun aktif
         </Text>
         <MetaRow label="Nama kebun" value={currentFarm?.farm?.name} />
-        <MetaRow label="Status" value={currentFarm?.status} />
+        <MetaRow label="Status" value={formatMemberStatus(currentFarm?.status)} />
       </Card>
 
       {isEmpty ? (
         <EmptyState
           title="Belum ada tugas"
-          subtitle="Tugas dari owner akan muncul di dashboard ini."
+          subtitle="Tugas dari pemilik akan muncul di dashboard ini."
         />
       ) : null}
 
@@ -118,7 +110,7 @@ export default function WorkerDashboardScreen() {
       ) : error ? (
         <EmptyState
           title="Dashboard belum dapat ditampilkan"
-          subtitle="Gunakan tombol refresh setelah koneksi atau akses kebun kembali tersedia."
+          subtitle="Muat ulang halaman setelah koneksi atau akses kebun kembali tersedia."
         />
       ) : null}
 

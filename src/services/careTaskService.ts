@@ -96,7 +96,7 @@ export async function getWorkerTasks(
     .returns<CareTaskRow[]>();
 
   if (error) {
-    return fail(error, 'Gagal memuat daftar tugas worker.');
+    return fail(error, 'Gagal memuat daftar tugas pekerja.');
   }
 
   return ok((data ?? []).map(mapCareTask));
@@ -180,7 +180,7 @@ export async function createTaskFromOperationalReport(
 
   const workerId = normalizeRequiredText(
     input.assignedWorkerId,
-    'Worker aktif wajib dipilih.'
+    'Pekerja aktif wajib dipilih.'
   );
 
   if (workerId instanceof Error) {
@@ -219,7 +219,7 @@ export async function createTaskFromOperationalReport(
 
   const accessResult = await ensureActiveOwner(
     reportResult.data.farm_id,
-    'Hanya owner aktif yang dapat membuat tindak lanjut laporan operasional.'
+    'Hanya pemilik aktif yang dapat membuat tindak lanjut laporan operasional.'
   );
 
   if (accessResult.error) {
@@ -311,7 +311,7 @@ export async function postponeTask(
 
 async function ensureActiveOwner(
   farmId: UUID,
-  forbiddenMessage = 'Hanya owner aktif yang dapat melihat tugas kebun.'
+  forbiddenMessage = 'Hanya pemilik aktif yang dapat melihat tugas kebun.'
 ): Promise<ServiceResult<SuccessData>> {
   const membershipResult = await getCurrentUserMembership(farmId);
 
@@ -356,7 +356,7 @@ async function ensureActiveWorker(farmId: UUID): Promise<ServiceResult<SuccessDa
   }
 
   if (membershipResult.data?.role !== 'worker' || membershipResult.data.status !== 'active') {
-    return fail(new Error('Hanya worker aktif yang dapat melihat tugasnya.'));
+    return fail(new Error('Hanya pekerja aktif yang dapat melihat tugasnya.'));
   }
 
   return ok({
@@ -582,7 +582,7 @@ function normalizeTaskTarget(input: {
   const customTargetNote = normalizeOptionalText(input.customTargetNote);
 
   if (!customTargetNote) {
-    return new Error('Catatan target custom wajib diisi.');
+    return new Error('Catatan target khusus wajib diisi.');
   }
 
   return {

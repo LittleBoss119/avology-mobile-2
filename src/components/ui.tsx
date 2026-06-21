@@ -9,6 +9,8 @@ import {
   type KeyboardTypeOptions,
 } from 'react-native';
 
+import { sanitizeDisplayValue, sanitizeUserFacingMessage } from '../utils/displayFormat';
+
 const colors = {
   background: '#F6F7F2',
   surface: '#FFFFFF',
@@ -132,12 +134,14 @@ export function Button({
   variant = 'primary',
   loading,
   disabled,
+  size = 'regular',
 }: {
   title: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'danger';
   loading?: boolean;
   disabled?: boolean;
+  size?: 'regular' | 'small';
 }) {
   const isPrimary = variant === 'primary';
   const isDanger = variant === 'danger';
@@ -148,6 +152,7 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: 'center',
+        alignSelf: size === 'small' ? 'flex-start' : 'stretch',
         backgroundColor: isPrimary
           ? pressed
             ? colors.primaryPressed
@@ -159,10 +164,10 @@ export function Button({
         borderCurve: 'continuous',
         borderRadius: 8,
         borderWidth: 1,
-        minHeight: 48,
+        minHeight: size === 'small' ? 40 : 48,
         justifyContent: 'center',
         opacity: disabled ? 0.6 : 1,
-        paddingHorizontal: 16,
+        paddingHorizontal: size === 'small' ? 12 : 16,
       })}
     >
       {loading ? (
@@ -172,7 +177,7 @@ export function Button({
           selectable
           style={{
             color: isPrimary ? '#FFFFFF' : isDanger ? colors.danger : colors.text,
-            fontSize: 16,
+            fontSize: size === 'small' ? 14 : 16,
             fontWeight: '700',
           }}
         >
@@ -184,7 +189,9 @@ export function Button({
 }
 
 export function ErrorBanner({ message }: { message?: string | null }) {
-  if (!message) {
+  const safeMessage = sanitizeUserFacingMessage(message);
+
+  if (!safeMessage) {
     return null;
   }
 
@@ -199,7 +206,7 @@ export function ErrorBanner({ message }: { message?: string | null }) {
       }}
     >
       <Text selectable style={{ color: colors.danger, lineHeight: 20 }}>
-        {message}
+        {safeMessage}
       </Text>
     </View>
   );
@@ -256,13 +263,15 @@ export function EmptyState({ title, subtitle }: { title: string; subtitle?: stri
 }
 
 export function MetaRow({ label, value }: { label: string; value?: string | null }) {
+  const safeValue = sanitizeDisplayValue(value);
+
   return (
     <View style={{ gap: 3 }}>
       <Text selectable style={{ color: colors.muted, fontSize: 13 }}>
         {label}
       </Text>
       <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>
-        {value || '-'}
+        {safeValue || '-'}
       </Text>
     </View>
   );

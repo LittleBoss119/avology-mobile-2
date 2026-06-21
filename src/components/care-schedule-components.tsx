@@ -9,9 +9,15 @@ import type {
   Tree,
   WorkerMembership,
 } from '../types/domain';
+import {
+  formatCareCategory,
+  formatTargetType,
+  formatTaskStatus,
+  formatTreeTargetFallback,
+} from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
 import { Button, Card, EmptyState, Field, MetaRow } from './ui';
-import { careCategoryOptions, formatCareCategory } from './care-sop-components';
+import { careCategoryOptions } from './care-sop-components';
 
 export type ManualScheduleFormValues = {
   assignedWorkerId: string;
@@ -91,7 +97,7 @@ export function CareTaskSummaryCard({
         <SmallBadge label={formatTaskStatus(task.status)} />
       </View>
       {showAssignedWorker ? (
-        <MetaRow label="Worker" value={assignedWorkerName ?? task.assignedTo} />
+        <MetaRow label="Pekerja" value={assignedWorkerName ?? 'Pekerja tidak tersedia'} />
       ) : null}
       <MetaRow label="Jatuh tempo" value={task.dueDate} />
       <MetaRow label="Target" value={formatCareTarget(task)} />
@@ -176,7 +182,7 @@ export function ManualScheduleForm({
       <TextArea
         label="Instruksi"
         onChangeText={(value) => updateValue('instruction', value)}
-        placeholder="Instruksi kerja untuk worker"
+        placeholder="Instruksi kerja untuk pekerja"
         value={values.instruction}
       />
     </View>
@@ -203,20 +209,10 @@ export function formatCareTarget(input: {
   }
 
   if (input.targetType === 'tree') {
-    return input.targetTreeId ? `Pohon ${input.targetTreeId}` : 'Pohon belum dipilih';
+    return formatTreeTargetFallback(input.targetTreeId);
   }
 
-  return input.customTargetNote ?? 'Target custom belum diisi';
-}
-
-export function formatTaskStatus(status: TaskStatus): string {
-  const labels: Record<TaskStatus, string> = {
-    completed: 'Selesai',
-    pending: 'Pending',
-    postponed: 'Ditunda',
-  };
-
-  return labels[status];
+  return input.customTargetNote ?? 'Target khusus belum diisi';
 }
 
 function WorkerPicker({
@@ -231,10 +227,10 @@ function WorkerPicker({
   return (
     <View style={{ gap: 8 }}>
       <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
-        Worker aktif *
+        Pekerja aktif *
       </Text>
       {workers.length === 0 ? (
-        <EmptyState title="Belum ada worker aktif" subtitle="Setujui worker terlebih dahulu sebelum membuat tugas." />
+        <EmptyState title="Belum ada pekerja aktif" subtitle="Setujui pekerja terlebih dahulu sebelum membuat tugas." />
       ) : (
         <View style={{ gap: 8 }}>
           {workers.map((worker) => (
@@ -316,7 +312,7 @@ function TargetPicker({
 
       {values.targetType === 'custom' ? (
         <TextArea
-          label="Catatan target custom *"
+          label="Catatan target khusus *"
           onChangeText={(value) => onValueChange('customTargetNote', value)}
           placeholder="Contoh: Area dekat gudang pupuk"
           value={values.customTargetNote}
@@ -416,14 +412,4 @@ function SmallBadge({ label }: { label: string }) {
   );
 }
 
-function formatTargetType(targetType: TargetType): string {
-  const labels: Record<TargetType, string> = {
-    column: 'Kolom',
-    custom: 'Custom',
-    farm: 'Seluruh kebun',
-    row: 'Baris',
-    tree: 'Pohon',
-  };
-
-  return labels[targetType];
-}
+export { formatTaskStatus };

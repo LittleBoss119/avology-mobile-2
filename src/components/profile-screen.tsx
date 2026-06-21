@@ -3,20 +3,13 @@ import React from 'react';
 import { Text } from 'react-native';
 
 import { useAuth } from '../context/auth-context';
+import { formatMemberStatus, formatRole } from '../utils/displayFormat';
 import { Button, Card, EmptyState, ErrorBanner, MetaRow, PageIntro, Screen } from './ui';
 
 export function ProfileScreen() {
-  const { currentFarm, error, profile, refresh, signOut } = useAuth();
+  const { currentFarm, error, profile, signOut } = useAuth();
   const [loggingOut, setLoggingOut] = React.useState(false);
   const [logoutError, setLogoutError] = React.useState<string | null>(null);
-  const [refreshing, setRefreshing] = React.useState(false);
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    setLogoutError(null);
-    await refresh();
-    setRefreshing(false);
-  }
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -38,16 +31,15 @@ export function ProfileScreen() {
     <Screen
       footer={
         <>
-          <Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />
-          <Button title="Logout" variant="danger" loading={loggingOut} onPress={handleLogout} />
+          <Button title="Keluar" variant="danger" loading={loggingOut} onPress={handleLogout} />
         </>
       }
     >
-      <PageIntro title="Profile" subtitle="Data akun dan akses kebun saat ini." />
+      <PageIntro title="Profil" subtitle="Data akun dan akses kebun saat ini." />
       <ErrorBanner message={logoutError ?? error?.message} />
 
       {!profile ? (
-        <EmptyState title="Profil tidak tersedia" subtitle="Coba refresh atau login ulang." />
+        <EmptyState title="Profil tidak tersedia" subtitle="Muat ulang halaman atau masuk ulang." />
       ) : (
         <Card>
           <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
@@ -66,26 +58,15 @@ export function ProfileScreen() {
             Kebun
           </Text>
           <MetaRow label="Nama kebun" value={currentFarm.farm?.name} />
-          <MetaRow label="Role" value={formatRole(currentFarm.role)} />
+          <MetaRow label="Peran" value={formatRole(currentFarm.role)} />
           <MetaRow label="Status" value={formatMembershipStatus(currentFarm.status)} />
-          {currentFarm.role === 'owner' ? <MetaRow label="Join code" value={currentFarm.farm?.joinCode} /> : null}
+          {currentFarm.role === 'owner' ? <MetaRow label="Kode gabung" value={currentFarm.farm?.joinCode} /> : null}
         </Card>
       )}
     </Screen>
   );
 }
 
-function formatRole(role: string): string {
-  return role === 'owner' ? 'Owner' : 'Worker';
-}
-
 function formatMembershipStatus(status: string): string {
-  const labels: Record<string, string> = {
-    active: 'Aktif',
-    pending: 'Menunggu approval',
-    rejected: 'Ditolak',
-    removed: 'Dinonaktifkan',
-  };
-
-  return labels[status] ?? status;
+  return formatMemberStatus(status);
 }

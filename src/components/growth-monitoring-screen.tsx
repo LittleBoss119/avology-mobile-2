@@ -7,22 +7,12 @@ import { getFloweringAndFruitingTrees } from '../services/growthPhaseService';
 import type { GrowthPhase, Tree } from '../types/domain';
 import { formatGrowthPhase, formatTreeLocation } from '../utils/treeFormat';
 import { GrowthPhaseBadge } from './tree-components';
-import {
-  Button,
-  Card,
-  EmptyState,
-  ErrorBanner,
-  LoadingState,
-  MetaRow,
-  PageIntro,
-  Screen,
-} from './ui';
+import { Button, Card, EmptyState, ErrorBanner, LoadingState, MetaRow, PageIntro, Screen } from './ui';
 
 export function OwnerGrowthMonitoringScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [trees, setTrees] = React.useState<Tree[]>([]);
 
   const farmId = currentFarm?.farmId;
@@ -54,13 +44,6 @@ export function OwnerGrowthMonitoringScreen() {
     }, [loadTrees])
   );
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadTrees();
-    setRefreshing(false);
-  }
-
   if (loading) {
     return <LoadingState message="Memuat monitoring fase..." />;
   }
@@ -69,7 +52,7 @@ export function OwnerGrowthMonitoringScreen() {
   const fruitingTrees = trees.filter((tree) => tree.currentGrowthPhase === 'fruiting');
 
   return (
-    <Screen footer={<Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />}>
+    <Screen>
       <PageIntro
         title="Monitoring Fase"
         subtitle="Pantau pohon yang sedang berbunga dan berbuah berdasarkan fase terbaru."

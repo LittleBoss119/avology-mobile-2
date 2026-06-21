@@ -19,11 +19,10 @@ import {
 import type { CareSOP, CareSOPNextScheduleReference } from '../../../../src/types/domain';
 
 export default function CareSOPListScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [references, setReferences] = React.useState<Record<string, CareSOPNextScheduleReference>>({});
-  const [refreshing, setRefreshing] = React.useState(false);
   const [sops, setSops] = React.useState<CareSOP[]>([]);
 
   const farmId = currentFarm?.farmId;
@@ -72,13 +71,6 @@ export default function CareSOPListScreen() {
     }, [loadSops])
   );
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadSops();
-    setRefreshing(false);
-  }
-
   if (loading) {
     return <LoadingState message="Memuat SOP perawatan..." />;
   }
@@ -88,7 +80,6 @@ export default function CareSOPListScreen() {
       footer={
         <>
           <Button title="Tambah SOP" onPress={() => router.push('/owner/sops/create')} />
-          <Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />
         </>
       }
     >

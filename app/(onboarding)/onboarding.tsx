@@ -19,15 +19,15 @@ export default function OnboardingDecisionScreen() {
     <Screen
       footer={
         <>
-          <Button title="Buat Kebun sebagai Owner" onPress={() => router.push('/create-farm')} />
-          <Button title="Gabung sebagai Worker" variant="secondary" onPress={() => router.push('/join-farm')} />
-          <Button title="Logout" variant="secondary" onPress={handleLogout} />
+          <Button title="Buat Kebun sebagai Pemilik" onPress={() => router.push('/create-farm')} />
+          <Button title="Gabung sebagai Pekerja" variant="secondary" onPress={() => router.push('/join-farm')} />
+          <Button title="Keluar" variant="secondary" onPress={handleLogout} />
         </>
       }
     >
       <PageIntro
         title="Pilih Akses"
-        subtitle="Buat kebun baru sebagai owner atau ajukan bergabung menggunakan kode kebun."
+        subtitle="Buat kebun baru sebagai pemilik atau ajukan bergabung menggunakan kode kebun."
       />
       <ErrorBanner message={error?.message} />
       <Card>

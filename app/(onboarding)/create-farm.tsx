@@ -46,7 +46,7 @@ export default function CreateFarmScreen() {
     <Screen footer={<Button title="Buat Kebun" loading={submitting} onPress={handleSubmit} />}>
       <PageIntro
         title="Buat Kebun"
-        subtitle="Owner aktif akan dibuat otomatis setelah kebun berhasil tersimpan."
+        subtitle="Akses pemilik aktif akan dibuat otomatis setelah kebun berhasil tersimpan."
       />
       <ErrorBanner message={error} />
       <Field label="Nama kebun" value={name} onChangeText={setName} placeholder="MS Farm" />

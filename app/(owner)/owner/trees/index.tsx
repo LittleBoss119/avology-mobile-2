@@ -17,11 +17,10 @@ import { getTrees } from '../../../../src/services/treeService';
 import type { Tree } from '../../../../src/types/domain';
 
 export default function OwnerTreeListScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [archived, setArchived] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [trees, setTrees] = React.useState<Tree[]>([]);
 
@@ -55,13 +54,6 @@ export default function OwnerTreeListScreen() {
     loadTrees().finally(() => setLoading(false));
   }, [loadTrees]);
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadTrees();
-    setRefreshing(false);
-  }
-
   if (loading) {
     return <LoadingState message="Memuat pohon..." />;
   }
@@ -71,7 +63,6 @@ export default function OwnerTreeListScreen() {
       footer={
         <>
           <Button title="Tambah Pohon" onPress={() => router.push('/owner/trees/create')} />
-          <Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />
         </>
       }
     >
@@ -90,7 +81,7 @@ export default function OwnerTreeListScreen() {
           title={archived ? 'Belum ada pohon diarsipkan' : 'Belum ada pohon aktif'}
           subtitle={
             archived
-              ? 'Pohon yang diarsipkan owner akan muncul di sini.'
+              ? 'Pohon yang diarsipkan pemilik akan muncul di sini.'
               : 'Tambahkan pohon pertama untuk mulai mencatat kondisi.'
           }
         />

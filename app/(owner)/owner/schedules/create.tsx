@@ -137,7 +137,7 @@ export default function CreateManualScheduleScreen() {
         </>
       }
     >
-      <PageIntro title="Jadwal Manual" subtitle="Buat jadwal perawatan dan tugaskan ke worker aktif." />
+      <PageIntro title="Jadwal Manual" subtitle="Buat jadwal perawatan dan tugaskan ke pekerja aktif." />
       <ErrorBanner message={error} />
       <ManualScheduleForm values={values} trees={trees} workers={workers} onChange={setValues} />
     </Screen>
@@ -160,7 +160,7 @@ function validateValues(
   }
 
   if (!values.assignedWorkerId.trim()) {
-    return new Error('Pilih worker aktif.');
+    return new Error('Pilih pekerja aktif.');
   }
 
   if (values.targetType === 'row' && !values.targetRow.trim()) {
@@ -176,7 +176,7 @@ function validateValues(
   }
 
   if (values.targetType === 'custom' && !values.customTargetNote.trim()) {
-    return new Error('Catatan target custom wajib diisi.');
+    return new Error('Catatan target khusus wajib diisi.');
   }
 
   return {

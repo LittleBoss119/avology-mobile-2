@@ -235,7 +235,7 @@ async function ensureActiveFarmMember(farmId: UUID): Promise<ServiceResult<Succe
   }
 
   if (membershipResult.data?.status !== 'active') {
-    return fail(new Error('Hanya member aktif yang dapat mengakses laporan operasional.'));
+    return fail(new Error('Hanya anggota kebun aktif yang dapat mengakses laporan operasional.'));
   }
 
   return ok({
@@ -251,7 +251,7 @@ async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessDat
   }
 
   if (membershipResult.data?.role !== 'owner' || membershipResult.data.status !== 'active') {
-    return fail(new Error('Hanya owner aktif yang dapat mengubah laporan operasional.'));
+    return fail(new Error('Hanya pemilik aktif yang dapat mengubah laporan operasional.'));
   }
 
   return ok({
@@ -267,7 +267,7 @@ async function ensureActiveWorker(farmId: UUID): Promise<ServiceResult<SuccessDa
   }
 
   if (membershipResult.data?.role !== 'worker' || membershipResult.data.status !== 'active') {
-    return fail(new Error('Hanya worker aktif yang dapat membuat laporan operasional.'));
+    return fail(new Error('Hanya pekerja aktif yang dapat membuat laporan operasional.'));
   }
 
   return ok({

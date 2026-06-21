@@ -1,4 +1,8 @@
 import type { GrowthPhase, TreeConditionStatus } from '../types/domain';
+import {
+  formatGrowthPhase as formatDisplayGrowthPhase,
+  formatTreeCondition,
+} from './displayFormat';
 
 export const treeConditionStatusLabels: Record<TreeConditionStatus, string> = {
   healthy: 'Sehat',
@@ -20,11 +24,11 @@ export const growthPhaseLabels: Record<GrowthPhase, string> = {
 export type TreeArchiveStatus = 'active' | 'archived';
 
 export function formatTreeConditionStatus(status: TreeConditionStatus): string {
-  return treeConditionStatusLabels[status];
+  return formatTreeCondition(status);
 }
 
 export function formatGrowthPhase(phase?: GrowthPhase | null): string {
-  return phase ? growthPhaseLabels[phase] : 'Belum dicatat';
+  return formatDisplayGrowthPhase(phase);
 }
 
 export function formatTreeLocation({
@@ -54,6 +58,10 @@ export function formatTreeLocation({
 
 export function formatTreeArchiveStatus(isArchived: boolean): TreeArchiveStatus {
   return isArchived ? 'archived' : 'active';
+}
+
+export function formatTreeArchiveStatusLabel(isArchived: boolean): string {
+  return isArchived ? 'Diarsipkan' : 'Aktif';
 }
 
 function normalizeOptionalText(value: string | null | undefined): string | null {

@@ -134,6 +134,7 @@ export type TreeConditionReport = {
   farmId: UUID;
   treeId: UUID;
   reportedBy: UUID;
+  reportedByName?: string | null;
   conditionStatus: TreeConditionStatus;
   note: string | null;
   reportedAt: string;

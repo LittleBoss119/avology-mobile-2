@@ -21,6 +21,11 @@ import type {
   Tree,
   WorkerMembership,
 } from '../types/domain';
+import {
+  formatOperationalReportCategory,
+  formatOperationalReportStatus,
+  formatTargetType,
+} from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
 import {
   Button,
@@ -75,7 +80,7 @@ export function WorkerCreateOperationalReportScreen() {
 
   async function handleSubmit() {
     if (!currentFarm?.farmId || currentFarm.role !== 'worker' || currentFarm.status !== 'active') {
-      setError('Hanya worker aktif yang dapat membuat laporan operasional.');
+      setError('Hanya pekerja aktif yang dapat membuat laporan operasional.');
       return;
     }
 
@@ -124,7 +129,7 @@ export function WorkerCreateOperationalReportScreen() {
     >
       <PageIntro
         title="Laporan Operasional"
-        subtitle="Laporkan kendala kebun agar owner bisa membuat tindak lanjut."
+        subtitle="Laporkan kendala kebun agar pemilik bisa membuat tindak lanjut."
       />
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
@@ -163,17 +168,16 @@ export function WorkerCreateOperationalReportScreen() {
 }
 
 export function WorkerOperationalReportListScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [reports, setReports] = React.useState<OperationalReport[]>([]);
 
   const farmId = currentFarm?.farmId;
 
   const loadReports = React.useCallback(async () => {
     if (!farmId || currentFarm?.role !== 'worker' || currentFarm.status !== 'active') {
-      setError('Hanya worker aktif yang dapat melihat laporan operasional.');
+      setError('Hanya pekerja aktif yang dapat melihat laporan operasional.');
       setReports([]);
       return;
     }
@@ -198,13 +202,6 @@ export function WorkerOperationalReportListScreen() {
     }, [loadReports])
   );
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadReports();
-    setRefreshing(false);
-  }
-
   if (loading) {
     return <LoadingState message="Memuat laporan operasional..." />;
   }
@@ -214,7 +211,6 @@ export function WorkerOperationalReportListScreen() {
       footer={
         <>
           <Button title="Buat Laporan" onPress={() => router.push('/worker/reports/create')} />
-          <Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />
         </>
       }
     >
@@ -241,11 +237,10 @@ export function WorkerOperationalReportListScreen() {
 }
 
 export function OwnerOperationalReportListScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [categoryFilter, setCategoryFilter] = React.useState<OperationalReportCategoryFilter>('all');
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [reports, setReports] = React.useState<OperationalReport[]>([]);
   const [statusFilter, setStatusFilter] = React.useState<OperationalReportStatusFilter>('all');
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
@@ -254,7 +249,7 @@ export function OwnerOperationalReportListScreen() {
 
   const loadReports = React.useCallback(async () => {
     if (!farmId || currentFarm?.role !== 'owner' || currentFarm.status !== 'active') {
-      setError('Hanya owner aktif yang dapat melihat laporan operasional.');
+      setError('Hanya pemilik aktif yang dapat melihat laporan operasional.');
       setReports([]);
       setWorkerNames({});
       return;
@@ -296,24 +291,15 @@ export function OwnerOperationalReportListScreen() {
     }, [loadReports])
   );
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadReports();
-    setRefreshing(false);
-  }
-
   if (loading) {
     return <LoadingState message="Memuat laporan operasional..." />;
   }
 
   return (
-    <Screen
-      footer={<Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />}
-    >
+    <Screen>
       <PageIntro
         title="Laporan Operasional"
-        subtitle="Pantau laporan kebun dari worker dan tindak lanjuti bila perlu."
+        subtitle="Pantau laporan kebun dari pekerja dan tindak lanjuti bila perlu."
       />
       <ErrorBanner message={error} />
 
@@ -323,7 +309,7 @@ export function OwnerOperationalReportListScreen() {
       {reports.length === 0 ? (
         <EmptyState
           title="Belum ada laporan"
-          subtitle="Laporan operasional worker pada filter ini akan muncul di sini."
+          subtitle="Laporan operasional pekerja pada filter ini akan muncul di sini."
         />
       ) : (
         <View style={{ gap: 12 }}>
@@ -362,7 +348,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     }
 
     if (!farmId || currentFarm?.role !== 'owner' || currentFarm.status !== 'active') {
-      setError('Hanya owner aktif yang dapat melihat detail laporan operasional.');
+      setError('Hanya pemilik aktif yang dapat melihat detail laporan operasional.');
       setReport(null);
       setWorkerNames({});
       return;
@@ -467,7 +453,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
           </View>
           <SmallBadge label={formatOperationalReportStatus(report.status)} />
         </View>
-        <MetaRow label="Reporter" value={workerNames[report.reportedBy] ?? report.reportedBy} />
+        <MetaRow label="Pelapor" value={workerNames[report.reportedBy] ?? 'Pelapor tidak tersedia'} />
         <MetaRow label="Tanggal dibuat" value={formatDateTime(report.createdAt)} />
         <MetaRow label="Lokasi" value={report.locationNote} />
       </Card>
@@ -483,7 +469,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
 
       <Card>
         <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          Update Status
+          Perbarui Status
         </Text>
         <View style={{ gap: 8 }}>
           {operationalReportStatusOptions.map((status) => (
@@ -535,7 +521,7 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
       }
 
       if (!farmId || currentFarm?.role !== 'owner' || currentFarm.status !== 'active') {
-        setError('Hanya owner aktif yang dapat membuat tindak lanjut laporan.');
+        setError('Hanya pemilik aktif yang dapat membuat tindak lanjut laporan.');
         setLoading(false);
         return;
       }
@@ -598,7 +584,7 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
     }
 
     if (!assignedWorkerId) {
-      setError('Pilih worker aktif.');
+      setError('Pilih pekerja aktif.');
       return;
     }
 
@@ -608,7 +594,7 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
     }
 
     if (targetType === 'custom' && !customTargetNote.trim()) {
-      setError('Catatan target custom wajib diisi.');
+      setError('Catatan target khusus wajib diisi.');
       return;
     }
 
@@ -653,7 +639,7 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
         </>
       }
     >
-      <PageIntro title="Buat Tugas Tindak Lanjut" subtitle="Buat tugas tindak lanjut untuk worker aktif." />
+      <PageIntro title="Buat Tugas Tindak Lanjut" subtitle="Buat tugas tindak lanjut untuk pekerja aktif." />
       <ErrorBanner message={error} />
 
       {report ? (
@@ -699,7 +685,7 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
       <TextArea
         label="Instruksi"
         onChangeText={setInstruction}
-        placeholder="Instruksi tindak lanjut untuk worker"
+        placeholder="Instruksi tindak lanjut untuk pekerja"
         value={instruction}
       />
     </Screen>
@@ -729,7 +715,7 @@ function OperationalReportCard({
         <SmallBadge label={formatOperationalReportStatus(report.status)} />
       </View>
       <MetaRow label="Tanggal" value={formatDate(report.createdAt)} />
-      {reporterName ? <MetaRow label="Reporter" value={reporterName} /> : null}
+      {reporterName ? <MetaRow label="Pelapor" value={reporterName} /> : null}
       {report.locationNote ? <MetaRow label="Lokasi" value={report.locationNote} /> : null}
     </Card>
   );
@@ -809,10 +795,10 @@ function WorkerPicker({
   return (
     <View style={{ gap: 8 }}>
       <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
-        Worker aktif *
+        Pekerja aktif *
       </Text>
       {workers.length === 0 ? (
-        <EmptyState title="Belum ada worker aktif" subtitle="Setujui worker terlebih dahulu sebelum membuat tugas." />
+        <EmptyState title="Belum ada pekerja aktif" subtitle="Setujui pekerja terlebih dahulu sebelum membuat tugas." />
       ) : (
         <View style={{ gap: 8 }}>
           {workers.map((worker) => (
@@ -906,7 +892,7 @@ function TaskTargetPicker({
 
       {targetType === 'custom' ? (
         <TextArea
-          label="Catatan target custom *"
+          label="Catatan target khusus *"
           onChangeText={onCustomTargetNoteChange}
           placeholder="Contoh: Area dekat gudang pupuk"
           value={customTargetNote}
@@ -914,31 +900,6 @@ function TaskTargetPicker({
       ) : null}
     </View>
   );
-}
-
-function formatOperationalReportCategory(category: OperationalReportCategory): string {
-  const labels: Record<OperationalReportCategory, string> = {
-    area_pest_disease: 'Hama/Penyakit Area',
-    broken_tool: 'Alat Rusak',
-    disaster_weather: 'Cuaca/Bencana',
-    land_damage: 'Kerusakan Lahan',
-    other: 'Lainnya',
-    out_of_stock: 'Stok Habis',
-    worker_need: 'Kebutuhan Worker',
-  };
-
-  return labels[category];
-}
-
-function formatOperationalReportStatus(status: OperationalReportStatus): string {
-  const labels: Record<OperationalReportStatus, string> = {
-    in_progress: 'Diproses',
-    new: 'Baru',
-    rejected: 'Ditolak',
-    resolved: 'Selesai',
-  };
-
-  return labels[status];
 }
 
 function formatReportSummary(report: OperationalReport): string {
@@ -979,18 +940,6 @@ function formatDateTime(value: string): string {
     month: 'short',
     year: 'numeric',
   });
-}
-
-function formatTargetType(targetType: TargetType): string {
-  const labels: Record<TargetType, string> = {
-    column: 'Kolom',
-    custom: 'Custom',
-    farm: 'Seluruh Kebun',
-    row: 'Baris',
-    tree: 'Pohon',
-  };
-
-  return labels[targetType];
 }
 
 function getTodayIsoDate(): string {

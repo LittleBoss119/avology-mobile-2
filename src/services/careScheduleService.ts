@@ -264,7 +264,7 @@ export async function createManualSchedule(
 
   const accessResult = await ensureActiveOwner(
     input.farmId,
-    'Hanya owner aktif yang dapat membuat jadwal manual.'
+    'Hanya pemilik aktif yang dapat membuat jadwal manual.'
   );
 
   if (accessResult.error) {
@@ -292,7 +292,7 @@ export async function createManualSchedule(
   });
 
   if (error) {
-    return fail(error, 'Gagal membuat jadwal manual dan tugas worker.');
+    return fail(error, 'Gagal membuat jadwal manual dan tugas pekerja.');
   }
 
   const row = ((data ?? []) as ScheduleTaskRpcRow[])[0];
@@ -312,7 +312,7 @@ export async function getCareSchedules(
 ): Promise<ServiceResult<CareSchedule[]>> {
   const accessResult = await ensureActiveOwner(
     input.farmId,
-    'Hanya owner aktif yang dapat melihat jadwal perawatan.'
+    'Hanya pemilik aktif yang dapat melihat jadwal perawatan.'
   );
 
   if (accessResult.error) {
@@ -353,7 +353,7 @@ export async function getCareScheduleDetail(
 
   const accessResult = await ensureActiveOwner(
     scheduleResult.data.farm_id,
-    'Hanya owner aktif yang dapat melihat jadwal perawatan.'
+    'Hanya pemilik aktif yang dapat melihat jadwal perawatan.'
   );
 
   if (accessResult.error) {
@@ -473,14 +473,14 @@ async function createMultiWorkerScheduleWithDirectInsert(input: {
   if (tasksResult.error) {
     return fail(
       tasksResult.error,
-      'Jadwal berhasil dibuat, tetapi tugas worker gagal dibuat. Periksa data jadwal sebelum mencoba lagi.'
+      'Jadwal berhasil dibuat, tetapi tugas pekerja gagal dibuat. Periksa data jadwal sebelum mencoba lagi.'
     );
   }
 
   const taskIds = (tasksResult.data ?? []).map((row) => row.id);
 
   if (taskIds.length !== input.workerIds.length) {
-    return fail(new Error('Jumlah task yang dibuat tidak sesuai jumlah worker yang dipilih.'));
+    return fail(new Error('Jumlah tugas yang dibuat tidak sesuai jumlah pekerja yang dipilih.'));
   }
 
   return ok({
@@ -519,7 +519,7 @@ async function getActiveCareSOPForSchedule(
 
 async function ensureActiveOwner(
   farmId: UUID,
-  forbiddenMessage = 'Hanya owner aktif yang dapat membuat jadwal dari SOP.'
+  forbiddenMessage = 'Hanya pemilik aktif yang dapat membuat jadwal dari SOP.'
 ): Promise<ServiceResult<SuccessData>> {
   const membershipResult = await getCurrentUserMembership(farmId);
 
@@ -557,7 +557,7 @@ async function ensureActiveWorkers(
   });
 
   if (error) {
-    return fail(error, 'Gagal memuat worker aktif.');
+    return fail(error, 'Gagal memuat pekerja aktif.');
   }
 
   const activeWorkerIds = new Set(
@@ -566,7 +566,7 @@ async function ensureActiveWorkers(
   const invalidWorkerIds = workerIds.filter((workerId) => !activeWorkerIds.has(workerId));
 
   if (invalidWorkerIds.length > 0) {
-    return fail(new Error('Tugas hanya dapat diberikan kepada worker aktif pada kebun ini.'));
+    return fail(new Error('Tugas hanya dapat diberikan kepada pekerja aktif pada kebun ini.'));
   }
 
   return ok({
@@ -623,7 +623,7 @@ function normalizeWorkerIds(workerIds: UUID[]): UUID[] | Error {
   );
 
   if (uniqueWorkerIds.length === 0) {
-    return new Error('Pilih minimal satu worker aktif.');
+    return new Error('Pilih minimal satu pekerja aktif.');
   }
 
   return uniqueWorkerIds;
@@ -660,7 +660,7 @@ function normalizeTarget(input: {
   }
 
   if (input.targetType === 'custom') {
-    return new Error('Jadwal dari SOP tidak boleh memakai target custom.');
+    return new Error('Jadwal dari SOP tidak boleh memakai target khusus.');
   }
 
   if (!['farm', 'row', 'column', 'tree'].includes(input.targetType)) {
@@ -796,7 +796,7 @@ function normalizeManualTarget(input: {
   const customTargetNote = normalizeOptionalText(input.customTargetNote);
 
   if (!customTargetNote) {
-    return new Error('Catatan target custom wajib diisi.');
+    return new Error('Catatan target khusus wajib diisi.');
   }
 
   return {

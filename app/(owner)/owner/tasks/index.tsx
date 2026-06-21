@@ -24,10 +24,9 @@ type TaskStatusFilter = 'all' | TaskStatus;
 const statusFilters: TaskStatusFilter[] = ['all', 'pending', 'postponed', 'completed'];
 
 export default function OwnerTaskListScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [selectedStatus, setSelectedStatus] = React.useState<TaskStatusFilter>('all');
   const [tasks, setTasks] = React.useState<CareTask[]>([]);
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
@@ -82,20 +81,13 @@ export default function OwnerTaskListScreen() {
     }, [loadTasks])
   );
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadTasks();
-    setRefreshing(false);
-  }
-
   if (loading) {
-    return <LoadingState message="Memuat tugas worker..." />;
+    return <LoadingState message="Memuat tugas pekerja..." />;
   }
 
   return (
-    <Screen footer={<Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />}>
-      <PageIntro title="Tugas Worker" subtitle="Lihat semua tugas perawatan dalam kebun aktif." />
+    <Screen>
+      <PageIntro title="Tugas Pekerja" subtitle="Lihat semua tugas perawatan dalam kebun aktif." />
       <ErrorBanner message={error} />
 
       <StatusFilter selectedStatus={selectedStatus} onSelect={setSelectedStatus} />
@@ -103,7 +95,7 @@ export default function OwnerTaskListScreen() {
       {filteredTasks.length === 0 ? (
         <EmptyState
           title={tasks.length === 0 ? 'Belum ada tugas' : 'Tidak ada tugas pada filter ini'}
-          subtitle="Task dari jadwal perawatan akan muncul di sini."
+          subtitle="Tugas dari jadwal perawatan akan muncul di sini."
         />
       ) : (
         <View style={{ gap: 12 }}>

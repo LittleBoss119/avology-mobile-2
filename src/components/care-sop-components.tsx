@@ -8,6 +8,11 @@ import type {
   CareSOPNextScheduleReference,
   Tree,
 } from '../types/domain';
+import {
+  formatCareCategory,
+  formatTargetType,
+  formatTreeTargetFallback,
+} from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
 import { Button, Card, EmptyState, Field, MetaRow } from './ui';
 
@@ -128,7 +133,7 @@ export function CareSOPForm({
       <TextArea
         label="Instruksi default"
         onChangeText={(value) => updateValue('defaultInstruction', value)}
-        placeholder="Tulis instruksi ringkas untuk worker"
+        placeholder="Tulis instruksi ringkas untuk pekerja"
         value={values.defaultInstruction}
       />
 
@@ -201,17 +206,7 @@ export function ScheduleReferenceSummary({
   );
 }
 
-export function formatCareCategory(category: CareCategory): string {
-  const labels: Record<CareCategory, string> = {
-    fertilizing: 'Pemupukan',
-    other: 'Lainnya',
-    spraying: 'Penyemprotan',
-    watering: 'Penyiraman',
-    weeding: 'Pengendalian gulma',
-  };
-
-  return labels[category];
-}
+export { formatCareCategory };
 
 export function formatCareSOPTarget(sop: CareSOP): string {
   if (sop.defaultTargetType === 'farm') {
@@ -226,7 +221,7 @@ export function formatCareSOPTarget(sop: CareSOP): string {
     return `Kolom ${sop.defaultTargetColumn ?? '-'}`;
   }
 
-  return sop.defaultTargetTreeId ? `Pohon ${sop.defaultTargetTreeId}` : 'Pohon belum dipilih';
+  return formatTreeTargetFallback(sop.defaultTargetTreeId);
 }
 
 export function formatIntervalDays(intervalDays: number | null): string {
@@ -377,17 +372,6 @@ function SmallBadge({ label, tone }: { label: string; tone: BadgeTone }) {
       </Text>
     </View>
   );
-}
-
-function formatTargetType(targetType: CareSOPDefaultTargetType): string {
-  const labels: Record<CareSOPDefaultTargetType, string> = {
-    column: 'Kolom',
-    farm: 'Seluruh kebun',
-    row: 'Baris',
-    tree: 'Pohon',
-  };
-
-  return labels[targetType];
 }
 
 function formatDateTime(value: string | null): string {

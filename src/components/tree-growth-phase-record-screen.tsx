@@ -54,7 +54,7 @@ export function TreeGrowthPhaseRecordScreen({
       }
 
       if (basePath === '/worker/trees' && result.data.isArchived) {
-        setError('Pohon yang diarsipkan tidak tersedia untuk worker.');
+        setError('Pohon yang diarsipkan tidak tersedia untuk pekerja.');
         setLoading(false);
         return;
       }

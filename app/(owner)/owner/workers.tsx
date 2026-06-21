@@ -21,13 +21,13 @@ import {
 } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/auth-context';
 import type { WorkerMembership } from '../../../src/types/domain';
+import { formatMemberStatus } from '../../../src/utils/displayFormat';
 
 export default function WorkerManagementScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [pendingWorkers, setPendingWorkers] = React.useState<WorkerMembership[]>([]);
   const [activeWorkers, setActiveWorkers] = React.useState<WorkerMembership[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [actionId, setActionId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -69,13 +69,6 @@ export default function WorkerManagementScreen() {
     }, [loadWorkers])
   );
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadWorkers();
-    setRefreshing(false);
-  }
-
   async function handleAction(
     membershipId: string,
     action: 'approve' | 'reject' | 'remove'
@@ -101,20 +94,20 @@ export default function WorkerManagementScreen() {
   }
 
   if (loading) {
-    return <LoadingState message="Memuat worker..." />;
+    return <LoadingState message="Memuat pekerja..." />;
   }
 
   return (
-    <Screen footer={<Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />}>
+    <Screen>
       <PageIntro
-        title="Worker Management"
-        subtitle="Setujui pengajuan worker, tolak pengajuan, atau nonaktifkan worker aktif."
+        title="Manajemen Pekerja"
+        subtitle="Setujui pengajuan, tolak pengajuan, atau nonaktifkan pekerja aktif."
       />
       <ErrorBanner message={error} />
 
-      <SectionTitle title="Pengajuan Worker" />
+      <SectionTitle title="Pengajuan Pekerja" />
       {pendingWorkers.length === 0 ? (
-        <EmptyState title="Tidak ada pengajuan" subtitle="Pengajuan worker baru akan muncul di sini." />
+        <EmptyState title="Tidak ada pengajuan" subtitle="Pengajuan pekerja baru akan muncul di sini." />
       ) : (
         pendingWorkers.map((worker) => (
           <WorkerCard key={worker.membershipId} worker={worker}>
@@ -139,9 +132,9 @@ export default function WorkerManagementScreen() {
         ))
       )}
 
-      <SectionTitle title="Worker Aktif" />
+      <SectionTitle title="Pekerja Aktif" />
       {activeWorkers.length === 0 ? (
-        <EmptyState title="Belum ada worker aktif" subtitle="Worker yang disetujui akan muncul di sini." />
+        <EmptyState title="Belum ada pekerja aktif" subtitle="Pekerja yang disetujui akan muncul di sini." />
       ) : (
         activeWorkers.map((worker) => (
           <WorkerCard key={worker.membershipId} worker={worker}>
@@ -184,12 +177,5 @@ function WorkerCard({
 }
 
 function formatMembershipStatus(status: WorkerMembership['status']): string {
-  const labels: Record<WorkerMembership['status'], string> = {
-    active: 'Aktif',
-    pending: 'Menunggu approval',
-    rejected: 'Ditolak',
-    removed: 'Dinonaktifkan',
-  };
-
-  return labels[status];
+  return formatMemberStatus(status);
 }

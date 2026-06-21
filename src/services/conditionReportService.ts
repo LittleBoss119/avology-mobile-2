@@ -1,4 +1,6 @@
 import { supabase } from '../lib/supabase';
+import { getCurrentProfile } from './authService';
+import { getActiveWorkers } from './memberService';
 import type {
   CreateTreeConditionReportData,
   CreateTreeConditionReportInput,
@@ -9,6 +11,7 @@ import type {
   TreeConditionReport,
   TreeConditionStatus,
   UUID,
+  WorkerMembership,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
 
@@ -110,7 +113,18 @@ export async function getTreeConditionReports(
     return fail(error, 'Gagal memuat riwayat kondisi pohon.');
   }
 
-  return ok((data ?? []).map(mapTreeConditionReport));
+  const reports = (data ?? []).map(mapTreeConditionReport);
+  const reporterNames = await getConditionReporterNames(
+    treeFarmIdResult.data,
+    reports.map((report) => report.reportedBy)
+  );
+
+  return ok(
+    reports.map((report) => ({
+      ...report,
+      reportedByName: reporterNames[report.reportedBy] ?? null,
+    }))
+  );
 }
 
 async function getAccessibleTreeFarmId(treeId: UUID): Promise<ServiceResult<UUID>> {
@@ -139,7 +153,7 @@ async function ensureActiveFarmMember(farmId: UUID): Promise<ServiceResult<Succe
   }
 
   if (membershipResult.data?.status !== 'active') {
-    return fail(new Error('Hanya member aktif yang dapat mengakses laporan kondisi pohon.'));
+    return fail(new Error('Hanya anggota kebun aktif yang dapat mengakses laporan kondisi pohon.'));
   }
 
   return ok({
@@ -196,10 +210,46 @@ function mapTreeConditionReport(row: TreeConditionReportRow): TreeConditionRepor
     farmId: row.farm_id,
     treeId: row.tree_id,
     reportedBy: row.reported_by,
+    reportedByName: null,
     conditionStatus: row.condition_status,
     note: row.note,
     reportedAt: row.reported_at,
   };
+}
+
+async function getConditionReporterNames(
+  farmId: UUID,
+  reporterIds: UUID[]
+): Promise<Record<string, string>> {
+  const uniqueReporterIds = Array.from(new Set(reporterIds));
+
+  if (uniqueReporterIds.length === 0) {
+    return {};
+  }
+
+  const reporterNames: Record<string, string> = {};
+
+  const profileResult = await getCurrentProfile();
+
+  if (profileResult.data?.fullName) {
+    reporterNames[profileResult.data.id] = profileResult.data.fullName;
+  }
+
+  const workersResult = await getActiveWorkers(farmId);
+
+  if (workersResult.data) {
+    for (const worker of workersResult.data as WorkerMembership[]) {
+      if (worker.fullName) {
+        reporterNames[worker.userId] = worker.fullName;
+      }
+    }
+  }
+
+  return Object.fromEntries(
+    uniqueReporterIds
+      .map((reporterId) => [reporterId, reporterNames[reporterId]])
+      .filter((entry): entry is [string, string] => Boolean(entry[1]))
+  );
 }
 
 function normalizeOptionalText(value: string | null | undefined): string | null {

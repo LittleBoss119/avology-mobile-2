@@ -18,11 +18,10 @@ import type { CareTask } from '../../../../src/types/domain';
 type TaskRangeFilter = 'today' | 'all';
 
 export default function WorkerTaskListScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [rangeFilter, setRangeFilter] = React.useState<TaskRangeFilter>('today');
-  const [refreshing, setRefreshing] = React.useState(false);
   const [tasks, setTasks] = React.useState<CareTask[]>([]);
 
   const farmId = currentFarm?.farmId;
@@ -63,19 +62,12 @@ export default function WorkerTaskListScreen() {
     }, [loadTasks])
   );
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadTasks();
-    setRefreshing(false);
-  }
-
   if (loading) {
     return <LoadingState message="Memuat tugas..." />;
   }
 
   return (
-    <Screen footer={<Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />}>
+    <Screen>
       <PageIntro title="Tugas Saya" subtitle="Lihat tugas perawatan yang ditugaskan kepada Anda." />
       <ErrorBanner message={error} />
 
@@ -84,7 +76,7 @@ export default function WorkerTaskListScreen() {
       {filteredTasks.length === 0 ? (
         <EmptyState
           title={tasks.length === 0 ? 'Belum ada tugas' : 'Tidak ada tugas hari ini'}
-          subtitle="Tugas dari owner akan muncul di sini."
+          subtitle="Tugas dari pemilik akan muncul di sini."
         />
       ) : (
         <View style={{ gap: 12 }}>

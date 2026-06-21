@@ -32,7 +32,7 @@ export default function JoinFarmScreen() {
     <Screen footer={<Button title="Ajukan Bergabung" loading={submitting} onPress={handleSubmit} />}>
       <PageIntro
         title="Gabung Kebun"
-        subtitle="Masukkan kode kebun dari owner. Akses operasional menunggu approval."
+        subtitle="Masukkan kode kebun dari pemilik. Akses operasional menunggu persetujuan."
       />
       <ErrorBanner message={error} />
       <Field label="Kode kebun" value={joinCode} onChangeText={setJoinCode} placeholder="Contoh: A1B2C3D4" />

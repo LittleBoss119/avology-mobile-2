@@ -36,7 +36,7 @@ export default function CareScheduleDetailScreen() {
     const normalizedScheduleId = scheduleId?.trim();
 
     if (!normalizedScheduleId) {
-      setError('Schedule ID tidak ditemukan.');
+      setError('Data jadwal tidak ditemukan.');
       setSchedule(null);
       setWorkerNames({});
       return;
@@ -97,7 +97,7 @@ export default function CareScheduleDetailScreen() {
 
   return (
     <Screen footer={<Button title="Kembali ke Jadwal" variant="secondary" onPress={() => router.replace('/owner/schedules')} />}>
-      <PageIntro title={schedule.title} subtitle="Detail jadwal perawatan dan tugas worker yang dihasilkan." />
+      <PageIntro title={schedule.title} subtitle="Detail jadwal perawatan dan tugas pekerja yang dihasilkan." />
       <ErrorBanner message={error} />
 
       <Card>
@@ -118,10 +118,10 @@ export default function CareScheduleDetailScreen() {
       </Card>
 
       <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
-        Tugas Worker
+        Tugas Pekerja
       </Text>
       {schedule.tasks.length === 0 ? (
-        <EmptyState title="Belum ada tugas" subtitle="Task dari jadwal ini belum tersedia." />
+        <EmptyState title="Belum ada tugas" subtitle="Tugas dari jadwal ini belum tersedia." />
       ) : (
         <View style={{ gap: 12 }}>
           {schedule.tasks.map((task) => (

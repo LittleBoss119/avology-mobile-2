@@ -51,8 +51,8 @@ export default function AuthLayout() {
       }}
     >
       <Stack.Screen name="get-started" options={{ title: 'Avology' }} />
-      <Stack.Screen name="login" options={{ title: 'Login' }} />
-      <Stack.Screen name="register" options={{ title: 'Register' }} />
+      <Stack.Screen name="login" options={{ title: 'Masuk' }} />
+      <Stack.Screen name="register" options={{ title: 'Daftar' }} />
     </Stack>
   );
 }

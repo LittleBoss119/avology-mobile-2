@@ -9,6 +9,7 @@ import type {
   TreeHistoryItem,
   TreeHistoryType,
 } from '../types/domain';
+import { formatPersonDisplayName } from '../utils/displayFormat';
 import { formatGrowthPhase, formatTreeConditionStatus, formatTreeLocation } from '../utils/treeFormat';
 import { Card, EmptyState, Field, MetaRow } from './ui';
 
@@ -41,6 +42,7 @@ export type GrowthPhaseBadgeProps = {
 
 export type ConditionReportListItem = Omit<TreeConditionReport, 'reportedBy'> & {
   reportedBy?: string | null;
+  reportedByName?: string | null;
 };
 
 export type ConditionReportItemProps = {
@@ -147,7 +149,7 @@ export function GrowthPhaseBadge({ phase }: GrowthPhaseBadgeProps) {
 }
 
 export function ConditionReportList({
-  emptySubtitle = 'Laporan kondisi yang dibuat owner atau worker aktif akan muncul di sini.',
+  emptySubtitle = 'Laporan kondisi yang dibuat pemilik atau pekerja aktif akan muncul di sini.',
   emptyTitle = 'Belum ada laporan kondisi',
   reports,
 }: ConditionReportListProps) {
@@ -184,6 +186,8 @@ export function TreeHistoryTimeline({ history }: TreeHistoryTimelineProps) {
 }
 
 export function ConditionReportItem({ report }: ConditionReportItemProps) {
+  const reporterName = formatPersonDisplayName(report.reportedByName ?? report.reportedBy);
+
   return (
     <Card>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
@@ -193,7 +197,7 @@ export function ConditionReportItem({ report }: ConditionReportItemProps) {
         </Text>
       </View>
       <MetaRow label="Catatan" value={report.note || 'Catatan belum diisi'} />
-      {report.reportedBy ? <MetaRow label="Dilaporkan oleh" value={report.reportedBy} /> : null}
+      <MetaRow label="Dilaporkan oleh" value={reporterName} />
     </Card>
   );
 }

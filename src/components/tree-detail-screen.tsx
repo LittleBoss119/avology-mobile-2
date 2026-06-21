@@ -6,7 +6,7 @@ import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import { archiveTree, getTreeDetail, restoreTree } from '../services/treeService';
 import type { Tree, TreeConditionReport, TreeHistoryItem } from '../types/domain';
-import { formatGrowthPhase, formatTreeArchiveStatus } from '../utils/treeFormat';
+import { formatGrowthPhase, formatTreeArchiveStatusLabel } from '../utils/treeFormat';
 import {
   ConditionReportList,
   ConditionStatusBadge,
@@ -36,7 +36,6 @@ export function TreeDetailScreen({
   const [actionLoading, setActionLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [history, setHistory] = React.useState<TreeHistoryItem[]>([]);
   const [reports, setReports] = React.useState<TreeConditionReport[]>([]);
   const [tree, setTree] = React.useState<Tree | null>(null);
@@ -63,7 +62,7 @@ export function TreeDetailScreen({
     }
 
     if (mode === 'worker' && treeResult.data.isArchived) {
-      setError('Pohon yang diarsipkan tidak tersedia untuk worker.');
+      setError('Pohon yang diarsipkan tidak tersedia untuk pekerja.');
       setTree(null);
       setHistory([]);
       setReports([]);
@@ -98,12 +97,6 @@ export function TreeDetailScreen({
       loadDetail().finally(() => setLoading(false));
     }, [loadDetail])
   );
-
-  async function handleRefresh() {
-    setRefreshing(true);
-    await loadDetail();
-    setRefreshing(false);
-  }
 
   async function handleArchiveToggle() {
     if (!tree) {
@@ -161,7 +154,7 @@ export function TreeDetailScreen({
 
   if (!tree) {
     return (
-      <Screen footer={<Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />}>
+      <Screen>
         <PageIntro title="Detail Pohon" subtitle="Data pohon tidak dapat dimuat." />
         <ErrorBanner message={error} />
         <EmptyState title="Pohon tidak ditemukan" subtitle="Pohon mungkin sudah tidak tersedia atau akses ditolak." />
@@ -183,13 +176,11 @@ export function TreeDetailScreen({
               loading={actionLoading}
               onPress={handleArchiveToggle}
             />
-            <Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />
           </>
         ) : (
           <>
             <Button title="Catat Kondisi" onPress={() => router.push(`${basePath}/${tree.id}/report`)} />
             <Button title="Catat Fase" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
-            <Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />
           </>
         )
       }
@@ -203,7 +194,7 @@ export function TreeDetailScreen({
         <MetaRow label="Kolom" value={tree.columnPosition} />
         <MetaRow label="Varietas" value={tree.variety} />
         <MetaRow label="Tanggal tanam" value={tree.plantedAt} />
-        <MetaRow label="Status arsip" value={formatTreeArchiveStatus(tree.isArchived)} />
+        <MetaRow label="Status arsip" value={formatTreeArchiveStatusLabel(tree.isArchived)} />
         <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
           Fase saat ini
         </Text>

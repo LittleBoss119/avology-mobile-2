@@ -378,7 +378,7 @@ async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessDat
   }
 
   if (membershipResult.data?.role !== 'owner' || membershipResult.data.status !== 'active') {
-    return fail(new Error('Hanya owner aktif yang dapat mengelola SOP perawatan.'));
+    return fail(new Error('Hanya pemilik aktif yang dapat mengelola SOP perawatan.'));
   }
 
   return ok({
@@ -571,7 +571,7 @@ function normalizeTarget(input: {
   }
 
   if (targetType === 'custom') {
-    return new Error('Target custom tidak boleh digunakan pada SOP perawatan.');
+    return new Error('Target khusus tidak boleh digunakan pada SOP perawatan.');
   }
 
   if (!careSopTargetTypes.includes(targetType as CareSOPDefaultTargetType)) {

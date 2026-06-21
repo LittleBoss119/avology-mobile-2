@@ -58,7 +58,7 @@ export default function OwnerLayout() {
   }, [loading, membershipKey, pathname, sessionUserId, targetRoute]);
 
   if (loading) {
-    return <LoadingState message="Memeriksa akses owner..." />;
+    return <LoadingState message="Memeriksa akses pemilik..." />;
   }
 
   return (
@@ -69,7 +69,7 @@ export default function OwnerLayout() {
         contentStyle: { backgroundColor: '#F6F7F2' },
       }}
     >
-      <Stack.Screen name="owner/index" options={{ title: 'Owner' }} />
+      <Stack.Screen name="owner/index" options={{ title: 'Pemilik' }} />
       <Stack.Screen name="owner/growth-monitoring" options={{ title: 'Monitoring Fase' }} />
       <Stack.Screen name="owner/trees/index" options={{ title: 'Pohon' }} />
       <Stack.Screen name="owner/trees/create" options={{ title: 'Tambah Pohon' }} />
@@ -85,13 +85,13 @@ export default function OwnerLayout() {
       <Stack.Screen name="owner/schedules/index" options={{ title: 'Jadwal Perawatan' }} />
       <Stack.Screen name="owner/schedules/create" options={{ title: 'Jadwal Manual' }} />
       <Stack.Screen name="owner/schedules/[scheduleId]" options={{ title: 'Detail Jadwal' }} />
-      <Stack.Screen name="owner/tasks/index" options={{ title: 'Tugas Worker' }} />
+      <Stack.Screen name="owner/tasks/index" options={{ title: 'Tugas Pekerja' }} />
       <Stack.Screen name="owner/tasks/[taskId]" options={{ title: 'Detail Tugas' }} />
       <Stack.Screen name="owner/reports/index" options={{ title: 'Laporan Operasional' }} />
       <Stack.Screen name="owner/reports/[reportId]" options={{ title: 'Detail Laporan' }} />
       <Stack.Screen name="owner/reports/[reportId]/task" options={{ title: 'Buat Tugas' }} />
-      <Stack.Screen name="owner/workers" options={{ title: 'Worker Management' }} />
-      <Stack.Screen name="owner/profile" options={{ title: 'Profile' }} />
+      <Stack.Screen name="owner/workers" options={{ title: 'Manajemen Pekerja' }} />
+      <Stack.Screen name="owner/profile" options={{ title: 'Profil' }} />
     </Stack>
   );
 }

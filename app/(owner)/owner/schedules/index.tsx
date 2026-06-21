@@ -16,10 +16,9 @@ import { getCareSchedules } from '../../../../src/services/careScheduleService';
 import type { CareSchedule } from '../../../../src/types/domain';
 
 export default function CareScheduleListScreen() {
-  const { currentFarm, refresh } = useAuth();
+  const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
   const [schedules, setSchedules] = React.useState<CareSchedule[]>([]);
 
   const farmId = currentFarm?.farmId;
@@ -51,13 +50,6 @@ export default function CareScheduleListScreen() {
     }, [loadSchedules])
   );
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refresh();
-    await loadSchedules();
-    setRefreshing(false);
-  }
-
   if (loading) {
     return <LoadingState message="Memuat jadwal perawatan..." />;
   }
@@ -67,7 +59,6 @@ export default function CareScheduleListScreen() {
       footer={
         <>
           <Button title="Buat Jadwal Manual" onPress={() => router.push('/owner/schedules/create')} />
-          <Button title="Refresh" variant="secondary" loading={refreshing} onPress={handleRefresh} />
         </>
       }
     >
@@ -77,7 +68,7 @@ export default function CareScheduleListScreen() {
       {schedules.length === 0 ? (
         <EmptyState
           title="Belum ada jadwal"
-          subtitle="Buat jadwal manual untuk menghasilkan tugas worker."
+          subtitle="Buat jadwal manual untuk menghasilkan tugas pekerja."
         />
       ) : (
         <View style={{ gap: 12 }}>

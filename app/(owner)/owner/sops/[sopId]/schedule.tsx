@@ -34,6 +34,7 @@ import type {
   Tree,
   WorkerMembership,
 } from '../../../../../src/types/domain';
+import { formatTargetType } from '../../../../../src/utils/displayFormat';
 import { formatTreeLocation } from '../../../../../src/utils/treeFormat';
 
 type ScheduleFormValues = {
@@ -83,7 +84,7 @@ export default function CreateScheduleFromSOPScreen() {
       }
 
       if (!normalizedSopId) {
-        setError('SOP ID tidak ditemukan.');
+        setError('Data SOP tidak ditemukan.');
         setLoading(false);
         return;
       }
@@ -240,7 +241,7 @@ export default function CreateScheduleFromSOPScreen() {
     setSubmitting(false);
     Alert.alert(
       'Jadwal dibuat',
-      `${result.data.taskIds.length} tugas worker berhasil dibuat dari SOP.`,
+      `${result.data.taskIds.length} tugas pekerja berhasil dibuat dari SOP.`,
       [
         {
           text: 'OK',
@@ -278,7 +279,7 @@ export default function CreateScheduleFromSOPScreen() {
         </>
       }
     >
-      <PageIntro title="Buat Jadwal" subtitle="Gunakan SOP sebagai dasar jadwal dan tugas worker." />
+      <PageIntro title="Buat Jadwal" subtitle="Gunakan SOP sebagai dasar jadwal dan tugas pekerja." />
       <ErrorBanner message={error} />
 
       <Card>
@@ -322,7 +323,7 @@ export default function CreateScheduleFromSOPScreen() {
       <TextArea
         label="Instruksi"
         onChangeText={(value) => updateValue('instruction', value)}
-        placeholder="Instruksi kerja untuk worker"
+        placeholder="Instruksi kerja untuk pekerja"
         value={values.instruction}
       />
     </Screen>
@@ -341,10 +342,10 @@ function WorkerPicker({
   return (
     <View style={{ gap: 8 }}>
       <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
-        Worker aktif *
+        Pekerja aktif *
       </Text>
       {workers.length === 0 ? (
-        <EmptyState title="Belum ada worker aktif" subtitle="Setujui worker terlebih dahulu sebelum membuat tugas." />
+        <EmptyState title="Belum ada pekerja aktif" subtitle="Setujui pekerja terlebih dahulu sebelum membuat tugas." />
       ) : (
         <View style={{ gap: 8 }}>
           {workers.map((worker) => (
@@ -503,7 +504,7 @@ function validateValues(values: ScheduleFormValues): Error | null {
   }
 
   if (values.assignedWorkerIds.length === 0) {
-    return new Error('Pilih minimal satu worker aktif.');
+    return new Error('Pilih minimal satu pekerja aktif.');
   }
 
   if (values.targetType === 'row' && !values.targetRow.trim()) {
@@ -519,17 +520,6 @@ function validateValues(values: ScheduleFormValues): Error | null {
   }
 
   return null;
-}
-
-function formatTargetType(targetType: CareSOPDefaultTargetType): string {
-  const labels: Record<CareSOPDefaultTargetType, string> = {
-    column: 'Kolom',
-    farm: 'Seluruh kebun',
-    row: 'Baris',
-    tree: 'Pohon',
-  };
-
-  return labels[targetType];
 }
 
 function getTodayIsoDate(): string {
