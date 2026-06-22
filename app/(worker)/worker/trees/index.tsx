@@ -56,7 +56,7 @@ export default function WorkerTreeListScreen() {
       <Field
         label="Cari pohon"
         onChangeText={setSearch}
-        placeholder="Kode pohon atau varietas"
+        placeholder="Baris, kolom, atau varietas"
         value={search}
       />
 

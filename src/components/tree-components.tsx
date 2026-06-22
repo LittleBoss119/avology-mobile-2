@@ -10,11 +10,17 @@ import type {
   TreeHistoryType,
 } from '../types/domain';
 import { formatPersonDisplayName } from '../utils/displayFormat';
-import { formatGrowthPhase, formatTreeConditionStatus, formatTreeLocation } from '../utils/treeFormat';
+import {
+  buildTreeDisplayCode,
+  formatGrowthPhase,
+  formatTreeAge,
+  formatTreeConditionStatus,
+  formatTreeDisplayCode,
+  formatTreeLocation,
+} from '../utils/treeFormat';
 import { Card, EmptyState, Field, MetaRow } from './ui';
 
 export type TreeFormValues = {
-  treeCode: string;
   rowPosition: string;
   columnPosition: string;
   variety: string;
@@ -60,12 +66,14 @@ export type TreeHistoryTimelineProps = {
 };
 
 export function TreeCard({ children, onPress, tree }: TreeCardProps) {
+  const displayCode = formatTreeDisplayCode(tree);
+
   const content = (
     <Card>
       <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: 5 }}>
           <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '700' }}>
-            {tree.treeCode}
+            {displayCode}
           </Text>
           <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
             {formatTreeLocation(tree)}
@@ -78,6 +86,7 @@ export function TreeCard({ children, onPress, tree }: TreeCardProps) {
       </View>
 
       <MetaRow label="Varietas" value={tree.variety} />
+      <MetaRow label="Umur" value={formatTreeAge(tree.plantedAt)} />
       {tree.currentGrowthPhase ? (
         <MetaRow label="Fase saat ini" value={formatGrowthPhase(tree.currentGrowthPhase)} />
       ) : null}
@@ -93,6 +102,8 @@ export function TreeCard({ children, onPress, tree }: TreeCardProps) {
 }
 
 export function TreeForm({ onChange, values }: TreeFormProps) {
+  const previewCode = buildTreeDisplayCode(values);
+
   function updateValue(field: keyof TreeFormValues, value: string) {
     onChange({
       ...values,
@@ -102,12 +113,7 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
 
   return (
     <View style={{ gap: 14 }}>
-      <Field
-        label="Kode pohon *"
-        onChangeText={(value) => updateValue('treeCode', value)}
-        placeholder="Contoh: P-001"
-        value={values.treeCode}
-      />
+      <MetaRow label="Kode pohon" value={previewCode ?? 'Lokasi belum lengkap'} />
       <Field
         label="Baris"
         onChangeText={(value) => updateValue('rowPosition', value)}

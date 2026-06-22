@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import {
   Button,
@@ -21,12 +21,6 @@ type WorkerStat = {
   label: string;
   value: number;
   tone?: 'muted' | 'primary';
-};
-
-type Shortcut = {
-  title: string;
-  subtitle: string;
-  onPress: () => void;
 };
 
 export default function WorkerDashboardScreen() {
@@ -73,25 +67,41 @@ export default function WorkerDashboardScreen() {
   }
 
   const stats = summary ? buildStats(summary) : [];
-  const isEmpty = summary ? stats.every((stat) => stat.value === 0) : false;
+  const isEmpty = summary
+    ? summary.todayTasks === 0 && summary.unfinishedTasks === 0 && summary.completedTasks === 0
+    : false;
+  const farmName = currentFarm?.farm?.name;
 
   return (
-    <Screen
-      footer={
-        <>
-          <Button title="Profil" variant="secondary" onPress={() => router.push('/worker/profile')} />
-        </>
-      }
-    >
-      <PageIntro title="Dashboard Pekerja" subtitle="Tugas dan laporan lapangan." />
+    <Screen>
+      <PageIntro
+        title="Dashboard Pekerja"
+        subtitle={
+          farmName
+            ? `Fokus tugas hari ini dan laporan lapangan di ${farmName}.`
+            : 'Fokus tugas hari ini dan laporan lapangan.'
+        }
+      />
       <ErrorBanner message={error} />
 
       <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          Kebun aktif
-        </Text>
-        <MetaRow label="Nama kebun" value={currentFarm?.farm?.name} />
-        <MetaRow label="Status" value={formatMemberStatus(currentFarm?.status)} />
+        <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
+          <View style={{ flex: 1, gap: 8 }}>
+            <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '800' }}>
+              Tugas Hari Ini
+            </Text>
+            <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+              {summary && summary.todayTasks > 0
+                ? 'Ada tugas yang perlu dikerjakan hari ini.'
+                : 'Tidak ada tugas jatuh tempo hari ini.'}
+            </Text>
+          </View>
+          <Text selectable style={{ color: '#2F6F4E', fontSize: 40, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+            {summary?.todayTasks ?? 0}
+          </Text>
+        </View>
+        <MetaRow label="Kebun" value={farmName} />
+        <MetaRow label="Status akses" value={formatMemberStatus(currentFarm?.status)} />
       </Card>
 
       {isEmpty ? (
@@ -110,16 +120,39 @@ export default function WorkerDashboardScreen() {
       ) : error ? (
         <EmptyState
           title="Dashboard belum dapat ditampilkan"
-          subtitle="Muat ulang halaman setelah koneksi atau akses kebun kembali tersedia."
+          subtitle="Buka kembali halaman ini setelah koneksi atau akses kebun tersedia."
         />
       ) : null}
 
+      <SectionTitle title="Pekerjaan Hari Ini" />
+      {summary && summary.todayTasks > 0 ? (
+        <Card>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
+            {summary.todayTasks} tugas menunggu dikerjakan
+          </Text>
+          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+            Buka daftar tugas untuk melihat detail target, tanggal, dan status pekerjaan.
+          </Text>
+        </Card>
+      ) : (
+        <EmptyState title="Belum ada tugas hari ini" subtitle="Tugas dari pemilik akan muncul saat ada pekerjaan baru." />
+      )}
+
+      <SectionTitle title="Aksi Lapangan" />
       <View style={{ gap: 10 }}>
-        {buildShortcuts().map((shortcut) => (
-          <ShortcutCard key={shortcut.title} shortcut={shortcut} />
-        ))}
+        <Button title="Lihat Tugas" onPress={() => router.push('/worker/tasks')} />
+        <Button title="Laporkan Kondisi Pohon" variant="secondary" onPress={() => router.push('/worker/trees')} />
+        <Button title="Buat Laporan Operasional" variant="secondary" onPress={() => router.push('/worker/reports/create')} />
       </View>
     </Screen>
+  );
+}
+
+function SectionTitle({ title }: { title: string }) {
+  return (
+    <Text selectable style={{ color: '#1E2A24', fontSize: 19, fontWeight: '800', paddingTop: 4 }}>
+      {title}
+    </Text>
   );
 }
 
@@ -148,66 +181,9 @@ function WorkerStatCard({ stat }: { stat: WorkerStat }) {
   );
 }
 
-function ShortcutCard({ shortcut }: { shortcut: Shortcut }) {
-  return (
-    <Pressable
-      onPress={shortcut.onPress}
-      style={({ pressed }) => ({
-        backgroundColor: pressed ? '#EEF3EA' : '#FFFFFF',
-        borderColor: '#DDE4DA',
-        borderCurve: 'continuous',
-        borderRadius: 8,
-        borderWidth: 1,
-        gap: 5,
-        minHeight: 72,
-        justifyContent: 'center',
-        padding: 16,
-      })}
-    >
-      <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
-        {shortcut.title}
-      </Text>
-      <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-        {shortcut.subtitle}
-      </Text>
-    </Pressable>
-  );
-}
-
 function buildStats(summary: WorkerDashboardSummary): WorkerStat[] {
   return [
-    { label: 'Tugas Hari Ini', value: summary.todayTasks },
     { label: 'Tugas Belum Selesai', value: summary.unfinishedTasks },
     { label: 'Tugas Selesai', tone: summary.completedTasks === 0 ? 'muted' : 'primary', value: summary.completedTasks },
-  ];
-}
-
-function buildShortcuts(): Shortcut[] {
-  return [
-    {
-      title: 'Lihat Tugas',
-      subtitle: 'Buka daftar tugas.',
-      onPress: () => router.push('/worker/tasks'),
-    },
-    {
-      title: 'Catat Kondisi Pohon',
-      subtitle: 'Pilih pohon lalu catat kondisi.',
-      onPress: () => router.push('/worker/trees'),
-    },
-    {
-      title: 'Catat Fase Pertumbuhan',
-      subtitle: 'Pilih pohon lalu catat fase.',
-      onPress: () => router.push('/worker/trees'),
-    },
-    {
-      title: 'Buat Laporan Operasional',
-      subtitle: 'Laporkan kejadian lapangan.',
-      onPress: () => router.push('/worker/reports/create'),
-    },
-    {
-      title: 'Lihat Pohon',
-      subtitle: 'Buka daftar pohon.',
-      onPress: () => router.push('/worker/trees'),
-    },
   ];
 }

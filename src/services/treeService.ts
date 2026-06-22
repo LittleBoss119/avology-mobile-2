@@ -16,6 +16,7 @@ import type {
   UUID,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
+import { buildTreeDisplayCode } from '../utils/treeFormat';
 
 const TREE_SELECT =
   'id, farm_id, tree_code, row_position, column_position, variety, planted_at, current_condition, current_growth_phase, is_archived, created_at, updated_at';
@@ -127,10 +128,12 @@ export async function getTreeDetail(
 export async function createTree(
   input: CreateTreeInput
 ): Promise<ServiceResult<CreateTreeData>> {
-  const treeCode = normalizeOptionalText(input.treeCode);
+  const rowPosition = normalizeOptionalText(input.rowPosition);
+  const columnPosition = normalizeOptionalText(input.columnPosition);
+  const treeCode = buildTreeDisplayCode({ columnPosition, rowPosition });
 
   if (!treeCode) {
-    return fail(new Error('Kode pohon wajib diisi.'));
+    return fail(new Error('Baris dan kolom wajib diisi untuk membuat kode pohon.'));
   }
 
   const accessResult = await ensureActiveOwner(input.farmId);
@@ -144,8 +147,8 @@ export async function createTree(
     .insert({
       farm_id: input.farmId,
       tree_code: treeCode,
-      row_position: normalizeOptionalText(input.rowPosition),
-      column_position: normalizeOptionalText(input.columnPosition),
+      row_position: rowPosition,
+      column_position: columnPosition,
       variety: normalizeOptionalText(input.variety),
       planted_at: normalizeOptionalText(input.plantedAt),
     })
@@ -323,23 +326,28 @@ async function getCurrentUserMembership(
 
 function buildTreeUpdates(input: UpdateTreeInput): TreeUpdateRow | Error {
   const updates: TreeUpdateRow = {};
-
-  if (input.treeCode !== undefined) {
-    const treeCode = normalizeOptionalText(input.treeCode);
-
-    if (!treeCode) {
-      return new Error('Kode pohon wajib diisi.');
-    }
-
-    updates.tree_code = treeCode;
-  }
+  const rowPosition = input.rowPosition !== undefined ? normalizeOptionalText(input.rowPosition) : undefined;
+  const columnPosition = input.columnPosition !== undefined ? normalizeOptionalText(input.columnPosition) : undefined;
 
   if (input.rowPosition !== undefined) {
-    updates.row_position = normalizeOptionalText(input.rowPosition);
+    updates.row_position = rowPosition ?? null;
   }
 
   if (input.columnPosition !== undefined) {
-    updates.column_position = normalizeOptionalText(input.columnPosition);
+    updates.column_position = columnPosition ?? null;
+  }
+
+  if (input.rowPosition !== undefined || input.columnPosition !== undefined) {
+    const treeCode = buildTreeDisplayCode({
+      columnPosition,
+      rowPosition,
+    });
+
+    if (!treeCode) {
+      return new Error('Baris dan kolom wajib diisi untuk membuat kode pohon.');
+    }
+
+    updates.tree_code = treeCode;
   }
 
   if (input.variety !== undefined) {

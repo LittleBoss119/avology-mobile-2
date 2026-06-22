@@ -6,7 +6,12 @@ import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import { archiveTree, getTreeDetail, restoreTree } from '../services/treeService';
 import type { Tree, TreeConditionReport, TreeHistoryItem } from '../types/domain';
-import { formatGrowthPhase, formatTreeArchiveStatusLabel } from '../utils/treeFormat';
+import {
+  formatGrowthPhase,
+  formatTreeAge,
+  formatTreeArchiveStatusLabel,
+  formatTreeDisplayCode,
+} from '../utils/treeFormat';
 import {
   ConditionReportList,
   ConditionStatusBadge,
@@ -162,6 +167,8 @@ export function TreeDetailScreen({
     );
   }
 
+  const displayCode = formatTreeDisplayCode(tree);
+
   return (
     <Screen
       footer={
@@ -185,15 +192,16 @@ export function TreeDetailScreen({
         )
       }
     >
-      <PageIntro title={tree.treeCode} subtitle="Detail pohon, fase terbaru, dan riwayat pohon." />
+      <PageIntro title={displayCode} subtitle="Detail pohon, fase terbaru, dan riwayat pohon." />
       <ErrorBanner message={error} />
 
       <Card>
-        <MetaRow label="Kode pohon" value={tree.treeCode} />
+        <MetaRow label="Kode pohon" value={displayCode} />
         <MetaRow label="Baris" value={tree.rowPosition} />
         <MetaRow label="Kolom" value={tree.columnPosition} />
         <MetaRow label="Varietas" value={tree.variety} />
         <MetaRow label="Tanggal tanam" value={tree.plantedAt} />
+        <MetaRow label="Umur pohon" value={formatTreeAge(tree.plantedAt)} />
         <MetaRow label="Status arsip" value={formatTreeArchiveStatusLabel(tree.isArchived)} />
         <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
           Fase saat ini

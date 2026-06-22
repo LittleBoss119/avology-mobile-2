@@ -71,7 +71,7 @@ export default function OwnerTreeListScreen() {
       <Field
         label="Cari pohon"
         onChangeText={setSearch}
-        placeholder="Kode pohon atau varietas"
+        placeholder="Baris, kolom, atau varietas"
         value={search}
       />
       <TreeArchiveFilter archived={archived} onChange={setArchived} />

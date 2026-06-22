@@ -22,7 +22,7 @@ const friendlyMessages: Array<[string, string]> = [
   ['Only active owners can remove workers', 'Hanya pemilik aktif yang dapat mengeluarkan pekerja.'],
   ['Only active owners can view pending workers', 'Hanya pemilik aktif yang dapat melihat pengajuan pekerja.'],
   ['Only active owners can view active workers', 'Hanya pemilik aktif yang dapat melihat pekerja aktif.'],
-  ['trees_unique_code_per_farm', 'Kode pohon sudah digunakan di kebun ini.'],
+  ['trees_unique_code_per_farm', 'Lokasi pohon ini sudah digunakan. Periksa baris dan kolom.'],
   ['Tree condition report tree must belong to the same farm', 'Pohon tidak terdaftar pada kebun yang dipilih.'],
   ['Only active farm members can create tree condition reports', 'Hanya anggota kebun aktif yang dapat membuat laporan kondisi pohon.'],
   ['Growth phase record tree must belong to the same farm', 'Pohon tidak terdaftar pada kebun yang dipilih.'],

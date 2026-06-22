@@ -7,7 +7,6 @@ import { useAuth } from '../../../../src/context/auth-context';
 import { createTree } from '../../../../src/services/treeService';
 
 const initialValues: TreeFormValues = {
-  treeCode: '',
   rowPosition: '',
   columnPosition: '',
   variety: '',
@@ -21,10 +20,8 @@ export default function OwnerCreateTreeScreen() {
   const [values, setValues] = React.useState<TreeFormValues>(initialValues);
 
   async function handleSubmit() {
-    const treeCode = values.treeCode.trim();
-
-    if (!treeCode) {
-      setError('Kode pohon wajib diisi.');
+    if (!values.rowPosition.trim() || !values.columnPosition.trim()) {
+      setError('Baris dan kolom wajib diisi untuk membuat kode pohon.');
       return;
     }
 
@@ -38,7 +35,6 @@ export default function OwnerCreateTreeScreen() {
 
     const result = await createTree({
       farmId: currentFarm.farmId,
-      treeCode,
       rowPosition: values.rowPosition,
       columnPosition: values.columnPosition,
       variety: values.variety,

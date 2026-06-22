@@ -290,7 +290,7 @@ export type GetTreeDetailInput = {
 
 export type CreateTreeInput = {
   farmId: UUID;
-  treeCode: string;
+  treeCode?: string;
   rowPosition?: string | null;
   columnPosition?: string | null;
   variety?: string | null;

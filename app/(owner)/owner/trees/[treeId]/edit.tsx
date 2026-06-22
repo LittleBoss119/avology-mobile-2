@@ -6,7 +6,6 @@ import { Button, ErrorBanner, LoadingState, PageIntro, Screen } from '../../../.
 import { getTreeDetail, updateTree } from '../../../../../src/services/treeService';
 
 const initialValues: TreeFormValues = {
-  treeCode: '',
   rowPosition: '',
   columnPosition: '',
   variety: '',
@@ -44,7 +43,6 @@ export default function OwnerEditTreeScreen() {
       }
 
       setValues({
-        treeCode: result.data.treeCode,
         rowPosition: result.data.rowPosition ?? '',
         columnPosition: result.data.columnPosition ?? '',
         variety: result.data.variety ?? '',
@@ -62,15 +60,14 @@ export default function OwnerEditTreeScreen() {
 
   async function handleSubmit() {
     const normalizedTreeId = treeId?.trim();
-    const treeCode = values.treeCode.trim();
 
     if (!normalizedTreeId) {
       setError('Data pohon tidak ditemukan.');
       return;
     }
 
-    if (!treeCode) {
-      setError('Kode pohon wajib diisi.');
+    if (!values.rowPosition.trim() || !values.columnPosition.trim()) {
+      setError('Baris dan kolom wajib diisi untuk membuat kode pohon.');
       return;
     }
 
@@ -79,7 +76,6 @@ export default function OwnerEditTreeScreen() {
 
     const result = await updateTree({
       treeId: normalizedTreeId,
-      treeCode,
       rowPosition: values.rowPosition,
       columnPosition: values.columnPosition,
       variety: values.variety,

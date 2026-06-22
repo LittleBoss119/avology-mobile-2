@@ -1,4 +1,4 @@
-import type { GrowthPhase, TreeConditionStatus } from '../types/domain';
+import type { GrowthPhase, Tree, TreeConditionStatus } from '../types/domain';
 import {
   formatGrowthPhase as formatDisplayGrowthPhase,
   formatTreeCondition,
@@ -56,6 +56,66 @@ export function formatTreeLocation({
   return 'Lokasi belum diisi';
 }
 
+export function buildTreeDisplayCode({
+  columnPosition,
+  rowPosition,
+}: {
+  columnPosition?: string | null;
+  rowPosition?: string | null;
+}): string | null {
+  const row = normalizeTreeRow(rowPosition);
+  const column = normalizeTreeColumn(columnPosition);
+
+  if (!row || !column) {
+    return null;
+  }
+
+  return `${row}-${column}`;
+}
+
+export function formatTreeDisplayCode(tree: Pick<Tree, 'columnPosition' | 'rowPosition' | 'treeCode'>): string {
+  const displayCode = buildTreeDisplayCode(tree);
+
+  if (displayCode) {
+    return displayCode;
+  }
+
+  const row = normalizeOptionalText(tree.rowPosition);
+  const column = normalizeOptionalText(tree.columnPosition);
+  const legacyCode = !row && !column ? normalizeOptionalText(tree.treeCode) : null;
+
+  return legacyCode ?? 'Lokasi belum lengkap';
+}
+
+export function formatTreeAge(plantedAt?: string | null): string {
+  const normalized = normalizeOptionalText(plantedAt);
+
+  if (!normalized) {
+    return 'Tanggal tanam belum diisi';
+  }
+
+  const plantedDate = new Date(normalized);
+
+  if (Number.isNaN(plantedDate.getTime())) {
+    return 'Tanggal tanam tidak valid';
+  }
+
+  const today = new Date();
+  const diffMs = today.getTime() - plantedDate.getTime();
+  const diffDays = Math.max(0, Math.floor(diffMs / 86_400_000));
+  const monthDiff = getFullMonthDiff(plantedDate, today);
+
+  if (monthDiff < 1) {
+    return `${diffDays} hari`;
+  }
+
+  if (monthDiff < 12) {
+    return `${monthDiff} bulan`;
+  }
+
+  return `${Math.floor(monthDiff / 12)} tahun`;
+}
+
 export function formatTreeArchiveStatus(isArchived: boolean): TreeArchiveStatus {
   return isArchived ? 'archived' : 'active';
 }
@@ -67,4 +127,26 @@ export function formatTreeArchiveStatusLabel(isArchived: boolean): string {
 function normalizeOptionalText(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function normalizeTreeRow(value: string | null | undefined): string | null {
+  const normalized = normalizeOptionalText(value);
+  return normalized ? normalized.toUpperCase() : null;
+}
+
+function normalizeTreeColumn(value: string | null | undefined): string | null {
+  return normalizeOptionalText(value);
+}
+
+function getFullMonthDiff(startDate: Date, endDate: Date): number {
+  let months =
+    (endDate.getFullYear() - startDate.getFullYear()) * 12 +
+    endDate.getMonth() -
+    startDate.getMonth();
+
+  if (endDate.getDate() < startDate.getDate()) {
+    months -= 1;
+  }
+
+  return Math.max(0, months);
 }
