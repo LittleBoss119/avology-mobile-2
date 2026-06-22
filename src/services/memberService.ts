@@ -1,6 +1,10 @@
 import { supabase } from '../lib/supabase';
 import type {
+  FarmMemberBasicProfile,
+  FarmActorDisplayProfile,
   MembershipActionInput,
+  MemberRole,
+  MemberStatus,
   RequestJoinFarmData,
   RequestJoinFarmInput,
   ServiceResult,
@@ -27,6 +31,29 @@ type ActiveWorkerRow = {
   phone: string | null;
   role: 'worker';
   status: 'active';
+  joined_at: string | null;
+};
+
+type FarmMemberBasicProfileRow = {
+  user_id: string;
+  full_name: string;
+  phone: string | null;
+};
+
+type FarmActorDisplayProfileRow = {
+  user_id: string;
+  full_name: string;
+  role: MemberRole;
+  status: MemberStatus;
+};
+
+type WorkerMembershipRow = {
+  id: string;
+  user_id: string;
+  role: MemberRole;
+  status: MemberStatus;
+  created_at: string;
+  updated_at: string | null;
   joined_at: string | null;
 };
 
@@ -78,6 +105,67 @@ export async function getActiveWorkers(
   }
 
   return ok(((data ?? []) as ActiveWorkerRow[]).map(mapActiveWorker));
+}
+
+export async function getFarmMemberBasicProfiles(
+  farmId: UUID
+): Promise<ServiceResult<FarmMemberBasicProfile[]>> {
+  const { data, error } = await supabase.rpc('get_member_basic_profiles', {
+    p_farm_id: farmId,
+  });
+
+  if (error) {
+    return fail(error, 'Gagal memuat profil dasar anggota kebun.');
+  }
+
+  return ok(((data ?? []) as FarmMemberBasicProfileRow[]).map(mapFarmMemberBasicProfile));
+}
+
+export async function getFarmActorDisplayProfiles(
+  farmId: UUID
+): Promise<ServiceResult<FarmActorDisplayProfile[]>> {
+  const { data, error } = await supabase.rpc('get_farm_actor_display_profiles', {
+    p_farm_id: farmId,
+  });
+
+  if (error) {
+    return fail(error, 'Gagal memuat nama aktor riwayat kebun.');
+  }
+
+  return ok(((data ?? []) as FarmActorDisplayProfileRow[]).map(mapFarmActorDisplayProfile));
+}
+
+export async function getWorkerMemberships(
+  farmId: UUID
+): Promise<ServiceResult<WorkerMembership[]>> {
+  const [membersResult, profilesResult] = await Promise.all([
+    supabase
+      .from('farm_members')
+      .select('id, user_id, role, status, created_at, updated_at, joined_at')
+      .eq('farm_id', farmId)
+      .eq('role', 'worker')
+      .order('created_at', { ascending: false })
+      .returns<WorkerMembershipRow[]>(),
+    getFarmMemberBasicProfiles(farmId),
+  ]);
+
+  if (membersResult.error) {
+    return fail(membersResult.error, 'Gagal memuat riwayat akses pekerja.');
+  }
+
+  if (profilesResult.error) {
+    return fail(profilesResult.error);
+  }
+
+  const profileMap = new Map(
+    profilesResult.data.map((profile) => [profile.userId, profile])
+  );
+
+  return ok(
+    (membersResult.data ?? [])
+      .filter((row) => row.role === 'worker')
+      .map((row) => mapWorkerMembership(row, profileMap.get(row.user_id)))
+  );
 }
 
 export async function approveWorker(
@@ -137,5 +225,39 @@ function mapActiveWorker(row: ActiveWorkerRow): WorkerMembership {
     role: row.role,
     status: row.status,
     joinedAt: row.joined_at,
+  };
+}
+
+function mapFarmMemberBasicProfile(row: FarmMemberBasicProfileRow): FarmMemberBasicProfile {
+  return {
+    fullName: row.full_name,
+    phone: row.phone,
+    userId: row.user_id,
+  };
+}
+
+function mapFarmActorDisplayProfile(row: FarmActorDisplayProfileRow): FarmActorDisplayProfile {
+  return {
+    fullName: row.full_name,
+    role: row.role,
+    status: row.status,
+    userId: row.user_id,
+  };
+}
+
+function mapWorkerMembership(
+  row: WorkerMembershipRow,
+  profile?: FarmMemberBasicProfile
+): WorkerMembership {
+  return {
+    createdAt: row.created_at,
+    fullName: profile?.fullName ?? 'Pengguna tidak tersedia',
+    joinedAt: row.joined_at,
+    membershipId: row.id,
+    phone: profile?.phone ?? null,
+    role: 'worker',
+    status: row.status,
+    updatedAt: row.updated_at,
+    userId: row.user_id,
   };
 }

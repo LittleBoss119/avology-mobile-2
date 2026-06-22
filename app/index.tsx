@@ -41,7 +41,7 @@ export default function IndexRoute() {
   }, [hasBlockingError, initializing, membershipKey, pathname, sessionUserId, targetRoute]);
 
   if (initializing) {
-    return <LoadingState message="Memeriksa sesi..." />;
+    return <LoadingState message="Memeriksa akses..." />;
   }
 
   if (hasBlockingError) {

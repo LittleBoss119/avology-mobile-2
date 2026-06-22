@@ -1,17 +1,17 @@
 import { supabase } from '../lib/supabase';
 import { getCurrentProfile } from './authService';
-import { getActiveWorkers } from './memberService';
+import { getFarmActorDisplayProfiles, getFarmMemberBasicProfiles } from './memberService';
 import type {
   CreateTreeConditionReportData,
   CreateTreeConditionReportInput,
   GetTreeConditionReportsInput,
+  MemberRole,
   MemberStatus,
   ServiceResult,
   SuccessData,
   TreeConditionReport,
   TreeConditionStatus,
   UUID,
-  WorkerMembership,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
 
@@ -35,6 +35,11 @@ type TreeFarmRow = {
 
 type MembershipRow = {
   status: MemberStatus;
+};
+
+type ReporterDisplay = {
+  fullName: string | null;
+  role: MemberRole | null;
 };
 
 export async function createTreeConditionReport(
@@ -114,7 +119,7 @@ export async function getTreeConditionReports(
   }
 
   const reports = (data ?? []).map(mapTreeConditionReport);
-  const reporterNames = await getConditionReporterNames(
+  const reporterDisplays = await getConditionReporterDisplays(
     treeFarmIdResult.data,
     reports.map((report) => report.reportedBy)
   );
@@ -122,7 +127,8 @@ export async function getTreeConditionReports(
   return ok(
     reports.map((report) => ({
       ...report,
-      reportedByName: reporterNames[report.reportedBy] ?? null,
+      reportedByName: reporterDisplays[report.reportedBy]?.fullName ?? null,
+      reportedByRole: reporterDisplays[report.reportedBy]?.role ?? null,
     }))
   );
 }
@@ -211,44 +217,60 @@ function mapTreeConditionReport(row: TreeConditionReportRow): TreeConditionRepor
     treeId: row.tree_id,
     reportedBy: row.reported_by,
     reportedByName: null,
+    reportedByRole: null,
     conditionStatus: row.condition_status,
     note: row.note,
     reportedAt: row.reported_at,
   };
 }
 
-async function getConditionReporterNames(
+async function getConditionReporterDisplays(
   farmId: UUID,
   reporterIds: UUID[]
-): Promise<Record<string, string>> {
+): Promise<Record<string, ReporterDisplay>> {
   const uniqueReporterIds = Array.from(new Set(reporterIds));
 
   if (uniqueReporterIds.length === 0) {
     return {};
   }
 
-  const reporterNames: Record<string, string> = {};
+  const reporterDisplays: Record<string, ReporterDisplay> = {};
 
   const profileResult = await getCurrentProfile();
 
   if (profileResult.data?.fullName) {
-    reporterNames[profileResult.data.id] = profileResult.data.fullName;
+    reporterDisplays[profileResult.data.id] = {
+      fullName: profileResult.data.fullName,
+      role: null,
+    };
   }
 
-  const workersResult = await getActiveWorkers(farmId);
+  const actorProfilesResult = await getFarmActorDisplayProfiles(farmId);
 
-  if (workersResult.data) {
-    for (const worker of workersResult.data as WorkerMembership[]) {
-      if (worker.fullName) {
-        reporterNames[worker.userId] = worker.fullName;
+  if (actorProfilesResult.data) {
+    for (const profile of actorProfilesResult.data) {
+      reporterDisplays[profile.userId] = {
+        fullName: profile.fullName,
+        role: profile.role,
+      };
+    }
+  } else {
+    const memberProfilesResult = await getFarmMemberBasicProfiles(farmId);
+
+    if (memberProfilesResult.data) {
+      for (const profile of memberProfilesResult.data) {
+        reporterDisplays[profile.userId] = {
+          fullName: profile.fullName,
+          role: null,
+        };
       }
     }
   }
 
   return Object.fromEntries(
     uniqueReporterIds
-      .map((reporterId) => [reporterId, reporterNames[reporterId]])
-      .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      .map((reporterId) => [reporterId, reporterDisplays[reporterId]])
+      .filter((entry): entry is [string, ReporterDisplay] => Boolean(entry[1]))
   );
 }
 

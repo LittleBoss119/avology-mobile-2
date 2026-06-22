@@ -5,7 +5,9 @@ import { Button, Card, ErrorBanner, MetaRow, PageIntro, Screen } from '../../src
 import { useAuth } from '../../src/context/auth-context';
 
 export default function OnboardingDecisionScreen() {
-  const { error, profile, signOut } = useAuth();
+  const { currentFarm, error, profile, signOut } = useAuth();
+  const isInactiveRecovery = currentFarm?.status === 'rejected' || currentFarm?.status === 'removed';
+  const inactiveRecoveryParams = isInactiveRecovery ? { inactiveRecovery: '1' } : undefined;
 
   async function handleLogout() {
     const signOutError = await signOut();
@@ -19,8 +21,25 @@ export default function OnboardingDecisionScreen() {
     <Screen
       footer={
         <>
-          <Button title="Buat Kebun sebagai Pemilik" onPress={() => router.push('/create-farm')} />
-          <Button title="Gabung sebagai Pekerja" variant="secondary" onPress={() => router.push('/join-farm')} />
+          <Button
+            title="Buat Kebun sebagai Pemilik"
+            onPress={() =>
+              router.push({
+                pathname: '/create-farm',
+                params: inactiveRecoveryParams,
+              })
+            }
+          />
+          <Button
+            title="Gabung sebagai Pekerja"
+            variant="secondary"
+            onPress={() =>
+              router.push({
+                pathname: '/join-farm',
+                params: inactiveRecoveryParams,
+              })
+            }
+          />
           <Button title="Profil Akun" variant="secondary" size="small" onPress={() => router.push('/profile')} />
           <Button title="Keluar" variant="secondary" onPress={handleLogout} />
         </>

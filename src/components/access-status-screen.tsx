@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 
 import { useAuth } from '../context/auth-context';
@@ -15,6 +15,23 @@ export function AccessStatusScreen({
   const { currentFarm, error, refresh, signOut } = useAuth();
   const [refreshing, setRefreshing] = React.useState(false);
   const [loggingOut, setLoggingOut] = React.useState(false);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+
+      setRefreshing(true);
+      refresh().finally(() => {
+        if (isActive) {
+          setRefreshing(false);
+        }
+      });
+
+      return () => {
+        isActive = false;
+      };
+    }, [refresh])
+  );
 
   if (!currentFarm) {
     return <LoadingState message="Memuat status akses..." />;
@@ -38,6 +55,8 @@ export function AccessStatusScreen({
   }
 
   const canReturnToAccessFlow = currentFarm.status === 'rejected' || currentFarm.status === 'removed';
+  const canManuallyCheckStatus = currentFarm.status === 'pending';
+  const inactiveRecoveryParams = { inactiveRecovery: '1' };
 
   return (
     <Screen
@@ -45,12 +64,32 @@ export function AccessStatusScreen({
         <>
           {canReturnToAccessFlow ? (
             <>
-              <Button title="Kembali ke Pilih Akses" variant="secondary" onPress={() => router.push('/onboarding')} />
-              <Button title="Gabung Kebun Lagi" variant="secondary" onPress={() => router.push('/join-farm')} />
+              <Button
+                title="Kembali ke Pilih Akses"
+                variant="secondary"
+                onPress={() =>
+                  router.replace({
+                    pathname: '/onboarding',
+                    params: inactiveRecoveryParams,
+                  })
+                }
+              />
+              <Button
+                title="Gabung Kebun Lagi"
+                variant="secondary"
+                onPress={() =>
+                  router.replace({
+                    pathname: '/join-farm',
+                    params: inactiveRecoveryParams,
+                  })
+                }
+              />
             </>
           ) : null}
           <Button title="Profil Akun" variant="secondary" size="small" onPress={() => router.push('/profile')} />
-          <Button title="Cek Status" variant="secondary" size="small" loading={refreshing} onPress={handleRefresh} />
+          {canManuallyCheckStatus ? (
+            <Button title="Cek Status" variant="secondary" size="small" loading={refreshing} onPress={handleRefresh} />
+          ) : null}
           <Button title="Keluar" variant="secondary" loading={loggingOut} onPress={handleLogout} />
         </>
       }

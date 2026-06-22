@@ -1,4 +1,6 @@
 import { supabase } from '../lib/supabase';
+import { getCurrentProfile } from './authService';
+import { getFarmActorDisplayProfiles, getFarmMemberBasicProfiles } from './memberService';
 import type {
   GetTreeHistoryInput,
   MemberRole,
@@ -34,6 +36,11 @@ type MembershipRow = {
   status: MemberStatus;
 };
 
+type HistoryActorDisplay = {
+  fullName: string | null;
+  role: MemberRole | null;
+};
+
 export async function getTreeHistory(
   input: GetTreeHistoryInput
 ): Promise<ServiceResult<TreeHistoryItem[]>> {
@@ -66,7 +73,19 @@ export async function getTreeHistory(
     return fail(error, 'Gagal memuat riwayat pohon.');
   }
 
-  return ok((data ?? []).map(mapTreeHistoryItem));
+  const history = (data ?? []).map(mapTreeHistoryItem);
+  const actorDisplays = await getHistoryActorDisplays(
+    treeFarmIdResult.data,
+    history.map((item) => item.actorId)
+  );
+
+  return ok(
+    history.map((item) => ({
+      ...item,
+      actorName: actorDisplays[item.actorId]?.fullName ?? null,
+      actorRole: actorDisplays[item.actorId]?.role ?? null,
+    }))
+  );
 }
 
 async function getAccessibleTreeFarmId(treeId: UUID): Promise<ServiceResult<UUID>> {
@@ -154,6 +173,8 @@ async function getCurrentUserId(): Promise<ServiceResult<UUID>> {
 
 function mapTreeHistoryItem(row: TreeHistoryRow): TreeHistoryItem {
   return {
+    actorName: null,
+    actorRole: null,
     treeId: row.tree_id,
     farmId: row.farm_id,
     historyType: row.history_type,
@@ -162,6 +183,56 @@ function mapTreeHistoryItem(row: TreeHistoryRow): TreeHistoryItem {
     actorId: row.actor_id,
     happenedAt: row.happened_at,
   };
+}
+
+async function getHistoryActorDisplays(
+  farmId: UUID,
+  actorIds: UUID[]
+): Promise<Record<string, HistoryActorDisplay>> {
+  const uniqueActorIds = Array.from(new Set(actorIds));
+
+  if (uniqueActorIds.length === 0) {
+    return {};
+  }
+
+  const actorDisplays: Record<string, HistoryActorDisplay> = {};
+
+  const profileResult = await getCurrentProfile();
+
+  if (profileResult.data?.fullName) {
+    actorDisplays[profileResult.data.id] = {
+      fullName: profileResult.data.fullName,
+      role: null,
+    };
+  }
+
+  const actorProfilesResult = await getFarmActorDisplayProfiles(farmId);
+
+  if (actorProfilesResult.data) {
+    for (const profile of actorProfilesResult.data) {
+      actorDisplays[profile.userId] = {
+        fullName: profile.fullName,
+        role: profile.role,
+      };
+    }
+  } else {
+    const memberProfilesResult = await getFarmMemberBasicProfiles(farmId);
+
+    if (memberProfilesResult.data) {
+      for (const profile of memberProfilesResult.data) {
+        actorDisplays[profile.userId] = {
+          fullName: profile.fullName,
+          role: null,
+        };
+      }
+    }
+  }
+
+  return Object.fromEntries(
+    uniqueActorIds
+      .map((actorId) => [actorId, actorDisplays[actorId]])
+      .filter((entry): entry is [string, HistoryActorDisplay] => Boolean(entry[1]))
+  );
 }
 
 function isMissingHistoryViewError(error: { code?: string; message?: string }): boolean {

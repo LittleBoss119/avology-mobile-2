@@ -43,9 +43,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setStableProfile(setProfile, profileResult.data);
-
     if (!profileResult.data) {
+      setStableProfile(setProfile, null);
       setStableCurrentFarm(setCurrentFarm, null);
       return;
     }
@@ -57,11 +56,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (farmResult.error) {
+      setStableProfile(setProfile, profileResult.data);
       setStableCurrentFarm(setCurrentFarm, null);
       setStableError(setError, farmResult.error);
       return;
     }
 
+    setStableProfile(setProfile, profileResult.data);
     setStableCurrentFarm(setCurrentFarm, farmResult.data);
   }, []);
 

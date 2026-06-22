@@ -5,6 +5,7 @@ import { Alert, Text } from 'react-native';
 import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import { archiveTree, getTreeDetail, restoreTree } from '../services/treeService';
+import { useAuth } from '../context/auth-context';
 import type { Tree, TreeConditionReport, TreeHistoryItem } from '../types/domain';
 import {
   formatGrowthPhase,
@@ -38,6 +39,7 @@ export function TreeDetailScreen({
   mode: TreeDetailMode;
   treeId?: string;
 }) {
+  const { profile } = useAuth();
   const [actionLoading, setActionLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -222,12 +224,12 @@ export function TreeDetailScreen({
       <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
         Timeline Riwayat
       </Text>
-      <TreeHistoryTimeline history={history} />
+      <TreeHistoryTimeline currentUserId={profile?.id} history={history} viewerMode={mode} />
 
       <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
         Riwayat Kondisi
       </Text>
-      <ConditionReportList reports={reports} />
+      <ConditionReportList currentUserId={profile?.id} reports={reports} viewerMode={mode} />
     </Screen>
   );
 }

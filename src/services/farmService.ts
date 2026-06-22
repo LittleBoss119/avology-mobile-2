@@ -29,7 +29,18 @@ type CurrentUserFarmRow = {
   joined_at: string | null;
   created_at?: string;
   updated_at?: string | null;
-  farms?: FarmRow | FarmRow[] | null;
+};
+
+type CurrentUserAccessRow = {
+  membership_id: string;
+  farm_id: string;
+  user_id: string;
+  role: CurrentUserFarm['role'];
+  status: CurrentUserFarm['status'];
+  joined_at: string | null;
+  created_at?: string;
+  updated_at?: string | null;
+  farm_name?: string | null;
 };
 
 export async function createFarm(input: CreateFarmInput): Promise<ServiceResult<CreateFarmData>> {
@@ -71,40 +82,90 @@ export async function getCurrentUserFarm(): Promise<ServiceResult<CurrentUserFar
     return ok(null);
   }
 
+  const accessResult = await getCurrentUserAccessFromRpc();
+
+  if (accessResult.error && !isMissingRpcError(accessResult.error)) {
+    return fail(accessResult.error, 'Gagal memuat data akses pengguna.');
+  }
+
+  if (!accessResult.error) {
+    return mapCurrentUserAccessResult(accessResult.data);
+  }
+
   const { data, error } = await supabase
     .from('farm_members')
-    .select(
-      `
-        id,
-        farm_id,
-        user_id,
-        role,
-        status,
-        joined_at,
-        created_at,
-        updated_at,
-        farms (
-          id,
-          name,
-          location,
-          area_size,
-          join_code,
-          created_by,
-          created_at,
-          updated_at
-        )
-      `
-    )
+    .select('id, farm_id, user_id, role, status, joined_at, created_at, updated_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle<CurrentUserFarmRow>();
+    .returns<CurrentUserFarmRow[]>();
 
   if (error) {
     return fail(error, 'Gagal memuat data kebun pengguna.');
   }
 
-  return ok(data ? mapCurrentUserFarm(data) : null);
+  const currentMembership = chooseMostRecentMembership(data ?? []);
+
+  if (!currentMembership) {
+    return ok(null);
+  }
+
+  if (currentMembership.status !== 'active') {
+    return ok(mapCurrentUserFarm(currentMembership));
+  }
+
+  const farmResult = await getFarmDetail(currentMembership.farm_id);
+
+  if (farmResult.error) {
+    return fail(farmResult.error);
+  }
+
+  return ok(mapCurrentUserFarm(currentMembership, farmResult.data));
+}
+
+async function getCurrentUserAccessFromRpc(): Promise<ServiceResult<CurrentUserAccessRow | null>> {
+  const { data, error } = await supabase.rpc('get_current_user_access');
+
+  if (error) {
+    return fail(error);
+  }
+
+  const rows = (data ?? []) as CurrentUserAccessRow[];
+
+  return ok(rows[0] ?? null);
+}
+
+async function mapCurrentUserAccessResult(
+  row: CurrentUserAccessRow | null
+): Promise<ServiceResult<CurrentUserFarm | null>> {
+  if (!row) {
+    return ok(null);
+  }
+
+  const membership = mapCurrentUserFarm({
+    id: row.membership_id,
+    farm_id: row.farm_id,
+    user_id: row.user_id,
+    role: row.role,
+    status: row.status,
+    joined_at: row.joined_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  });
+
+  if (membership.status !== 'active') {
+    return ok(membership);
+  }
+
+  const farmResult = await getFarmDetail(membership.farmId);
+
+  if (farmResult.error) {
+    return fail(farmResult.error);
+  }
+
+  return ok({
+    ...membership,
+    farm: farmResult.data,
+  });
 }
 
 export async function getFarmDetail(farmId: UUID): Promise<ServiceResult<Farm>> {
@@ -121,9 +182,7 @@ export async function getFarmDetail(farmId: UUID): Promise<ServiceResult<Farm>> 
   return ok(mapFarm(data));
 }
 
-function mapCurrentUserFarm(row: CurrentUserFarmRow): CurrentUserFarm {
-  const farmRow = Array.isArray(row.farms) ? row.farms[0] : row.farms;
-
+function mapCurrentUserFarm(row: CurrentUserFarmRow, farm?: Farm): CurrentUserFarm {
   return {
     membershipId: row.id,
     farmId: row.farm_id,
@@ -133,8 +192,17 @@ function mapCurrentUserFarm(row: CurrentUserFarmRow): CurrentUserFarm {
     joinedAt: row.joined_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    farm: farmRow ? mapFarm(farmRow) : undefined,
+    farm,
   };
+}
+
+function chooseMostRecentMembership(rows: CurrentUserFarmRow[]): CurrentUserFarmRow | null {
+  return [...rows].sort((first, second) => {
+    const firstTime = new Date(first.updated_at ?? first.created_at ?? 0).getTime();
+    const secondTime = new Date(second.updated_at ?? second.created_at ?? 0).getTime();
+
+    return secondTime - firstTime;
+  })[0] ?? null;
 }
 
 function mapFarm(row: FarmRow): Farm {
@@ -159,5 +227,18 @@ function isMissingSessionError(error: { message?: string; name?: string }): bool
   return (
     error.name === 'AuthSessionMissingError' ||
     error.message?.toLowerCase().includes('auth session missing') === true
+  );
+}
+
+function isMissingRpcError(error: { code?: string; message?: string; rawMessage?: string }): boolean {
+  const message = `${error.message ?? ''} ${error.rawMessage ?? ''}`.toLowerCase();
+
+  return (
+    error.code === 'PGRST202' ||
+    error.code === 'PGRST205' ||
+    message.includes('get_current_user_access') &&
+      (message.includes('not found') ||
+        message.includes('schema cache') ||
+        message.includes('does not exist'))
   );
 }

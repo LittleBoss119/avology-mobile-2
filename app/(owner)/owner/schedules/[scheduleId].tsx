@@ -19,8 +19,8 @@ import {
 } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getCareScheduleDetail } from '../../../../src/services/careScheduleService';
-import { getActiveWorkers } from '../../../../src/services/memberService';
-import type { CareScheduleDetail, WorkerMembership } from '../../../../src/types/domain';
+import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
+import type { CareScheduleDetail, FarmMemberBasicProfile } from '../../../../src/types/domain';
 
 export default function CareScheduleDetailScreen() {
   const { currentFarm } = useAuth();
@@ -53,7 +53,7 @@ export default function CareScheduleDetailScreen() {
 
     const [scheduleResult, workersResult] = await Promise.all([
       getCareScheduleDetail({ scheduleId: normalizedScheduleId }),
-      getActiveWorkers(farmId),
+      getFarmMemberBasicProfiles(farmId),
     ]);
 
     if (scheduleResult.error) {
@@ -68,7 +68,7 @@ export default function CareScheduleDetailScreen() {
     } else {
       setWorkerNames(
         Object.fromEntries(
-          workersResult.data.map((worker: WorkerMembership) => [worker.userId, worker.fullName])
+          workersResult.data.map((worker: FarmMemberBasicProfile) => [worker.userId, worker.fullName])
         )
       );
     }

@@ -4,7 +4,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '../context/auth-context';
 import { createTaskFromOperationalReport } from '../services/careTaskService';
-import { getActiveWorkers } from '../services/memberService';
+import { getActiveWorkers, getFarmMemberBasicProfiles } from '../services/memberService';
 import {
   createOperationalReport,
   getOperationalReportDetail,
@@ -14,6 +14,7 @@ import {
 import { getTrees } from '../services/treeService';
 import type {
   CreateTaskFromOperationalReportInput,
+  FarmMemberBasicProfile,
   OperationalReport,
   OperationalReportCategory,
   OperationalReportStatus,
@@ -275,7 +276,7 @@ export function OwnerOperationalReportListScreen() {
         farmId,
         status: statusFilter,
       }),
-      getActiveWorkers(farmId),
+      getFarmMemberBasicProfiles(farmId),
     ]);
 
     if (reportsResult.error) {
@@ -290,7 +291,7 @@ export function OwnerOperationalReportListScreen() {
     } else {
       setWorkerNames(
         Object.fromEntries(
-          workersResult.data.map((worker: WorkerMembership) => [worker.userId, worker.fullName])
+          workersResult.data.map((worker: FarmMemberBasicProfile) => [worker.userId, worker.fullName])
         )
       );
     }
@@ -370,7 +371,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
 
     const [reportResult, workersResult] = await Promise.all([
       getOperationalReportDetail({ operationalReportId: normalizedReportId }),
-      getActiveWorkers(farmId),
+      getFarmMemberBasicProfiles(farmId),
     ]);
 
     if (reportResult.error) {
@@ -385,7 +386,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     } else {
       setWorkerNames(
         Object.fromEntries(
-          workersResult.data.map((worker: WorkerMembership) => [worker.userId, worker.fullName])
+          workersResult.data.map((worker: FarmMemberBasicProfile) => [worker.userId, worker.fullName])
         )
       );
     }

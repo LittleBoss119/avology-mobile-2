@@ -4,8 +4,7 @@ import { Text, View } from 'react-native';
 
 import {
   approveWorker,
-  getActiveWorkers,
-  getPendingWorkers,
+  getWorkerMemberships,
   rejectWorker,
   removeWorker,
 } from '../../../src/services/memberService';
@@ -25,40 +24,34 @@ import { formatMemberStatus } from '../../../src/utils/displayFormat';
 
 export default function WorkerManagementScreen() {
   const { currentFarm } = useAuth();
-  const [pendingWorkers, setPendingWorkers] = React.useState<WorkerMembership[]>([]);
-  const [activeWorkers, setActiveWorkers] = React.useState<WorkerMembership[]>([]);
+  const [workers, setWorkers] = React.useState<WorkerMembership[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [actionId, setActionId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const farmId = currentFarm?.farmId;
+  const pendingWorkers = workers.filter((worker) => worker.status === 'pending');
+  const activeWorkers = workers.filter((worker) => worker.status === 'active');
+  const historyWorkers = workers.filter((worker) =>
+    worker.status === 'rejected' || worker.status === 'removed'
+  );
 
   const loadWorkers = React.useCallback(async () => {
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
-      setPendingWorkers([]);
-      setActiveWorkers([]);
+      setWorkers([]);
       return;
     }
 
     setError(null);
-    const [pendingResult, activeResult] = await Promise.all([
-      getPendingWorkers(farmId),
-      getActiveWorkers(farmId),
-    ]);
 
-    if (pendingResult.error) {
-      setError(pendingResult.error.message);
-      setPendingWorkers([]);
-    } else {
-      setPendingWorkers(pendingResult.data);
-    }
+    const result = await getWorkerMemberships(farmId);
 
-    if (activeResult.error) {
-      setError(activeResult.error.message);
-      setActiveWorkers([]);
+    if (result.error) {
+      setError(result.error.message);
+      setWorkers([]);
     } else {
-      setActiveWorkers(activeResult.data);
+      setWorkers(result.data);
     }
   }, [farmId]);
 
@@ -101,11 +94,11 @@ export default function WorkerManagementScreen() {
     <Screen>
       <PageIntro
         title="Manajemen Pekerja"
-        subtitle="Setujui pengajuan, tolak pengajuan, atau nonaktifkan pekerja aktif."
+        subtitle="Kelola pengajuan, pekerja aktif, dan akses pekerja yang tidak aktif."
       />
       <ErrorBanner message={error} />
 
-      <SectionTitle title="Pengajuan Pekerja" />
+      <SectionTitle title="Pengajuan Menunggu" />
       {pendingWorkers.length === 0 ? (
         <EmptyState title="Tidak ada pengajuan" subtitle="Pengajuan pekerja baru akan muncul di sini." />
       ) : (
@@ -147,6 +140,18 @@ export default function WorkerManagementScreen() {
           </WorkerCard>
         ))
       )}
+
+      <SectionTitle title="Akses Tidak Aktif" />
+      {historyWorkers.length === 0 ? (
+        <EmptyState
+          title="Belum ada akses tidak aktif"
+          subtitle="Pekerja yang ditolak atau dinonaktifkan akan muncul di sini."
+        />
+      ) : (
+        historyWorkers.map((worker) => (
+          <WorkerCard key={worker.membershipId} worker={worker} />
+        ))
+      )}
     </Screen>
   );
 }
@@ -163,7 +168,7 @@ function WorkerCard({
   children,
   worker,
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   worker: WorkerMembership;
 }) {
   return (
@@ -171,6 +176,8 @@ function WorkerCard({
       <MetaRow label="Nama" value={worker.fullName} />
       <MetaRow label="Nomor HP" value={worker.phone} />
       <MetaRow label="Status" value={formatMembershipStatus(worker.status)} />
+      <MetaRow label="Tanggal pengajuan" value={formatDateTime(worker.createdAt)} />
+      <MetaRow label="Terakhir diperbarui" value={formatDateTime(worker.updatedAt)} />
       {children}
     </Card>
   );
@@ -178,4 +185,24 @@ function WorkerCard({
 
 function formatMembershipStatus(status: WorkerMembership['status']): string {
   return formatMemberStatus(status);
+}
+
+function formatDateTime(value?: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString('id-ID', {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }

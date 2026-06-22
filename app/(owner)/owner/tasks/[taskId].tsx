@@ -19,13 +19,13 @@ import {
 } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getCareScheduleDetail } from '../../../../src/services/careScheduleService';
-import { getActiveWorkers } from '../../../../src/services/memberService';
+import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
 import type {
   ActivityStatus,
   CareScheduleDetail,
   CareTaskDetail,
-  WorkerMembership,
+  FarmMemberBasicProfile,
 } from '../../../../src/types/domain';
 
 export default function OwnerTaskDetailScreen() {
@@ -63,7 +63,7 @@ export default function OwnerTaskDetailScreen() {
 
     const [taskResult, workersResult] = await Promise.all([
       getTaskDetail({ taskId: normalizedTaskId }),
-      getActiveWorkers(farmId),
+      getFarmMemberBasicProfiles(farmId),
     ]);
 
     if (taskResult.error) {
@@ -88,7 +88,7 @@ export default function OwnerTaskDetailScreen() {
     } else {
       setWorkerNames(
         Object.fromEntries(
-          workersResult.data.map((worker: WorkerMembership) => [worker.userId, worker.fullName])
+          workersResult.data.map((worker: FarmMemberBasicProfile) => [worker.userId, worker.fullName])
         )
       );
     }
@@ -170,6 +170,7 @@ export default function OwnerTaskDetailScreen() {
           {task.activities.map((activity) => (
             <Card key={activity.id}>
               <MetaRow label="Status" value={formatActivityStatus(activity.status)} />
+              <MetaRow label="Pelaksana" value={workerNames[activity.performedBy] ?? 'Pengguna tidak tersedia'} />
               <MetaRow label="Waktu" value={formatDateTime(activity.performedAt)} />
               <MetaRow label="Catatan" value={activity.note} />
             </Card>

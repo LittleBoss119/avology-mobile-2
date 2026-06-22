@@ -2,6 +2,7 @@ import type { CurrentUserFarm, Profile } from '../types/domain';
 
 const accountProfileRoutes = new Set(['/profile']);
 const onboardingFlowRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile']);
+const inactiveAccessRecoveryRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile']);
 const authFlowRoutes = new Set(['/get-started', '/login', '/register']);
 
 type ResolveAccessRouteInput = {
@@ -60,7 +61,8 @@ export function isWorkerActive(currentFarm: CurrentUserFarm | null): boolean {
 export function isAllowedOnboardingRoute(
   pathname: string,
   profile: Profile | null,
-  currentFarm: CurrentUserFarm | null
+  currentFarm: CurrentUserFarm | null,
+  options: { allowInactiveAccessRecovery?: boolean } = {}
 ): boolean {
   if (!profile) {
     return false;
@@ -70,7 +72,7 @@ export function isAllowedOnboardingRoute(
     return onboardingFlowRoutes.has(pathname);
   }
 
-  if (canStayInOnboardingFlow(pathname, currentFarm)) {
+  if (canStayInOnboardingFlow(pathname, currentFarm, options)) {
     return true;
   }
 
@@ -110,20 +112,25 @@ export function isAccessRouteSatisfied(pathname: string, targetRoute: string): b
 
 export function canStayInOnboardingFlow(
   pathname: string,
-  membership: CurrentUserFarm | null
+  membership: CurrentUserFarm | null,
+  _options: { allowInactiveAccessRecovery?: boolean } = {}
 ): boolean {
-  return (
-    (membership?.status === 'rejected' || membership?.status === 'removed') &&
-    onboardingFlowRoutes.has(normalizePath(pathname))
-  );
+  const normalizedPath = normalizePath(pathname);
+
+  if (!membership || (membership.status !== 'rejected' && membership.status !== 'removed')) {
+    return false;
+  }
+
+  return inactiveAccessRecoveryRoutes.has(normalizedPath);
 }
 
 export function shouldRedirectAccess(
   pathname: string,
   targetRoute: string,
-  membership: CurrentUserFarm | null
+  membership: CurrentUserFarm | null,
+  options: { allowInactiveAccessRecovery?: boolean } = {}
 ): boolean {
-  if (canStayInOnboardingFlow(pathname, membership)) {
+  if (canStayInOnboardingFlow(pathname, membership, options)) {
     return false;
   }
 

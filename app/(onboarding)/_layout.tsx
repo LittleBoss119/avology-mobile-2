@@ -1,4 +1,4 @@
-import { router, Stack, useFocusEffect, usePathname } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams, usePathname } from 'expo-router';
 import React from 'react';
 
 import { LoadingState } from '../../src/components/ui';
@@ -11,9 +11,11 @@ import {
 
 export default function OnboardingLayout() {
   const { currentFarm, initializing, profile, refresh } = useAuth();
+  const { inactiveRecovery } = useLocalSearchParams<{ inactiveRecovery?: string }>();
   const [checkingAccess, setCheckingAccess] = React.useState(false);
   const pathname = usePathname();
   const loading = initializing || checkingAccess;
+  const allowInactiveAccessRecovery = inactiveRecovery === '1';
   const targetRoute = resolveAccessRoute({ session: profile, membership: currentFarm });
   const sessionUserId = profile?.id ?? null;
   const membershipKey = currentFarm
@@ -42,7 +44,9 @@ export default function OnboardingLayout() {
       return;
     }
 
-    const shouldRedirect = shouldRedirectAccess(pathname, targetRoute, currentFarm);
+    const shouldRedirect = shouldRedirectAccess(pathname, targetRoute, currentFarm, {
+      allowInactiveAccessRecovery,
+    });
 
     logAccessGuardDecision({
       currentPathname: pathname,
@@ -55,10 +59,10 @@ export default function OnboardingLayout() {
     if (shouldRedirect) {
       router.replace(targetRoute);
     }
-  }, [loading, membershipKey, pathname, sessionUserId, targetRoute]);
+  }, [allowInactiveAccessRecovery, loading, membershipKey, pathname, sessionUserId, targetRoute]);
 
   if (loading) {
-    return <LoadingState message="Memeriksa sesi..." />;
+    return <LoadingState message="Memeriksa akses..." />;
   }
 
   return (

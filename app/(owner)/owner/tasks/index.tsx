@@ -15,9 +15,9 @@ import {
   Screen,
 } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
-import { getActiveWorkers } from '../../../../src/services/memberService';
+import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { getFarmTasks } from '../../../../src/services/careTaskService';
-import type { CareTask, TaskStatus, WorkerMembership } from '../../../../src/types/domain';
+import type { CareTask, FarmMemberBasicProfile, TaskStatus } from '../../../../src/types/domain';
 
 type TaskStatusFilter = 'all' | TaskStatus;
 
@@ -53,7 +53,7 @@ export default function OwnerTaskListScreen() {
 
     const [tasksResult, workersResult] = await Promise.all([
       getFarmTasks({ farmId }),
-      getActiveWorkers(farmId),
+      getFarmMemberBasicProfiles(farmId),
     ]);
 
     if (tasksResult.error) {
@@ -68,7 +68,7 @@ export default function OwnerTaskListScreen() {
     } else {
       setWorkerNames(
         Object.fromEntries(
-          workersResult.data.map((worker: WorkerMembership) => [worker.userId, worker.fullName])
+          workersResult.data.map((worker: FarmMemberBasicProfile) => [worker.userId, worker.fullName])
         )
       );
     }

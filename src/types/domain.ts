@@ -112,7 +112,21 @@ export type WorkerMembership = {
   role: 'worker';
   status: MemberStatus;
   createdAt?: string;
+  updatedAt?: string | null;
   joinedAt?: string | null;
+};
+
+export type FarmMemberBasicProfile = {
+  userId: UUID;
+  fullName: string;
+  phone: string | null;
+};
+
+export type FarmActorDisplayProfile = {
+  userId: UUID;
+  fullName: string;
+  role: MemberRole;
+  status: MemberStatus;
 };
 
 export type Tree = {
@@ -136,6 +150,7 @@ export type TreeConditionReport = {
   treeId: UUID;
   reportedBy: UUID;
   reportedByName?: string | null;
+  reportedByRole?: MemberRole | null;
   conditionStatus: TreeConditionStatus;
   note: string | null;
   reportedAt: string;
@@ -160,6 +175,8 @@ export type TreeHistoryItem = {
   title: string;
   description: string | null;
   actorId: UUID;
+  actorName?: string | null;
+  actorRole?: MemberRole | null;
   happenedAt: string;
 };
 

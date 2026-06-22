@@ -58,17 +58,18 @@ export default function CareScheduleListScreen() {
     <Screen
       footer={
         <>
-          <Button title="Buat Jadwal Manual" onPress={() => router.push('/owner/schedules/create')} />
+          <Button title="Buat dari SOP" onPress={() => router.push('/owner/sops')} />
+          <Button title="Buat Manual" variant="secondary" onPress={() => router.push('/owner/schedules/create')} />
         </>
       }
     >
-      <PageIntro title="Jadwal Perawatan" subtitle="Lihat jadwal kerja manual dan jadwal perawatan kebun." />
+      <PageIntro title="Jadwal Perawatan" subtitle="Lihat jadwal dari SOP dan jadwal manual kebun." />
       <ErrorBanner message={error} />
 
       {schedules.length === 0 ? (
         <EmptyState
           title="Belum ada jadwal"
-          subtitle="Buat jadwal manual untuk menghasilkan tugas pekerja."
+          subtitle="Buat jadwal dari SOP atau manual untuk menghasilkan tugas pekerja."
         />
       ) : (
         <View style={{ gap: 12 }}>

@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import type {
   GrowthPhase,
+  MemberRole,
   Tree,
   TreeConditionReport,
   TreeConditionStatus,
@@ -49,6 +50,7 @@ export type GrowthPhaseBadgeProps = {
 export type ConditionReportListItem = Omit<TreeConditionReport, 'reportedBy'> & {
   reportedBy?: string | null;
   reportedByName?: string | null;
+  reportedByRole?: MemberRole | null;
 };
 
 export type ConditionReportItemProps = {
@@ -59,11 +61,17 @@ export type ConditionReportListProps = {
   reports: ConditionReportListItem[];
   emptyTitle?: string;
   emptySubtitle?: string;
+  currentUserId?: string | null;
+  viewerMode?: TreeHistoryViewerMode;
 };
 
 export type TreeHistoryTimelineProps = {
+  currentUserId?: string | null;
   history: TreeHistoryItem[];
+  viewerMode?: TreeHistoryViewerMode;
 };
+
+type TreeHistoryViewerMode = 'owner' | 'worker';
 
 export function TreeCard({ children, onPress, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
@@ -155,9 +163,11 @@ export function GrowthPhaseBadge({ phase }: GrowthPhaseBadgeProps) {
 }
 
 export function ConditionReportList({
+  currentUserId,
   emptySubtitle = 'Laporan kondisi yang dibuat pemilik atau pekerja aktif akan muncul di sini.',
   emptyTitle = 'Belum ada laporan kondisi',
   reports,
+  viewerMode = 'owner',
 }: ConditionReportListProps) {
   if (reports.length === 0) {
     return <EmptyState title={emptyTitle} subtitle={emptySubtitle} />;
@@ -166,13 +176,22 @@ export function ConditionReportList({
   return (
     <View style={{ gap: 12 }}>
       {reports.map((report) => (
-        <ConditionReportItem key={report.id} report={report} />
+        <ConditionReportItem
+          key={report.id}
+          currentUserId={currentUserId}
+          report={report}
+          viewerMode={viewerMode}
+        />
       ))}
     </View>
   );
 }
 
-export function TreeHistoryTimeline({ history }: TreeHistoryTimelineProps) {
+export function TreeHistoryTimeline({
+  currentUserId,
+  history,
+  viewerMode = 'owner',
+}: TreeHistoryTimelineProps) {
   if (history.length === 0) {
     return (
       <EmptyState
@@ -185,14 +204,32 @@ export function TreeHistoryTimeline({ history }: TreeHistoryTimelineProps) {
   return (
     <View style={{ gap: 12 }}>
       {history.map((item) => (
-        <TreeHistoryTimelineItem key={`${item.historyType}-${item.happenedAt}-${item.title}`} item={item} />
+        <TreeHistoryTimelineItem
+          key={`${item.historyType}-${item.happenedAt}-${item.title}`}
+          currentUserId={currentUserId}
+          item={item}
+          viewerMode={viewerMode}
+        />
       ))}
     </View>
   );
 }
 
-export function ConditionReportItem({ report }: ConditionReportItemProps) {
-  const reporterName = formatPersonDisplayName(report.reportedByName ?? report.reportedBy);
+export function ConditionReportItem({
+  currentUserId,
+  report,
+  viewerMode = 'owner',
+}: ConditionReportItemProps & {
+  currentUserId?: string | null;
+  viewerMode?: TreeHistoryViewerMode;
+}) {
+  const reporterName = formatActorDisplayName({
+    actorId: report.reportedBy ?? null,
+    actorName: report.reportedByName,
+    actorRole: report.reportedByRole,
+    currentUserId,
+    viewerMode,
+  });
 
   return (
     <Card>
@@ -208,7 +245,15 @@ export function ConditionReportItem({ report }: ConditionReportItemProps) {
   );
 }
 
-function TreeHistoryTimelineItem({ item }: { item: TreeHistoryItem }) {
+function TreeHistoryTimelineItem({
+  currentUserId,
+  item,
+  viewerMode,
+}: {
+  currentUserId?: string | null;
+  item: TreeHistoryItem;
+  viewerMode: TreeHistoryViewerMode;
+}) {
   return (
     <Card>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
@@ -219,8 +264,52 @@ function TreeHistoryTimelineItem({ item }: { item: TreeHistoryItem }) {
       </View>
       <MetaRow label="Judul" value={formatHistoryTitle(item)} />
       <MetaRow label="Catatan" value={item.description || 'Catatan belum diisi'} />
+      <MetaRow
+        label="Dicatat oleh"
+        value={formatActorDisplayName({
+          actorId: item.actorId,
+          actorName: item.actorName,
+          actorRole: item.actorRole,
+          currentUserId,
+          viewerMode,
+        })}
+      />
     </Card>
   );
+}
+
+function formatActorDisplayName({
+  actorId,
+  actorName,
+  actorRole,
+  currentUserId,
+  viewerMode,
+}: {
+  actorId?: string | null;
+  actorName?: string | null;
+  actorRole?: MemberRole | null;
+  currentUserId?: string | null;
+  viewerMode: TreeHistoryViewerMode;
+}): string {
+  if (actorId && currentUserId && actorId === currentUserId) {
+    return 'Anda';
+  }
+
+  const displayName = formatPersonDisplayName(actorName, '');
+
+  if (displayName) {
+    return displayName;
+  }
+
+  if (actorRole === 'owner') {
+    return 'Pemilik kebun';
+  }
+
+  if (actorRole === 'worker') {
+    return 'Pekerja kebun';
+  }
+
+  return viewerMode === 'worker' ? 'Anggota kebun' : 'Pengguna tidak tersedia';
 }
 
 function SmallBadge({ label, tone }: { label: string; tone: BadgeTone }) {
