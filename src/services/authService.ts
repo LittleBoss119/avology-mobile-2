@@ -8,6 +8,7 @@ import type {
   RegisterUserInput,
   ServiceResult,
   SuccessData,
+  UpdateProfileInput,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
 
@@ -152,14 +153,55 @@ export async function getCurrentProfile(): Promise<ServiceResult<Profile | null>
     return fail(error, 'Gagal memuat profil pengguna.');
   }
 
-  return ok(mapProfile(data));
+  return ok(mapProfile(data, userResult.data.user.email ?? null));
 }
 
-function mapProfile(row: ProfileRow): Profile {
+export async function updateCurrentProfile(
+  input: UpdateProfileInput
+): Promise<ServiceResult<Profile>> {
+  const fullName = input.fullName.trim();
+  const phone = normalizeOptionalText(input.phone);
+
+  if (!fullName) {
+    return fail(new Error('Nama lengkap wajib diisi.'));
+  }
+
+  const userResult = await supabase.auth.getUser();
+
+  if (userResult.error) {
+    return fail(userResult.error, 'Gagal memuat pengguna saat ini.');
+  }
+
+  const userId = userResult.data.user?.id;
+
+  if (!userId) {
+    return fail(new Error('Sesi tidak ditemukan. Silakan login kembali.'));
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      full_name: fullName,
+      phone,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+    .select('id, full_name, phone, created_at, updated_at')
+    .single<ProfileRow>();
+
+  if (error) {
+    return fail(error, 'Gagal menyimpan profil. Silakan coba lagi.');
+  }
+
+  return ok(mapProfile(data, userResult.data.user.email ?? null));
+}
+
+function mapProfile(row: ProfileRow, email?: string | null): Profile {
   return {
     id: row.id,
     fullName: row.full_name,
     phone: row.phone,
+    email,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

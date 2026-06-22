@@ -76,6 +76,7 @@ export type Profile = {
   id: UUID;
   fullName: string;
   phone: string | null;
+  email?: string | null;
   createdAt?: string;
   updatedAt?: string | null;
 };
@@ -527,6 +528,11 @@ export type CreateTaskFromOperationalReportData = {
 export type RegisterUserInput = {
   email: string;
   password: string;
+  fullName: string;
+  phone?: string | null;
+};
+
+export type UpdateProfileInput = {
   fullName: string;
   phone?: string | null;
 };

@@ -21,6 +21,7 @@ export default function OnboardingDecisionScreen() {
         <>
           <Button title="Buat Kebun sebagai Pemilik" onPress={() => router.push('/create-farm')} />
           <Button title="Gabung sebagai Pekerja" variant="secondary" onPress={() => router.push('/join-farm')} />
+          <Button title="Profil Akun" variant="secondary" size="small" onPress={() => router.push('/profile')} />
           <Button title="Keluar" variant="secondary" onPress={handleLogout} />
         </>
       }

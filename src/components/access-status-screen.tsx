@@ -49,6 +49,7 @@ export function AccessStatusScreen({
               <Button title="Gabung Kebun Lagi" variant="secondary" onPress={() => router.push('/join-farm')} />
             </>
           ) : null}
+          <Button title="Profil Akun" variant="secondary" size="small" onPress={() => router.push('/profile')} />
           <Button title="Cek Status" variant="secondary" size="small" loading={refreshing} onPress={handleRefresh} />
           <Button title="Keluar" variant="secondary" loading={loggingOut} onPress={handleLogout} />
         </>

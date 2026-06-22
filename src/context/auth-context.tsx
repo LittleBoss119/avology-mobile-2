@@ -177,6 +177,7 @@ function isSameProfile(first: Profile | null, second: Profile | null): boolean {
     first?.id === second?.id &&
     first?.fullName === second?.fullName &&
     first?.phone === second?.phone &&
+    first?.email === second?.email &&
     first?.createdAt === second?.createdAt &&
     first?.updatedAt === second?.updatedAt
   );

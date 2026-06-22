@@ -96,6 +96,7 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/reports/[reportId]/task" options={{ title: 'Buat Tugas' }} />
           <Stack.Screen name="owner/workers" options={{ title: 'Manajemen Pekerja' }} />
           <Stack.Screen name="owner/profile" options={{ headerBackVisible: false, title: 'Profil' }} />
+          <Stack.Screen name="owner/farm-profile" options={{ title: 'Profil Kebun' }} />
         </Stack>
       </View>
       <RoleBottomNavigation role="owner" />

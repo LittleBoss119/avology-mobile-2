@@ -1,6 +1,7 @@
 import type { CurrentUserFarm, Profile } from '../types/domain';
 
-const onboardingFlowRoutes = new Set(['/onboarding', '/create-farm', '/join-farm']);
+const accountProfileRoutes = new Set(['/profile']);
+const onboardingFlowRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile']);
 const authFlowRoutes = new Set(['/get-started', '/login', '/register']);
 
 type ResolveAccessRouteInput = {
@@ -86,6 +87,14 @@ export function isAccessRouteSatisfied(pathname: string, targetRoute: string): b
 
   if (targetPath === '/onboarding') {
     return onboardingFlowRoutes.has(currentPath);
+  }
+
+  if (
+    targetPath === '/pending-approval' ||
+    targetPath === '/rejected' ||
+    targetPath === '/removed-access'
+  ) {
+    return currentPath === targetPath || accountProfileRoutes.has(currentPath);
   }
 
   if (targetPath === '/owner') {
