@@ -173,7 +173,7 @@ function parseIntervalDays(value: string): number | null | Error {
   const parsed = Number(normalized);
 
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    return new Error('Interval hari harus berupa angka bulat lebih dari 0.');
+    return new Error('Interval perawatan harus berupa angka bulat lebih dari 0 hari.');
   }
 
   return parsed;

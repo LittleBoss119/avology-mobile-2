@@ -12,7 +12,7 @@ export default function OwnerFarmProfileScreen() {
   if (!isOwnerActive(currentFarm)) {
     return (
       <Screen>
-        <PageIntro title="Profil Kebun" subtitle="Kelola informasi dan akses kebun." />
+        <PageIntro title="Kebun Saya" subtitle="Profil kebun dan akses operasional." />
         <EmptyState title="Akses tidak tersedia" subtitle="Profil Kebun hanya tersedia untuk pemilik aktif." />
       </Screen>
     );
@@ -20,7 +20,7 @@ export default function OwnerFarmProfileScreen() {
 
   return (
     <Screen>
-      <PageIntro title="Profil Kebun" subtitle="Kelola informasi dan akses kebun." />
+      <PageIntro title="Kebun Saya" subtitle="Profil kebun, kode gabung, pekerja, dan SOP." />
       <ErrorBanner message={error?.message} />
 
       {!farm ? (
@@ -32,7 +32,14 @@ export default function OwnerFarmProfileScreen() {
           </Text>
           <MetaRow label="Nama kebun" value={farm.name} />
           <MetaRow label="Lokasi" value={farm.location} />
-          <MetaRow label="Luas" value={formatAreaSize(farm.areaSize)} />
+          <MetaRow
+            label="Luas"
+            value={
+              farm.areaSize === null || farm.areaSize === undefined
+                ? null
+                : `${new Intl.NumberFormat('id-ID').format(farm.areaSize)} m2`
+            }
+          />
           <MetaRow label="Kode gabung" value={farm.joinCode} />
         </Card>
       )}
@@ -49,12 +56,4 @@ export default function OwnerFarmProfileScreen() {
       </Card>
     </Screen>
   );
-}
-
-function formatAreaSize(areaSize?: number | null): string | null {
-  if (areaSize === null || areaSize === undefined) {
-    return null;
-  }
-
-  return `${new Intl.NumberFormat('id-ID').format(areaSize)} m²`;
 }

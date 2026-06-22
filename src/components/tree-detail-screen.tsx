@@ -204,7 +204,7 @@ export function TreeDetailScreen({
         <MetaRow label="Varietas" value={tree.variety} />
         <MetaRow label="Tanggal tanam" value={tree.plantedAt} />
         <MetaRow label="Umur pohon" value={formatTreeAge(tree.plantedAt)} />
-        <MetaRow label="Status arsip" value={formatTreeArchiveStatusLabel(tree.isArchived)} />
+        <MetaRow label="Status pohon" value={formatTreeArchiveStatusLabel(tree.isArchived)} />
         <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
           Fase saat ini
         </Text>

@@ -29,6 +29,8 @@ export default function WorkerTaskDetailScreen() {
   const [actionLoading, setActionLoading] = React.useState<'complete' | 'postpone' | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [completeNote, setCompleteNote] = React.useState('');
+  const [showCompleteInput, setShowCompleteInput] = React.useState(false);
   const [postponeNote, setPostponeNote] = React.useState('');
   const [showPostponeInput, setShowPostponeInput] = React.useState(false);
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
@@ -67,10 +69,17 @@ export default function WorkerTaskDetailScreen() {
       return;
     }
 
+    if (!showCompleteInput) {
+      setShowCompleteInput(true);
+      setShowPostponeInput(false);
+      return;
+    }
+
     setActionLoading('complete');
     setError(null);
 
     const result = await completeTask({
+      note: completeNote,
       taskId: task.id,
     });
 
@@ -80,6 +89,8 @@ export default function WorkerTaskDetailScreen() {
       return;
     }
 
+    setCompleteNote('');
+    setShowCompleteInput(false);
     await loadDetail();
     setActionLoading(null);
   }
@@ -91,6 +102,7 @@ export default function WorkerTaskDetailScreen() {
 
     if (!showPostponeInput) {
       setShowPostponeInput(true);
+      setShowCompleteInput(false);
       return;
     }
 
@@ -147,8 +159,16 @@ export default function WorkerTaskDetailScreen() {
               value={postponeNote}
             />
           ) : null}
+          {showCompleteInput ? (
+            <TextArea
+              label="Catatan penyelesaian (opsional)"
+              onChangeText={setCompleteNote}
+              placeholder="Contoh: Pekerjaan selesai sesuai instruksi"
+              value={completeNote}
+            />
+          ) : null}
           <Button
-            title="Selesaikan Tugas"
+            title={showCompleteInput ? 'Kirim Penyelesaian' : 'Selesaikan Tugas'}
             disabled={isCompleted || actionLoading === 'postpone'}
             loading={actionLoading === 'complete'}
             onPress={handleComplete}

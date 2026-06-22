@@ -144,7 +144,7 @@ export default function OwnerTaskDetailScreen() {
         </Text>
         {task.careScheduleId ? (
           <>
-            <MetaRow label="Tipe sumber" value="Jadwal perawatan" />
+            <MetaRow label="Sumber tugas" value="Jadwal perawatan" />
             <MetaRow label="Judul jadwal" value={schedule?.title ?? 'Jadwal terkait'} />
             <MetaRow label="Tanggal jadwal" value={schedule?.scheduledDate} />
             <Button

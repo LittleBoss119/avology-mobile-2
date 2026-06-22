@@ -152,7 +152,7 @@ export function sanitizeUserFacingMessage(message?: string | null): string | nul
     return null;
   }
 
-  return message
+  const sanitizedMessage = message
     .replace(uuidPattern, 'data terkait')
     .replace(/\bTree ID\b/gi, 'Data pohon')
     .replace(/\bSchedule ID\b/gi, 'Data jadwal')
@@ -163,4 +163,28 @@ export function sanitizeUserFacingMessage(message?: string | null): string | nul
     .replace(/\bowner\b/g, 'pemilik')
     .replace(/\bapproval\b/gi, 'persetujuan')
     .trim();
+
+  return isTechnicalUserMessage(sanitizedMessage)
+    ? 'Terjadi kendala saat memproses data. Periksa input lalu coba lagi.'
+    : sanitizedMessage;
+}
+
+function isTechnicalUserMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes('violates row-level security') ||
+    normalized.includes('violates foreign key constraint') ||
+    normalized.includes('violates check constraint') ||
+    normalized.includes('violates not-null constraint') ||
+    normalized.includes('duplicate key value violates unique constraint') ||
+    normalized.includes('invalid input syntax') ||
+    normalized.includes('schema cache') ||
+    normalized.includes('postgresterror') ||
+    normalized.includes('sqlstate') ||
+    normalized.includes('permission denied for table') ||
+    normalized.includes('relation "') ||
+    normalized.includes('column "') ||
+    normalized.includes('stack trace')
+  );
 }

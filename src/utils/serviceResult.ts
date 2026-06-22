@@ -6,6 +6,8 @@ type ErrorLike = {
   name?: string;
 };
 
+const uuidPattern = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
+
 const friendlyMessages: Array<[string, string]> = [
   ['Invalid login credentials', 'Email atau password tidak sesuai.'],
   ['Email not confirmed', 'Email belum dikonfirmasi. Periksa inbox Anda terlebih dahulu.'],
@@ -30,8 +32,8 @@ const friendlyMessages: Array<[string, string]> = [
   ['Hanya owner aktif yang dapat mengakses monitoring fase.', 'Hanya pemilik aktif yang dapat mengakses monitoring fase.'],
   ['Only active owners can manage care SOPs', 'Hanya pemilik aktif yang dapat mengelola SOP perawatan.'],
   ['SOP default target tree must belong to the same farm', 'Pohon target SOP tidak terdaftar pada kebun yang dipilih.'],
-  ['care_sops_interval_days_check', 'Interval hari SOP harus lebih dari 0.'],
-  ['care_sops_default_target_check', 'Target default SOP tidak valid.'],
+  ['care_sops_interval_days_check', 'Interval perawatan SOP harus lebih dari 0 hari.'],
+  ['care_sops_default_target_check', 'Target bawaan SOP tidak valid.'],
   ['Only active owners can create schedules from SOP', 'Hanya pemilik aktif yang dapat membuat jadwal dari SOP.'],
   ['Only active owners can create manual schedules', 'Hanya pemilik aktif yang dapat membuat jadwal manual.'],
   ['Active SOP not found for farm', 'SOP aktif tidak ditemukan pada kebun ini.'],
@@ -93,5 +95,35 @@ function toFriendlyMessage(message: string): string {
     message.toLowerCase().includes(raw.toLowerCase())
   );
 
-  return match?.[1] ?? message;
+  if (match) {
+    return match[1];
+  }
+
+  if (isTechnicalMessage(message)) {
+    return 'Terjadi kendala saat memproses data. Periksa input lalu coba lagi.';
+  }
+
+  return message;
+}
+
+function isTechnicalMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+
+  return (
+    uuidPattern.test(message) ||
+    normalized.includes('violates row-level security') ||
+    normalized.includes('violates foreign key constraint') ||
+    normalized.includes('violates check constraint') ||
+    normalized.includes('violates not-null constraint') ||
+    normalized.includes('duplicate key value violates unique constraint') ||
+    normalized.includes('invalid input syntax') ||
+    normalized.includes('schema cache') ||
+    normalized.includes('postgresterror') ||
+    normalized.includes('sqlstate') ||
+    normalized.includes('permission denied for table') ||
+    normalized.includes('relation "') ||
+    normalized.includes('column "') ||
+    normalized.includes('rpc ') ||
+    normalized.includes('stack trace')
+  );
 }

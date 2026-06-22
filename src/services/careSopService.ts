@@ -567,7 +567,7 @@ function normalizeTarget(input: {
   const targetType = input.defaultTargetType;
 
   if (!targetType) {
-    return new Error('Target default SOP wajib dipilih.');
+    return new Error('Target bawaan SOP wajib dipilih.');
   }
 
   if (targetType === 'custom') {
@@ -575,7 +575,7 @@ function normalizeTarget(input: {
   }
 
   if (!careSopTargetTypes.includes(targetType as CareSOPDefaultTargetType)) {
-    return new Error('Target default SOP tidak valid.');
+    return new Error('Target bawaan SOP tidak valid.');
   }
 
   if (targetType === 'farm') {
@@ -637,7 +637,7 @@ function normalizeIntervalDays(value: number | null | undefined): number | null 
   }
 
   if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
-    return new Error('Interval hari SOP harus berupa angka bulat lebih dari 0.');
+    return new Error('Interval perawatan SOP harus berupa angka bulat lebih dari 0 hari.');
   }
 
   return value;

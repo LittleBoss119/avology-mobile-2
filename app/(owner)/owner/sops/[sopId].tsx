@@ -163,14 +163,14 @@ export default function CareSOPDetailScreen() {
 
       <Card>
         <MetaRow label="Kategori" value={formatCareCategory(sop.category)} />
-        <MetaRow label="Interval" value={formatIntervalDays(sop.intervalDays)} />
-        <MetaRow label="Target default" value={formatCareSOPTarget(sop)} />
+        <MetaRow label="Interval perawatan" value={formatIntervalDays(sop.intervalDays)} />
+        <MetaRow label="Target bawaan" value={formatCareSOPTarget(sop)} />
         <MetaRow label="Status" value={sop.isActive ? 'Aktif' : 'Nonaktif'} />
       </Card>
 
       <Card>
         <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          Instruksi Default
+          Instruksi Bawaan
         </Text>
         <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
           {sop.defaultInstruction || 'Instruksi belum diisi.'}

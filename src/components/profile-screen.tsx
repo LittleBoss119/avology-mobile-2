@@ -84,7 +84,7 @@ export function ProfileScreen() {
         <>
           {profile && isEditing ? (
             <>
-              <Button title="Simpan Profil" loading={saving} disabled={loggingOut} onPress={handleSave} />
+              <Button title="Simpan Profil Akun" loading={saving} disabled={loggingOut} onPress={handleSave} />
               <Button
                 title="Batal"
                 variant="secondary"
@@ -94,7 +94,12 @@ export function ProfileScreen() {
             </>
           ) : null}
           {profile && !isEditing ? (
-            <Button title="Edit Profil" variant="secondary" disabled={loggingOut} onPress={() => setIsEditing(true)} />
+            <Button
+              title="Edit Profil Akun"
+              variant="secondary"
+              disabled={loggingOut}
+              onPress={() => setIsEditing(true)}
+            />
           ) : null}
           <Button title="Keluar" variant="danger" loading={loggingOut} disabled={saving} onPress={handleLogout} />
         </>
@@ -109,7 +114,7 @@ export function ProfileScreen() {
       ) : (
         <Card>
           <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-            Data Pribadi
+            Profil Akun
           </Text>
           {isEditing ? (
             <>
@@ -121,13 +126,13 @@ export function ProfileScreen() {
                 placeholder="Nomor HP"
                 keyboardType="phone-pad"
               />
-              {profile.email ? <MetaRow label="Email" value={profile.email} /> : null}
+              {profile.email ? <MetaRow label="Email login" value={profile.email} /> : null}
             </>
           ) : (
             <>
               <MetaRow label="Nama lengkap" value={profile.fullName} />
               <MetaRow label="Nomor HP" value={profile.phone} />
-              {profile.email ? <MetaRow label="Email" value={profile.email} /> : null}
+              {profile.email ? <MetaRow label="Email login" value={profile.email} /> : null}
             </>
           )}
         </Card>
@@ -136,12 +141,12 @@ export function ProfileScreen() {
       {canOpenFarmProfile ? (
         <Card>
           <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-            Pengelolaan Kebun
+            Kebun Saya
           </Text>
           <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-            Kelola data kebun, kode gabung, pekerja, dan SOP.
+            Area khusus pemilik untuk melihat data kebun, kode gabung, pekerja, dan SOP.
           </Text>
-          <Button title="Profil Kebun" variant="secondary" onPress={() => router.push('/owner/farm-profile')} />
+          <Button title="Buka Profil Kebun" variant="secondary" onPress={() => router.push('/owner/farm-profile')} />
         </Card>
       ) : null}
     </Screen>

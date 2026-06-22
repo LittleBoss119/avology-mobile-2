@@ -105,7 +105,7 @@ export default function CareScheduleDetailScreen() {
         <MetaRow label="Kategori" value={formatCareCategory(schedule.category)} />
         <MetaRow label="Tanggal jadwal" value={schedule.scheduledDate} />
         <MetaRow label="Target" value={formatCareTarget(schedule)} />
-        <MetaRow label="Tipe jadwal" value={schedule.careSopId ? 'Dari SOP' : 'Manual'} />
+        <MetaRow label="Jenis jadwal" value={schedule.careSopId ? 'Dari SOP' : 'Manual'} />
       </Card>
 
       <Card>

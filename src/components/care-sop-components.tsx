@@ -64,8 +64,8 @@ export function CareSOPCard({
         </View>
         <SmallBadge label={sop.isActive ? 'Aktif' : 'Nonaktif'} tone={sop.isActive ? 'success' : 'muted'} />
       </View>
-      <MetaRow label="Interval" value={formatIntervalDays(sop.intervalDays)} />
-      <MetaRow label="Target default" value={formatCareSOPTarget(sop)} />
+      <MetaRow label="Interval perawatan" value={formatIntervalDays(sop.intervalDays)} />
+      <MetaRow label="Target bawaan" value={formatCareSOPTarget(sop)} />
       {reference ? <ScheduleReferenceSummary reference={reference} compact /> : null}
     </Card>
   );
@@ -124,21 +124,21 @@ export function CareSOPForm({
 
       <Field
         keyboardType="number-pad"
-        label="Interval hari"
+        label="Interval perawatan (hari)"
         onChangeText={(value) => updateValue('intervalDays', value)}
         placeholder="Contoh: 14"
         value={values.intervalDays}
       />
 
       <TextArea
-        label="Instruksi default"
+        label="Instruksi bawaan"
         onChangeText={(value) => updateValue('defaultInstruction', value)}
         placeholder="Tulis instruksi ringkas untuk pekerja"
         value={values.defaultInstruction}
       />
 
       <OptionGroup
-        label="Target default *"
+        label="Target bawaan *"
         options={careSopTargetOptions.map((targetType) => ({
           label: formatTargetType(targetType),
           value: targetType,
