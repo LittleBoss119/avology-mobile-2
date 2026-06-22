@@ -38,7 +38,7 @@ import { formatTargetType } from '../../../../../src/utils/displayFormat';
 import { formatTreeLocation } from '../../../../../src/utils/treeFormat';
 
 type ScheduleFormValues = {
-  assignedWorkerIds: string[];
+  assignedWorkerId: string;
   instruction: string;
   scheduledDate: string;
   targetColumn: string;
@@ -48,7 +48,7 @@ type ScheduleFormValues = {
 };
 
 const initialValues: ScheduleFormValues = {
-  assignedWorkerIds: [],
+  assignedWorkerId: '',
   instruction: '',
   scheduledDate: '',
   targetColumn: '',
@@ -143,7 +143,7 @@ export default function CreateScheduleFromSOPScreen() {
       }
 
       setValues({
-        assignedWorkerIds: [],
+        assignedWorkerId: '',
         instruction: sopResult.data.defaultInstruction ?? '',
         scheduledDate:
           referenceResult.error || !referenceResult.data.nextDueDate
@@ -164,7 +164,7 @@ export default function CreateScheduleFromSOPScreen() {
     };
   }, [farmId, sopId]);
 
-  function updateValue(field: keyof ScheduleFormValues, value: string | string[]) {
+  function updateValue(field: keyof ScheduleFormValues, value: string) {
     setValues((current) => ({
       ...current,
       [field]: value,
@@ -181,17 +181,11 @@ export default function CreateScheduleFromSOPScreen() {
     }));
   }
 
-  function toggleWorker(workerId: string) {
-    setValues((current) => {
-      const isSelected = current.assignedWorkerIds.includes(workerId);
-
-      return {
-        ...current,
-        assignedWorkerIds: isSelected
-          ? current.assignedWorkerIds.filter((selectedId) => selectedId !== workerId)
-          : [...current.assignedWorkerIds, workerId],
-      };
-    });
+  function selectWorker(workerId: string) {
+    setValues((current) => ({
+      ...current,
+      assignedWorkerId: workerId,
+    }));
   }
 
   async function handleSubmit() {
@@ -221,7 +215,7 @@ export default function CreateScheduleFromSOPScreen() {
     setError(null);
 
     const result = await createScheduleFromSOP({
-      assignedWorkerIds: values.assignedWorkerIds,
+      assignedWorkerIds: [values.assignedWorkerId],
       farmId,
       instruction: values.instruction,
       scheduledDate: values.scheduledDate,
@@ -308,9 +302,9 @@ export default function CreateScheduleFromSOPScreen() {
       />
 
       <WorkerPicker
-        selectedWorkerIds={values.assignedWorkerIds}
+        selectedWorkerId={values.assignedWorkerId}
         workers={workers}
-        onToggle={toggleWorker}
+        onSelect={selectWorker}
       />
 
       <TargetPicker
@@ -331,12 +325,12 @@ export default function CreateScheduleFromSOPScreen() {
 }
 
 function WorkerPicker({
-  onToggle,
-  selectedWorkerIds,
+  onSelect,
+  selectedWorkerId,
   workers,
 }: {
-  onToggle: (workerId: string) => void;
-  selectedWorkerIds: string[];
+  onSelect: (workerId: string) => void;
+  selectedWorkerId: string;
   workers: WorkerMembership[];
 }) {
   return (
@@ -352,8 +346,8 @@ function WorkerPicker({
             <Button
               key={worker.userId}
               title={worker.fullName}
-              variant={selectedWorkerIds.includes(worker.userId) ? 'primary' : 'secondary'}
-              onPress={() => onToggle(worker.userId)}
+              variant={selectedWorkerId === worker.userId ? 'primary' : 'secondary'}
+              onPress={() => onSelect(worker.userId)}
             />
           ))}
         </View>
@@ -369,7 +363,7 @@ function TargetPicker({
   values,
 }: {
   onTargetTypeChange: (targetType: CareSOPDefaultTargetType) => void;
-  onValueChange: (field: keyof ScheduleFormValues, value: string | string[]) => void;
+  onValueChange: (field: keyof ScheduleFormValues, value: string) => void;
   trees: Tree[];
   values: ScheduleFormValues;
 }) {
@@ -503,8 +497,8 @@ function validateValues(values: ScheduleFormValues): Error | null {
     return new Error('Tanggal jadwal harus memakai format YYYY-MM-DD.');
   }
 
-  if (values.assignedWorkerIds.length === 0) {
-    return new Error('Pilih minimal satu pekerja aktif.');
+  if (!values.assignedWorkerId.trim()) {
+    return new Error('Pilih satu pekerja aktif.');
   }
 
   if (values.targetType === 'row' && !values.targetRow.trim()) {

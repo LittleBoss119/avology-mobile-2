@@ -60,6 +60,18 @@ const operationalReportStatusOptions: OperationalReportStatus[] = [
 type OperationalReportStatusFilter = 'all' | OperationalReportStatus;
 type OperationalReportCategoryFilter = 'all' | OperationalReportCategory;
 
+function canCreateTaskFromReportStatus(status: OperationalReportStatus): boolean {
+  return status !== 'resolved' && status !== 'rejected';
+}
+
+function getClosedReportTaskMessage(status: OperationalReportStatus): string {
+  if (status === 'resolved') {
+    return 'Laporan yang sudah selesai tidak dapat dibuatkan tugas tindak lanjut.';
+  }
+
+  return 'Laporan yang ditolak tidak dapat dibuatkan tugas tindak lanjut.';
+}
+
 export function WorkerCreateOperationalReportScreen() {
   const { currentFarm } = useAuth();
   const [category, setCategory] = React.useState<OperationalReportCategory | null>(null);
@@ -423,14 +435,25 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     );
   }
 
+  const canCreateFollowUpTask = canCreateTaskFromReportStatus(report.status);
+
   return (
     <Screen
       footer={
         <>
-          <Button
-            title="Buat Tugas Tindak Lanjut"
-            onPress={() => router.push(`/owner/reports/${report.id}/task`)}
-          />
+          {canCreateFollowUpTask ? (
+            <Button
+              title="Buat Tugas Tindak Lanjut"
+              onPress={() => router.push(`/owner/reports/${report.id}/task`)}
+            />
+          ) : (
+            <Button
+              title="Tugas Tindak Lanjut Tidak Tersedia"
+              disabled
+              variant="secondary"
+              onPress={() => undefined}
+            />
+          )}
           <Button title="Kembali ke Laporan" variant="secondary" onPress={() => router.replace('/owner/reports')} />
         </>
       }
@@ -440,6 +463,14 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
         subtitle="Detail laporan operasional kebun."
       />
       <ErrorBanner message={error} />
+
+      {!canCreateFollowUpTask ? (
+        <Card>
+          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+            {getClosedReportTaskMessage(report.status)}
+          </Text>
+        </Card>
+      ) : null}
 
       <Card>
         <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
@@ -544,6 +575,10 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
         setReport(reportResult.data);
         setTitle(`Tindak lanjut ${formatOperationalReportCategory(reportResult.data.category)}`);
         setInstruction(reportResult.data.description ?? reportResult.data.locationNote ?? '');
+
+        if (!canCreateTaskFromReportStatus(reportResult.data.status)) {
+          setError(getClosedReportTaskMessage(reportResult.data.status));
+        }
       }
 
       if (workersResult.error) {
@@ -580,6 +615,11 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
   async function handleSubmit() {
     if (!report) {
       setError('Data laporan tidak ditemukan.');
+      return;
+    }
+
+    if (!canCreateTaskFromReportStatus(report.status)) {
+      setError(getClosedReportTaskMessage(report.status));
       return;
     }
 
@@ -630,11 +670,18 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
     return <LoadingState message="Memuat form tindak lanjut..." />;
   }
 
+  const canSubmitFollowUpTask = report ? canCreateTaskFromReportStatus(report.status) : false;
+
   return (
     <Screen
       footer={
         <>
-          <Button title="Buat Tugas" loading={submitting} onPress={handleSubmit} />
+          <Button
+            title="Buat Tugas"
+            disabled={!canSubmitFollowUpTask}
+            loading={submitting}
+            onPress={handleSubmit}
+          />
           <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
         </>
       }

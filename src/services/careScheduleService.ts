@@ -102,37 +102,6 @@ type CareTaskRow = {
   updated_at?: string | null;
 };
 
-type ScheduleInsertRow = {
-  farm_id: string;
-  care_sop_id: string;
-  title: string;
-  category: CareCategory;
-  scheduled_date: string;
-  target_type: CareSOPDefaultTargetType;
-  target_row: string | null;
-  target_column: string | null;
-  target_tree_id: string | null;
-  custom_target_note: null;
-  instruction: string | null;
-  created_by: string;
-};
-
-type TaskInsertRow = {
-  farm_id: string;
-  care_schedule_id: string;
-  assigned_to: string;
-  assigned_by: string;
-  title: string;
-  category: CareCategory;
-  instruction: string | null;
-  target_type: CareSOPDefaultTargetType;
-  target_row: string | null;
-  target_column: string | null;
-  target_tree_id: string | null;
-  custom_target_note: null;
-  due_date: string;
-};
-
 type NormalizedTarget = {
   targetType: CareSOPDefaultTargetType;
   targetRow: string | null;
@@ -163,6 +132,10 @@ export async function createScheduleFromSOP(
     return fail(workerIds);
   }
 
+  if (workerIds.length !== 1) {
+    return fail(new Error('Pilih satu pekerja aktif untuk membuat jadwal dari SOP.'));
+  }
+
   const sopResult = await getActiveCareSOPForSchedule(input.farmId, input.sopId);
 
   if (sopResult.error) {
@@ -173,12 +146,6 @@ export async function createScheduleFromSOP(
 
   if (accessResult.error) {
     return fail(accessResult.error);
-  }
-
-  const userIdResult = await getCurrentUserId();
-
-  if (userIdResult.error) {
-    return fail(userIdResult.error);
   }
 
   const workersResult = await ensureActiveWorkers(input.farmId, workerIds);
@@ -201,25 +168,13 @@ export async function createScheduleFromSOP(
   const instruction =
     normalizeOptionalText(input.instruction) ?? sopResult.data.default_instruction;
 
-  if (workerIds.length === 1) {
-    return createSingleWorkerScheduleWithRpc({
-      farmId: input.farmId,
-      instruction,
-      scheduledDate,
-      sopId: input.sopId,
-      target,
-      workerId: workerIds[0],
-    });
-  }
-
-  return createMultiWorkerScheduleWithDirectInsert({
-    createdBy: userIdResult.data,
+  return createSingleWorkerScheduleWithRpc({
     farmId: input.farmId,
     instruction,
     scheduledDate,
-    sop: sopResult.data,
+    sopId: input.sopId,
     target,
-    workerIds,
+    workerId: workerIds[0],
   });
 }
 
@@ -411,81 +366,6 @@ async function createSingleWorkerScheduleWithRpc(input: {
   return ok({
     scheduleId: row.schedule_id,
     taskIds: [row.task_id],
-  });
-}
-
-async function createMultiWorkerScheduleWithDirectInsert(input: {
-  createdBy: UUID;
-  farmId: UUID;
-  instruction: string | null;
-  scheduledDate: string;
-  sop: CareSOPScheduleSourceRow;
-  target: NormalizedTarget;
-  workerIds: UUID[];
-}): Promise<ServiceResult<CreateScheduleFromSOPData>> {
-  const scheduleRow: ScheduleInsertRow = {
-    care_sop_id: input.sop.id,
-    category: input.sop.category,
-    created_by: input.createdBy,
-    custom_target_note: null,
-    farm_id: input.farmId,
-    instruction: input.instruction,
-    scheduled_date: input.scheduledDate,
-    target_column: input.target.targetColumn,
-    target_row: input.target.targetRow,
-    target_tree_id: input.target.targetTreeId,
-    target_type: input.target.targetType,
-    title: input.sop.name,
-  };
-
-  const scheduleResult = await supabase
-    .from('care_schedules')
-    .insert(scheduleRow)
-    .select('id')
-    .single<{ id: string }>();
-
-  if (scheduleResult.error) {
-    return fail(scheduleResult.error, 'Gagal membuat jadwal dari SOP.');
-  }
-
-  const taskRows: TaskInsertRow[] = input.workerIds.map((workerId) => ({
-    assigned_by: input.createdBy,
-    assigned_to: workerId,
-    care_schedule_id: scheduleResult.data.id,
-    category: input.sop.category,
-    custom_target_note: null,
-    due_date: input.scheduledDate,
-    farm_id: input.farmId,
-    instruction: input.instruction,
-    target_column: input.target.targetColumn,
-    target_row: input.target.targetRow,
-    target_tree_id: input.target.targetTreeId,
-    target_type: input.target.targetType,
-    title: input.sop.name,
-  }));
-
-  const tasksResult = await supabase
-    .from('care_tasks')
-    .insert(taskRows)
-    .select('id')
-    .returns<Array<{ id: string }>>();
-
-  if (tasksResult.error) {
-    return fail(
-      tasksResult.error,
-      'Jadwal berhasil dibuat, tetapi tugas pekerja gagal dibuat. Periksa data jadwal sebelum mencoba lagi.'
-    );
-  }
-
-  const taskIds = (tasksResult.data ?? []).map((row) => row.id);
-
-  if (taskIds.length !== input.workerIds.length) {
-    return fail(new Error('Jumlah tugas yang dibuat tidak sesuai jumlah pekerja yang dipilih.'));
-  }
-
-  return ok({
-    scheduleId: scheduleResult.data.id,
-    taskIds,
   });
 }
 

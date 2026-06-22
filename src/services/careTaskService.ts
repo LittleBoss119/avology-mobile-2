@@ -14,6 +14,7 @@ import type {
   GetWorkerTasksInput,
   MemberRole,
   MemberStatus,
+  OperationalReportStatus,
   PostponeTaskData,
   PostponeTaskInput,
   ServiceResult,
@@ -69,6 +70,7 @@ type MembershipRow = {
 type OperationalReportSourceRow = {
   id: string;
   farm_id: string;
+  status: OperationalReportStatus;
 };
 
 export async function getWorkerTasks(
@@ -226,6 +228,10 @@ export async function createTaskFromOperationalReport(
     return fail(accessResult.error);
   }
 
+  if (!canCreateTaskFromReportStatus(reportResult.data.status)) {
+    return fail(new Error(getClosedReportTaskMessage(reportResult.data.status)));
+  }
+
   const { data, error } = await supabase.rpc('create_task_from_operational_report', {
     p_assigned_worker_id: workerId,
     p_custom_target_note: target.customTargetNote,
@@ -245,15 +251,6 @@ export async function createTaskFromOperationalReport(
 
   if (!data) {
     return fail(new Error('RPC create_task_from_operational_report tidak mengembalikan task id.'));
-  }
-
-  const statusResult = await supabase.rpc('update_operational_report_status', {
-    p_operational_report_id: reportId,
-    p_status: 'in_progress',
-  });
-
-  if (statusResult.error) {
-    return fail(statusResult.error, 'Task dibuat, tetapi status laporan gagal diperbarui.');
   }
 
   return ok({
@@ -333,7 +330,7 @@ async function getAccessibleOperationalReportSource(
 ): Promise<ServiceResult<OperationalReportSourceRow>> {
   const { data, error } = await supabase
     .from('operational_reports')
-    .select('id, farm_id')
+    .select('id, farm_id, status')
     .eq('id', operationalReportId)
     .maybeSingle<OperationalReportSourceRow>();
 
@@ -346,6 +343,18 @@ async function getAccessibleOperationalReportSource(
   }
 
   return ok(data);
+}
+
+function canCreateTaskFromReportStatus(status: OperationalReportStatus): boolean {
+  return status !== 'resolved' && status !== 'rejected';
+}
+
+function getClosedReportTaskMessage(status: OperationalReportStatus): string {
+  if (status === 'resolved') {
+    return 'Laporan yang sudah selesai tidak dapat dibuatkan tugas tindak lanjut.';
+  }
+
+  return 'Laporan yang ditolak tidak dapat dibuatkan tugas tindak lanjut.';
 }
 
 async function ensureActiveWorker(farmId: UUID): Promise<ServiceResult<SuccessData>> {
