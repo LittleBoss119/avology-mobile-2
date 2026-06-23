@@ -31,21 +31,28 @@ export const appTheme = colors;
 
 export function Screen({
   children,
+  floatingAction,
   footer,
 }: {
   children: React.ReactNode;
+  floatingAction?: React.ReactNode;
   footer?: React.ReactNode;
 }) {
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardShouldPersistTaps="handled"
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ flexGrow: 1, padding: 20, gap: 18 }}
-    >
-      <View style={{ flex: 1, gap: 18 }}>{children}</View>
-      {footer ? <View style={{ gap: 10, paddingBottom: 16 }}>{footer}</View> : null}
-    </ScrollView>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ flexGrow: 1, padding: 20, gap: 18, paddingBottom: floatingAction ? 96 : 20 }}
+      >
+        <View style={{ flex: 1, gap: 18 }}>{children}</View>
+        {footer ? <View style={{ gap: 10, paddingBottom: 16 }}>{footer}</View> : null}
+      </ScrollView>
+      {floatingAction ? (
+        <View style={{ bottom: 24, position: 'absolute', right: 20 }}>{floatingAction}</View>
+      ) : null}
+    </View>
   );
 }
 
@@ -139,6 +146,53 @@ export function Card({
       }}
     >
       {children}
+    </View>
+  );
+}
+
+type BadgeTone = 'danger' | 'muted' | 'success' | 'warning';
+
+const badgeColors: Record<BadgeTone, { background: string; border: string; text: string }> = {
+  danger: {
+    background: colors.dangerSurface,
+    border: '#FDA29B',
+    text: colors.danger,
+  },
+  muted: {
+    background: '#F2F4F7',
+    border: '#D0D5DD',
+    text: '#475467',
+  },
+  success: {
+    background: colors.successSurface,
+    border: '#A6D9B8',
+    text: colors.primary,
+  },
+  warning: {
+    background: colors.warningSurface,
+    border: '#F6D77A',
+    text: '#7A5600',
+  },
+};
+
+export function Badge({ label, tone = 'muted' }: { label: string; tone?: BadgeTone }) {
+  const badge = badgeColors[tone];
+
+  return (
+    <View
+      style={{
+        alignSelf: 'flex-start',
+        backgroundColor: badge.background,
+        borderColor: badge.border,
+        borderRadius: 999,
+        borderWidth: 1,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+      }}
+    >
+      <Text selectable style={{ color: badge.text, fontSize: 12, fontWeight: '700' }}>
+        {label}
+      </Text>
     </View>
   );
 }

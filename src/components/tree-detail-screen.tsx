@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Alert, Text } from 'react-native';
+import { Alert, Modal, Pressable, Text, View } from 'react-native';
 
 import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
@@ -12,14 +12,17 @@ import {
   formatTreeAge,
   formatTreeArchiveStatusLabel,
   formatTreeDisplayCode,
+  formatTreeLocation,
 } from '../utils/treeFormat';
 import {
   ConditionReportList,
   ConditionStatusBadge,
-  GrowthPhaseBadge,
   TreeHistoryTimeline,
+  TreeVisualPlaceholder,
 } from './tree-components';
 import {
+  appTheme,
+  Badge,
   Button,
   Card,
   EmptyState,
@@ -43,6 +46,7 @@ export function TreeDetailScreen({
   const [actionLoading, setActionLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [menuOpen, setMenuOpen] = React.useState(false);
   const [history, setHistory] = React.useState<TreeHistoryItem[]>([]);
   const [reports, setReports] = React.useState<TreeConditionReport[]>([]);
   const [tree, setTree] = React.useState<Tree | null>(null);
@@ -172,64 +176,230 @@ export function TreeDetailScreen({
   const displayCode = formatTreeDisplayCode(tree);
 
   return (
-    <Screen
-      footer={
-        mode === 'owner' ? (
-          <>
-            <Button title="Catat Kondisi" onPress={() => router.push(`${basePath}/${tree.id}/report`)} />
-            <Button title="Catat Fase" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
-            <Button title="Edit Pohon" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/edit`)} />
-            <Button
-              title={tree.isArchived ? 'Pulihkan' : 'Arsipkan'}
-              variant={tree.isArchived ? 'secondary' : 'danger'}
-              loading={actionLoading}
-              onPress={handleArchiveToggle}
-            />
-          </>
-        ) : (
-          <>
-            <Button title="Catat Kondisi" onPress={() => router.push(`${basePath}/${tree.id}/report`)} />
-            <Button title="Catat Fase" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
-          </>
-        )
-      }
-    >
-      <PageIntro title={displayCode} subtitle="Detail pohon, fase terbaru, dan riwayat pohon." />
+    <Screen>
+      <DetailHeader mode={mode} onMenuPress={() => setMenuOpen(true)} />
       <ErrorBanner message={error} />
 
-      <Card>
-        <MetaRow label="Kode pohon" value={displayCode} />
-        <MetaRow label="Baris" value={tree.rowPosition} />
-        <MetaRow label="Kolom" value={tree.columnPosition} />
-        <MetaRow label="Varietas" value={tree.variety} />
-        <MetaRow label="Tanggal tanam" value={tree.plantedAt} />
-        <MetaRow label="Umur pohon" value={formatTreeAge(tree.plantedAt)} />
-        <MetaRow label="Status pohon" value={formatTreeArchiveStatusLabel(tree.isArchived)} />
-        <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
-          Fase saat ini
-        </Text>
-        {tree.currentGrowthPhase ? (
-          <GrowthPhaseBadge phase={tree.currentGrowthPhase} />
-        ) : (
-          <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '600' }}>
-            {formatGrowthPhase(tree.currentGrowthPhase)}
-          </Text>
-        )}
-        <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
-          Kondisi saat ini
-        </Text>
-        <ConditionStatusBadge status={tree.currentCondition} />
-      </Card>
+      <TreeDetailHero displayCode={displayCode} tree={tree} />
+      {mode === 'owner' ? (
+        <OwnerTreeMenu
+          actionLoading={actionLoading}
+          onArchiveToggle={() => {
+            setMenuOpen(false);
+            handleArchiveToggle();
+          }}
+          onClose={() => setMenuOpen(false)}
+          onEdit={() => {
+            setMenuOpen(false);
+            router.push(`${basePath}/${tree.id}/edit`);
+          }}
+          tree={tree}
+          visible={menuOpen}
+        />
+      ) : null}
 
-      <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
-        Timeline Riwayat
-      </Text>
+      <SectionTitle title="Informasi Pohon" />
+      <InfoGrid mode={mode} tree={tree} />
+
+      <SectionTitle title="Aksi Pohon" />
+      <ActionSection basePath={basePath} tree={tree} />
+
+      <SectionTitle title="Timeline Riwayat" />
       <TreeHistoryTimeline currentUserId={profile?.id} history={history} viewerMode={mode} />
 
-      <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
-        Riwayat Kondisi
-      </Text>
-      <ConditionReportList currentUserId={profile?.id} reports={reports} viewerMode={mode} />
+      {history.length === 0 && reports.length > 0 ? (
+        <>
+          <SectionTitle title="Laporan Kondisi" />
+          <ConditionReportList currentUserId={profile?.id} reports={reports} viewerMode={mode} />
+        </>
+      ) : null}
     </Screen>
   );
+}
+
+function DetailHeader({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuPress: () => void }) {
+  return (
+    <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
+      <View style={{ flex: 1 }}>
+        <PageIntro title="Detail Pohon" subtitle="Kondisi, lokasi, dan riwayat operasional pohon." />
+      </View>
+      {mode === 'owner' ? (
+        <Pressable
+          onPress={onMenuPress}
+          style={{
+            alignItems: 'center',
+            backgroundColor: '#FFFFFF',
+            borderColor: '#DCE7D5',
+            borderRadius: 999,
+            borderWidth: 1,
+            height: 44,
+            justifyContent: 'center',
+            marginTop: 10,
+            width: 44,
+          }}
+        >
+          <Text selectable style={{ color: '#065F2E', fontSize: 22, fontWeight: '900', lineHeight: 24 }}>
+            ...
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function TreeDetailHero({ displayCode, tree }: { displayCode: string; tree: Tree }) {
+  return (
+    <Card>
+      <TreeVisualPlaceholder condition={tree.currentCondition}>
+        <ConditionStatusBadge status={tree.currentCondition} />
+        {tree.isArchived ? <Badge label="Diarsipkan" tone="muted" /> : null}
+      </TreeVisualPlaceholder>
+      <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text selectable style={{ color: appTheme.primary, fontSize: 34, fontWeight: '900' }}>
+            {displayCode}
+          </Text>
+          <Text selectable style={{ color: appTheme.muted, fontSize: 16, lineHeight: 22 }}>
+            {`${tree.variety || 'Varietas belum diisi'} - ${formatGrowthPhase(tree.currentGrowthPhase)}`}
+          </Text>
+        </View>
+        <View style={{ justifyContent: 'center' }}>
+          <ConditionStatusBadge status={tree.currentCondition} />
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+function InfoGrid({ mode, tree }: { mode: TreeDetailMode; tree: Tree }) {
+  const items = [
+    { label: 'Varietas', value: tree.variety || 'Belum diisi' },
+    { label: 'Tanggal Tanam', value: formatFriendlyDate(tree.plantedAt) },
+    { label: 'Umur Pohon', value: formatTreeAge(tree.plantedAt) },
+    { label: 'Lokasi', value: formatTreeLocation(tree) },
+    { label: 'Fase Tumbuh', value: formatGrowthPhase(tree.currentGrowthPhase) },
+  ];
+
+  if (mode === 'owner') {
+    items.push({ label: 'Status Arsip', value: formatTreeArchiveStatusLabel(tree.isArchived) });
+  }
+
+  return (
+    <Card>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 16 }}>
+        {items.map((item) => (
+          <View key={item.label} style={{ flexBasis: '50%', gap: 3, paddingRight: 12 }}>
+            <MetaRow label={item.label} value={item.value} />
+          </View>
+        ))}
+      </View>
+    </Card>
+  );
+}
+
+function ActionSection({
+  basePath,
+  tree,
+}: {
+  basePath: string;
+  tree: Tree;
+}) {
+  return (
+    <Card>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <Button title="Catat Kondisi" size="small" onPress={() => router.push(`${basePath}/${tree.id}/report`)} />
+        <Button title="Catat Fase" size="small" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
+      </View>
+    </Card>
+  );
+}
+
+function OwnerTreeMenu({
+  actionLoading,
+  onArchiveToggle,
+  onClose,
+  onEdit,
+  tree,
+  visible,
+}: {
+  actionLoading: boolean;
+  onArchiveToggle: () => void;
+  onClose: () => void;
+  onEdit: () => void;
+  tree: Tree;
+  visible: boolean;
+}) {
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
+      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.18)', flex: 1 }} onPress={onClose}>
+        <View style={{ alignItems: 'flex-end', paddingRight: 20, paddingTop: 92 }}>
+          <View
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderColor: '#DCE7D5',
+              borderRadius: 14,
+              borderWidth: 1,
+              minWidth: 210,
+              overflow: 'hidden',
+            }}
+          >
+            <MenuItem label="Edit Pohon" onPress={onEdit} />
+            <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
+            <MenuItem
+              danger={!tree.isArchived}
+              disabled={actionLoading}
+              label={tree.isArchived ? 'Pulihkan Pohon' : 'Arsipkan Pohon'}
+              onPress={onArchiveToggle}
+            />
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function MenuItem({
+  danger,
+  disabled,
+  label,
+  onPress,
+}: {
+  danger?: boolean;
+  disabled?: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable disabled={disabled} onPress={onPress} style={{ opacity: disabled ? 0.6 : 1, padding: 14 }}>
+      <Text selectable style={{ color: danger ? '#B42318' : '#1E2A24', fontSize: 15, fontWeight: '800' }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function SectionTitle({ title }: { title: string }) {
+  return (
+    <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '800', paddingTop: 4 }}>
+      {title}
+    </Text>
+  );
+}
+
+function formatFriendlyDate(value?: string | null): string {
+  if (!value) {
+    return 'Belum diisi';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }

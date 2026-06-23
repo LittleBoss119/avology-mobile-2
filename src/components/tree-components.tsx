@@ -14,12 +14,10 @@ import { formatPersonDisplayName } from '../utils/displayFormat';
 import {
   buildTreeDisplayCode,
   formatGrowthPhase,
-  formatTreeAge,
   formatTreeConditionStatus,
   formatTreeDisplayCode,
-  formatTreeLocation,
 } from '../utils/treeFormat';
-import { Card, EmptyState, Field, MetaRow } from './ui';
+import { appTheme, Badge, Card, EmptyState, Field, MetaRow } from './ui';
 
 export type TreeFormValues = {
   rowPosition: string;
@@ -75,31 +73,40 @@ type TreeHistoryViewerMode = 'owner' | 'worker';
 
 export function TreeCard({ children, onPress, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
+  const primaryBadge = tree.currentCondition === 'healthy' && tree.currentGrowthPhase
+    ? <Badge label={formatGrowthPhase(tree.currentGrowthPhase)} tone={getGrowthPhaseOptionalTone(tree.currentGrowthPhase)} />
+    : <ConditionStatusBadge status={tree.currentCondition} />;
 
   const content = (
-    <Card>
-      <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
-        <View style={{ flex: 1, gap: 5 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '700' }}>
-            {displayCode}
-          </Text>
-          <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-            {formatTreeLocation(tree)}
-          </Text>
-        </View>
-        <View style={{ alignItems: 'flex-end', gap: 6 }}>
-          <ConditionStatusBadge status={tree.currentCondition} />
-          {tree.isArchived ? <SmallBadge label="Diarsipkan" tone="muted" /> : null}
-        </View>
+    <View
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderColor: '#DCE7D5',
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 10,
+        padding: 10,
+      }}
+    >
+      <TreeVisualPlaceholder condition={tree.currentCondition} size="compact">
+        {tree.isArchived ? <Badge label="Arsip" tone="muted" /> : primaryBadge}
+      </TreeVisualPlaceholder>
+
+      <View style={{ gap: 3 }}>
+        <Text selectable style={{ color: appTheme.primary, fontSize: 20, fontWeight: '900' }}>
+          {displayCode}
+        </Text>
+        <Text
+          selectable
+          numberOfLines={1}
+          style={{ color: appTheme.text, fontSize: 14, fontWeight: '700' }}
+        >
+          {tree.variety || 'Varietas belum diisi'}
+        </Text>
       </View>
 
-      <MetaRow label="Varietas" value={tree.variety} />
-      <MetaRow label="Umur" value={formatTreeAge(tree.plantedAt)} />
-      {tree.currentGrowthPhase ? (
-        <MetaRow label="Fase saat ini" value={formatGrowthPhase(tree.currentGrowthPhase)} />
-      ) : null}
       {children}
-    </Card>
+    </View>
   );
 
   if (!onPress) {
@@ -107,6 +114,57 @@ export function TreeCard({ children, onPress, tree }: TreeCardProps) {
   }
 
   return <Pressable onPress={onPress}>{content}</Pressable>;
+}
+
+export function TreeVisualPlaceholder({
+  children,
+  condition,
+  size = 'regular',
+}: {
+  children?: React.ReactNode;
+  condition?: TreeConditionStatus;
+  size?: 'compact' | 'regular';
+}) {
+  const accent = getVisualAccent(condition);
+  const isCompact = size === 'compact';
+
+  return (
+    <View
+      style={{
+        backgroundColor: accent.background,
+        borderColor: accent.border,
+        borderRadius: 12,
+        borderWidth: 1,
+        minHeight: isCompact ? 84 : 108,
+        overflow: 'hidden',
+        padding: isCompact ? 9 : 12,
+      }}
+    >
+      <View style={{ alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between' }}>
+        <View style={{ gap: isCompact ? 5 : 8 }}>
+          <View
+            style={{
+              backgroundColor: accent.leaf,
+              borderRadius: 999,
+              height: isCompact ? 30 : 42,
+              transform: [{ rotate: '-22deg' }],
+              width: isCompact ? 50 : 68,
+            }}
+          />
+          <View
+            style={{
+              backgroundColor: '#5C8A45',
+              borderRadius: 999,
+              height: isCompact ? 34 : 46,
+              marginLeft: isCompact ? 20 : 28,
+              width: isCompact ? 24 : 32,
+            }}
+          />
+        </View>
+        <View style={{ alignItems: 'flex-end', gap: 6 }}>{children}</View>
+      </View>
+    </View>
+  );
 }
 
 export function TreeForm({ onChange, values }: TreeFormProps) {
@@ -153,13 +211,13 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
 export function ConditionStatusBadge({ status }: ConditionStatusBadgeProps) {
   const tone = getConditionTone(status);
 
-  return <SmallBadge label={formatTreeConditionStatus(status)} tone={tone} />;
+  return <Badge label={formatTreeConditionStatus(status)} tone={tone} />;
 }
 
 export function GrowthPhaseBadge({ phase }: GrowthPhaseBadgeProps) {
   const tone = getGrowthPhaseTone(phase);
 
-  return <SmallBadge label={formatGrowthPhase(phase)} tone={tone} />;
+  return <Badge label={formatGrowthPhase(phase)} tone={tone} />;
 }
 
 export function ConditionReportList({
@@ -255,28 +313,94 @@ function TreeHistoryTimelineItem({
   viewerMode: TreeHistoryViewerMode;
 }) {
   return (
-    <Card>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-        <SmallBadge label={formatHistoryType(item.historyType)} tone={getHistoryTone(item.historyType)} />
-        <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
-          {formatDateTime(item.happenedAt)}
-        </Text>
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <View style={{ alignItems: 'center', paddingTop: 6 }}>
+        <View
+          style={{
+            backgroundColor: getTimelineDotColor(item.historyType),
+            borderRadius: 999,
+            height: 24,
+            width: 24,
+          }}
+        />
+        <View style={{ backgroundColor: '#DCE7D5', flex: 1, marginTop: 6, width: 1 }} />
       </View>
-      <MetaRow label="Judul" value={formatHistoryTitle(item)} />
-      <MetaRow label="Catatan" value={item.description || 'Catatan belum diisi'} />
-      <MetaRow
-        label="Dicatat oleh"
-        value={formatActorDisplayName({
-          actorId: item.actorId,
-          actorName: item.actorName,
-          actorRole: item.actorRole,
-          currentUserId,
-          viewerMode,
-        })}
-      />
-    </Card>
+      <View style={{ flex: 1 }}>
+        <View
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderColor: '#DCE7D5',
+            borderRadius: 12,
+            borderWidth: 1,
+            gap: 8,
+            padding: 12,
+          }}
+        >
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+            <Badge label={formatHistoryType(item.historyType)} tone={getHistoryTone(item.historyType)} />
+            <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
+              {formatDateTime(item.happenedAt)}
+            </Text>
+          </View>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800', lineHeight: 22 }}>
+            {formatHistoryTitle(item)}
+          </Text>
+          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+            {item.description || 'Catatan belum diisi'}
+          </Text>
+          <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
+            Dicatat oleh{' '}
+            {formatActorDisplayName({
+              actorId: item.actorId,
+              actorName: item.actorName,
+              actorRole: item.actorRole,
+              currentUserId,
+              viewerMode,
+            })}
+          </Text>
+        </View>
+      </View>
+    </View>
   );
 }
+
+function getVisualAccent(status?: TreeConditionStatus): {
+  background: string;
+  border: string;
+  leaf: string;
+} {
+  if (status && status !== 'healthy') {
+    return {
+      background: '#FFF8E8',
+      border: '#F6D77A',
+      leaf: '#C9A227',
+    };
+  }
+
+  return {
+    background: '#E7F3EA',
+    border: '#B8D8BF',
+    leaf: appTheme.primary,
+  };
+}
+
+function getGrowthPhaseOptionalTone(phase?: GrowthPhase | null): BadgeTone {
+  return phase ? getGrowthPhaseTone(phase) : 'muted';
+}
+
+function getTimelineDotColor(type: TreeHistoryType): string {
+  if (type === 'condition') {
+    return '#FCEFC7';
+  }
+
+  if (type === 'phase') {
+    return '#E7F6EC';
+  }
+
+  return '#E7EEF8';
+}
+
+type BadgeTone = 'danger' | 'muted' | 'success' | 'warning';
 
 function formatActorDisplayName({
   actorId,
@@ -311,53 +435,6 @@ function formatActorDisplayName({
 
   return viewerMode === 'worker' ? 'Anggota kebun' : 'Pengguna tidak tersedia';
 }
-
-function SmallBadge({ label, tone }: { label: string; tone: BadgeTone }) {
-  const colors = badgeColors[tone];
-
-  return (
-    <View
-      style={{
-        alignSelf: 'flex-start',
-        backgroundColor: colors.background,
-        borderColor: colors.border,
-        borderRadius: 999,
-        borderWidth: 1,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-      }}
-    >
-      <Text selectable style={{ color: colors.text, fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-type BadgeTone = 'danger' | 'muted' | 'success' | 'warning';
-
-const badgeColors: Record<BadgeTone, { background: string; border: string; text: string }> = {
-  danger: {
-    background: '#FEE4E2',
-    border: '#FDA29B',
-    text: '#B42318',
-  },
-  muted: {
-    background: '#F2F4F7',
-    border: '#D0D5DD',
-    text: '#475467',
-  },
-  success: {
-    background: '#E8F5EE',
-    border: '#B7DEC9',
-    text: '#2F6F4E',
-  },
-  warning: {
-    background: '#FFF4D6',
-    border: '#F6D77A',
-    text: '#7A5600',
-  },
-};
 
 function getConditionTone(status: TreeConditionStatus): BadgeTone {
   if (status === 'healthy') {

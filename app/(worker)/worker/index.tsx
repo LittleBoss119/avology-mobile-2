@@ -3,19 +3,20 @@ import React from 'react';
 import { Text, View } from 'react-native';
 
 import {
+  appTheme,
+  Badge,
   Button,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
-  MetaRow,
   PageIntro,
   Screen,
 } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/auth-context';
 import { getWorkerDashboardSummary } from '../../../src/services/dashboardService';
 import type { WorkerDashboardSummary } from '../../../src/types/domain';
-import { formatMemberStatus } from '../../../src/utils/displayFormat';
+import { formatMemberStatus, formatPersonDisplayName } from '../../../src/utils/displayFormat';
 
 type WorkerStat = {
   label: string;
@@ -24,7 +25,7 @@ type WorkerStat = {
 };
 
 export default function WorkerDashboardScreen() {
-  const { currentFarm } = useAuth();
+  const { currentFarm, profile } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState<WorkerDashboardSummary | null>(null);
@@ -71,38 +72,14 @@ export default function WorkerDashboardScreen() {
     ? summary.todayTasks === 0 && summary.unfinishedTasks === 0 && summary.completedTasks === 0
     : false;
   const farmName = currentFarm?.farm?.name;
+  const workerName = formatPersonDisplayName(profile?.fullName, 'Pekerja kebun');
 
   return (
     <Screen>
-      <PageIntro
-        title="Dashboard Pekerja"
-        subtitle={
-          farmName
-            ? `Fokus tugas hari ini dan laporan lapangan di ${farmName}.`
-            : 'Fokus tugas hari ini dan laporan lapangan.'
-        }
-      />
+      <PageIntro title={`Halo, ${workerName}`} subtitle={farmName ?? 'Fokus pekerjaan lapangan hari ini.'} />
       <ErrorBanner message={error} />
 
-      <Card>
-        <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
-          <View style={{ flex: 1, gap: 8 }}>
-            <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '800' }}>
-              Tugas Hari Ini
-            </Text>
-            <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-              {summary && summary.todayTasks > 0
-                ? 'Ada tugas yang perlu dikerjakan hari ini.'
-                : 'Tidak ada tugas jatuh tempo hari ini.'}
-            </Text>
-          </View>
-          <Text selectable style={{ color: '#2F6F4E', fontSize: 40, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
-            {summary?.todayTasks ?? 0}
-          </Text>
-        </View>
-        <MetaRow label="Kebun" value={farmName} />
-        <MetaRow label="Status akses" value={formatMemberStatus(currentFarm?.status)} />
-      </Card>
+      <WorkerHero farmName={farmName} status={formatMemberStatus(currentFarm?.status)} summary={summary} />
 
       {isEmpty ? (
         <EmptyState
@@ -111,6 +88,7 @@ export default function WorkerDashboardScreen() {
         />
       ) : null}
 
+      <SectionTitle title="Ringkasan Tugas" />
       {summary ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
           {stats.map((stat) => (
@@ -124,28 +102,103 @@ export default function WorkerDashboardScreen() {
         />
       ) : null}
 
-      <SectionTitle title="Pekerjaan Hari Ini" />
-      {summary && summary.todayTasks > 0 ? (
-        <Card>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
-            {summary.todayTasks} tugas menunggu dikerjakan
-          </Text>
-          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-            Buka daftar tugas untuk melihat detail target, tanggal, dan status pekerjaan.
-          </Text>
-        </Card>
-      ) : (
-        <EmptyState title="Belum ada tugas hari ini" subtitle="Tugas dari pemilik akan muncul saat ada pekerjaan baru." />
-      )}
+      <SectionTitle title="Prioritas Berikutnya" />
+      <NextTaskSummary summary={summary} />
 
       <SectionTitle title="Aksi Lapangan" />
-      <View style={{ gap: 10 }}>
-        <Button title="Lihat Tugas" onPress={() => router.push('/worker/tasks')} />
-        <Button title="Laporkan Kondisi Pohon" variant="secondary" onPress={() => router.push('/worker/trees')} />
-        <Button title="Buat Laporan Operasional" variant="secondary" onPress={() => router.push('/worker/reports/create')} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <Button title="Lihat Tugas" size="small" onPress={() => router.push('/worker/tasks')} />
+        <Button title="Lapor Kondisi" size="small" variant="secondary" onPress={() => router.push('/worker/trees')} />
+        <Button title="Buat Laporan" size="small" variant="secondary" onPress={() => router.push('/worker/reports/create')} />
       </View>
     </Screen>
   );
+}
+
+function WorkerHero({
+  farmName,
+  status,
+  summary,
+}: {
+  farmName?: string;
+  status: string;
+  summary: WorkerDashboardSummary | null;
+}) {
+  const hasTodayTask = Boolean(summary && summary.todayTasks > 0);
+
+  return (
+    <View
+      style={{
+        backgroundColor: hasTodayTask ? appTheme.primary : appTheme.primarySoft,
+        borderColor: hasTodayTask ? appTheme.primary : '#B8D8BF',
+        borderRadius: 16,
+        borderWidth: 1,
+        gap: 14,
+        padding: 18,
+      }}
+    >
+      <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
+        <View style={{ flex: 1, gap: 8 }}>
+          <Text selectable style={{ color: hasTodayTask ? '#FFFFFF' : appTheme.text, fontSize: 20, fontWeight: '900' }}>
+            Tugas Hari Ini
+          </Text>
+          <Text selectable style={{ color: hasTodayTask ? '#DDEFE2' : appTheme.muted, lineHeight: 21 }}>
+            {hasTodayTask
+              ? 'Ada pekerjaan yang perlu diprioritaskan hari ini.'
+              : 'Tidak ada tugas jatuh tempo hari ini.'}
+          </Text>
+        </View>
+        <Text selectable style={{ color: hasTodayTask ? '#FFFFFF' : appTheme.primary, fontSize: 52, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+          {summary?.todayTasks ?? 0}
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        <Badge label={farmName ?? 'Kebun aktif'} tone={hasTodayTask ? 'success' : 'muted'} />
+        <Badge label={status} tone="success" />
+      </View>
+    </View>
+  );
+}
+
+function NextTaskSummary({ summary }: { summary: WorkerDashboardSummary | null }) {
+  if (!summary) {
+    return (
+      <EmptyState
+        title="Prioritas belum dapat ditampilkan"
+        subtitle="Buka kembali halaman ini setelah koneksi atau akses kebun tersedia."
+      />
+    );
+  }
+
+  if (summary.todayTasks > 0) {
+    return (
+      <Card>
+        <Badge label="Hari ini" tone="warning" />
+        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
+          {summary.todayTasks} tugas perlu dikerjakan
+        </Text>
+        <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+          Buka daftar tugas untuk melihat target dan instruksi pekerjaan.
+        </Text>
+      </Card>
+    );
+  }
+
+  if (summary.unfinishedTasks > 0) {
+    return (
+      <Card>
+        <Badge label="Belum selesai" tone="warning" />
+        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
+          {summary.unfinishedTasks} tugas masih terbuka
+        </Text>
+        <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+          Cek daftar tugas untuk melanjutkan pekerjaan yang tertunda.
+        </Text>
+      </Card>
+    );
+  }
+
+  return <EmptyState title="Belum ada tugas prioritas" subtitle="Tugas dari pemilik akan muncul saat ada pekerjaan baru." />;
 }
 
 function SectionTitle({ title }: { title: string }) {
@@ -183,6 +236,7 @@ function WorkerStatCard({ stat }: { stat: WorkerStat }) {
 
 function buildStats(summary: WorkerDashboardSummary): WorkerStat[] {
   return [
+    { label: 'Tugas Hari Ini', value: summary.todayTasks },
     { label: 'Tugas Belum Selesai', value: summary.unfinishedTasks },
     { label: 'Tugas Selesai', tone: summary.completedTasks === 0 ? 'muted' : 'primary', value: summary.completedTasks },
   ];

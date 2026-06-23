@@ -3,18 +3,20 @@ import React from 'react';
 import { Text, View } from 'react-native';
 
 import {
+  appTheme,
+  Badge,
   Button,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
-  MetaRow,
   PageIntro,
   Screen,
 } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/auth-context';
 import { getOwnerDashboardSummary } from '../../../src/services/dashboardService';
 import type { OwnerDashboardSummary } from '../../../src/types/domain';
+import { formatPersonDisplayName } from '../../../src/utils/displayFormat';
 
 type DashboardStat = {
   label: string;
@@ -30,7 +32,7 @@ type PriorityInsight = {
 };
 
 export default function OwnerDashboardScreen() {
-  const { currentFarm } = useAuth();
+  const { currentFarm, profile } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState<OwnerDashboardSummary | null>(null);
@@ -72,46 +74,16 @@ export default function OwnerDashboardScreen() {
   const isEmpty = summary ? stats.every((stat) => stat.value === 0) : false;
   const priorities = summary ? buildPriorities(summary) : [];
   const farmName = currentFarm?.farm?.name;
+  const healthyPercent =
+    summary && summary.totalTrees > 0 ? Math.round((summary.healthyTrees / summary.totalTrees) * 100) : 0;
+  const ownerName = formatPersonDisplayName(profile?.fullName, 'Pemilik kebun');
 
   return (
     <Screen>
-      <PageIntro
-        title="Dashboard Pemilik"
-        subtitle={
-          farmName
-            ? `Pantau kondisi ${farmName} dan pekerjaan yang perlu diperhatikan hari ini.`
-            : 'Pantau kondisi kebun dan pekerjaan yang perlu diperhatikan hari ini.'
-        }
-      />
+      <PageIntro title={`Halo, ${ownerName}`} subtitle={farmName ?? 'Pantau kebun aktif Anda hari ini.'} />
       <ErrorBanner message={error} />
 
-      <Card>
-        <View style={{ gap: 8 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '800' }}>
-            Kondisi Pohon
-          </Text>
-          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-            {summary && summary.problemTrees > 0
-              ? 'Ada pohon yang perlu diperiksa lebih lanjut.'
-              : 'Kondisi pohon terlihat stabil.'}
-          </Text>
-        </View>
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <MiniMetric label="Total" value={summary?.totalTrees ?? 0} />
-          <MiniMetric label="Sehat" value={summary?.healthyTrees ?? 0} tone="primary" />
-          <MiniMetric
-            label="Bermasalah"
-            value={summary?.problemTrees ?? 0}
-            tone={summary && summary.problemTrees > 0 ? 'danger' : 'muted'}
-          />
-        </View>
-        <MetaRow label="Kebun" value={farmName} />
-        {currentFarm?.farm?.joinCode ? (
-          <Text selectable style={{ color: '#68746D', fontSize: 12, lineHeight: 18 }}>
-            Kode gabung: {currentFarm.farm.joinCode}
-          </Text>
-        ) : null}
-      </Card>
+      <OwnerHero summary={summary} healthyPercent={healthyPercent} farmName={farmName} />
 
       {isEmpty ? (
         <EmptyState
@@ -120,7 +92,16 @@ export default function OwnerDashboardScreen() {
         />
       ) : null}
 
-      <SectionTitle title="Perlu Perhatian" />
+      <SectionTitle title="Insight Kebun" />
+      {summary ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+          {stats.map((stat) => (
+            <DashboardStatCard key={stat.label} stat={stat} />
+          ))}
+        </View>
+      ) : null}
+
+      <SectionTitle title="Prioritas" />
       {priorities.length > 0 ? (
         <View style={{ gap: 10 }}>
           {priorities.map((priority) => (
@@ -146,12 +127,89 @@ export default function OwnerDashboardScreen() {
       ) : null}
 
       <SectionTitle title="Aksi Cepat" />
-      <View style={{ gap: 10 }}>
-        <Button title="Tambah Pohon" onPress={() => router.push('/owner/trees/create')} />
-        <Button title="Buat Jadwal" variant="secondary" onPress={() => router.push('/owner/schedules/create')} />
-        <Button title="Lihat Laporan" variant="secondary" onPress={() => router.push('/owner/reports')} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <Button title="Tambah Pohon" size="small" onPress={() => router.push('/owner/trees/create')} />
+        <Button title="Buat Jadwal" size="small" variant="secondary" onPress={() => router.push('/owner/schedules/create')} />
+        <Button title="Lihat Laporan" size="small" variant="secondary" onPress={() => router.push('/owner/reports')} />
       </View>
     </Screen>
+  );
+}
+
+function OwnerHero({
+  farmName,
+  healthyPercent,
+  summary,
+}: {
+  farmName?: string;
+  healthyPercent: number;
+  summary: OwnerDashboardSummary | null;
+}) {
+  return (
+    <View
+      style={{
+        backgroundColor: appTheme.primary,
+        borderRadius: 16,
+        gap: 18,
+        overflow: 'hidden',
+        padding: 18,
+      }}
+    >
+      <View style={{ gap: 6 }}>
+        <Text selectable style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '900' }}>
+          Kondisi Kebun
+        </Text>
+        <Text selectable style={{ color: '#DDEFE2', lineHeight: 21 }}>
+          {farmName
+            ? `Ringkasan cepat ${farmName} berdasarkan data operasional.`
+            : 'Ringkasan cepat berdasarkan data operasional kebun.'}
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 16, justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <Text selectable style={{ color: '#FFFFFF', fontSize: 52, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+            {healthyPercent}%
+          </Text>
+          <Text selectable style={{ color: '#DDEFE2', fontSize: 15, lineHeight: 21 }}>
+            pohon dalam kondisi sehat
+          </Text>
+        </View>
+        <View style={{ justifyContent: 'center' }}>
+          <Badge
+            label={summary && summary.problemTrees > 0 ? 'Perlu dicek' : 'Stabil'}
+            tone={summary && summary.problemTrees > 0 ? 'warning' : 'success'}
+          />
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <HeroMetric label="Total Pohon" value={summary?.totalTrees ?? 0} />
+        <HeroMetric label="Sehat" value={summary?.healthyTrees ?? 0} />
+        <HeroMetric label="Perhatian" value={summary?.problemTrees ?? 0} warning />
+      </View>
+    </View>
+  );
+}
+
+function HeroMetric({ label, value, warning }: { label: string; value: number; warning?: boolean }) {
+  return (
+    <View
+      style={{
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        borderColor: 'rgba(255,255,255,0.25)',
+        borderRadius: 12,
+        borderWidth: 1,
+        flex: 1,
+        gap: 4,
+        padding: 10,
+      }}
+    >
+      <Text selectable style={{ color: '#DDEFE2', fontSize: 12, fontWeight: '700' }}>
+        {label}
+      </Text>
+      <Text selectable style={{ color: warning ? '#F6D77A' : '#FFFFFF', fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -249,11 +307,6 @@ function buildStats(summary: OwnerDashboardSummary): DashboardStat[] {
     },
     { label: 'Pohon Berbunga', value: summary.floweringTrees },
     { label: 'Pohon Berbuah', value: summary.fruitingTrees },
-    {
-      label: 'SOP Jatuh Tempo/Terlambat',
-      tone: summary.dueOrOverdueSops > 0 ? 'danger' : 'muted',
-      value: summary.dueOrOverdueSops,
-    },
   ];
 }
 
@@ -278,6 +331,12 @@ function buildPriorities(summary: OwnerDashboardSummary): PriorityInsight[] {
       description: 'Pantau pekerjaan perawatan yang masih terbuka.',
       tone: 'danger',
       value: summary.unfinishedTasks,
+    },
+    {
+      title: 'Tugas hari ini',
+      description: 'Pastikan pekerjaan yang jatuh tempo hari ini siap dikerjakan.',
+      tone: 'warning',
+      value: summary.todayTasks,
     },
     {
       title: 'Laporan operasional baru',
