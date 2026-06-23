@@ -69,8 +69,11 @@ export default function WorkerLayout() {
         <Stack
           screenOptions={{
             headerBackTitle: 'Kembali',
+            headerStyle: { backgroundColor: '#F7FAF3' },
             headerShadowVisible: false,
-            contentStyle: { backgroundColor: '#F6F7F2' },
+            headerTintColor: '#065F2E',
+            headerTitleStyle: { color: '#1E2A24', fontWeight: '800' },
+            contentStyle: { backgroundColor: '#F7FAF3' },
           }}
         >
           <Stack.Screen name="worker/index" options={{ headerBackVisible: false, title: 'Pekerja' }} />

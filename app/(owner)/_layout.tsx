@@ -69,8 +69,11 @@ export default function OwnerLayout() {
         <Stack
           screenOptions={{
             headerBackTitle: 'Kembali',
+            headerStyle: { backgroundColor: '#F7FAF3' },
             headerShadowVisible: false,
-            contentStyle: { backgroundColor: '#F6F7F2' },
+            headerTintColor: '#065F2E',
+            headerTitleStyle: { color: '#1E2A24', fontWeight: '800' },
+            contentStyle: { backgroundColor: '#F7FAF3' },
           }}
         >
           <Stack.Screen name="owner/index" options={{ headerBackVisible: false, title: 'Pemilik' }} />
@@ -96,7 +99,7 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/reports/[reportId]/task" options={{ title: 'Buat Tugas' }} />
           <Stack.Screen name="owner/workers" options={{ title: 'Manajemen Pekerja' }} />
           <Stack.Screen name="owner/profile" options={{ headerBackVisible: false, title: 'Profil' }} />
-          <Stack.Screen name="owner/farm-profile" options={{ title: 'Profil Kebun' }} />
+          <Stack.Screen name="owner/farm-profile" options={{ title: 'Kebun Saya' }} />
         </Stack>
       </View>
       <RoleBottomNavigation role="owner" />

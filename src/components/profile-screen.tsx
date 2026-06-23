@@ -5,7 +5,18 @@ import { Text } from 'react-native';
 import { useAuth } from '../context/auth-context';
 import { updateCurrentProfile } from '../services/authService';
 import { isOwnerActive } from '../utils/routeGuard';
-import { Button, Card, EmptyState, ErrorBanner, Field, MetaRow, PageIntro, Screen, SuccessBanner } from './ui';
+import {
+  BrandMark,
+  Button,
+  Card,
+  EmptyState,
+  ErrorBanner,
+  Field,
+  MetaRow,
+  PageIntro,
+  Screen,
+  SuccessBanner,
+} from './ui';
 
 export function ProfileScreen() {
   const { currentFarm, error, profile, refresh, signOut } = useAuth();
@@ -105,6 +116,7 @@ export function ProfileScreen() {
         </>
       }
     >
+      <BrandMark compact />
       <PageIntro title="Profil Akun" subtitle="Kelola data pribadi akun Avology kamu." />
       <ErrorBanner message={formError ?? error?.message} />
       <SuccessBanner message={successMessage} />
@@ -112,7 +124,7 @@ export function ProfileScreen() {
       {!profile ? (
         <EmptyState title="Profil tidak tersedia" subtitle="Masuk ulang jika data akun belum muncul." />
       ) : (
-        <Card>
+        <Card variant="highlight">
           <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
             Profil Akun
           </Text>

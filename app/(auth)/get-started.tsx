@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { Text } from 'react-native';
 
-import { Button, Card, PageIntro, Screen } from '../../src/components/ui';
+import { BrandMark, Button, Card, PageIntro, Screen } from '../../src/components/ui';
 
 export default function GetStartedScreen() {
   return (
@@ -13,11 +13,12 @@ export default function GetStartedScreen() {
         </>
       }
     >
+      <BrandMark />
       <PageIntro
-        title="Avology"
-        subtitle="Kelola operasional kebun alpukat MS Farm dari satu aplikasi mobile."
+        title="Kelola kebun dari genggaman"
+        subtitle="Pantau pekerjaan, laporan lapangan, dan kondisi pohon dalam satu ruang kerja."
       />
-      <Card>
+      <Card variant="highlight">
         <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
           Operasional kebun alpukat
         </Text>

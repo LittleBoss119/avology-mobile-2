@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import React from 'react';
 
-import { Button, ErrorBanner, Field, PageIntro, Screen } from '../../src/components/ui';
+import { BrandMark, Button, Card, ErrorBanner, Field, PageIntro, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
 import { loginUser } from '../../src/services/authService';
 
@@ -38,10 +38,13 @@ export default function LoginScreen() {
         </>
       }
     >
+      <BrandMark compact />
       <PageIntro title="Masuk" subtitle="Masuk untuk melanjutkan ke area pemilik atau pekerja." />
       <ErrorBanner message={error} />
-      <Field label="Email" value={email} onChangeText={setEmail} placeholder="nama@email.com" keyboardType="email-address" />
-      <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
+      <Card>
+        <Field label="Email" value={email} onChangeText={setEmail} placeholder="nama@email.com" keyboardType="email-address" />
+        <Field label="Password" value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
+      </Card>
     </Screen>
   );
 }

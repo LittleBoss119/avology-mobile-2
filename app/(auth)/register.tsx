@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import React from 'react';
 
 import { registerUser } from '../../src/services/authService';
-import { Button, ErrorBanner, Field, PageIntro, Screen } from '../../src/components/ui';
+import { BrandMark, Button, Card, ErrorBanner, Field, PageIntro, Screen } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
 
 export default function RegisterScreen() {
@@ -45,12 +45,15 @@ export default function RegisterScreen() {
         </>
       }
     >
+      <BrandMark compact />
       <PageIntro title="Buat Akun" subtitle="Daftarkan akun sebelum membuat atau bergabung ke kebun." />
       <ErrorBanner message={error} />
-      <Field label="Nama lengkap" value={fullName} onChangeText={setFullName} placeholder="Nama pengguna" />
-      <Field label="Nomor HP" value={phone} onChangeText={setPhone} placeholder="08..." keyboardType="phone-pad" />
-      <Field label="Email" value={email} onChangeText={setEmail} placeholder="nama@email.com" keyboardType="email-address" />
-      <Field label="Password" value={password} onChangeText={setPassword} placeholder="Minimal 6 karakter" secureTextEntry />
+      <Card>
+        <Field label="Nama lengkap" value={fullName} onChangeText={setFullName} placeholder="Nama pengguna" />
+        <Field label="Nomor HP" value={phone} onChangeText={setPhone} placeholder="08..." keyboardType="phone-pad" />
+        <Field label="Email" value={email} onChangeText={setEmail} placeholder="nama@email.com" keyboardType="email-address" />
+        <Field label="Password" value={password} onChangeText={setPassword} placeholder="Minimal 6 karakter" secureTextEntry />
+      </Card>
     </Screen>
   );
 }

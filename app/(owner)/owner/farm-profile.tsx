@@ -26,7 +26,7 @@ export default function OwnerFarmProfileScreen() {
       {!farm ? (
         <EmptyState title="Data kebun tidak tersedia" subtitle="Coba buka kembali halaman ini beberapa saat lagi." />
       ) : (
-        <Card>
+        <Card variant="highlight">
           <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
             Data Kebun
           </Text>
