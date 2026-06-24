@@ -16,7 +16,7 @@ import {
   formatTreeTargetFallback,
 } from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
-import { appTheme, Badge, Button, Card, DateField, EmptyState, Field, MetaRow, SectionTitle } from './ui';
+import { appTheme, Badge, Button, Card, CompactMetaItem, DateField, EmptyState, Field, MetaRow, SectionTitle } from './ui';
 import { careCategoryOptions } from './care-sop-components';
 
 export type ManualScheduleFormValues = {
@@ -97,29 +97,36 @@ export function CareTaskSummaryCard({
 }) {
   const content = (
     <Card>
-      <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
-        <View style={{ flex: 1, gap: 5 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '900', lineHeight: 23 }}>
+      <View style={{ gap: 8 }}>
+        <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 8, justifyContent: 'space-between' }}>
+          <Text
+            selectable
+            ellipsizeMode="tail"
+            numberOfLines={1}
+            style={{ color: '#065F2E', flex: 1, fontSize: 17, fontWeight: '900', lineHeight: 23 }}
+          >
             {task.title}
           </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            <Badge label={formatTaskStatus(task.status)} tone={getTaskTone(task.status)} />
-            <Badge label={formatTaskSource(task)} tone="muted" />
-          </View>
+          <Badge label={formatTaskStatus(task.status)} maxWidth={96} tone={getTaskTone(task.status)} />
         </View>
-      </View>
-      {task.instruction ? (
-        <Text selectable numberOfLines={2} style={{ color: '#68746D', lineHeight: 20 }}>
-          {task.instruction}
-        </Text>
-      ) : null}
-      <View style={{ backgroundColor: appTheme.primarySoft, borderRadius: 12, gap: 8, padding: 12 }}>
-        <MetaRow label="Target" value={formatCareTarget(task)} />
-        <MetaRow label="Tanggal" value={formatDate(task.dueDate)} />
-        <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
-        {showAssignedWorker ? (
-          <MetaRow label="Pekerja" value={assignedWorkerName ?? 'Pekerja tidak tersedia'} />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+          <Badge label={formatTaskSource(task)} maxWidth={100} tone="muted" />
+          <Badge label={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} maxWidth={128} tone="success" />
+        </View>
+        {task.instruction ? (
+          <Text selectable ellipsizeMode="tail" numberOfLines={2} style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
+            {task.instruction}
+          </Text>
         ) : null}
+        <View style={{ gap: 4 }}>
+          <View style={{ alignItems: 'center', flexDirection: 'row', gap: 10 }}>
+            <CompactMetaItem icon="calendar" label={formatDate(task.dueDate)} />
+            <CompactMetaItem icon="target" label={formatCareTarget(task)} />
+          </View>
+          {showAssignedWorker ? (
+            <CompactMetaItem icon="user" label={assignedWorkerName ?? 'Pekerja tidak tersedia'} />
+          ) : null}
+        </View>
       </View>
     </Card>
   );

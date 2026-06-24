@@ -4,11 +4,11 @@ import { Text, View } from 'react-native';
 
 import { CareTaskSummaryCard } from '../../../../src/components/care-schedule-components';
 import {
+  appTheme,
   ChipButton,
   EmptyState,
   ErrorBanner,
   LoadingState,
-  MetricCard,
   PageIntro,
   Screen,
 } from '../../../../src/components/ui';
@@ -74,15 +74,10 @@ export default function WorkerTaskListScreen() {
 
   return (
     <Screen>
-      <PageIntro title="Tugas Saya" subtitle="Lihat tugas perawatan yang ditugaskan kepada Anda." />
+      <PageIntro title="Pekerjaan Lapangan" subtitle="Lihat tugas perawatan yang ditugaskan kepada Anda." />
       <ErrorBanner message={error} />
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        <MetricCard label="Hari Ini" value={countTodayOpenTasks(tasks)} tone="primary" />
-        <MetricCard label="Belum Selesai" value={countTasksByStatus(tasks, 'pending')} tone="warning" />
-        <MetricCard label="Ditunda" value={countTasksByStatus(tasks, 'postponed')} tone="danger" />
-        <MetricCard label="Selesai" value={countTasksByStatus(tasks, 'completed')} tone="success" />
-      </View>
+      <TaskSummary tasks={tasks} />
 
       <RangeFilter selectedRange={rangeFilter} onSelect={setRangeFilter} />
 
@@ -129,6 +124,41 @@ function RangeFilter({
           />
         ))}
       </View>
+    </View>
+  );
+}
+
+function TaskSummary({ tasks }: { tasks: CareTask[] }) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+      <SummaryPill label="Hari ini" value={countTodayOpenTasks(tasks)} />
+      <SummaryPill label="Belum" value={countTasksByStatus(tasks, 'pending')} />
+      <SummaryPill label="Ditunda" value={countTasksByStatus(tasks, 'postponed')} />
+      <SummaryPill label="Selesai" value={countTasksByStatus(tasks, 'completed')} />
+    </View>
+  );
+}
+
+function SummaryPill({ label, value }: { label: string; value: number }) {
+  return (
+    <View
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderColor: '#DCE7D5',
+        borderRadius: 14,
+        borderWidth: 1,
+        flexBasis: '22%',
+        flexGrow: 1,
+        gap: 3,
+        padding: 11,
+      }}
+    >
+      <Text selectable numberOfLines={1} style={{ color: appTheme.muted, fontSize: 12, fontWeight: '800' }}>
+        {label}
+      </Text>
+      <Text selectable style={{ color: appTheme.primary, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+        {value}
+      </Text>
     </View>
   );
 }

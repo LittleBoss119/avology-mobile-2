@@ -451,6 +451,55 @@ export function DateField({
   );
 }
 
+export function CompactMetaItem({
+  icon,
+  label,
+}: {
+  icon: 'calendar' | 'target' | 'user';
+  label: string;
+}) {
+  return (
+    <View style={{ alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 5 }}>
+      <CompactMetaIcon name={icon} />
+      <Text
+        selectable
+        ellipsizeMode="tail"
+        numberOfLines={1}
+        style={{ color: colors.muted, flexShrink: 1, fontSize: 13, lineHeight: 18 }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function CompactMetaIcon({ name }: { name: 'calendar' | 'target' | 'user' }) {
+  const color = colors.muted;
+
+  if (name === 'calendar') {
+    return (
+      <View style={{ borderColor: color, borderRadius: 3, borderWidth: 1.5, height: 14, width: 13 }}>
+        <View style={{ backgroundColor: color, height: 1.5, marginTop: 3 }} />
+      </View>
+    );
+  }
+
+  if (name === 'target') {
+    return (
+      <View style={{ alignItems: 'center', borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 14, justifyContent: 'center', width: 14 }}>
+        <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, width: 6 }} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ alignItems: 'center', width: 14 }}>
+      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, width: 6 }} />
+      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, marginTop: -1, width: 12 }} />
+    </View>
+  );
+}
+
 function DateFieldCalendarIcon() {
   return (
     <View style={{ borderColor: colors.primary, borderRadius: 4, borderWidth: 2, height: 18, width: 17 }}>

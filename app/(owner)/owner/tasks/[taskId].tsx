@@ -10,14 +10,14 @@ import {
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import {
   Badge,
-  Button,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
   MetaRow,
-  PageIntro,
   Screen,
+  TopAppBar,
+  Button,
 } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getCareScheduleDetail } from '../../../../src/services/careScheduleService';
@@ -109,8 +109,8 @@ export default function OwnerTaskDetailScreen() {
 
   if (!task) {
     return (
-      <Screen footer={<Button title="Kembali" variant="secondary" onPress={() => router.replace('/owner/tasks')} />}>
-        <PageIntro title="Detail Tugas" subtitle="Data tugas tidak dapat dimuat." />
+      <Screen>
+        <TopAppBar title="Detail Tugas" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <EmptyState title="Tugas tidak ditemukan" subtitle="Tugas mungkin tidak tersedia atau akses ditolak." />
       </Screen>
@@ -118,22 +118,24 @@ export default function OwnerTaskDetailScreen() {
   }
 
   return (
-    <Screen footer={<Button title="Kembali ke Tugas" variant="secondary" onPress={() => router.replace('/owner/tasks')} />}>
-      <PageIntro title="Detail Tugas" subtitle="Pantau instruksi, target, pekerja, dan riwayat realisasi." />
+    <Screen>
+      <TopAppBar title="Detail Tugas" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
       <Card variant="highlight">
+        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
+          {task.title}
+        </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <Badge label={formatTaskStatus(task.status)} tone={getTaskTone(task.status)} />
           <Badge label={formatTaskSource(task)} tone="muted" />
         </View>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
-          {task.title}
-        </Text>
-        <MetaRow label="Pekerja" value={workerNames[task.assignedTo] ?? 'Pekerja tidak tersedia'} />
-        <MetaRow label="Tanggal" value={formatDate(task.dueDate)} />
-        <MetaRow label="Target" value={formatCareTarget(task)} />
-        <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
+        <View style={{ gap: 10 }}>
+          <MetaRow label="Pekerja" value={workerNames[task.assignedTo] ?? 'Pekerja tidak tersedia'} />
+          <MetaRow label="Tanggal" value={formatDate(task.dueDate)} />
+          <MetaRow label="Target" value={formatCareTarget(task)} />
+          <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
+        </View>
       </Card>
 
       <Card>
@@ -141,7 +143,7 @@ export default function OwnerTaskDetailScreen() {
           Instruksi
         </Text>
         <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-          {task.instruction || 'Instruksi belum diisi.'}
+          {task.instruction || '-'}
         </Text>
       </Card>
 

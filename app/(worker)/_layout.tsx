@@ -82,9 +82,9 @@ export default function WorkerLayout() {
           <Stack.Screen name="worker/trees/[treeId]/report" options={{ title: 'Catat Kondisi' }} />
           <Stack.Screen name="worker/trees/[treeId]/phase" options={{ title: 'Catat Fase' }} />
           <Stack.Screen name="worker/tasks/index" options={{ headerBackVisible: false, title: 'Tugas Saya' }} />
-          <Stack.Screen name="worker/tasks/[taskId]" options={{ title: 'Detail Tugas' }} />
+          <Stack.Screen name="worker/tasks/[taskId]" options={{ headerShown: false, title: 'Detail Tugas' }} />
           <Stack.Screen name="worker/reports/index" options={{ headerBackVisible: false, title: 'Laporan' }} />
-          <Stack.Screen name="worker/reports/create" options={{ title: 'Buat Laporan' }} />
+          <Stack.Screen name="worker/reports/create" options={{ headerShown: false, title: 'Buat Laporan' }} />
           <Stack.Screen name="worker/profile" options={{ headerBackVisible: false, title: 'Profil' }} />
         </Stack>
       </View>

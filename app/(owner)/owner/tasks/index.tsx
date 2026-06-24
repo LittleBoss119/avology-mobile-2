@@ -4,14 +4,13 @@ import { Text, View } from 'react-native';
 
 import {
   CareTaskSummaryCard,
-  formatTaskStatus,
 } from '../../../../src/components/care-schedule-components';
 import {
+  appTheme,
   ChipButton,
   EmptyState,
   ErrorBanner,
   LoadingState,
-  MetricCard,
   PageIntro,
   Screen,
 } from '../../../../src/components/ui';
@@ -20,9 +19,15 @@ import { getFarmMemberBasicProfiles } from '../../../../src/services/memberServi
 import { getFarmTasks } from '../../../../src/services/careTaskService';
 import type { CareTask, FarmMemberBasicProfile, TaskStatus } from '../../../../src/types/domain';
 
-type TaskStatusFilter = 'all' | TaskStatus;
+type TaskStatusFilter = 'all' | 'today' | TaskStatus;
 
-const statusFilters: TaskStatusFilter[] = ['all', 'pending', 'postponed', 'completed'];
+const statusFilters: Array<{ label: string; value: TaskStatusFilter }> = [
+  { label: 'Semua', value: 'all' },
+  { label: 'Hari ini', value: 'today' },
+  { label: 'Belum selesai', value: 'pending' },
+  { label: 'Selesai', value: 'completed' },
+  { label: 'Tertunda', value: 'postponed' },
+];
 
 export default function OwnerTaskListScreen() {
   const { currentFarm } = useAuth();
@@ -35,6 +40,10 @@ export default function OwnerTaskListScreen() {
   const farmId = currentFarm?.farmId;
 
   const filteredTasks = React.useMemo(() => {
+    if (selectedStatus === 'today') {
+      return tasks.filter((task) => task.dueDate === getTodayIsoDate());
+    }
+
     if (selectedStatus === 'all') {
       return tasks;
     }
@@ -88,14 +97,10 @@ export default function OwnerTaskListScreen() {
 
   return (
     <Screen>
-      <PageIntro title="Tugas Pekerja" subtitle="Lihat semua tugas perawatan dalam kebun aktif." />
+      <PageIntro title="Tugas Lapangan" subtitle="Lihat semua tugas perawatan dalam kebun aktif." />
       <ErrorBanner message={error} />
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        <MetricCard label="Menunggu" value={countTasksByStatus(tasks, 'pending')} tone="warning" />
-        <MetricCard label="Ditunda" value={countTasksByStatus(tasks, 'postponed')} tone="danger" />
-        <MetricCard label="Selesai" value={countTasksByStatus(tasks, 'completed')} tone="success" />
-      </View>
+      <TaskSummary tasks={tasks} />
 
       <StatusFilter selectedStatus={selectedStatus} onSelect={setSelectedStatus} />
 
@@ -135,10 +140,10 @@ function StatusFilter({
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {statusFilters.map((status) => (
           <ChipButton
-            key={status}
-            active={selectedStatus === status}
-            label={status === 'all' ? 'Semua' : formatTaskStatus(status)}
-            onPress={() => onSelect(status)}
+            key={status.value}
+            active={selectedStatus === status.value}
+            label={status.label}
+            onPress={() => onSelect(status.value)}
           />
         ))}
       </View>
@@ -146,6 +151,49 @@ function StatusFilter({
   );
 }
 
+function TaskSummary({ tasks }: { tasks: CareTask[] }) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+      <SummaryPill label="Hari ini" value={tasks.filter((task) => task.dueDate === getTodayIsoDate()).length} />
+      <SummaryPill label="Belum" value={countTasksByStatus(tasks, 'pending')} />
+      <SummaryPill label="Selesai" value={countTasksByStatus(tasks, 'completed')} />
+      <SummaryPill label="Tertunda" value={countTasksByStatus(tasks, 'postponed')} />
+    </View>
+  );
+}
+
+function SummaryPill({ label, value }: { label: string; value: number }) {
+  return (
+    <View
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderColor: '#DCE7D5',
+        borderRadius: 14,
+        borderWidth: 1,
+        flexBasis: '22%',
+        flexGrow: 1,
+        gap: 3,
+        padding: 11,
+      }}
+    >
+      <Text selectable numberOfLines={1} style={{ color: appTheme.muted, fontSize: 12, fontWeight: '800' }}>
+        {label}
+      </Text>
+      <Text selectable style={{ color: appTheme.primary, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 function countTasksByStatus(tasks: CareTask[], status: TaskStatus): number {
   return tasks.filter((task) => task.status === status).length;
+}
+
+function getTodayIsoDate(): string {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
