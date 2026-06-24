@@ -22,7 +22,6 @@ import {
 } from './tree-components';
 import {
   appTheme,
-  Badge,
   Card,
   EmptyState,
   ErrorBanner,
@@ -244,17 +243,14 @@ function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuP
 function TreeDetailHero({ displayCode, tree }: { displayCode: string; tree: Tree }) {
   return (
     <View style={{ gap: 14 }}>
-      <TreeVisualPlaceholder condition={tree.currentCondition}>
-        <ConditionStatusBadge status={tree.currentCondition} />
-        {tree.isArchived ? <Badge label="Diarsipkan" tone="muted" /> : null}
-      </TreeVisualPlaceholder>
+      <TreeVisualPlaceholder condition={tree.currentCondition} />
       <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: 6 }}>
           <Text selectable style={{ color: appTheme.primary, fontSize: 34, fontWeight: '900' }}>
             {displayCode}
           </Text>
           <Text selectable style={{ color: appTheme.muted, fontSize: 16, lineHeight: 22 }}>
-            {`${tree.variety || 'Varietas belum diisi'} - ${formatGrowthPhase(tree.currentGrowthPhase)}`}
+            {tree.variety || 'Varietas belum diisi'}
           </Text>
         </View>
         <View style={{ justifyContent: 'center' }}>
@@ -304,9 +300,8 @@ function ActionSection({
         label="Catat Kondisi"
         onPress={() => router.push(`${basePath}/${tree.id}/report`)}
         tone="primary"
-        type="condition"
       />
-      <TreeActionButton label="Catat Fase" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} type="phase" />
+      <TreeActionButton label="Catat Fase" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
     </View>
   );
 }
@@ -315,12 +310,10 @@ function TreeActionButton({
   label,
   onPress,
   tone = 'secondary',
-  type,
 }: {
   label: string;
   onPress: () => void;
   tone?: 'primary' | 'secondary';
-  type: 'condition' | 'phase';
 }) {
   const isPrimary = tone === 'primary';
 
@@ -334,53 +327,15 @@ function TreeActionButton({
         borderRadius: 14,
         borderWidth: 1,
         flex: 1,
-        flexDirection: 'row',
-        gap: 9,
         justifyContent: 'center',
         minHeight: 50,
         paddingHorizontal: 10,
       }}
     >
-      <ActionGlyph active={isPrimary} type={type} />
       <Text selectable style={{ color: isPrimary ? '#FFFFFF' : appTheme.primary, fontSize: 14, fontWeight: '900' }}>
         {label}
       </Text>
     </Pressable>
-  );
-}
-
-function ActionGlyph({ active, type }: { active: boolean; type: 'condition' | 'phase' }) {
-  const foreground = active ? '#FFFFFF' : appTheme.primary;
-  const background = active ? 'rgba(255,255,255,0.18)' : '#E7F3EA';
-
-  return (
-    <View
-      style={{
-        alignItems: 'center',
-        backgroundColor: background,
-        borderRadius: 999,
-        height: 24,
-        justifyContent: 'center',
-        width: 24,
-      }}
-    >
-      {type === 'condition' ? (
-        <View style={{ backgroundColor: foreground, borderRadius: 999, height: 10, width: 10 }} />
-      ) : (
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-          <View style={{ backgroundColor: foreground, borderRadius: 999, height: 14, width: 3 }} />
-          <View
-            style={{
-              backgroundColor: foreground,
-              borderRadius: 999,
-              height: 3,
-              position: 'absolute',
-              width: 14,
-            }}
-          />
-        </View>
-      )}
-    </View>
   );
 }
 

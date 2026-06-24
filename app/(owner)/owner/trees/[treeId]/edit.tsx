@@ -1,7 +1,12 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 
-import { TreeForm, type TreeFormValues } from '../../../../../src/components/tree-components';
+import {
+  formatDateForDb,
+  parseDbDate,
+  TreeForm,
+  type TreeFormValues,
+} from '../../../../../src/components/tree-components';
 import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../../src/components/ui';
 import { getTreeDetail, updateTree } from '../../../../../src/services/treeService';
 
@@ -9,7 +14,7 @@ const initialValues: TreeFormValues = {
   rowPosition: '',
   columnPosition: '',
   variety: '',
-  plantedAt: '',
+  plantedAt: null,
 };
 
 export default function OwnerEditTreeScreen() {
@@ -46,7 +51,7 @@ export default function OwnerEditTreeScreen() {
         rowPosition: result.data.rowPosition ?? '',
         columnPosition: result.data.columnPosition ?? '',
         variety: result.data.variety ?? '',
-        plantedAt: result.data.plantedAt ?? '',
+        plantedAt: parseDbDate(result.data.plantedAt),
       });
       setLoading(false);
     }
@@ -71,11 +76,6 @@ export default function OwnerEditTreeScreen() {
       return;
     }
 
-    if (!isValidOptionalDate(values.plantedAt)) {
-      setError('Tanggal tanam harus memakai format tahun-bulan-tanggal, contoh 2026-06-24.');
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
 
@@ -84,7 +84,7 @@ export default function OwnerEditTreeScreen() {
       rowPosition: values.rowPosition,
       columnPosition: values.columnPosition,
       variety: values.variety,
-      plantedAt: values.plantedAt,
+      plantedAt: formatDateForDb(values.plantedAt),
     });
 
     if (result.error) {
@@ -128,19 +128,4 @@ export default function OwnerEditTreeScreen() {
       </Screen>
     </>
   );
-}
-
-function isValidOptionalDate(value: string): boolean {
-  const normalized = value.trim();
-
-  if (!normalized) {
-    return true;
-  }
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    return false;
-  }
-
-  const date = new Date(normalized);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === normalized;
 }

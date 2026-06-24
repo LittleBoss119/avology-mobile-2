@@ -98,6 +98,11 @@ export default function WorkerTreeListScreen() {
       ),
     [ageRange, conditionFilters, debouncedSearch, phaseFilters, trees]
   );
+  const hasActiveSearchOrFilter =
+    debouncedSearch.length > 0 ||
+    conditionFilters.length > 0 ||
+    phaseFilters.length > 0 ||
+    ageRange !== 'all';
 
   function toggleConditionFilter(condition: TreeConditionStatus) {
     setConditionFilters((current) => toggleArrayValue(current, condition));
@@ -113,9 +118,10 @@ export default function WorkerTreeListScreen() {
 
   return (
     <Screen>
-      <PageIntro title="Data Pohon" subtitle={`${displayedTrees.length} pohon aktif tersedia untuk dipantau.`} />
+      <PageIntro title="Data Pohon" subtitle={`${trees.length} pohon aktif tersedia untuk dipantau.`} />
       <ErrorBanner message={error} />
       <SearchFilterBar onFilterPress={() => setFilterOpen(true)} onSearchChange={setSearch} search={search} />
+      <ResultCount active={hasActiveSearchOrFilter} count={displayedTrees.length} />
       <ActiveFilterSummary ageRange={ageRange} conditionFilters={conditionFilters} phaseFilters={phaseFilters} />
 
       <WorkerFilterPanel
@@ -188,18 +194,24 @@ function SearchFilterBar({
           alignItems: 'center',
           backgroundColor: '#065F2E',
           borderRadius: 14,
-          gap: 4,
           height: 52,
           justifyContent: 'center',
-          width: 70,
+          width: 52,
         }}
+        accessibilityLabel="Buka filter pohon"
+        accessibilityRole="button"
       >
         <FilterGlyph />
-        <Text selectable style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '900' }}>
-          Filter
-        </Text>
       </Pressable>
     </View>
+  );
+}
+
+function ResultCount({ active, count }: { active: boolean; count: number }) {
+  return (
+    <Text selectable style={{ color: '#68746D', fontSize: 13, fontWeight: '700', marginTop: -6 }}>
+      {active ? `${count} hasil ditemukan` : `Menampilkan ${count} pohon`}
+    </Text>
   );
 }
 
@@ -320,10 +332,28 @@ function WorkerFilterPanel({
 
 function FilterGlyph() {
   return (
-    <View style={{ gap: 2 }}>
-      <View style={{ backgroundColor: '#FFFFFF', borderRadius: 999, height: 2, width: 18 }} />
-      <View style={{ backgroundColor: '#DDEFE2', borderRadius: 999, height: 2, marginLeft: 5, width: 13 }} />
-      <View style={{ backgroundColor: '#FFFFFF', borderRadius: 999, height: 2, width: 18 }} />
+    <View style={{ gap: 4 }}>
+      <SliderGlyphLine knobLeft={3} />
+      <SliderGlyphLine knobLeft={12} />
+      <SliderGlyphLine knobLeft={7} />
+    </View>
+  );
+}
+
+function SliderGlyphLine({ knobLeft }: { knobLeft: number }) {
+  return (
+    <View style={{ height: 4, justifyContent: 'center', width: 22 }}>
+      <View style={{ backgroundColor: '#DDEFE2', borderRadius: 999, height: 2, width: 22 }} />
+      <View
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 999,
+          height: 6,
+          left: knobLeft,
+          position: 'absolute',
+          width: 6,
+        }}
+      />
     </View>
   );
 }

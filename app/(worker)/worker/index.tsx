@@ -9,7 +9,6 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
-  PageIntro,
   Screen,
 } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/auth-context';
@@ -75,7 +74,7 @@ export default function WorkerDashboardScreen() {
 
   return (
     <Screen>
-      <PageIntro title={`Halo, ${workerName}`} subtitle={farmName ?? 'Fokus pekerjaan lapangan hari ini.'} />
+      <DashboardIntro farmName={farmName} name={workerName} roleLabel="Pekerja" />
       <ErrorBanner message={error} />
 
       <WorkerHero farmName={farmName} status={formatMemberStatus(currentFarm?.status)} summary={summary} />
@@ -111,6 +110,30 @@ export default function WorkerDashboardScreen() {
         <DashboardActionButton label="Buat Laporan" meta="Lapangan" onPress={() => router.push('/worker/reports/create')} />
       </View>
     </Screen>
+  );
+}
+
+function DashboardIntro({
+  farmName,
+  name,
+  roleLabel,
+}: {
+  farmName?: string;
+  name: string;
+  roleLabel: string;
+}) {
+  return (
+    <View style={{ gap: 9, paddingTop: 8 }}>
+      <Badge label={roleLabel} tone="success" />
+      <View style={{ gap: 4 }}>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 30, fontWeight: '900', letterSpacing: 0 }}>
+          Halo, {name}
+        </Text>
+        <Text selectable style={{ color: '#68746D', fontSize: 16, lineHeight: 23 }}>
+          {farmName ? `Fokus pekerjaan lapangan di ${farmName}.` : 'Fokus pekerjaan lapangan hari ini.'}
+        </Text>
+      </View>
+    </View>
   );
 }
 

@@ -9,7 +9,6 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
-  PageIntro,
   Screen,
 } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/auth-context';
@@ -79,7 +78,7 @@ export default function OwnerDashboardScreen() {
 
   return (
     <Screen>
-      <PageIntro title={`Halo, ${ownerName}`} subtitle={farmName ?? 'Pantau kebun aktif Anda hari ini.'} />
+      <DashboardIntro farmName={farmName} name={ownerName} roleLabel="Pemilik" />
       <ErrorBanner message={error} />
 
       <OwnerHero summary={summary} healthyPercent={healthyPercent} farmName={farmName} />
@@ -123,6 +122,30 @@ export default function OwnerDashboardScreen() {
         <DashboardActionButton label="Lihat Laporan" meta="Lapangan" onPress={() => router.push('/owner/reports')} />
       </View>
     </Screen>
+  );
+}
+
+function DashboardIntro({
+  farmName,
+  name,
+  roleLabel,
+}: {
+  farmName?: string;
+  name: string;
+  roleLabel: string;
+}) {
+  return (
+    <View style={{ gap: 9, paddingTop: 8 }}>
+      <Badge label={roleLabel} tone="success" />
+      <View style={{ gap: 4 }}>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 30, fontWeight: '900', letterSpacing: 0 }}>
+          Halo, {name}
+        </Text>
+        <Text selectable style={{ color: '#68746D', fontSize: 16, lineHeight: 23 }}>
+          {farmName ? `Pantau ${farmName} dari ringkasan hari ini.` : 'Pantau kebun aktif Anda hari ini.'}
+        </Text>
+      </View>
+    </View>
   );
 }
 

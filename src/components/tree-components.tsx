@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import type {
   GrowthPhase,
@@ -22,7 +23,7 @@ export type TreeFormValues = {
   rowPosition: string;
   columnPosition: string;
   variety: string;
-  plantedAt: string;
+  plantedAt: Date | null;
 };
 
 export type TreeCardProps = {
@@ -200,12 +201,30 @@ export function TreeVisualPlaceholder({
 
 export function TreeForm({ onChange, values }: TreeFormProps) {
   const previewCode = buildTreeDisplayCode(values);
+  const [datePickerOpen, setDatePickerOpen] = React.useState(false);
 
-  function updateValue(field: keyof TreeFormValues, value: string) {
+  function updateTextValue(field: 'rowPosition' | 'columnPosition' | 'variety', value: string) {
     onChange({
       ...values,
       [field]: value,
     });
+  }
+
+  function updateDateValue(value: Date | null) {
+    onChange({
+      ...values,
+      plantedAt: value,
+    });
+  }
+
+  function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
+    if (Platform.OS === 'android') {
+      setDatePickerOpen(false);
+    }
+
+    if (event.type === 'set' && selectedDate) {
+      updateDateValue(selectedDate);
+    }
   }
 
   return (
@@ -215,7 +234,7 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
         <View style={{ flex: 1 }}>
           <Field
             label="Baris"
-            onChangeText={(value) => updateValue('rowPosition', value)}
+            onChangeText={(value) => updateTextValue('rowPosition', value)}
             placeholder="A"
             value={values.rowPosition}
           />
@@ -223,7 +242,7 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
         <View style={{ flex: 1 }}>
           <Field
             label="Kolom"
-            onChangeText={(value) => updateValue('columnPosition', value)}
+            onChangeText={(value) => updateTextValue('columnPosition', value)}
             placeholder="1"
             value={values.columnPosition}
           />
@@ -231,37 +250,76 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
       </View>
       <Field
         label="Varietas"
-        onChangeText={(value) => updateValue('variety', value)}
+        onChangeText={(value) => updateTextValue('variety', value)}
         placeholder="Contoh: Alpukat mentega"
         value={values.variety}
       />
-      <Field
-        label="Tanggal tanam"
-        onChangeText={(value) => updateValue('plantedAt', value)}
-        placeholder="Contoh: 2026-06-24"
-        value={values.plantedAt}
-      />
-      <View style={{ alignItems: 'flex-start', gap: 8 }}>
-        <Text selectable style={{ color: '#68746D', fontSize: 13, lineHeight: 19 }}>
-          Gunakan format tahun-bulan-tanggal. Kosongkan jika tanggal tanam belum diketahui.
+      <View style={{ gap: 8 }}>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '700' }}>
+          Tanggal tanam
         </Text>
         <Pressable
-          onPress={() => updateValue('plantedAt', formatTodayDate())}
+          accessibilityLabel="Pilih tanggal tanam"
+          accessibilityRole="button"
+          onPress={() => setDatePickerOpen(true)}
           style={{
-            backgroundColor: '#E7F3EA',
-            borderColor: '#B8D8BF',
-            borderRadius: 999,
+            backgroundColor: '#FFFFFF',
+            borderColor: '#DCE7D5',
+            borderRadius: 12,
             borderWidth: 1,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
+            paddingHorizontal: 14,
+            paddingVertical: 14,
           }}
         >
-          <Text selectable style={{ color: '#065F2E', fontSize: 13, fontWeight: '800' }}>
-            Gunakan hari ini
+          <Text selectable style={{ color: values.plantedAt ? '#1E2A24' : '#94A098', fontSize: 16, fontWeight: '800' }}>
+            {formatDateForDisplay(values.plantedAt)}
           </Text>
         </Pressable>
+        {datePickerOpen ? (
+          <DateTimePicker
+            display={Platform.OS === 'ios' ? 'inline' : 'default'}
+            mode="date"
+            onChange={handleDateChange}
+            value={values.plantedAt ?? new Date()}
+          />
+        ) : null}
+        <Text selectable style={{ color: '#68746D', fontSize: 13, lineHeight: 19 }}>
+          Kosongkan jika tanggal tanam belum diketahui.
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <DateActionButton label="Gunakan hari ini" onPress={() => updateDateValue(new Date())} />
+          {values.plantedAt ? <DateActionButton label="Kosongkan" muted onPress={() => updateDateValue(null)} /> : null}
+        </View>
       </View>
     </View>
+  );
+}
+
+function DateActionButton({
+  label,
+  muted,
+  onPress,
+}: {
+  label: string;
+  muted?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        backgroundColor: muted ? '#FFFFFF' : '#E7F3EA',
+        borderColor: muted ? '#DCE7D5' : '#B8D8BF',
+        borderRadius: 999,
+        borderWidth: 1,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+      }}
+    >
+      <Text selectable style={{ color: muted ? '#68746D' : '#065F2E', fontSize: 13, fontWeight: '800' }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -488,7 +546,7 @@ function getTimelineMarker(type: TreeHistoryType): string {
     return '+';
   }
 
-  return '✓';
+  return '*';
 }
 
 type BadgeTone = 'danger' | 'muted' | 'success' | 'warning';
@@ -653,10 +711,52 @@ function formatDateTime(value: string): string {
   });
 }
 
-function formatTodayDate(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
+export function formatDateForDisplay(date: Date | null): string {
+  if (!date) {
+    return 'Pilih tanggal tanam';
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+export function formatDateForDb(date: Date | null): string {
+  if (!date) {
+    return '';
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+export function parseDbDate(value?: string | null): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const date = new Date(year, monthIndex, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== monthIndex ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
 }
