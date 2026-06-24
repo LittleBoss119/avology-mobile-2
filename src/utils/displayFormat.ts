@@ -65,8 +65,8 @@ export function formatGrowthPhase(phase?: GrowthPhase | null): string {
 
 export function formatOperationalReportStatus(status: OperationalReportStatus): string {
   const labels: Record<OperationalReportStatus, string> = {
-    in_progress: 'Dikerjakan',
-    new: 'Baru',
+    in_progress: 'Dalam tindak lanjut',
+    new: 'Belum direspons',
     rejected: 'Ditolak',
     resolved: 'Selesai',
   };

@@ -394,9 +394,14 @@ export type GetOperationalReportsInput = {
   farmId: UUID;
   status?: OperationalReportStatus | 'all';
   category?: OperationalReportCategory | 'all';
+  reportedBy?: UUID;
 };
 
 export type GetOperationalReportDetailInput = {
+  operationalReportId: UUID;
+};
+
+export type GetOperationalReportFollowUpTasksInput = {
   operationalReportId: UUID;
 };
 

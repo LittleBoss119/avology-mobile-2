@@ -24,7 +24,12 @@ import {
   getTaskDetail,
   postponeTask,
 } from '../../../../src/services/careTaskService';
-import type { ActivityStatus, CareTaskDetail } from '../../../../src/types/domain';
+import { getOperationalReportDetail } from '../../../../src/services/operationalReportService';
+import type { ActivityStatus, CareTaskDetail, OperationalReport } from '../../../../src/types/domain';
+import {
+  formatOperationalReportCategory,
+  formatOperationalReportStatus,
+} from '../../../../src/utils/displayFormat';
 
 export default function WorkerTaskDetailScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
@@ -34,6 +39,7 @@ export default function WorkerTaskDetailScreen() {
   const [completeNote, setCompleteNote] = React.useState('');
   const [showCompleteInput, setShowCompleteInput] = React.useState(false);
   const [postponeNote, setPostponeNote] = React.useState('');
+  const [report, setReport] = React.useState<OperationalReport | null>(null);
   const [showPostponeInput, setShowPostponeInput] = React.useState(false);
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
 
@@ -42,11 +48,13 @@ export default function WorkerTaskDetailScreen() {
 
     if (!normalizedTaskId) {
       setError('Data tugas tidak ditemukan.');
+      setReport(null);
       setTask(null);
       return;
     }
 
     setError(null);
+    setReport(null);
 
     const result = await getTaskDetail({ taskId: normalizedTaskId });
 
@@ -57,6 +65,16 @@ export default function WorkerTaskDetailScreen() {
     }
 
     setTask(result.data);
+
+    if (result.data.operationalReportId) {
+      const reportResult = await getOperationalReportDetail({
+        operationalReportId: result.data.operationalReportId,
+      });
+
+      if (!reportResult.error) {
+        setReport(reportResult.data);
+      }
+    }
   }, [taskId]);
 
   useFocusEffect(
@@ -211,6 +229,25 @@ export default function WorkerTaskDetailScreen() {
           {task.instruction || '-'}
         </Text>
       </Card>
+
+      {task.operationalReportId ? (
+        <Card>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+            Sumber Laporan
+          </Text>
+          {report ? (
+            <>
+              <MetaRow label="Kategori laporan" value={formatOperationalReportCategory(report.category)} />
+              <MetaRow label="Lokasi laporan" value={report.locationNote ?? '-'} />
+              <MetaRow label="Status laporan" value={formatOperationalReportStatus(report.status)} />
+            </>
+          ) : (
+            <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+              Tugas ini berasal dari laporan operasional.
+            </Text>
+          )}
+        </Card>
+      ) : null}
 
       <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
         Realisasi

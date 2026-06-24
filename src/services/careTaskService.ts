@@ -10,6 +10,7 @@ import type {
   CompleteTaskData,
   CompleteTaskInput,
   GetFarmTasksInput,
+  GetOperationalReportFollowUpTasksInput,
   GetTaskDetailInput,
   GetWorkerTasksInput,
   MemberRole,
@@ -71,6 +72,12 @@ type OperationalReportSourceRow = {
   id: string;
   farm_id: string;
   status: OperationalReportStatus;
+};
+
+type ExistingFollowUpTaskRow = {
+  id: string;
+  status: TaskStatus;
+  title: string;
 };
 
 export async function getWorkerTasks(
@@ -168,6 +175,71 @@ export async function getTaskDetail(
   });
 }
 
+export async function getOperationalReportFollowUpTasks(
+  input: GetOperationalReportFollowUpTasksInput
+): Promise<ServiceResult<CareTaskDetail[]>> {
+  const reportId = normalizeRequiredText(
+    input.operationalReportId,
+    'Laporan operasional tidak ditemukan.'
+  );
+
+  if (reportId instanceof Error) {
+    return fail(reportId);
+  }
+
+  const reportResult = await getAccessibleOperationalReportSource(reportId);
+
+  if (reportResult.error) {
+    return fail(reportResult.error);
+  }
+
+  const tasksResult = await supabase
+    .from('care_tasks')
+    .select(CARE_TASK_SELECT)
+    .eq('operational_report_id', reportId)
+    .order('due_date', { ascending: true })
+    .order('created_at', { ascending: false })
+    .returns<CareTaskRow[]>();
+
+  if (tasksResult.error) {
+    return fail(tasksResult.error, 'Gagal memuat tugas tindak lanjut laporan.');
+  }
+
+  const tasks = tasksResult.data ?? [];
+
+  if (tasks.length === 0) {
+    return ok([]);
+  }
+
+  const taskIds = tasks.map((task) => task.id);
+  const activitiesResult = await supabase
+    .from('care_activities')
+    .select(CARE_ACTIVITY_SELECT)
+    .in('care_task_id', taskIds)
+    .order('performed_at', { ascending: false })
+    .returns<CareActivityRow[]>();
+
+  if (activitiesResult.error) {
+    return fail(activitiesResult.error, 'Gagal memuat realisasi tindak lanjut laporan.');
+  }
+
+  const activitiesByTaskId = new Map<string, CareActivity[]>();
+
+  for (const activity of activitiesResult.data ?? []) {
+    const mappedActivity = mapCareActivity(activity);
+    const existingActivities = activitiesByTaskId.get(mappedActivity.careTaskId) ?? [];
+    existingActivities.push(mappedActivity);
+    activitiesByTaskId.set(mappedActivity.careTaskId, existingActivities);
+  }
+
+  return ok(
+    tasks.map((task) => ({
+      ...mapCareTask(task),
+      activities: activitiesByTaskId.get(task.id) ?? [],
+    }))
+  );
+}
+
 export async function createTaskFromOperationalReport(
   input: CreateTaskFromOperationalReportInput
 ): Promise<ServiceResult<CreateTaskFromOperationalReportData>> {
@@ -230,6 +302,18 @@ export async function createTaskFromOperationalReport(
 
   if (!canCreateTaskFromReportStatus(reportResult.data.status)) {
     return fail(new Error(getClosedReportTaskMessage(reportResult.data.status)));
+  }
+
+  const existingTaskResult = await getExistingActiveFollowUpTask(reportId);
+
+  if (existingTaskResult.error) {
+    return fail(existingTaskResult.error);
+  }
+
+  if (existingTaskResult.data) {
+    return fail(
+      new Error('Laporan ini sudah memiliki tugas tindak lanjut aktif. Buka detail laporan untuk melihat tugas tersebut.')
+    );
   }
 
   const { data, error } = await supabase.rpc('create_task_from_operational_report', {
@@ -355,6 +439,24 @@ function getClosedReportTaskMessage(status: OperationalReportStatus): string {
   }
 
   return 'Laporan yang ditolak tidak dapat dibuatkan tugas tindak lanjut.';
+}
+
+async function getExistingActiveFollowUpTask(
+  operationalReportId: UUID
+): Promise<ServiceResult<ExistingFollowUpTaskRow | null>> {
+  const { data, error } = await supabase
+    .from('care_tasks')
+    .select('id, status, title')
+    .eq('operational_report_id', operationalReportId)
+    .in('status', ['pending', 'postponed'])
+    .limit(1)
+    .maybeSingle<ExistingFollowUpTaskRow>();
+
+  if (error) {
+    return fail(error, 'Gagal memeriksa tugas tindak lanjut aktif.');
+  }
+
+  return ok(data);
 }
 
 async function ensureActiveWorker(farmId: UUID): Promise<ServiceResult<SuccessData>> {

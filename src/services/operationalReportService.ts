@@ -137,6 +137,10 @@ export async function getOperationalReports(
     query = query.eq('category', category);
   }
 
+  if (input.reportedBy) {
+    query = query.eq('reported_by', input.reportedBy);
+  }
+
   const { data, error } = await query.returns<OperationalReportRow[]>();
 
   if (error) {

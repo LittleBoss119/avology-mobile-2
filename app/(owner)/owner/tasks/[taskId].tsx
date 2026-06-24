@@ -23,18 +23,25 @@ import { useAuth } from '../../../../src/context/auth-context';
 import { getCareScheduleDetail } from '../../../../src/services/careScheduleService';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
+import { getOperationalReportDetail } from '../../../../src/services/operationalReportService';
 import type {
   ActivityStatus,
   CareScheduleDetail,
   CareTaskDetail,
   FarmMemberBasicProfile,
+  OperationalReport,
 } from '../../../../src/types/domain';
+import {
+  formatOperationalReportCategory,
+  formatOperationalReportStatus,
+} from '../../../../src/utils/displayFormat';
 
 export default function OwnerTaskDetailScreen() {
   const { currentFarm } = useAuth();
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [report, setReport] = React.useState<OperationalReport | null>(null);
   const [schedule, setSchedule] = React.useState<CareScheduleDetail | null>(null);
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
@@ -46,6 +53,7 @@ export default function OwnerTaskDetailScreen() {
 
     if (!normalizedTaskId) {
       setError('Data tugas tidak ditemukan.');
+      setReport(null);
       setTask(null);
       setSchedule(null);
       setWorkerNames({});
@@ -54,6 +62,7 @@ export default function OwnerTaskDetailScreen() {
 
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
+      setReport(null);
       setTask(null);
       setSchedule(null);
       setWorkerNames({});
@@ -61,6 +70,7 @@ export default function OwnerTaskDetailScreen() {
     }
 
     setError(null);
+    setReport(null);
     setSchedule(null);
 
     const [taskResult, workersResult] = await Promise.all([
@@ -81,6 +91,16 @@ export default function OwnerTaskDetailScreen() {
 
         if (!scheduleResult.error) {
           setSchedule(scheduleResult.data);
+        }
+      }
+
+      if (taskResult.data.operationalReportId) {
+        const reportResult = await getOperationalReportDetail({
+          operationalReportId: taskResult.data.operationalReportId,
+        });
+
+        if (!reportResult.error) {
+          setReport(reportResult.data);
         }
       }
     }
@@ -163,7 +183,18 @@ export default function OwnerTaskDetailScreen() {
             />
           </>
         ) : task.operationalReportId ? (
-          <MetaRow label="Sumber tugas" value="Laporan operasional" />
+          <>
+            <MetaRow label="Sumber tugas" value="Laporan operasional" />
+            <MetaRow label="Kategori laporan" value={report ? formatOperationalReportCategory(report.category) : 'Laporan terkait'} />
+            <MetaRow label="Lokasi laporan" value={report?.locationNote ?? '-'} />
+            <MetaRow label="Pelapor" value={report ? workerNames[report.reportedBy] ?? 'Pelapor tidak tersedia' : 'Pelapor tidak tersedia'} />
+            <MetaRow label="Status laporan" value={report ? formatOperationalReportStatus(report.status) : '-'} />
+            <Button
+              title="Buka Laporan"
+              variant="secondary"
+              onPress={() => router.push(`/owner/reports/${task.operationalReportId}`)}
+            />
+          </>
         ) : (
           <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
             Tugas tidak terhubung ke jadwal atau laporan.
