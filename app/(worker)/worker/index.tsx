@@ -1,11 +1,10 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import {
   appTheme,
   Badge,
-  Button,
   Card,
   EmptyState,
   ErrorBanner,
@@ -107,9 +106,9 @@ export default function WorkerDashboardScreen() {
 
       <SectionTitle title="Aksi Lapangan" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        <Button title="Lihat Tugas" size="small" onPress={() => router.push('/worker/tasks')} />
-        <Button title="Lapor Kondisi" size="small" variant="secondary" onPress={() => router.push('/worker/trees')} />
-        <Button title="Buat Laporan" size="small" variant="secondary" onPress={() => router.push('/worker/reports/create')} />
+        <DashboardActionButton label="Lihat Tugas" meta="Hari ini" onPress={() => router.push('/worker/tasks')} primary />
+        <DashboardActionButton label="Lapor Kondisi" meta="Pohon" onPress={() => router.push('/worker/trees')} />
+        <DashboardActionButton label="Buat Laporan" meta="Lapangan" onPress={() => router.push('/worker/reports/create')} />
       </View>
     </Screen>
   );
@@ -215,22 +214,61 @@ function WorkerStatCard({ stat }: { stat: WorkerStat }) {
   return (
     <View style={{ flexBasis: '30%', flexGrow: 1, minWidth: 100 }}>
       <Card>
-        <Text selectable style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
-          {stat.label}
-        </Text>
-        <Text
-          selectable
-          style={{
-            color: toneColor,
-            fontSize: 28,
-            fontVariant: ['tabular-nums'],
-            fontWeight: '800',
-          }}
-        >
-          {stat.value}
-        </Text>
+        <View style={{ justifyContent: 'space-between', minHeight: 74 }}>
+          <Text selectable numberOfLines={2} style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
+            {stat.label}
+          </Text>
+          <Text
+            selectable
+            style={{
+              color: toneColor,
+              fontSize: 28,
+              fontVariant: ['tabular-nums'],
+              fontWeight: '800',
+            }}
+          >
+            {stat.value}
+          </Text>
+        </View>
       </Card>
     </View>
+  );
+}
+
+function DashboardActionButton({
+  label,
+  meta,
+  onPress,
+  primary,
+}: {
+  label: string;
+  meta: string;
+  onPress: () => void;
+  primary?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        backgroundColor: primary ? appTheme.primary : '#FFFFFF',
+        borderColor: primary ? appTheme.primary : '#DCE7D5',
+        borderRadius: 14,
+        borderWidth: 1,
+        flexBasis: '30%',
+        flexGrow: 1,
+        gap: 4,
+        minHeight: 74,
+        minWidth: 104,
+        padding: 12,
+      }}
+    >
+      <Text selectable style={{ color: primary ? '#DDEFE2' : '#68746D', fontSize: 12, fontWeight: '700' }}>
+        {meta}
+      </Text>
+      <Text selectable style={{ color: primary ? '#FFFFFF' : '#1E2A24', fontSize: 14, fontWeight: '900', lineHeight: 18 }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 

@@ -1,8 +1,8 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 
 import { TreeForm, type TreeFormValues } from '../../../../../src/components/tree-components';
-import { Button, ErrorBanner, LoadingState, PageIntro, Screen } from '../../../../../src/components/ui';
+import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../../src/components/ui';
 import { getTreeDetail, updateTree } from '../../../../../src/services/treeService';
 
 const initialValues: TreeFormValues = {
@@ -71,6 +71,11 @@ export default function OwnerEditTreeScreen() {
       return;
     }
 
+    if (!isValidOptionalDate(values.plantedAt)) {
+      setError('Tanggal tanam harus memakai format tahun-bulan-tanggal, contoh 2026-06-24.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -93,26 +98,49 @@ export default function OwnerEditTreeScreen() {
   }
 
   if (loading) {
-    return <LoadingState message="Memuat data pohon..." />;
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <LoadingState message="Memuat data pohon..." />
+      </>
+    );
   }
 
   return (
-    <Screen
-      footer={
-        <>
-          <Button title="Simpan Perubahan" loading={submitting} onPress={handleSubmit} />
-          <Button
-            title="Batal"
-            variant="secondary"
-            disabled={submitting}
-            onPress={() => router.back()}
-          />
-        </>
-      }
-    >
-      <PageIntro title="Edit Pohon" subtitle="Perbarui identitas dan lokasi pohon." />
-      <ErrorBanner message={error} />
-      <TreeForm values={values} onChange={setValues} />
-    </Screen>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <Screen
+        footer={
+          <>
+            <Button title="Simpan Perubahan" loading={submitting} onPress={handleSubmit} />
+            <Button
+              title="Batal"
+              variant="secondary"
+              disabled={submitting}
+              onPress={() => router.back()}
+            />
+          </>
+        }
+      >
+        <TopAppBar title="Edit Pohon" onBack={() => router.back()} />
+        <ErrorBanner message={error} />
+        <TreeForm values={values} onChange={setValues} />
+      </Screen>
+    </>
   );
+}
+
+function isValidOptionalDate(value: string): boolean {
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return true;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return false;
+  }
+
+  const date = new Date(normalized);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === normalized;
 }

@@ -23,7 +23,6 @@ import {
 import {
   appTheme,
   Badge,
-  Button,
   Card,
   EmptyState,
   ErrorBanner,
@@ -31,6 +30,7 @@ import {
   MetaRow,
   PageIntro,
   Screen,
+  TopAppBar,
 } from './ui';
 
 type TreeDetailMode = 'owner' | 'worker';
@@ -177,7 +177,7 @@ export function TreeDetailScreen({
 
   return (
     <Screen>
-      <DetailHeader mode={mode} onMenuPress={() => setMenuOpen(true)} />
+      <TreeDetailTopBar mode={mode} onMenuPress={() => setMenuOpen(true)} />
       <ErrorBanner message={error} />
 
       <TreeDetailHero displayCode={displayCode} tree={tree} />
@@ -201,7 +201,6 @@ export function TreeDetailScreen({
       <SectionTitle title="Informasi Pohon" />
       <InfoGrid mode={mode} tree={tree} />
 
-      <SectionTitle title="Aksi Pohon" />
       <ActionSection basePath={basePath} tree={tree} />
 
       <SectionTitle title="Timeline Riwayat" />
@@ -217,39 +216,34 @@ export function TreeDetailScreen({
   );
 }
 
-function DetailHeader({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuPress: () => void }) {
-  return (
-    <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
-      <View style={{ flex: 1 }}>
-        <PageIntro title="Detail Pohon" subtitle="Kondisi, lokasi, dan riwayat operasional pohon." />
-      </View>
-      {mode === 'owner' ? (
-        <Pressable
-          onPress={onMenuPress}
-          style={{
-            alignItems: 'center',
-            backgroundColor: '#FFFFFF',
-            borderColor: '#DCE7D5',
-            borderRadius: 999,
-            borderWidth: 1,
-            height: 44,
-            justifyContent: 'center',
-            marginTop: 10,
-            width: 44,
-          }}
-        >
-          <Text selectable style={{ color: '#065F2E', fontSize: 22, fontWeight: '900', lineHeight: 24 }}>
-            ...
-          </Text>
-        </Pressable>
-      ) : null}
-    </View>
-  );
+function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuPress: () => void }) {
+  const right =
+    mode === 'owner' ? (
+      <Pressable
+        onPress={onMenuPress}
+        style={{
+          alignItems: 'center',
+          backgroundColor: '#FFFFFF',
+          borderColor: '#DCE7D5',
+          borderRadius: 999,
+          borderWidth: 1,
+          height: 44,
+          justifyContent: 'center',
+          width: 44,
+        }}
+      >
+        <Text selectable style={{ color: '#065F2E', fontSize: 22, fontWeight: '900', lineHeight: 24 }}>
+          ...
+        </Text>
+      </Pressable>
+    ) : undefined;
+
+  return <TopAppBar right={right} title="Detail Pohon" onBack={() => router.back()} />;
 }
 
 function TreeDetailHero({ displayCode, tree }: { displayCode: string; tree: Tree }) {
   return (
-    <Card>
+    <View style={{ gap: 14 }}>
       <TreeVisualPlaceholder condition={tree.currentCondition}>
         <ConditionStatusBadge status={tree.currentCondition} />
         {tree.isArchived ? <Badge label="Diarsipkan" tone="muted" /> : null}
@@ -267,7 +261,7 @@ function TreeDetailHero({ displayCode, tree }: { displayCode: string; tree: Tree
           <ConditionStatusBadge status={tree.currentCondition} />
         </View>
       </View>
-    </Card>
+    </View>
   );
 }
 
@@ -305,12 +299,88 @@ function ActionSection({
   tree: Tree;
 }) {
   return (
-    <Card>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        <Button title="Catat Kondisi" size="small" onPress={() => router.push(`${basePath}/${tree.id}/report`)} />
-        <Button title="Catat Fase" size="small" variant="secondary" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
-      </View>
-    </Card>
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <TreeActionButton
+        label="Catat Kondisi"
+        onPress={() => router.push(`${basePath}/${tree.id}/report`)}
+        tone="primary"
+        type="condition"
+      />
+      <TreeActionButton label="Catat Fase" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} type="phase" />
+    </View>
+  );
+}
+
+function TreeActionButton({
+  label,
+  onPress,
+  tone = 'secondary',
+  type,
+}: {
+  label: string;
+  onPress: () => void;
+  tone?: 'primary' | 'secondary';
+  type: 'condition' | 'phase';
+}) {
+  const isPrimary = tone === 'primary';
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        alignItems: 'center',
+        backgroundColor: isPrimary ? appTheme.primary : '#FFFFFF',
+        borderColor: isPrimary ? appTheme.primary : '#DCE7D5',
+        borderRadius: 14,
+        borderWidth: 1,
+        flex: 1,
+        flexDirection: 'row',
+        gap: 9,
+        justifyContent: 'center',
+        minHeight: 50,
+        paddingHorizontal: 10,
+      }}
+    >
+      <ActionGlyph active={isPrimary} type={type} />
+      <Text selectable style={{ color: isPrimary ? '#FFFFFF' : appTheme.primary, fontSize: 14, fontWeight: '900' }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function ActionGlyph({ active, type }: { active: boolean; type: 'condition' | 'phase' }) {
+  const foreground = active ? '#FFFFFF' : appTheme.primary;
+  const background = active ? 'rgba(255,255,255,0.18)' : '#E7F3EA';
+
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        backgroundColor: background,
+        borderRadius: 999,
+        height: 24,
+        justifyContent: 'center',
+        width: 24,
+      }}
+    >
+      {type === 'condition' ? (
+        <View style={{ backgroundColor: foreground, borderRadius: 999, height: 10, width: 10 }} />
+      ) : (
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ backgroundColor: foreground, borderRadius: 999, height: 14, width: 3 }} />
+          <View
+            style={{
+              backgroundColor: foreground,
+              borderRadius: 999,
+              height: 3,
+              position: 'absolute',
+              width: 14,
+            }}
+          />
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -331,7 +401,7 @@ function OwnerTreeMenu({
 }) {
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.18)', flex: 1 }} onPress={onClose}>
+      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.04)', flex: 1 }} onPress={onClose}>
         <View style={{ alignItems: 'flex-end', paddingRight: 20, paddingTop: 92 }}>
           <View
             style={{
@@ -339,8 +409,13 @@ function OwnerTreeMenu({
               borderColor: '#DCE7D5',
               borderRadius: 14,
               borderWidth: 1,
+              elevation: 5,
               minWidth: 210,
               overflow: 'hidden',
+              shadowColor: '#1E2A24',
+              shadowOffset: { height: 4, width: 0 },
+              shadowOpacity: 0.14,
+              shadowRadius: 14,
             }}
           >
             <MenuItem label="Edit Pohon" onPress={onEdit} />

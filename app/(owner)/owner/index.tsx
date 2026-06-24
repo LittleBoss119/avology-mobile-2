@@ -1,11 +1,10 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import {
   appTheme,
   Badge,
-  Button,
   Card,
   EmptyState,
   ErrorBanner,
@@ -117,20 +116,11 @@ export default function OwnerDashboardScreen() {
         />
       ) : null}
 
-      <SectionTitle title="Monitoring Kebun" />
-      {summary ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-          {buildMonitoringStats(summary).map((stat) => (
-            <DashboardStatCard key={stat.label} stat={stat} />
-          ))}
-        </View>
-      ) : null}
-
       <SectionTitle title="Aksi Cepat" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        <Button title="Tambah Pohon" size="small" onPress={() => router.push('/owner/trees/create')} />
-        <Button title="Buat Jadwal" size="small" variant="secondary" onPress={() => router.push('/owner/schedules/create')} />
-        <Button title="Lihat Laporan" size="small" variant="secondary" onPress={() => router.push('/owner/reports')} />
+        <DashboardActionButton label="Tambah Pohon" meta="Data kebun" onPress={() => router.push('/owner/trees/create')} primary />
+        <DashboardActionButton label="Buat Jadwal" meta="Perawatan" onPress={() => router.push('/owner/schedules/create')} />
+        <DashboardActionButton label="Lihat Laporan" meta="Lapangan" onPress={() => router.push('/owner/reports')} />
       </View>
     </Screen>
   );
@@ -221,21 +211,6 @@ function SectionTitle({ title }: { title: string }) {
   );
 }
 
-function MiniMetric({ label, tone = 'muted', value }: DashboardStat) {
-  const toneColor = tone === 'danger' ? '#B42318' : tone === 'primary' ? '#2F6F4E' : '#68746D';
-
-  return (
-    <View style={{ flex: 1, gap: 4 }}>
-      <Text selectable style={{ color: toneColor, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
-        {value}
-      </Text>
-      <Text selectable style={{ color: '#68746D', fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 function PriorityCard({ priority }: { priority: PriorityInsight }) {
   const toneColor = priority.tone === 'danger' ? '#B42318' : '#7A5600';
 
@@ -265,22 +240,61 @@ function DashboardStatCard({ stat }: { stat: DashboardStat }) {
   return (
     <View style={{ flexBasis: '47%', flexGrow: 1, minWidth: 140 }}>
       <Card>
-        <Text selectable style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
-          {stat.label}
-        </Text>
-        <Text
-          selectable
-          style={{
-            color: toneColor,
-            fontSize: 28,
-            fontVariant: ['tabular-nums'],
-            fontWeight: '800',
-          }}
-        >
-          {stat.value}
-        </Text>
+        <View style={{ justifyContent: 'space-between', minHeight: 76 }}>
+          <Text selectable numberOfLines={2} style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
+            {stat.label}
+          </Text>
+          <Text
+            selectable
+            style={{
+              color: toneColor,
+              fontSize: 28,
+              fontVariant: ['tabular-nums'],
+              fontWeight: '800',
+            }}
+          >
+            {stat.value}
+          </Text>
+        </View>
       </Card>
     </View>
+  );
+}
+
+function DashboardActionButton({
+  label,
+  meta,
+  onPress,
+  primary,
+}: {
+  label: string;
+  meta: string;
+  onPress: () => void;
+  primary?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        backgroundColor: primary ? appTheme.primary : '#FFFFFF',
+        borderColor: primary ? appTheme.primary : '#DCE7D5',
+        borderRadius: 14,
+        borderWidth: 1,
+        flexBasis: '30%',
+        flexGrow: 1,
+        gap: 4,
+        minHeight: 74,
+        minWidth: 104,
+        padding: 12,
+      }}
+    >
+      <Text selectable style={{ color: primary ? '#DDEFE2' : '#68746D', fontSize: 12, fontWeight: '700' }}>
+        {meta}
+      </Text>
+      <Text selectable style={{ color: primary ? '#FFFFFF' : '#1E2A24', fontSize: 14, fontWeight: '900', lineHeight: 18 }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -305,16 +319,6 @@ function buildStats(summary: OwnerDashboardSummary): DashboardStat[] {
       tone: summary.pendingWorkers > 0 ? 'danger' : 'muted',
       value: summary.pendingWorkers,
     },
-    { label: 'Pohon Berbunga', value: summary.floweringTrees },
-    { label: 'Pohon Berbuah', value: summary.fruitingTrees },
-  ];
-}
-
-function buildMonitoringStats(summary: OwnerDashboardSummary): DashboardStat[] {
-  return [
-    { label: 'Pohon Berbunga', value: summary.floweringTrees },
-    { label: 'Pohon Berbuah', value: summary.fruitingTrees },
-    { label: 'Tugas Hari Ini', value: summary.todayTasks },
   ];
 }
 

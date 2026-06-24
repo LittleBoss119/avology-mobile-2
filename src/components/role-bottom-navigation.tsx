@@ -3,11 +3,13 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 type NavigationItem = {
-  icon: string;
+  icon: NavigationIconName;
   label: string;
   href: string;
   match: string[];
 };
+
+type NavigationIconName = 'calendar' | 'document' | 'home' | 'leaf' | 'user' | 'checklist';
 
 export function RoleBottomNavigation({ role }: { role: 'owner' | 'worker' }) {
   const pathname = usePathname();
@@ -61,17 +63,7 @@ export function RoleBottomNavigation({ role }: { role: 'owner' | 'worker' }) {
                   width: 24,
                 }}
               >
-                <Text
-                  selectable
-                  style={{
-                    color: isActive ? '#FFFFFF' : '#68746D',
-                    fontSize: 11,
-                    fontWeight: '900',
-                    textAlign: 'center',
-                  }}
-                >
-                  {item.icon}
-                </Text>
+                <NavigationIcon active={isActive} name={item.icon} />
               </View>
               <Text
                 selectable
@@ -96,31 +88,31 @@ export function RoleBottomNavigation({ role }: { role: 'owner' | 'worker' }) {
 const ownerNavigationItems: NavigationItem[] = [
   {
     href: '/owner',
-    icon: 'B',
+    icon: 'home',
     label: 'Beranda',
     match: ['/owner'],
   },
   {
     href: '/owner/trees',
-    icon: 'P',
+    icon: 'leaf',
     label: 'Pohon',
     match: ['/owner/trees'],
   },
   {
     href: '/owner/schedules',
-    icon: 'J',
+    icon: 'calendar',
     label: 'Jadwal',
     match: ['/owner/schedules', '/owner/tasks'],
   },
   {
     href: '/owner/reports',
-    icon: 'L',
+    icon: 'document',
     label: 'Laporan',
     match: ['/owner/reports'],
   },
   {
     href: '/owner/profile',
-    icon: 'A',
+    icon: 'user',
     label: 'Akun',
     match: ['/owner/profile', '/owner/farm-profile', '/owner/workers', '/owner/sops'],
   },
@@ -137,31 +129,31 @@ function isActivePath(pathname: string, match: string): boolean {
 const workerNavigationItems: NavigationItem[] = [
   {
     href: '/worker',
-    icon: 'B',
+    icon: 'home',
     label: 'Beranda',
     match: ['/worker'],
   },
   {
     href: '/worker/tasks',
-    icon: 'T',
+    icon: 'checklist',
     label: 'Tugas',
     match: ['/worker/tasks'],
   },
   {
     href: '/worker/trees',
-    icon: 'P',
+    icon: 'leaf',
     label: 'Pohon',
     match: ['/worker/trees'],
   },
   {
     href: '/worker/reports',
-    icon: 'L',
+    icon: 'document',
     label: 'Laporan',
     match: ['/worker/reports'],
   },
   {
     href: '/worker/profile',
-    icon: 'A',
+    icon: 'user',
     label: 'Akun',
     match: ['/worker/profile'],
   },
@@ -191,3 +183,80 @@ const workerTopLevelPaths = [
   '/worker/reports',
   '/worker/profile',
 ];
+
+function NavigationIcon({ active, name }: { active: boolean; name: NavigationIconName }) {
+  const color = active ? '#FFFFFF' : '#68746D';
+
+  if (name === 'home') {
+    return (
+      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <View
+          style={{
+            borderColor: color,
+            borderLeftWidth: 2,
+            borderTopWidth: 2,
+            height: 10,
+            transform: [{ rotate: '45deg' }],
+            width: 10,
+          }}
+        />
+        <View style={{ borderColor: color, borderWidth: 2, height: 8, marginTop: -3, width: 11 }} />
+      </View>
+    );
+  }
+
+  if (name === 'leaf') {
+    return (
+      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <View
+          style={{
+            borderColor: color,
+            borderRadius: 999,
+            borderWidth: 2,
+            height: 14,
+            transform: [{ rotate: '-35deg' }],
+            width: 9,
+          }}
+        />
+        <View style={{ backgroundColor: color, height: 10, marginTop: -3, width: 2 }} />
+      </View>
+    );
+  }
+
+  if (name === 'calendar') {
+    return (
+      <View style={{ borderColor: color, borderRadius: 3, borderWidth: 2, height: 16, width: 15 }}>
+        <View style={{ backgroundColor: color, height: 2, marginTop: 3 }} />
+      </View>
+    );
+  }
+
+  if (name === 'checklist') {
+    return (
+      <View style={{ gap: 3 }}>
+        {[0, 1, 2].map((item) => (
+          <View key={item} style={{ alignItems: 'center', flexDirection: 'row', gap: 2 }}>
+            <View style={{ borderColor: color, borderRadius: 2, borderWidth: 1.5, height: 4, width: 4 }} />
+            <View style={{ backgroundColor: color, borderRadius: 999, height: 2, width: 10 }} />
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  if (name === 'document') {
+    return (
+      <View style={{ borderColor: color, borderRadius: 3, borderWidth: 2, gap: 2, height: 16, padding: 3, width: 13 }}>
+        <View style={{ backgroundColor: color, borderRadius: 999, height: 2, width: 6 }} />
+        <View style={{ backgroundColor: color, borderRadius: 999, height: 2, width: 5 }} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 2, height: 8, width: 8 }} />
+      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 2, height: 8, marginTop: -1, width: 14 }} />
+    </View>
+  );
+}

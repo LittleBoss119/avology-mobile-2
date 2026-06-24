@@ -1,41 +1,61 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 
 import { TreeCard } from '../../../../src/components/tree-components';
 import {
   Badge,
   EmptyState,
   ErrorBanner,
-  Field,
   LoadingState,
   PageIntro,
   Screen,
 } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getTrees } from '../../../../src/services/treeService';
-import type { Tree, TreeConditionStatus } from '../../../../src/types/domain';
-import { formatTreeConditionStatus } from '../../../../src/utils/treeFormat';
+import type { GrowthPhase, Tree, TreeConditionStatus } from '../../../../src/types/domain';
+import {
+  formatGrowthPhase,
+  formatTreeConditionStatus,
+  formatTreeDisplayCode,
+} from '../../../../src/utils/treeFormat';
 
-type ConditionFilter = TreeConditionStatus | 'all';
+type AgeRangeFilter = 'all' | 'lt_1' | '1_3' | 'gt_3';
 
-const conditionFilters: Array<{ label: string; value: ConditionFilter }> = [
-  { label: 'Semua', value: 'all' },
+const conditionFilterOptions: Array<{ label: string; value: TreeConditionStatus }> = [
   { label: 'Sehat', value: 'healthy' },
-  { label: 'Perlu Perhatian', value: 'needs_attention' },
-  { label: 'Terserang Hama', value: 'pest_attacked' },
-  { label: 'Terindikasi Penyakit', value: 'disease_indicated' },
+  { label: 'Perlu dicek', value: 'needs_attention' },
+  { label: 'Hama', value: 'pest_attacked' },
+  { label: 'Penyakit', value: 'disease_indicated' },
   { label: 'Rusak', value: 'damaged' },
   { label: 'Mati', value: 'dead' },
 ];
 
+const phaseFilterOptions: Array<{ label: string; value: GrowthPhase }> = [
+  { label: 'Awal Tanam', value: 'initial_planting' },
+  { label: 'Vegetatif', value: 'vegetative' },
+  { label: 'Berbunga', value: 'flowering' },
+  { label: 'Berbuah', value: 'fruiting' },
+  { label: 'Panen', value: 'harvesting' },
+];
+
+const ageRangeFilters: Array<{ label: string; value: AgeRangeFilter }> = [
+  { label: 'Semua', value: 'all' },
+  { label: '<1 tahun', value: 'lt_1' },
+  { label: '1-3 tahun', value: '1_3' },
+  { label: '>3 tahun', value: 'gt_3' },
+];
+
 export default function OwnerTreeListScreen() {
   const { currentFarm } = useAuth();
+  const [ageRange, setAgeRange] = React.useState<AgeRangeFilter>('all');
   const [archived, setArchived] = React.useState(false);
-  const [condition, setCondition] = React.useState<ConditionFilter>('all');
+  const [conditionFilters, setConditionFilters] = React.useState<TreeConditionStatus[]>([]);
+  const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [filterOpen, setFilterOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const [phaseFilters, setPhaseFilters] = React.useState<GrowthPhase[]>([]);
   const [search, setSearch] = React.useState('');
   const [trees, setTrees] = React.useState<Tree[]>([]);
 
@@ -52,9 +72,7 @@ export default function OwnerTreeListScreen() {
 
     const result = await getTrees({
       archived,
-      condition,
       farmId,
-      search,
     });
 
     if (result.error) {
@@ -64,44 +82,72 @@ export default function OwnerTreeListScreen() {
     }
 
     setTrees(result.data);
-  }, [archived, condition, farmId, search]);
+  }, [archived, farmId]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
+
+    return () => clearTimeout(timer);
+  }, [search]);
 
   React.useEffect(() => {
     loadTrees().finally(() => setLoading(false));
   }, [loadTrees]);
+
+  const displayedTrees = React.useMemo(
+    () =>
+      sortTreesByCode(
+        filterTrees(trees, {
+          ageRange,
+          conditionFilters,
+          phaseFilters,
+          search: debouncedSearch,
+        })
+      ),
+    [ageRange, conditionFilters, debouncedSearch, phaseFilters, trees]
+  );
+
+  function toggleConditionFilter(condition: TreeConditionStatus) {
+    setConditionFilters((current) => toggleArrayValue(current, condition));
+  }
+
+  function togglePhaseFilter(phase: GrowthPhase) {
+    setPhaseFilters((current) => toggleArrayValue(current, phase));
+  }
 
   if (loading) {
     return <LoadingState message="Memuat pohon..." />;
   }
 
   return (
-    <Screen
-      floatingAction={
-        <FloatingAddButton onPress={() => router.push('/owner/trees/create')} />
-      }
-    >
+    <Screen floatingAction={<FloatingAddButton onPress={() => router.push('/owner/trees/create')} />}>
       <PageIntro
-        title="Pohon"
-        subtitle={`${trees.length} pohon ${archived ? 'diarsipkan' : 'aktif'} tampil dari kebun ini.`}
+        title="Data Pohon"
+        subtitle={`${displayedTrees.length} pohon ${archived ? 'diarsipkan' : 'aktif'} tampil dari kebun ini.`}
       />
       <ErrorBanner message={error} />
-      <SearchFilterBar
-        onFilterPress={() => setFilterOpen(true)}
-        onSearchChange={setSearch}
-        search={search}
+      <SearchFilterBar onFilterPress={() => setFilterOpen(true)} onSearchChange={setSearch} search={search} />
+      <ActiveFilterSummary
+        ageRange={ageRange}
+        archived={archived}
+        conditionFilters={conditionFilters}
+        phaseFilters={phaseFilters}
       />
-      <ActiveFilterSummary archived={archived} condition={condition} />
 
       <OwnerFilterPanel
+        ageRange={ageRange}
         archived={archived}
-        condition={condition}
+        conditionFilters={conditionFilters}
+        onAgeRangeChange={setAgeRange}
         onArchivedChange={setArchived}
         onClose={() => setFilterOpen(false)}
-        onConditionChange={setCondition}
+        onConditionToggle={toggleConditionFilter}
+        onPhaseToggle={togglePhaseFilter}
+        phaseFilters={phaseFilters}
         visible={filterOpen}
       />
 
-      {trees.length === 0 ? (
+      {displayedTrees.length === 0 ? (
         <EmptyState
           title={archived ? 'Belum ada pohon diarsipkan' : 'Belum ada pohon aktif'}
           subtitle={
@@ -112,7 +158,7 @@ export default function OwnerTreeListScreen() {
         />
       ) : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-          {trees.map((tree) => (
+          {displayedTrees.map((tree) => (
             <View key={tree.id} style={{ flexBasis: '47%', flexGrow: 1, minWidth: 154 }}>
               <TreeCard tree={tree} onPress={() => router.push(`/owner/trees/${tree.id}`)} />
             </View>
@@ -134,13 +180,32 @@ function SearchFilterBar({
 }) {
   return (
     <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 10 }}>
-      <View style={{ flex: 1 }}>
-        <Field
-          label="Cari pohon"
-          onChangeText={onSearchChange}
-          placeholder="Kode atau varietas"
-          value={search}
-        />
+      <View style={{ flex: 1, gap: 7 }}>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+          Cari pohon
+        </Text>
+        <View
+          style={{
+            alignItems: 'center',
+            backgroundColor: '#FFFFFF',
+            borderColor: '#DCE7D5',
+            borderRadius: 14,
+            borderWidth: 1,
+            flexDirection: 'row',
+            minHeight: 52,
+            paddingLeft: 14,
+          }}
+        >
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={onSearchChange}
+            placeholder="Kode atau varietas"
+            placeholderTextColor="#94A098"
+            style={{ color: '#1E2A24', flex: 1, fontSize: 16, minHeight: 50, paddingRight: 14 }}
+            value={search}
+          />
+        </View>
       </View>
       <Pressable
         onPress={onFilterPress}
@@ -148,12 +213,14 @@ function SearchFilterBar({
           alignItems: 'center',
           backgroundColor: '#065F2E',
           borderRadius: 14,
-          height: 50,
+          gap: 4,
+          height: 52,
           justifyContent: 'center',
-          width: 64,
+          width: 70,
         }}
       >
-        <Text selectable style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '900' }}>
+        <FilterGlyph />
+        <Text selectable style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '900' }}>
           Filter
         </Text>
       </Pressable>
@@ -162,92 +229,129 @@ function SearchFilterBar({
 }
 
 function ActiveFilterSummary({
+  ageRange,
   archived,
-  condition,
+  conditionFilters,
+  phaseFilters,
 }: {
+  ageRange: AgeRangeFilter;
   archived: boolean;
-  condition: ConditionFilter;
+  conditionFilters: TreeConditionStatus[];
+  phaseFilters: GrowthPhase[];
 }) {
-  if (condition === 'all' && !archived) {
+  if (conditionFilters.length === 0 && phaseFilters.length === 0 && ageRange === 'all' && !archived) {
     return null;
   }
 
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-      {condition !== 'all' ? <Badge label={getConditionFilterLabel(condition)} tone="success" /> : null}
+      {conditionFilters.length > 0 ? (
+        <Badge label={conditionFilters.length === 1 ? getConditionFilterLabel(conditionFilters[0]) : `${conditionFilters.length} kondisi`} tone="success" />
+      ) : null}
+      {phaseFilters.length > 0 ? (
+        <Badge label={phaseFilters.length === 1 ? getPhaseFilterLabel(phaseFilters[0]) : `${phaseFilters.length} fase`} tone="warning" />
+      ) : null}
+      {ageRange !== 'all' ? <Badge label={getAgeRangeLabel(ageRange)} tone="muted" /> : null}
       {archived ? <Badge label="Diarsipkan" tone="muted" /> : null}
     </View>
   );
 }
 
 function OwnerFilterPanel({
+  ageRange,
   archived,
-  condition,
+  conditionFilters,
+  onAgeRangeChange,
   onArchivedChange,
   onClose,
-  onConditionChange,
+  onConditionToggle,
+  onPhaseToggle,
+  phaseFilters,
   visible,
 }: {
+  ageRange: AgeRangeFilter;
   archived: boolean;
-  condition: ConditionFilter;
+  conditionFilters: TreeConditionStatus[];
+  onAgeRangeChange: (ageRange: AgeRangeFilter) => void;
   onArchivedChange: (archived: boolean) => void;
   onClose: () => void;
-  onConditionChange: (condition: ConditionFilter) => void;
+  onConditionToggle: (condition: TreeConditionStatus) => void;
+  onPhaseToggle: (phase: GrowthPhase) => void;
+  phaseFilters: GrowthPhase[];
   visible: boolean;
 }) {
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.24)', flex: 1 }} onPress={onClose} />
+      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.12)', flex: 1 }} onPress={onClose} />
       <View
         style={{
           backgroundColor: '#FFFFFF',
-          borderTopLeftRadius: 22,
-          borderTopRightRadius: 22,
-          gap: 18,
-          padding: 20,
+          borderTopLeftRadius: 30,
+          borderTopRightRadius: 30,
+          gap: 20,
+          paddingBottom: 28,
+          paddingHorizontal: 22,
+          paddingTop: 10,
         }}
       >
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+        <View style={{ alignSelf: 'center', backgroundColor: '#DCE7D5', borderRadius: 999, height: 5, width: 48 }} />
+        <View style={{ alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
           <View style={{ flex: 1, gap: 4 }}>
             <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '900' }}>
               Filter Pohon
             </Text>
             <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-              Pilih kondisi dan status pohon yang ingin ditampilkan.
+              Pilih kondisi, fase, umur, dan status pohon.
             </Text>
           </View>
-          <Pressable onPress={onClose} style={{ padding: 6 }}>
-            <Text selectable style={{ color: '#065F2E', fontSize: 16, fontWeight: '800' }}>
-              Selesai
-            </Text>
-          </Pressable>
+          <SheetDoneButton onPress={onClose} />
         </View>
 
-        <View style={{ gap: 9 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '800' }}>
-            Kondisi
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {conditionFilters.map((filter) => (
+        <FilterSection title="Kondisi">
+          <ChipRow>
+            {conditionFilterOptions.map((filter) => (
               <FilterChip
                 key={filter.value}
-                active={condition === filter.value}
-                label={filter.value === 'all' ? filter.label : formatTreeConditionStatus(filter.value)}
-                onPress={() => onConditionChange(filter.value)}
+                active={conditionFilters.includes(filter.value)}
+                label={filter.label}
+                onPress={() => onConditionToggle(filter.value)}
               />
             ))}
-          </View>
-        </View>
+          </ChipRow>
+        </FilterSection>
 
-        <View style={{ gap: 9 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '800' }}>
-            Status pohon
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+        <FilterSection title="Fase tumbuh">
+          <ChipRow>
+            {phaseFilterOptions.map((filter) => (
+              <FilterChip
+                key={filter.value}
+                active={phaseFilters.includes(filter.value)}
+                label={filter.label}
+                onPress={() => onPhaseToggle(filter.value)}
+              />
+            ))}
+          </ChipRow>
+        </FilterSection>
+
+        <FilterSection title="Umur">
+          <ChipRow>
+            {ageRangeFilters.map((filter) => (
+              <FilterChip
+                key={filter.value}
+                active={ageRange === filter.value}
+                label={filter.label}
+                onPress={() => onAgeRangeChange(filter.value)}
+              />
+            ))}
+          </ChipRow>
+        </FilterSection>
+
+        <FilterSection title="Status pohon">
+          <ChipRow>
             <FilterChip active={!archived} label="Aktif" onPress={() => onArchivedChange(false)} />
             <FilterChip active={archived} label="Diarsipkan" onPress={() => onArchivedChange(true)} />
-          </View>
-        </View>
+          </ChipRow>
+        </FilterSection>
       </View>
     </Modal>
   );
@@ -273,6 +377,51 @@ function FloatingAddButton({ onPress }: { onPress: () => void }) {
       </Text>
     </Pressable>
   );
+}
+
+function FilterGlyph() {
+  return (
+    <View style={{ gap: 2 }}>
+      <View style={{ backgroundColor: '#FFFFFF', borderRadius: 999, height: 2, width: 18 }} />
+      <View style={{ backgroundColor: '#DDEFE2', borderRadius: 999, height: 2, marginLeft: 5, width: 13 }} />
+      <View style={{ backgroundColor: '#FFFFFF', borderRadius: 999, height: 2, width: 18 }} />
+    </View>
+  );
+}
+
+function SheetDoneButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        backgroundColor: '#E7F3EA',
+        borderColor: '#B8D8BF',
+        borderRadius: 999,
+        borderWidth: 1,
+        paddingHorizontal: 15,
+        paddingVertical: 9,
+      }}
+    >
+      <Text selectable style={{ color: '#065F2E', fontSize: 14, fontWeight: '900' }}>
+        Selesai
+      </Text>
+    </Pressable>
+  );
+}
+
+function FilterSection({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <View style={{ gap: 9 }}>
+      <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '800' }}>
+        {title}
+      </Text>
+      {children}
+    </View>
+  );
+}
+
+function ChipRow({ children }: { children: React.ReactNode }) {
+  return <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{children}</View>;
 }
 
 function FilterChip({
@@ -303,6 +452,104 @@ function FilterChip({
   );
 }
 
-function getConditionFilterLabel(condition: ConditionFilter): string {
-  return condition === 'all' ? 'Semua kondisi' : formatTreeConditionStatus(condition);
+function filterTrees(
+  trees: Tree[],
+  filters: {
+    ageRange: AgeRangeFilter;
+    conditionFilters: TreeConditionStatus[];
+    phaseFilters: GrowthPhase[];
+    search: string;
+  }
+): Tree[] {
+  return trees.filter((tree) => {
+    if (filters.conditionFilters.length > 0 && !filters.conditionFilters.includes(tree.currentCondition)) {
+      return false;
+    }
+
+    if (
+      filters.phaseFilters.length > 0 &&
+      (!tree.currentGrowthPhase || !filters.phaseFilters.includes(tree.currentGrowthPhase))
+    ) {
+      return false;
+    }
+
+    if (!matchesAgeRange(tree, filters.ageRange)) {
+      return false;
+    }
+
+    if (!filters.search) {
+      return true;
+    }
+
+    const searchableText = [
+      formatTreeDisplayCode(tree),
+      tree.treeCode,
+      tree.variety,
+      tree.rowPosition,
+      tree.columnPosition,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return searchableText.includes(filters.search);
+  });
+}
+
+function matchesAgeRange(tree: Tree, ageRange: AgeRangeFilter): boolean {
+  if (ageRange === 'all') {
+    return true;
+  }
+
+  const ageYears = getTreeAgeYears(tree.plantedAt);
+
+  if (ageYears === null) {
+    return false;
+  }
+
+  if (ageRange === 'lt_1') {
+    return ageYears < 1;
+  }
+
+  if (ageRange === '1_3') {
+    return ageYears >= 1 && ageYears <= 3;
+  }
+
+  return ageYears > 3;
+}
+
+function sortTreesByCode(trees: Tree[]): Tree[] {
+  return [...trees].sort((first, second) =>
+    formatTreeDisplayCode(first).localeCompare(formatTreeDisplayCode(second), 'id-ID', { numeric: true })
+  );
+}
+
+function getTreeAgeYears(plantedAt?: string | null): number | null {
+  if (!plantedAt) {
+    return null;
+  }
+
+  const plantedDate = new Date(plantedAt);
+
+  if (Number.isNaN(plantedDate.getTime())) {
+    return null;
+  }
+
+  return (Date.now() - plantedDate.getTime()) / 31_536_000_000;
+}
+
+function toggleArrayValue<T>(values: T[], value: T): T[] {
+  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
+
+function getConditionFilterLabel(condition: TreeConditionStatus): string {
+  return conditionFilterOptions.find((filter) => filter.value === condition)?.label ?? formatTreeConditionStatus(condition);
+}
+
+function getPhaseFilterLabel(phase: GrowthPhase): string {
+  return phaseFilterOptions.find((filter) => filter.value === phase)?.label ?? formatGrowthPhase(phase);
+}
+
+function getAgeRangeLabel(ageRange: AgeRangeFilter): string {
+  return ageRangeFilters.find((filter) => filter.value === ageRange)?.label ?? 'Semua umur';
 }

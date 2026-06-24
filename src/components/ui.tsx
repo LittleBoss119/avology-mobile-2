@@ -8,6 +8,7 @@ import {
   View,
   type KeyboardTypeOptions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { sanitizeDisplayValue, sanitizeUserFacingMessage } from '../utils/displayFormat';
 
@@ -70,6 +71,57 @@ export function PageIntro({
       </Text>
       {subtitle ? (
         <Text selectable style={{ color: colors.muted, fontSize: 16, lineHeight: 24 }}>
+          {subtitle}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+export function TopAppBar({
+  right,
+  subtitle,
+  title,
+  onBack,
+}: {
+  right?: React.ReactNode;
+  subtitle?: string;
+  title: string;
+  onBack?: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View style={{ gap: subtitle ? 8 : 0, paddingTop: Math.max(insets.top, 8) }}>
+      <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }}>
+        {onBack ? (
+          <Pressable
+            onPress={onBack}
+            style={{
+              alignItems: 'center',
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: 999,
+              borderWidth: 1,
+              height: 44,
+              justifyContent: 'center',
+              width: 44,
+            }}
+          >
+            <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '900', lineHeight: 26 }}>
+              {'<'}
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={{ height: 44, width: 44 }} />
+        )}
+        <Text selectable numberOfLines={1} style={{ color: colors.text, fontSize: 20, fontWeight: '900' }}>
+          {title}
+        </Text>
+        {right ?? <View style={{ height: 44, width: 44 }} />}
+      </View>
+      {subtitle ? (
+        <Text selectable style={{ color: colors.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' }}>
           {subtitle}
         </Text>
       ) : null}
@@ -188,9 +240,10 @@ export function Badge({ label, tone = 'muted' }: { label: string; tone?: BadgeTo
         borderWidth: 1,
         paddingHorizontal: 10,
         paddingVertical: 5,
+        maxWidth: 104,
       }}
     >
-      <Text selectable style={{ color: badge.text, fontSize: 12, fontWeight: '700' }}>
+      <Text selectable numberOfLines={1} style={{ color: badge.text, fontSize: 12, fontWeight: '700' }}>
         {label}
       </Text>
     </View>

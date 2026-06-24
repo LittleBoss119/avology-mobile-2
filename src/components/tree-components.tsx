@@ -14,7 +14,6 @@ import { formatPersonDisplayName } from '../utils/displayFormat';
 import {
   buildTreeDisplayCode,
   formatGrowthPhase,
-  formatTreeConditionStatus,
   formatTreeDisplayCode,
 } from '../utils/treeFormat';
 import { appTheme, Badge, Card, EmptyState, Field, MetaRow } from './ui';
@@ -73,9 +72,6 @@ type TreeHistoryViewerMode = 'owner' | 'worker';
 
 export function TreeCard({ children, onPress, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
-  const primaryBadge = tree.currentCondition === 'healthy' && tree.currentGrowthPhase
-    ? <Badge label={formatGrowthPhase(tree.currentGrowthPhase)} tone={getGrowthPhaseOptionalTone(tree.currentGrowthPhase)} />
-    : <ConditionStatusBadge status={tree.currentCondition} />;
 
   const content = (
     <View
@@ -84,24 +80,36 @@ export function TreeCard({ children, onPress, tree }: TreeCardProps) {
         borderColor: '#DCE7D5',
         borderRadius: 12,
         borderWidth: 1,
-        gap: 10,
-        padding: 10,
+        gap: 9,
+        minHeight: 178,
+        padding: 9,
       }}
     >
       <TreeVisualPlaceholder condition={tree.currentCondition} size="compact">
-        {tree.isArchived ? <Badge label="Arsip" tone="muted" /> : primaryBadge}
+        {tree.isArchived ? <Badge label="Arsip" tone="muted" /> : <ConditionStatusBadge status={tree.currentCondition} />}
       </TreeVisualPlaceholder>
 
       <View style={{ gap: 3 }}>
-        <Text selectable style={{ color: appTheme.primary, fontSize: 20, fontWeight: '900' }}>
+        <Text selectable style={{ color: appTheme.primary, fontSize: 21, fontWeight: '900' }}>
           {displayCode}
         </Text>
         <Text
           selectable
           numberOfLines={1}
-          style={{ color: appTheme.text, fontSize: 14, fontWeight: '700' }}
+          style={{ color: appTheme.text, fontSize: 14, fontWeight: '700', lineHeight: 18 }}
         >
           {tree.variety || 'Varietas belum diisi'}
+        </Text>
+        <Text
+          selectable
+          numberOfLines={1}
+          style={{
+            color: tree.currentGrowthPhase ? appTheme.muted : '#94A098',
+            fontSize: 13,
+            lineHeight: 18,
+          }}
+        >
+          {tree.currentGrowthPhase ? formatCompactGrowthPhase(tree.currentGrowthPhase) : 'Belum dicatat'}
         </Text>
       </View>
 
@@ -135,33 +143,56 @@ export function TreeVisualPlaceholder({
         borderColor: accent.border,
         borderRadius: 12,
         borderWidth: 1,
-        minHeight: isCompact ? 84 : 108,
+        minHeight: isCompact ? 92 : 188,
         overflow: 'hidden',
-        padding: isCompact ? 9 : 12,
+        padding: isCompact ? 8 : 14,
       }}
     >
-      <View style={{ alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between' }}>
-        <View style={{ gap: isCompact ? 5 : 8 }}>
+      <View
+        style={{
+          backgroundColor: accent.haze,
+          borderRadius: 999,
+          height: isCompact ? 86 : 180,
+          position: 'absolute',
+          right: isCompact ? -18 : -30,
+          top: isCompact ? -20 : -26,
+          width: isCompact ? 118 : 220,
+        }}
+      />
+      <View
+        style={{
+          backgroundColor: 'rgba(255,255,255,0.34)',
+          borderRadius: 999,
+          bottom: isCompact ? -16 : -34,
+          height: isCompact ? 58 : 112,
+          left: isCompact ? -22 : -30,
+          position: 'absolute',
+          width: isCompact ? 86 : 160,
+        }}
+      />
+      <View style={{ alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' }}>
+        <View style={{ gap: isCompact ? 4 : 8, paddingTop: isCompact ? 16 : 42 }}>
           <View
             style={{
               backgroundColor: accent.leaf,
               borderRadius: 999,
-              height: isCompact ? 30 : 42,
+              height: isCompact ? 26 : 52,
               transform: [{ rotate: '-22deg' }],
-              width: isCompact ? 50 : 68,
+              width: isCompact ? 62 : 112,
             }}
           />
           <View
             style={{
-              backgroundColor: '#5C8A45',
+              backgroundColor: accent.fruit,
               borderRadius: 999,
-              height: isCompact ? 34 : 46,
-              marginLeft: isCompact ? 20 : 28,
-              width: isCompact ? 24 : 32,
+              height: isCompact ? 36 : 64,
+              marginLeft: isCompact ? 38 : 72,
+              marginTop: isCompact ? -8 : -12,
+              width: isCompact ? 28 : 50,
             }}
           />
         </View>
-        <View style={{ alignItems: 'flex-end', gap: 6 }}>{children}</View>
+        <View style={{ alignItems: 'flex-end', gap: 6, zIndex: 1 }}>{children}</View>
       </View>
     </View>
   );
@@ -180,18 +211,24 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
   return (
     <View style={{ gap: 14 }}>
       <MetaRow label="Kode pohon" value={previewCode ?? 'Lokasi belum lengkap'} />
-      <Field
-        label="Baris"
-        onChangeText={(value) => updateValue('rowPosition', value)}
-        placeholder="Contoh: A"
-        value={values.rowPosition}
-      />
-      <Field
-        label="Kolom"
-        onChangeText={(value) => updateValue('columnPosition', value)}
-        placeholder="Contoh: 1"
-        value={values.columnPosition}
-      />
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <Field
+            label="Baris"
+            onChangeText={(value) => updateValue('rowPosition', value)}
+            placeholder="A"
+            value={values.rowPosition}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Field
+            label="Kolom"
+            onChangeText={(value) => updateValue('columnPosition', value)}
+            placeholder="1"
+            value={values.columnPosition}
+          />
+        </View>
+      </View>
       <Field
         label="Varietas"
         onChangeText={(value) => updateValue('variety', value)}
@@ -201,9 +238,29 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
       <Field
         label="Tanggal tanam"
         onChangeText={(value) => updateValue('plantedAt', value)}
-        placeholder="YYYY-MM-DD"
+        placeholder="Contoh: 2026-06-24"
         value={values.plantedAt}
       />
+      <View style={{ alignItems: 'flex-start', gap: 8 }}>
+        <Text selectable style={{ color: '#68746D', fontSize: 13, lineHeight: 19 }}>
+          Gunakan format tahun-bulan-tanggal. Kosongkan jika tanggal tanam belum diketahui.
+        </Text>
+        <Pressable
+          onPress={() => updateValue('plantedAt', formatTodayDate())}
+          style={{
+            backgroundColor: '#E7F3EA',
+            borderColor: '#B8D8BF',
+            borderRadius: 999,
+            borderWidth: 1,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+          }}
+        >
+          <Text selectable style={{ color: '#065F2E', fontSize: 13, fontWeight: '800' }}>
+            Gunakan hari ini
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -211,13 +268,13 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
 export function ConditionStatusBadge({ status }: ConditionStatusBadgeProps) {
   const tone = getConditionTone(status);
 
-  return <Badge label={formatTreeConditionStatus(status)} tone={tone} />;
+  return <Badge label={formatCompactConditionStatus(status)} tone={tone} />;
 }
 
 export function GrowthPhaseBadge({ phase }: GrowthPhaseBadgeProps) {
   const tone = getGrowthPhaseTone(phase);
 
-  return <Badge label={formatGrowthPhase(phase)} tone={tone} />;
+  return <Badge label={formatCompactGrowthPhase(phase)} tone={tone} />;
 }
 
 export function ConditionReportList({
@@ -297,7 +354,7 @@ export function ConditionReportItem({
           {formatDateTime(report.reportedAt)}
         </Text>
       </View>
-      <MetaRow label="Catatan" value={report.note || 'Catatan belum diisi'} />
+      <MetaRow label="Catatan" value={report.note || '-'} />
       <MetaRow label="Dilaporkan oleh" value={reporterName} />
     </Card>
   );
@@ -317,12 +374,18 @@ function TreeHistoryTimelineItem({
       <View style={{ alignItems: 'center', paddingTop: 6 }}>
         <View
           style={{
+            alignItems: 'center',
             backgroundColor: getTimelineDotColor(item.historyType),
             borderRadius: 999,
             height: 24,
+            justifyContent: 'center',
             width: 24,
           }}
-        />
+        >
+          <Text selectable style={{ color: getTimelineTextColor(item.historyType), fontSize: 11, fontWeight: '900' }}>
+            {getTimelineMarker(item.historyType)}
+          </Text>
+        </View>
         <View style={{ backgroundColor: '#DCE7D5', flex: 1, marginTop: 6, width: 1 }} />
       </View>
       <View style={{ flex: 1 }}>
@@ -345,9 +408,11 @@ function TreeHistoryTimelineItem({
           <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800', lineHeight: 22 }}>
             {formatHistoryTitle(item)}
           </Text>
-          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-            {item.description || 'Catatan belum diisi'}
-          </Text>
+          {item.description ? (
+            <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+              {item.description}
+            </Text>
+          ) : null}
           <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
             Dicatat oleh{' '}
             {formatActorDisplayName({
@@ -367,25 +432,27 @@ function TreeHistoryTimelineItem({
 function getVisualAccent(status?: TreeConditionStatus): {
   background: string;
   border: string;
+  fruit: string;
+  haze: string;
   leaf: string;
 } {
   if (status && status !== 'healthy') {
     return {
       background: '#FFF8E8',
       border: '#F6D77A',
-      leaf: '#C9A227',
+      fruit: '#C49A25',
+      haze: '#F6D77A',
+      leaf: '#8A9A31',
     };
   }
 
   return {
-    background: '#E7F3EA',
+    background: '#DCEFE3',
     border: '#B8D8BF',
+    fruit: '#5C8A45',
+    haze: '#B8D8BF',
     leaf: appTheme.primary,
   };
-}
-
-function getGrowthPhaseOptionalTone(phase?: GrowthPhase | null): BadgeTone {
-  return phase ? getGrowthPhaseTone(phase) : 'muted';
 }
 
 function getTimelineDotColor(type: TreeHistoryType): string {
@@ -398,6 +465,30 @@ function getTimelineDotColor(type: TreeHistoryType): string {
   }
 
   return '#E7EEF8';
+}
+
+function getTimelineTextColor(type: TreeHistoryType): string {
+  if (type === 'condition') {
+    return '#7A5600';
+  }
+
+  if (type === 'phase') {
+    return '#065F2E';
+  }
+
+  return '#184E91';
+}
+
+function getTimelineMarker(type: TreeHistoryType): string {
+  if (type === 'condition') {
+    return '!';
+  }
+
+  if (type === 'phase') {
+    return '+';
+  }
+
+  return '✓';
 }
 
 type BadgeTone = 'danger' | 'muted' | 'success' | 'warning';
@@ -490,7 +581,7 @@ function formatHistoryType(type: TreeHistoryType): string {
 
 function formatHistoryTitle(item: TreeHistoryItem): string {
   if (item.historyType === 'condition' && isTreeConditionStatus(item.title)) {
-    return formatTreeConditionStatus(item.title);
+    return formatCompactConditionStatus(item.title);
   }
 
   if (item.historyType === 'phase' && isGrowthPhase(item.title)) {
@@ -498,6 +589,31 @@ function formatHistoryTitle(item: TreeHistoryItem): string {
   }
 
   return item.title;
+}
+
+function formatCompactConditionStatus(status: TreeConditionStatus): string {
+  const labels: Record<TreeConditionStatus, string> = {
+    damaged: 'Rusak',
+    dead: 'Mati',
+    disease_indicated: 'Penyakit',
+    healthy: 'Sehat',
+    needs_attention: 'Perlu dicek',
+    pest_attacked: 'Hama',
+  };
+
+  return labels[status];
+}
+
+function formatCompactGrowthPhase(phase: GrowthPhase): string {
+  const labels: Record<GrowthPhase, string> = {
+    flowering: 'Berbunga',
+    fruiting: 'Berbuah',
+    harvesting: 'Panen',
+    initial_planting: 'Awal',
+    vegetative: 'Vegetatif',
+  };
+
+  return labels[phase];
 }
 
 function isTreeConditionStatus(value: string): value is TreeConditionStatus {
@@ -535,4 +651,12 @@ function formatDateTime(value: string): string {
     month: 'short',
     year: 'numeric',
   });
+}
+
+function formatTodayDate(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
