@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '../context/auth-context';
 import {
@@ -36,6 +36,7 @@ import { formatCareCategory } from './care-sop-components';
 import {
   formatOperationalReportCategory,
   formatOperationalReportStatus,
+  formatOperationalReportStatusShort,
   formatTargetType,
 } from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
@@ -245,10 +246,8 @@ export function WorkerOperationalReportListScreen() {
 
   return (
     <Screen
-      footer={
-        <>
-          <Button title="Buat Laporan" onPress={() => router.push('/worker/reports/create')} />
-        </>
+      stickyFooter={
+        <Button title="Buat Laporan" onPress={() => router.push('/worker/reports/create')} />
       }
     >
       <PageIntro
@@ -271,6 +270,7 @@ export function WorkerOperationalReportListScreen() {
           {filteredReports.map((report) => (
             <OperationalReportCard
               key={report.id}
+              compactStatus
               report={report}
               onPress={() => router.push(`/worker/reports/${report.id}`)}
             />
@@ -422,13 +422,37 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
 export function OwnerOperationalReportListScreen() {
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
+  const [filterSheetVisible, setFilterSheetVisible] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [categoryFilter, setCategoryFilter] = React.useState<OperationalReportCategoryFilter>('all');
   const [reports, setReports] = React.useState<OperationalReport[]>([]);
+  const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<OperationalReportStatusFilter>('all');
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
 
   const farmId = currentFarm?.farmId;
+  const filteredReports = React.useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    return reports.filter((report) => {
+      const reporterName = workerNames[report.reportedBy] ?? '';
+      const searchableText = [
+        formatOperationalReportCategory(report.category),
+        report.description,
+        report.locationNote,
+        reporterName,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      const matchesSearch = !normalizedQuery || searchableText.includes(normalizedQuery);
+      const matchesStatus = statusFilter === 'all' || report.status === statusFilter;
+      const matchesCategory = categoryFilter === 'all' || report.category === categoryFilter;
+
+      return matchesSearch && matchesStatus && matchesCategory;
+    });
+  }, [categoryFilter, reports, searchQuery, statusFilter, workerNames]);
 
   const loadReports = React.useCallback(async () => {
     if (!farmId || currentFarm?.role !== 'owner' || currentFarm.status !== 'active') {
@@ -441,11 +465,7 @@ export function OwnerOperationalReportListScreen() {
     setError(null);
 
     const [reportsResult, workersResult] = await Promise.all([
-      getOperationalReports({
-        category: categoryFilter,
-        farmId,
-        status: statusFilter,
-      }),
+      getOperationalReports({ farmId }),
       getFarmMemberBasicProfiles(farmId),
     ]);
 
@@ -465,7 +485,7 @@ export function OwnerOperationalReportListScreen() {
         )
       );
     }
-  }, [categoryFilter, currentFarm?.role, currentFarm?.status, farmId, statusFilter]);
+  }, [currentFarm?.role, currentFarm?.status, farmId]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -480,27 +500,44 @@ export function OwnerOperationalReportListScreen() {
 
   return (
     <Screen>
-      <PageIntro
-        title="Laporan Lapangan"
-        subtitle="Pantau laporan kebun dari pekerja dan tindak lanjuti bila perlu."
-      />
+      <View style={{ gap: 7, paddingTop: 10 }}>
+        <Text selectable style={{ color: appTheme.primary, fontSize: 13, fontWeight: '900', letterSpacing: 0.2 }}>
+          Laporan Operasional
+        </Text>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 31, fontWeight: '900', lineHeight: 36 }}>
+          Laporan Lapangan
+        </Text>
+        <Text selectable style={{ color: '#68746D', fontSize: 16, lineHeight: 23 }}>
+          Pantau laporan kebun dari pekerja dan tindak lanjuti bila perlu.
+        </Text>
+      </View>
       <ErrorBanner message={error} />
 
       <ReportSummary reports={reports} />
 
-      <ReportStatusFilter selectedStatus={statusFilter} onSelect={setStatusFilter} />
-      <ReportCategoryFilter selectedCategory={categoryFilter} onSelect={setCategoryFilter} />
+      <ReportSearchFilterRow
+        categoryFilter={categoryFilter}
+        onOpenFilter={() => setFilterSheetVisible(true)}
+        onSearchChange={setSearchQuery}
+        searchQuery={searchQuery}
+        statusFilter={statusFilter}
+      />
 
-      {reports.length === 0 ? (
+      <Text selectable style={{ color: '#68746D', fontSize: 13, fontWeight: '700' }}>
+        Menampilkan {filteredReports.length} dari {reports.length} laporan
+      </Text>
+
+      {filteredReports.length === 0 ? (
         <EmptyState
-          title="Belum ada laporan"
-          subtitle="Laporan operasional pekerja pada filter ini akan muncul di sini."
+          title={reports.length === 0 ? 'Belum ada laporan' : 'Tidak ada laporan pada filter ini'}
+          subtitle="Laporan operasional pekerja yang sesuai pencarian akan muncul di sini."
         />
       ) : (
         <View style={{ gap: 12 }}>
-          {reports.map((report) => (
+          {filteredReports.map((report) => (
             <OperationalReportCard
               key={report.id}
+              compactStatus
               report={report}
               reporterName={workerNames[report.reportedBy]}
               onPress={() => router.push(`/owner/reports/${report.id}`)}
@@ -508,6 +545,18 @@ export function OwnerOperationalReportListScreen() {
           ))}
         </View>
       )}
+      <ReportFilterSheet
+        categoryFilter={categoryFilter}
+        onClose={() => setFilterSheetVisible(false)}
+        onReset={() => {
+          setStatusFilter('all');
+          setCategoryFilter('all');
+        }}
+        onSelectCategory={setCategoryFilter}
+        onSelectStatus={setStatusFilter}
+        statusFilter={statusFilter}
+        visible={filterSheetVisible}
+      />
     </Screen>
   );
 }
@@ -620,43 +669,14 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     );
   }
 
-  const canCreateFollowUpTask = canCreateTaskFromReportStatus(report.status);
   const hasFollowUpTasks = followUpTasks.length > 0;
   const hasActiveFollowUpTask = followUpTasks.some((task) => task.status === 'pending' || task.status === 'postponed');
   const allFollowUpTasksCompleted = hasFollowUpTasks && followUpTasks.every((task) => task.status === 'completed');
-  const canMarkResolved = report.status !== 'resolved' && report.status !== 'rejected' && allFollowUpTasksCompleted;
-  const ownerReportFooter = canMarkResolved ? (
-    <Button
-      title="Tandai Laporan Selesai"
-      loading={updatingStatus === 'resolved'}
-      onPress={() => handleStatusUpdate('resolved')}
-    />
-  ) : canCreateFollowUpTask && !hasActiveFollowUpTask && !hasFollowUpTasks ? (
-    <Button
-      title="Buat Tugas Tindak Lanjut"
-      onPress={() => router.push(`/owner/reports/${report.id}/task`)}
-    />
-  ) : !canCreateFollowUpTask ? (
-    <Button
-      title="Tugas Tindak Lanjut Tidak Tersedia"
-      disabled
-      variant="secondary"
-      onPress={() => undefined}
-    />
-  ) : null;
 
   return (
-    <Screen footer={ownerReportFooter}>
+    <Screen>
       <TopAppBar title="Detail Laporan" onBack={() => router.back()} />
       <ErrorBanner message={error} />
-
-      {!canCreateFollowUpTask ? (
-        <Card>
-          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-            {getClosedReportTaskMessage(report.status)}
-          </Text>
-        </Card>
-      ) : null}
 
       <Card variant="highlight">
         <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
@@ -690,21 +710,15 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
         workerNames={workerNames}
       />
 
-      <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          Keputusan Laporan
-        </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {operationalReportStatusOptions.map((status) => (
-            <ChipButton
-              key={status}
-              active={report.status === status || updatingStatus === status}
-              label={formatOperationalReportStatus(status)}
-              onPress={() => handleStatusUpdate(status)}
-            />
-          ))}
-        </View>
-      </Card>
+      <OwnerReportDecisionSection
+        allFollowUpTasksCompleted={allFollowUpTasksCompleted}
+        hasActiveFollowUpTask={hasActiveFollowUpTask}
+        hasFollowUpTasks={hasFollowUpTasks}
+        onCreateTask={() => router.push(`/owner/reports/${report.id}/task`)}
+        onUpdateStatus={handleStatusUpdate}
+        reportStatus={report.status}
+        updatingStatus={updatingStatus}
+      />
     </Screen>
   );
 }
@@ -923,11 +937,224 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
   );
 }
 
+function ReportSearchFilterRow({
+  categoryFilter,
+  onOpenFilter,
+  onSearchChange,
+  searchQuery,
+  statusFilter,
+}: {
+  categoryFilter: OperationalReportCategoryFilter;
+  onOpenFilter: () => void;
+  onSearchChange: (value: string) => void;
+  searchQuery: string;
+  statusFilter: OperationalReportStatusFilter;
+}) {
+  const activeFilterCount = Number(statusFilter !== 'all') + Number(categoryFilter !== 'all');
+
+  return (
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <TextInput
+        autoCapitalize="none"
+        autoCorrect={false}
+        onChangeText={onSearchChange}
+        placeholder="Cari laporan, lokasi, atau pelapor"
+        placeholderTextColor="#94A098"
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderColor: '#DCE7D5',
+          borderRadius: 14,
+          borderWidth: 1,
+          color: '#1E2A24',
+          flex: 1,
+          fontSize: 15,
+          minHeight: 48,
+          paddingHorizontal: 14,
+        }}
+        value={searchQuery}
+      />
+      <Pressable
+        accessibilityRole="button"
+        onPress={onOpenFilter}
+        style={{
+          alignItems: 'center',
+          backgroundColor: activeFilterCount > 0 ? appTheme.primary : '#FFFFFF',
+          borderColor: activeFilterCount > 0 ? appTheme.primary : '#DCE7D5',
+          borderRadius: 14,
+          borderWidth: 1,
+          justifyContent: 'center',
+          minHeight: 48,
+          paddingHorizontal: 15,
+        }}
+      >
+        <Text selectable style={{ color: activeFilterCount > 0 ? '#FFFFFF' : '#1E2A24', fontSize: 14, fontWeight: '900' }}>
+          Filter{activeFilterCount > 0 ? ` ${activeFilterCount}` : ''}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function ReportFilterSheet({
+  categoryFilter,
+  onClose,
+  onReset,
+  onSelectCategory,
+  onSelectStatus,
+  statusFilter,
+  visible,
+}: {
+  categoryFilter: OperationalReportCategoryFilter;
+  onClose: () => void;
+  onReset: () => void;
+  onSelectCategory: (category: OperationalReportCategoryFilter) => void;
+  onSelectStatus: (status: OperationalReportStatusFilter) => void;
+  statusFilter: OperationalReportStatusFilter;
+  visible: boolean;
+}) {
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+      <View style={{ backgroundColor: 'rgba(30, 42, 36, 0.28)', flex: 1, justifyContent: 'flex-end' }}>
+        <Pressable accessibilityRole="button" onPress={onClose} style={{ flex: 1 }} />
+        <View
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            gap: 18,
+            padding: 20,
+            paddingBottom: 24,
+          }}
+        >
+          <View style={{ gap: 5 }}>
+            <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '900' }}>
+              Filter Laporan
+            </Text>
+            <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+              Pilih status dan kategori laporan yang ingin ditampilkan.
+            </Text>
+          </View>
+
+          <ReportStatusFilter selectedStatus={statusFilter} onSelect={onSelectStatus} />
+          <ReportCategoryFilter selectedCategory={categoryFilter} onSelect={onSelectCategory} />
+
+          <View style={{ gap: 10 }}>
+            <Button title="Terapkan Filter" onPress={onClose} />
+            <Button
+              title="Reset Filter"
+              variant="secondary"
+              onPress={() => {
+                onReset();
+                onClose();
+              }}
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function OwnerReportDecisionSection({
+  allFollowUpTasksCompleted,
+  hasActiveFollowUpTask,
+  hasFollowUpTasks,
+  onCreateTask,
+  onUpdateStatus,
+  reportStatus,
+  updatingStatus,
+}: {
+  allFollowUpTasksCompleted: boolean;
+  hasActiveFollowUpTask: boolean;
+  hasFollowUpTasks: boolean;
+  onCreateTask: () => void;
+  onUpdateStatus: (status: OperationalReportStatus) => void;
+  reportStatus: OperationalReportStatus;
+  updatingStatus: OperationalReportStatus | null;
+}) {
+  if (reportStatus === 'new') {
+    return (
+      <Card>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
+          Tindakan Owner
+        </Text>
+        <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+          Laporan belum direspons. Pilih tindak lanjut yang paling sesuai dengan kondisi lapangan.
+        </Text>
+        <View style={{ gap: 10 }}>
+          {!hasFollowUpTasks ? (
+            <Button title="Buat Tugas Tindak Lanjut" onPress={onCreateTask} />
+          ) : (
+            <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+              Tugas tindak lanjut sudah tersedia untuk laporan ini.
+            </Text>
+          )}
+          <Button
+            title="Tandai Selesai Tanpa Tugas"
+            loading={updatingStatus === 'resolved'}
+            variant="secondary"
+            onPress={() => onUpdateStatus('resolved')}
+          />
+          <Button
+            title="Tolak Laporan"
+            loading={updatingStatus === 'rejected'}
+            variant="danger"
+            onPress={() => onUpdateStatus('rejected')}
+          />
+        </View>
+      </Card>
+    );
+  }
+
+  if (reportStatus === 'in_progress') {
+    return (
+      <Card>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
+          Tindakan Owner
+        </Text>
+        {allFollowUpTasksCompleted ? (
+          <>
+            <Text selectable style={{ color: appTheme.primary, fontWeight: '800', lineHeight: 21 }}>
+              Tugas tindak lanjut sudah selesai. Tinjau hasilnya lalu tandai laporan selesai.
+            </Text>
+            <Button
+              title="Tandai Laporan Selesai"
+              loading={updatingStatus === 'resolved'}
+              onPress={() => onUpdateStatus('resolved')}
+            />
+          </>
+        ) : hasActiveFollowUpTask ? (
+          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+            Menunggu pekerja menyelesaikan tugas tindak lanjut.
+          </Text>
+        ) : (
+          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+            Laporan sedang dalam tindak lanjut. Status final tetap diputuskan oleh pemilik.
+          </Text>
+        )}
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
+        Status Final
+      </Text>
+      <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+        {reportStatus === 'resolved' ? 'Laporan selesai.' : 'Laporan ditolak.'}
+      </Text>
+    </Card>
+  );
+}
+
 function OperationalReportCard({
+  compactStatus = false,
   onPress,
   report,
   reporterName,
 }: {
+  compactStatus?: boolean;
   onPress?: () => void;
   report: OperationalReport;
   reporterName?: string;
@@ -944,7 +1171,11 @@ function OperationalReportCard({
           >
             {formatOperationalReportCategory(report.category)}
           </Text>
-          <Badge label={formatOperationalReportStatus(report.status)} maxWidth={150} tone={getReportStatusTone(report.status)} />
+          <Badge
+            label={compactStatus ? formatOperationalReportStatusShort(report.status) : formatOperationalReportStatus(report.status)}
+            maxWidth={compactStatus ? 118 : 150}
+            tone={getReportStatusTone(report.status)}
+          />
         </View>
         <Text selectable ellipsizeMode="tail" numberOfLines={2} style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
           {formatReportSummary(report)}
@@ -1031,7 +1262,7 @@ function ReportSummary({ compact, reports }: { compact?: boolean; reports: Opera
         { label: 'Selesai', value: countReportsByStatus(reports, 'resolved') },
       ]
     : [
-        { label: 'Belum direspons', value: countReportsByStatus(reports, 'new') },
+        { label: 'Belum respons', value: countReportsByStatus(reports, 'new') },
         { label: 'Tindak lanjut', value: countReportsByStatus(reports, 'in_progress') },
         { label: 'Selesai', value: countReportsByStatus(reports, 'resolved') },
         { label: 'Ditolak', value: countReportsByStatus(reports, 'rejected') },
@@ -1047,13 +1278,14 @@ function ReportSummary({ compact, reports }: { compact?: boolean; reports: Opera
             borderColor: '#DCE7D5',
             borderRadius: 14,
             borderWidth: 1,
-            flexBasis: compact ? '30%' : '22%',
+            flexBasis: compact ? '30%' : '47%',
             flexGrow: 1,
             gap: 3,
+            minHeight: compact ? 74 : 78,
             padding: 11,
           }}
         >
-          <Text selectable numberOfLines={1} style={{ color: appTheme.muted, fontSize: 12, fontWeight: '800' }}>
+          <Text selectable numberOfLines={2} style={{ color: appTheme.muted, fontSize: 12, fontWeight: '800', lineHeight: 16 }}>
             {item.label}
           </Text>
           <Text selectable style={{ color: appTheme.primary, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
@@ -1067,7 +1299,6 @@ function ReportSummary({ compact, reports }: { compact?: boolean; reports: Opera
 
 function ReportFollowUpSection({
   mode,
-  reportStatus,
   tasks,
   workerNames,
 }: {
@@ -1076,9 +1307,6 @@ function ReportFollowUpSection({
   tasks: CareTaskDetail[];
   workerNames: Record<string, string>;
 }) {
-  const allTasksCompleted = tasks.length > 0 && tasks.every((task) => task.status === 'completed');
-  const hasOpenTask = tasks.some((task) => task.status === 'pending' || task.status === 'postponed');
-
   return (
     <View style={{ gap: 12 }}>
       <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '800', paddingTop: 4 }}>
@@ -1103,20 +1331,6 @@ function ReportFollowUpSection({
           ))}
         </View>
       )}
-
-      {allTasksCompleted && reportStatus !== 'resolved' && reportStatus !== 'rejected' ? (
-        <Card>
-          <Text selectable style={{ color: appTheme.primary, fontWeight: '800', lineHeight: 21 }}>
-            Tugas tindak lanjut sudah selesai. Tinjau hasilnya lalu tandai laporan selesai.
-          </Text>
-        </Card>
-      ) : hasOpenTask ? (
-        <Card>
-          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-            Tugas tindak lanjut masih berjalan. Status laporan tetap dikendalikan oleh pemilik.
-          </Text>
-        </Card>
-      ) : null}
     </View>
   );
 }

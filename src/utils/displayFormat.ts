@@ -74,6 +74,17 @@ export function formatOperationalReportStatus(status: OperationalReportStatus): 
   return labels[status];
 }
 
+export function formatOperationalReportStatusShort(status: OperationalReportStatus): string {
+  const labels: Record<OperationalReportStatus, string> = {
+    in_progress: 'Tindak lanjut',
+    new: 'Belum respons',
+    rejected: 'Ditolak',
+    resolved: 'Selesai',
+  };
+
+  return labels[status];
+}
+
 export function formatOperationalReportCategory(category: OperationalReportCategory): string {
   const labels: Record<OperationalReportCategory, string> = {
     area_pest_disease: 'Hama/Penyakit Area',

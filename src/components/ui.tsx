@@ -39,23 +39,46 @@ export function Screen({
   floatingAction,
   floatingActionBottom = 24,
   footer,
+  stickyFooter,
 }: {
   children: React.ReactNode;
   floatingAction?: React.ReactNode;
   floatingActionBottom?: number;
   footer?: React.ReactNode;
+  stickyFooter?: React.ReactNode;
 }) {
+  const insets = useSafeAreaInsets();
+  const overlayBottomPadding = stickyFooter ? 128 + insets.bottom : floatingAction ? 132 : 20;
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         style={{ flex: 1, backgroundColor: colors.background }}
-        contentContainerStyle={{ flexGrow: 1, padding: 20, gap: 18, paddingBottom: floatingAction ? 132 : 20 }}
+        contentContainerStyle={{ flexGrow: 1, padding: 20, gap: 18, paddingBottom: overlayBottomPadding }}
       >
         <View style={{ flex: 1, gap: 18 }}>{children}</View>
         {footer ? <View style={{ gap: 10, paddingBottom: 16 }}>{footer}</View> : null}
       </ScrollView>
+      {stickyFooter ? (
+        <View
+          style={{
+            backgroundColor: colors.background,
+            borderTopColor: colors.border,
+            borderTopWidth: 1,
+            bottom: 0,
+            left: 0,
+            paddingBottom: Math.max(insets.bottom, 12),
+            paddingHorizontal: 20,
+            paddingTop: 12,
+            position: 'absolute',
+            right: 0,
+          }}
+        >
+          {stickyFooter}
+        </View>
+      ) : null}
       {floatingAction ? (
         <View style={{ bottom: floatingActionBottom, position: 'absolute', right: 20 }}>{floatingAction}</View>
       ) : null}
