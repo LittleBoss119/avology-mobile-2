@@ -85,13 +85,13 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/trees/[treeId]/report" options={{ title: 'Catat Kondisi' }} />
           <Stack.Screen name="owner/trees/[treeId]/phase" options={{ title: 'Catat Fase' }} />
           <Stack.Screen name="owner/sops/index" options={{ title: 'SOP Perawatan' }} />
-          <Stack.Screen name="owner/sops/create" options={{ title: 'Tambah SOP' }} />
-          <Stack.Screen name="owner/sops/[sopId]" options={{ title: 'Detail SOP' }} />
-          <Stack.Screen name="owner/sops/[sopId]/edit" options={{ title: 'Edit SOP' }} />
-          <Stack.Screen name="owner/sops/[sopId]/schedule" options={{ title: 'Buat Jadwal' }} />
+          <Stack.Screen name="owner/sops/create" options={{ headerShown: false, title: 'Tambah SOP' }} />
+          <Stack.Screen name="owner/sops/[sopId]" options={{ headerShown: false, title: 'Detail SOP' }} />
+          <Stack.Screen name="owner/sops/[sopId]/edit" options={{ headerShown: false, title: 'Edit SOP' }} />
+          <Stack.Screen name="owner/sops/[sopId]/schedule" options={{ headerShown: false, title: 'Buat Jadwal' }} />
           <Stack.Screen name="owner/schedules/index" options={{ headerBackVisible: false, title: 'Jadwal Perawatan' }} />
-          <Stack.Screen name="owner/schedules/create" options={{ title: 'Jadwal Manual' }} />
-          <Stack.Screen name="owner/schedules/[scheduleId]" options={{ title: 'Detail Jadwal' }} />
+          <Stack.Screen name="owner/schedules/create" options={{ headerShown: false, title: 'Jadwal Manual' }} />
+          <Stack.Screen name="owner/schedules/[scheduleId]" options={{ headerShown: false, title: 'Detail Jadwal' }} />
           <Stack.Screen name="owner/tasks/index" options={{ title: 'Tugas Pekerja' }} />
           <Stack.Screen name="owner/tasks/[taskId]" options={{ title: 'Detail Tugas' }} />
           <Stack.Screen name="owner/reports/index" options={{ headerBackVisible: false, title: 'Laporan Operasional' }} />

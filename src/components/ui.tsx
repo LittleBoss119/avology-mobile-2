@@ -1,6 +1,6 @@
 import React from 'react';
 import DateTimePicker, {
-  type DateTimePickerEvent,
+  type DateTimePickerChangeEvent,
 } from '@react-native-community/datetimepicker';
 import {
   ActivityIndicator,
@@ -51,7 +51,7 @@ export function Screen({
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         style={{ flex: 1, backgroundColor: colors.background }}
-        contentContainerStyle={{ flexGrow: 1, padding: 20, gap: 18, paddingBottom: floatingAction ? 96 : 20 }}
+        contentContainerStyle={{ flexGrow: 1, padding: 20, gap: 18, paddingBottom: floatingAction ? 132 : 20 }}
       >
         <View style={{ flex: 1, gap: 18 }}>{children}</View>
         {footer ? <View style={{ gap: 10, paddingBottom: 16 }}>{footer}</View> : null}
@@ -233,7 +233,15 @@ const badgeColors: Record<BadgeTone, { background: string; border: string; text:
   },
 };
 
-export function Badge({ label, tone = 'muted' }: { label: string; tone?: BadgeTone }) {
+export function Badge({
+  label,
+  maxWidth = 128,
+  tone = 'muted',
+}: {
+  label: string;
+  maxWidth?: number;
+  tone?: BadgeTone;
+}) {
   const badge = badgeColors[tone];
 
   return (
@@ -246,7 +254,7 @@ export function Badge({ label, tone = 'muted' }: { label: string; tone?: BadgeTo
         borderWidth: 1,
         paddingHorizontal: 10,
         paddingVertical: 5,
-        maxWidth: 104,
+        maxWidth,
       }}
     >
       <Text selectable numberOfLines={1} style={{ color: badge.text, fontSize: 12, fontWeight: '700' }}>
@@ -390,16 +398,16 @@ export function DateField({
   const [showPicker, setShowPicker] = React.useState(false);
   const selectedDate = parseIsoDate(value) ?? new Date();
 
-  function handleChange(event: DateTimePickerEvent, date?: Date) {
+  function handleValueChange(_event: DateTimePickerChangeEvent, date: Date) {
     if (Platform.OS !== 'ios') {
       setShowPicker(false);
     }
 
-    if (event.type === 'dismissed' || !date) {
-      return;
-    }
-
     onChangeDate(formatIsoDate(date));
+  }
+
+  function handleDismiss() {
+    setShowPicker(false);
   }
 
   return (
@@ -411,16 +419,20 @@ export function DateField({
         accessibilityRole="button"
         onPress={() => setShowPicker(true)}
         style={{
+          alignItems: 'center',
           backgroundColor: colors.surface,
           borderColor: colors.border,
           borderCurve: 'continuous',
           borderRadius: 12,
           borderWidth: 1,
+          flexDirection: 'row',
+          gap: 10,
           justifyContent: 'center',
           minHeight: 50,
           paddingHorizontal: 15,
         }}
       >
+        <DateFieldCalendarIcon />
         <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
           {formatFriendlyDate(value)}
         </Text>
@@ -429,10 +441,20 @@ export function DateField({
         <DateTimePicker
           display="default"
           mode="date"
-          onChange={handleChange}
+          onDismiss={handleDismiss}
+          onNeutralButtonPress={handleDismiss}
+          onValueChange={handleValueChange}
           value={selectedDate}
         />
       ) : null}
+    </View>
+  );
+}
+
+function DateFieldCalendarIcon() {
+  return (
+    <View style={{ borderColor: colors.primary, borderRadius: 4, borderWidth: 2, height: 18, width: 17 }}>
+      <View style={{ backgroundColor: colors.primary, height: 2, marginTop: 4 }} />
     </View>
   );
 }

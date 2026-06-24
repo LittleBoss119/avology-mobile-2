@@ -1,5 +1,5 @@
 import React from 'react';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
 import { Platform, Pressable, Text, View } from 'react-native';
 
 import type {
@@ -217,14 +217,16 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
     });
   }
 
-  function handleDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
+  function handleDateValueChange(_event: DateTimePickerChangeEvent, selectedDate: Date) {
     if (Platform.OS === 'android') {
       setDatePickerOpen(false);
     }
 
-    if (event.type === 'set' && selectedDate) {
-      updateDateValue(selectedDate);
-    }
+    updateDateValue(selectedDate);
+  }
+
+  function handleDateDismiss() {
+    setDatePickerOpen(false);
   }
 
   return (
@@ -279,7 +281,9 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
           <DateTimePicker
             display={Platform.OS === 'ios' ? 'inline' : 'default'}
             mode="date"
-            onChange={handleDateChange}
+            onDismiss={handleDateDismiss}
+            onNeutralButtonPress={handleDateDismiss}
+            onValueChange={handleDateValueChange}
             value={values.plantedAt ?? new Date()}
           />
         ) : null}

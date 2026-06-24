@@ -5,7 +5,7 @@ import {
   CareSOPForm,
   type CareSOPFormValues,
 } from '../../../../src/components/care-sop-components';
-import { Button, ErrorBanner, LoadingState, PageIntro, Screen } from '../../../../src/components/ui';
+import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { createCareSOP } from '../../../../src/services/careSopService';
 import { getTrees } from '../../../../src/services/treeService';
@@ -115,13 +115,10 @@ export default function CreateCareSOPScreen() {
   return (
     <Screen
       footer={
-        <>
-          <Button title="Simpan SOP" loading={submitting} onPress={handleSubmit} />
-          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
-        </>
+        <Button title="Simpan SOP" loading={submitting} onPress={handleSubmit} />
       }
     >
-      <PageIntro title="Tambah SOP" subtitle="Buat template perawatan untuk dipakai saat membuat jadwal." />
+      <TopAppBar title="Tambah SOP" onBack={() => router.back()} />
       <ErrorBanner message={error} />
       <CareSOPForm values={values} trees={trees} onChange={setValues} />
     </Screen>

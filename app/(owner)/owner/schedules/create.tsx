@@ -134,11 +134,7 @@ export default function CreateManualScheduleScreen() {
         <Button title="Simpan Jadwal" loading={submitting} onPress={handleSubmit} />
       }
     >
-      <TopAppBar
-        title="Jadwal Manual"
-        subtitle="Buat jadwal perawatan dan tugaskan ke pekerja aktif."
-        onBack={() => router.back()}
-      />
+      <TopAppBar title="Jadwal Manual" onBack={() => router.back()} />
       <ErrorBanner message={error} />
       <ManualScheduleForm values={values} trees={trees} workers={workers} onChange={setValues} />
     </Screen>

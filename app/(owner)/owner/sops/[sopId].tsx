@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, Text, View } from 'react-native';
 
 import {
   formatCareCategory,
@@ -9,6 +9,7 @@ import {
   ScheduleReferenceSummary,
 } from '../../../../src/components/care-sop-components';
 import {
+  appTheme,
   Badge,
   Button,
   Card,
@@ -16,8 +17,8 @@ import {
   ErrorBanner,
   LoadingState,
   MetaRow,
-  PageIntro,
   Screen,
+  TopAppBar,
 } from '../../../../src/components/ui';
 import {
   getCareSOPDetail,
@@ -29,6 +30,7 @@ import type { CareSOP, CareSOPNextScheduleReference } from '../../../../src/type
 export default function CareSOPDetailScreen() {
   const { sopId } = useLocalSearchParams<{ sopId: string }>();
   const [actionLoading, setActionLoading] = React.useState(false);
+  const [actionMenuOpen, setActionMenuOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [reference, setReference] = React.useState<CareSOPNextScheduleReference | null>(null);
@@ -80,6 +82,7 @@ export default function CareSOPDetailScreen() {
       return;
     }
 
+    setActionMenuOpen(false);
     const nextIsActive = !sop.isActive;
 
     Alert.alert(
@@ -132,8 +135,8 @@ export default function CareSOPDetailScreen() {
 
   if (!sop) {
     return (
-      <Screen footer={<Button title="Kembali" variant="secondary" onPress={() => router.replace('/owner/sops')} />}>
-        <PageIntro title="Detail SOP" subtitle="Data SOP tidak dapat dimuat." />
+      <Screen>
+        <TopAppBar title="Detail SOP" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <EmptyState title="SOP tidak ditemukan" subtitle="SOP mungkin sudah tidak tersedia atau akses ditolak." />
       </Screen>
@@ -149,29 +152,39 @@ export default function CareSOPDetailScreen() {
             disabled={!sop.isActive}
             onPress={() => router.push(`/owner/sops/${sop.id}/schedule`)}
           />
-          <Button title="Edit SOP" variant="secondary" onPress={() => router.push(`/owner/sops/${sop.id}/edit`)} />
-          <Button
-            title={sop.isActive ? 'Nonaktifkan SOP' : 'Aktifkan SOP'}
-            variant={sop.isActive ? 'danger' : 'secondary'}
-            loading={actionLoading}
-            onPress={handleActiveToggle}
-          />
         </>
       }
     >
-      <PageIntro title="Template SOP" subtitle="Detail perawatan dan acuan jadwal berikutnya." />
+      <TopAppBar
+        right={<MenuButton onPress={() => setActionMenuOpen(true)} />}
+        title="Detail SOP"
+        onBack={() => router.back()}
+      />
+      <SOPActionMenu
+        actionLoading={actionLoading}
+        isActive={sop.isActive}
+        onClose={() => setActionMenuOpen(false)}
+        onEdit={() => {
+          setActionMenuOpen(false);
+          router.push(`/owner/sops/${sop.id}/edit`);
+        }}
+        onToggle={handleActiveToggle}
+        visible={actionMenuOpen}
+      />
       <ErrorBanner message={error} />
 
       <Card variant="highlight">
+        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
+          {sop.name}
+        </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <Badge label={formatCareCategory(sop.category)} tone="success" />
           <Badge label={sop.isActive ? 'Aktif' : 'Nonaktif'} tone={sop.isActive ? 'success' : 'muted'} />
         </View>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
-          {sop.name}
-        </Text>
-        <MetaRow label="Periode perawatan" value={formatIntervalDays(sop.intervalDays)} />
-        <MetaRow label="Target bawaan" value={formatCareSOPTarget(sop)} />
+        <View style={{ gap: 10 }}>
+          <MetaRow label="Periode" value={formatIntervalDays(sop.intervalDays)} />
+          <MetaRow label="Target bawaan" value={formatCareSOPTarget(sop)} />
+        </View>
       </Card>
 
       <Card>
@@ -179,7 +192,7 @@ export default function CareSOPDetailScreen() {
           Instruksi Bawaan
         </Text>
         <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-          {sop.defaultInstruction || 'Instruksi belum diisi.'}
+          {sop.defaultInstruction || '-'}
         </Text>
       </Card>
 
@@ -196,5 +209,104 @@ export default function CareSOPDetailScreen() {
         )}
       </Card>
     </Screen>
+  );
+}
+
+function MenuButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityLabel="Buka aksi SOP"
+      accessibilityRole="button"
+      onPress={onPress}
+      style={{
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderColor: '#DCE7D5',
+        borderRadius: 999,
+        borderWidth: 1,
+        height: 44,
+        justifyContent: 'center',
+        width: 44,
+      }}
+    >
+      <Text selectable style={{ color: appTheme.primary, fontSize: 20, fontWeight: '900', lineHeight: 22 }}>
+        ...
+      </Text>
+    </Pressable>
+  );
+}
+
+function SOPActionMenu({
+  actionLoading,
+  isActive,
+  onClose,
+  onEdit,
+  onToggle,
+  visible,
+}: {
+  actionLoading: boolean;
+  isActive: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onToggle: () => void;
+  visible: boolean;
+}) {
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
+      <Pressable style={{ flex: 1 }} onPress={onClose}>
+        <View
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderColor: '#DCE7D5',
+            borderRadius: 16,
+            borderWidth: 1,
+            gap: 4,
+            padding: 6,
+            position: 'absolute',
+            right: 20,
+            top: 76,
+            width: 190,
+          }}
+        >
+          <MenuActionItem label="Edit SOP" onPress={onEdit} />
+          <MenuActionItem
+            disabled={actionLoading}
+            label={isActive ? 'Nonaktifkan SOP' : 'Aktifkan SOP'}
+            tone={isActive ? 'danger' : 'default'}
+            onPress={onToggle}
+          />
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function MenuActionItem({
+  disabled,
+  label,
+  onPress,
+  tone = 'default',
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress: () => void;
+  tone?: 'danger' | 'default';
+}) {
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        backgroundColor: pressed ? appTheme.primarySoft : '#FFFFFF',
+        borderRadius: 12,
+        opacity: disabled ? 0.6 : 1,
+        paddingHorizontal: 12,
+        paddingVertical: 11,
+      })}
+    >
+      <Text selectable style={{ color: tone === 'danger' ? '#B42318' : appTheme.text, fontSize: 14, fontWeight: '800' }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }

@@ -271,11 +271,7 @@ export default function CreateScheduleFromSOPScreen() {
         />
       }
     >
-      <TopAppBar
-        title="Buat Jadwal"
-        subtitle="Gunakan SOP sebagai dasar jadwal dan tugas pekerja."
-        onBack={() => router.back()}
-      />
+      <TopAppBar title="Buat Jadwal" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
       <Card variant="highlight">

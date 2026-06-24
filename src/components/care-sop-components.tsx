@@ -53,27 +53,30 @@ export function CareSOPCard({
 }) {
   const content = (
     <Card>
-      <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
-        <View style={{ flex: 1, gap: 5 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '900', lineHeight: 24 }}>
+      <View style={{ gap: 8 }}>
+        <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 8, justifyContent: 'space-between' }}>
+          <Text
+            selectable
+            ellipsizeMode="tail"
+            numberOfLines={1}
+            style={{ color: appTheme.primary, flex: 1, fontSize: 17, fontWeight: '900' }}
+          >
             {sop.name}
           </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            <Badge label={formatCareCategory(sop.category)} tone="success" />
-            <Badge label={sop.isActive ? 'Aktif' : 'Nonaktif'} tone={sop.isActive ? 'success' : 'muted'} />
-          </View>
+          <Badge label={sop.isActive ? 'Aktif' : 'Nonaktif'} maxWidth={86} tone={sop.isActive ? 'success' : 'muted'} />
+        </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+          <Badge label={formatCareCategoryShort(sop.category)} maxWidth={116} tone="success" />
+        </View>
+        <View style={{ gap: 3 }}>
+          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: appTheme.muted, fontSize: 13, lineHeight: 18 }}>
+            {formatIntervalDays(sop.intervalDays)} - {formatCareSOPTarget(sop)}
+          </Text>
+          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: appTheme.muted, fontSize: 13, lineHeight: 18 }}>
+            Acuan: {reference ? formatScheduleReferenceShortStatus(reference) : 'Belum ada'}
+          </Text>
         </View>
       </View>
-      {sop.defaultInstruction ? (
-        <Text selectable numberOfLines={2} style={{ color: '#68746D', lineHeight: 20 }}>
-          {sop.defaultInstruction}
-        </Text>
-      ) : null}
-      <View style={{ backgroundColor: appTheme.primarySoft, borderRadius: 12, gap: 8, padding: 12 }}>
-        <MetaRow label="Periode" value={formatIntervalDays(sop.intervalDays)} />
-        <MetaRow label="Target bawaan" value={formatCareSOPTarget(sop)} />
-      </View>
-      {reference ? <ScheduleReferenceSummary reference={reference} compact /> : null}
     </Card>
   );
 
@@ -213,8 +216,8 @@ export function ScheduleReferenceSummary({
           ) : null}
         </>
       ) : reference.nextDueDate ? (
-        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-          {reference.nextDueDate}
+        <Text selectable numberOfLines={1} style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
+          {formatDateOnly(reference.nextDueDate)}
         </Text>
       ) : null}
     </View>
@@ -222,6 +225,18 @@ export function ScheduleReferenceSummary({
 }
 
 export { formatCareCategory };
+
+function formatCareCategoryShort(category: CareCategory): string {
+  if (category === 'other') {
+    return 'Lainnya';
+  }
+
+  if (category === 'weeding') {
+    return 'Gulma';
+  }
+
+  return formatCareCategory(category);
+}
 
 export function formatCareSOPTarget(sop: CareSOP): string {
   if (sop.defaultTargetType === 'farm') {
@@ -240,7 +255,7 @@ export function formatCareSOPTarget(sop: CareSOP): string {
 }
 
 export function formatIntervalDays(intervalDays: number | null): string {
-  return intervalDays ? `${intervalDays} hari` : 'Belum diisi';
+  return intervalDays ? `Setiap ${intervalDays} hari` : 'Belum ada';
 }
 
 export function formatScheduleReferenceStatus(
@@ -260,6 +275,26 @@ export function formatScheduleReferenceStatus(
 
   if (reference.status === 'due_today') {
     return 'Jatuh tempo hari ini';
+  }
+
+  return 'Terlambat';
+}
+
+function formatScheduleReferenceShortStatus(reference: CareSOPNextScheduleReference): string {
+  if (reference.status === 'no_history') {
+    return 'Belum ada';
+  }
+
+  if (reference.status === 'no_interval') {
+    return 'Belum ada';
+  }
+
+  if (reference.status === 'upcoming') {
+    return 'Belum jatuh';
+  }
+
+  if (reference.status === 'due_today') {
+    return 'Hari ini';
   }
 
   return 'Terlambat';
@@ -382,6 +417,20 @@ function formatDateTime(value: string | null): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatDateOnly(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
     month: 'short',
     year: 'numeric',
   });

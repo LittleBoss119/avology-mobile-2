@@ -124,7 +124,7 @@ export default function CareScheduleDetailScreen() {
           Instruksi
         </Text>
         <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-          {schedule.instruction || 'Instruksi belum diisi.'}
+          {schedule.instruction || '-'}
         </Text>
       </Card>
 

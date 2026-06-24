@@ -5,7 +5,7 @@ import {
   CareSOPForm,
   type CareSOPFormValues,
 } from '../../../../../src/components/care-sop-components';
-import { Button, ErrorBanner, LoadingState, PageIntro, Screen } from '../../../../../src/components/ui';
+import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../../src/components/ui';
 import { getCareSOPDetail, updateCareSOP } from '../../../../../src/services/careSopService';
 import { getTrees } from '../../../../../src/services/treeService';
 import type { CareCategory, Tree } from '../../../../../src/types/domain';
@@ -139,13 +139,10 @@ export default function EditCareSOPScreen() {
   return (
     <Screen
       footer={
-        <>
-          <Button title="Simpan Perubahan" loading={submitting} onPress={handleSubmit} />
-          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
-        </>
+        <Button title="Simpan Perubahan" loading={submitting} onPress={handleSubmit} />
       }
     >
-      <PageIntro title="Edit SOP" subtitle="Perbarui template perawatan agar tetap sesuai kebutuhan kebun." />
+      <TopAppBar title="Edit SOP" onBack={() => router.back()} />
       <ErrorBanner message={error} />
       <CareSOPForm values={values} trees={trees} onChange={setValues} />
     </Screen>

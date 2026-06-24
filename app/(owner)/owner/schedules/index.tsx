@@ -356,32 +356,89 @@ function CompactScheduleCard({
   return (
     <Pressable onPress={onPress}>
       <Card>
-        <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 10, justifyContent: 'space-between' }}>
-          <View style={{ flex: 1, gap: 7 }}>
-            <Text selectable numberOfLines={1} style={{ color: appTheme.primary, fontSize: 17, fontWeight: '900' }}>
-              {schedule.title}
+        <View style={{ gap: 8 }}>
+          <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 8, justifyContent: 'space-between' }}>
+            <Text
+              selectable
+              ellipsizeMode="tail"
+              numberOfLines={1}
+              style={{ color: appTheme.primary, flex: 1, fontSize: 17, fontWeight: '900' }}
+            >
+                {schedule.title}
             </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-              <Badge label={formatScheduleStatusLabel(status)} tone={getScheduleStatusTone(status)} />
-              <Badge label={schedule.careSopId ? 'Dari SOP' : 'Manual'} tone={schedule.careSopId ? 'warning' : 'muted'} />
-            </View>
+            <Badge label={formatScheduleStatusLabel(status)} maxWidth={116} tone={getScheduleStatusTone(status)} />
           </View>
-          <Text selectable style={{ color: appTheme.primary, fontSize: 28, fontWeight: '300', lineHeight: 30 }}>
-            {'>'}
-          </Text>
-        </View>
-        <View style={{ gap: 5 }}>
-          <Text selectable numberOfLines={1} style={{ color: appTheme.muted, fontSize: 14, lineHeight: 20 }}>
-            {formatDate(schedule.scheduledDate)} - {formatCareTarget(schedule)}
-          </Text>
-          {workers.length > 0 ? (
-            <Text selectable numberOfLines={1} style={{ color: appTheme.muted, fontSize: 13, lineHeight: 18 }}>
-              {workers.join(', ')}
-            </Text>
-          ) : null}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+            <Badge label={schedule.careSopId ? 'Dari SOP' : 'Manual'} maxWidth={96} tone={schedule.careSopId ? 'warning' : 'muted'} />
+          </View>
+          <ScheduleCardMeta
+            date={formatDate(schedule.scheduledDate)}
+            target={formatCareTarget(schedule)}
+            workers={workers}
+          />
         </View>
       </Card>
     </Pressable>
+  );
+}
+
+function ScheduleCardMeta({
+  date,
+  target,
+  workers,
+}: {
+  date: string;
+  target: string;
+  workers: string[];
+}) {
+  return (
+    <View style={{ gap: 4 }}>
+      <View style={{ alignItems: 'center', flexDirection: 'row', gap: 10 }}>
+        <MetadataItem icon="calendar" label={date} />
+        <MetadataItem icon="target" label={target} />
+      </View>
+      {workers.length > 0 ? (
+        <MetadataItem icon="user" label={workers.join(', ')} />
+      ) : null}
+    </View>
+  );
+}
+
+function MetadataItem({ icon, label }: { icon: 'calendar' | 'target' | 'user'; label: string }) {
+  return (
+    <View style={{ alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 5 }}>
+      <MetadataIcon name={icon} />
+      <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: appTheme.muted, flexShrink: 1, fontSize: 13, lineHeight: 18 }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function MetadataIcon({ name }: { name: 'calendar' | 'target' | 'user' }) {
+  const color = '#68746D';
+
+  if (name === 'calendar') {
+    return (
+      <View style={{ borderColor: color, borderRadius: 3, borderWidth: 1.5, height: 14, width: 13 }}>
+        <View style={{ backgroundColor: color, height: 1.5, marginTop: 3 }} />
+      </View>
+    );
+  }
+
+  if (name === 'target') {
+    return (
+      <View style={{ alignItems: 'center', borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 14, justifyContent: 'center', width: 14 }}>
+        <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, width: 6 }} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ alignItems: 'center', width: 14 }}>
+      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, width: 6 }} />
+      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, marginTop: -1, width: 12 }} />
+    </View>
   );
 }
 
