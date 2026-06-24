@@ -8,6 +8,7 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MetricCard,
   PageIntro,
   Screen,
 } from '../../../../src/components/ui';
@@ -85,6 +86,12 @@ export default function CareSOPListScreen() {
     >
       <PageIntro title="SOP Perawatan" subtitle="Kelola template perawatan untuk membuat jadwal kerja." />
       <ErrorBanner message={error} />
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <MetricCard label="Template" value={sops.length} tone="primary" />
+        <MetricCard label="Aktif" value={sops.filter((sop) => sop.isActive).length} tone="success" />
+        <MetricCard label="Nonaktif" value={sops.filter((sop) => !sop.isActive).length} tone="muted" />
+      </View>
 
       {sops.length === 0 ? (
         <EmptyState

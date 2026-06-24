@@ -11,13 +11,14 @@ import {
 import {
   Button,
   Card,
+  DateField,
   EmptyState,
   ErrorBanner,
   Field,
   LoadingState,
   MetaRow,
-  PageIntro,
   Screen,
+  TopAppBar,
 } from '../../../../../src/components/ui';
 import { useAuth } from '../../../../../src/context/auth-context';
 import { createScheduleFromSOP } from '../../../../../src/services/careScheduleService';
@@ -251,8 +252,8 @@ export default function CreateScheduleFromSOPScreen() {
 
   if (!sop) {
     return (
-      <Screen footer={<Button title="Kembali" variant="secondary" onPress={() => router.back()} />}>
-        <PageIntro title="Buat Jadwal" subtitle="Data SOP tidak dapat dimuat." />
+      <Screen>
+        <TopAppBar title="Buat Jadwal" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <EmptyState title="SOP tidak ditemukan" subtitle="SOP mungkin tidak tersedia atau akses ditolak." />
       </Screen>
@@ -262,21 +263,22 @@ export default function CreateScheduleFromSOPScreen() {
   return (
     <Screen
       footer={
-        <>
-          <Button
-            title="Buat Jadwal dan Tugas"
-            disabled={!sop.isActive}
-            loading={submitting}
-            onPress={handleSubmit}
-          />
-          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
-        </>
+        <Button
+          title="Buat Jadwal dan Tugas"
+          disabled={!sop.isActive}
+          loading={submitting}
+          onPress={handleSubmit}
+        />
       }
     >
-      <PageIntro title="Buat Jadwal" subtitle="Gunakan SOP sebagai dasar jadwal dan tugas pekerja." />
+      <TopAppBar
+        title="Buat Jadwal"
+        subtitle="Gunakan SOP sebagai dasar jadwal dan tugas pekerja."
+        onBack={() => router.back()}
+      />
       <ErrorBanner message={error} />
 
-      <Card>
+      <Card variant="highlight">
         <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
           {sop.name}
         </Text>
@@ -294,32 +296,43 @@ export default function CreateScheduleFromSOPScreen() {
         </Card>
       ) : null}
 
-      <Field
-        label="Tanggal jadwal *"
-        onChangeText={(value) => updateValue('scheduledDate', value)}
-        placeholder="YYYY-MM-DD"
-        value={values.scheduledDate}
-      />
+      <Card>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
+          Jadwal dan Pekerja
+        </Text>
+        <DateField
+          label="Tanggal jadwal *"
+          onChangeDate={(value) => updateValue('scheduledDate', value)}
+          value={values.scheduledDate}
+        />
 
-      <WorkerPicker
-        selectedWorkerId={values.assignedWorkerId}
-        workers={workers}
-        onSelect={selectWorker}
-      />
+        <WorkerPicker
+          selectedWorkerId={values.assignedWorkerId}
+          workers={workers}
+          onSelect={selectWorker}
+        />
+      </Card>
 
-      <TargetPicker
-        onTargetTypeChange={updateTargetType}
-        onValueChange={updateValue}
-        trees={trees}
-        values={values}
-      />
+      <Card>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
+          Target Pekerjaan
+        </Text>
+        <TargetPicker
+          onTargetTypeChange={updateTargetType}
+          onValueChange={updateValue}
+          trees={trees}
+          values={values}
+        />
+      </Card>
 
-      <TextArea
-        label="Instruksi"
-        onChangeText={(value) => updateValue('instruction', value)}
-        placeholder="Instruksi kerja untuk pekerja"
-        value={values.instruction}
-      />
+      <Card>
+        <TextArea
+          label="Instruksi"
+          onChangeText={(value) => updateValue('instruction', value)}
+          placeholder="Instruksi kerja untuk pekerja"
+          value={values.instruction}
+        />
+      </Card>
     </Screen>
   );
 }
@@ -409,7 +422,7 @@ function TargetPicker({
               {trees.map((tree) => (
                 <Button
                   key={tree.id}
-                  title={`${tree.treeCode} - ${formatTreeLocation(tree)}`}
+                  title={formatTreeLocation(tree)}
                   variant={values.targetTreeId === tree.id ? 'primary' : 'secondary'}
                   onPress={() => onValueChange('targetTreeId', tree.id)}
                 />

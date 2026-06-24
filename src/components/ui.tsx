@@ -1,6 +1,10 @@
 import React from 'react';
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -33,10 +37,12 @@ export const appTheme = colors;
 export function Screen({
   children,
   floatingAction,
+  floatingActionBottom = 24,
   footer,
 }: {
   children: React.ReactNode;
   floatingAction?: React.ReactNode;
+  floatingActionBottom?: number;
   footer?: React.ReactNode;
 }) {
   return (
@@ -51,7 +57,7 @@ export function Screen({
         {footer ? <View style={{ gap: 10, paddingBottom: 16 }}>{footer}</View> : null}
       </ScrollView>
       {floatingAction ? (
-        <View style={{ bottom: 24, position: 'absolute', right: 20 }}>{floatingAction}</View>
+        <View style={{ bottom: floatingActionBottom, position: 'absolute', right: 20 }}>{floatingAction}</View>
       ) : null}
     </View>
   );
@@ -250,6 +256,83 @@ export function Badge({ label, tone = 'muted' }: { label: string; tone?: BadgeTo
   );
 }
 
+export function MetricCard({
+  label,
+  tone = 'muted',
+  value,
+}: {
+  label: string;
+  tone?: 'danger' | 'muted' | 'primary' | 'success' | 'warning';
+  value: number | string;
+}) {
+  const textColor =
+    tone === 'danger'
+      ? colors.danger
+      : tone === 'warning'
+        ? '#7A5600'
+        : tone === 'success' || tone === 'primary'
+          ? colors.primary
+          : colors.muted;
+
+  return (
+    <View style={{ flexBasis: '30%', flexGrow: 1, minWidth: 96 }}>
+      <Card>
+        <View style={{ gap: 5, minHeight: 62, justifyContent: 'space-between' }}>
+          <Text selectable numberOfLines={2} style={{ color: colors.muted, fontSize: 12, fontWeight: '700', lineHeight: 17 }}>
+            {label}
+          </Text>
+          <Text selectable style={{ color: textColor, fontSize: 25, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+            {value}
+          </Text>
+        </View>
+      </Card>
+    </View>
+  );
+}
+
+export function ChipButton({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        backgroundColor: active ? colors.primary : colors.surface,
+        borderColor: active ? colors.primary : colors.border,
+        borderRadius: 999,
+        borderWidth: 1,
+        paddingHorizontal: 14,
+        paddingVertical: 9,
+      }}
+    >
+      <Text selectable style={{ color: active ? '#FFFFFF' : colors.text, fontSize: 14, fontWeight: '800' }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+export function SectionTitle({ subtitle, title }: { subtitle?: string; title: string }) {
+  return (
+    <View style={{ gap: 4, paddingTop: 4 }}>
+      <Text selectable style={{ color: colors.text, fontSize: 19, fontWeight: '800' }}>
+        {title}
+      </Text>
+      {subtitle ? (
+        <Text selectable style={{ color: colors.muted, lineHeight: 21 }}>
+          {subtitle}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function Field({
   label,
   value,
@@ -291,6 +374,65 @@ export function Field({
         }}
         value={value}
       />
+    </View>
+  );
+}
+
+export function DateField({
+  label,
+  onChangeDate,
+  value,
+}: {
+  label: string;
+  onChangeDate: (value: string) => void;
+  value: string;
+}) {
+  const [showPicker, setShowPicker] = React.useState(false);
+  const selectedDate = parseIsoDate(value) ?? new Date();
+
+  function handleChange(event: DateTimePickerEvent, date?: Date) {
+    if (Platform.OS !== 'ios') {
+      setShowPicker(false);
+    }
+
+    if (event.type === 'dismissed' || !date) {
+      return;
+    }
+
+    onChangeDate(formatIsoDate(date));
+  }
+
+  return (
+    <View style={{ gap: 7 }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
+        {label}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setShowPicker(true)}
+        style={{
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderCurve: 'continuous',
+          borderRadius: 12,
+          borderWidth: 1,
+          justifyContent: 'center',
+          minHeight: 50,
+          paddingHorizontal: 15,
+        }}
+      >
+        <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
+          {formatFriendlyDate(value)}
+        </Text>
+      </Pressable>
+      {showPicker ? (
+        <DateTimePicker
+          display="default"
+          mode="date"
+          onChange={handleChange}
+          value={selectedDate}
+        />
+      ) : null}
     </View>
   );
 }
@@ -442,4 +584,36 @@ export function MetaRow({ label, value }: { label: string; value?: string | null
       </Text>
     </View>
   );
+}
+
+function parseIsoDate(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatFriendlyDate(value: string): string {
+  const date = parseIsoDate(value);
+
+  if (!date) {
+    return 'Pilih tanggal';
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }

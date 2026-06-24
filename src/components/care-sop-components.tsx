@@ -14,7 +14,7 @@ import {
   formatTreeTargetFallback,
 } from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
-import { Button, Card, EmptyState, Field, MetaRow } from './ui';
+import { appTheme, Badge, Button, Card, EmptyState, Field, MetaRow, SectionTitle } from './ui';
 
 export type CareSOPFormValues = {
   name: string;
@@ -55,17 +55,24 @@ export function CareSOPCard({
     <Card>
       <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: 5 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '700' }}>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '900', lineHeight: 24 }}>
             {sop.name}
           </Text>
-          <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-            {formatCareCategory(sop.category)}
-          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+            <Badge label={formatCareCategory(sop.category)} tone="success" />
+            <Badge label={sop.isActive ? 'Aktif' : 'Nonaktif'} tone={sop.isActive ? 'success' : 'muted'} />
+          </View>
         </View>
-        <SmallBadge label={sop.isActive ? 'Aktif' : 'Nonaktif'} tone={sop.isActive ? 'success' : 'muted'} />
       </View>
-      <MetaRow label="Interval perawatan" value={formatIntervalDays(sop.intervalDays)} />
-      <MetaRow label="Target bawaan" value={formatCareSOPTarget(sop)} />
+      {sop.defaultInstruction ? (
+        <Text selectable numberOfLines={2} style={{ color: '#68746D', lineHeight: 20 }}>
+          {sop.defaultInstruction}
+        </Text>
+      ) : null}
+      <View style={{ backgroundColor: appTheme.primarySoft, borderRadius: 12, gap: 8, padding: 12 }}>
+        <MetaRow label="Periode" value={formatIntervalDays(sop.intervalDays)} />
+        <MetaRow label="Target bawaan" value={formatCareSOPTarget(sop)} />
+      </View>
       {reference ? <ScheduleReferenceSummary reference={reference} compact /> : null}
     </Card>
   );
@@ -105,73 +112,81 @@ export function CareSOPForm({
 
   return (
     <View style={{ gap: 14 }}>
-      <Field
-        label="Nama SOP *"
-        onChangeText={(value) => updateValue('name', value)}
-        placeholder="Contoh: Pemupukan NPK"
-        value={values.name}
-      />
-
-      <OptionGroup
-        label="Kategori *"
-        options={careCategoryOptions.map((category) => ({
-          label: formatCareCategory(category),
-          value: category,
-        }))}
-        selectedValue={values.category}
-        onSelect={(value) => updateValue('category', value)}
-      />
-
-      <Field
-        keyboardType="number-pad"
-        label="Interval perawatan (hari)"
-        onChangeText={(value) => updateValue('intervalDays', value)}
-        placeholder="Contoh: 14"
-        value={values.intervalDays}
-      />
-
-      <TextArea
-        label="Instruksi bawaan"
-        onChangeText={(value) => updateValue('defaultInstruction', value)}
-        placeholder="Tulis instruksi ringkas untuk pekerja"
-        value={values.defaultInstruction}
-      />
-
-      <OptionGroup
-        label="Target bawaan *"
-        options={careSopTargetOptions.map((targetType) => ({
-          label: formatTargetType(targetType),
-          value: targetType,
-        }))}
-        selectedValue={values.defaultTargetType}
-        onSelect={(value) => updateTargetType(value as CareSOPDefaultTargetType)}
-      />
-
-      {values.defaultTargetType === 'row' ? (
+      <Card>
+        <SectionTitle title="Template Perawatan" subtitle="Simpan nama, kategori, dan periode kerja yang sering berulang." />
         <Field
-          label="Baris target *"
-          onChangeText={(value) => updateValue('defaultTargetRow', value)}
-          placeholder="Contoh: A"
-          value={values.defaultTargetRow}
+          label="Nama SOP *"
+          onChangeText={(value) => updateValue('name', value)}
+          placeholder="Contoh: Pemupukan NPK"
+          value={values.name}
         />
-      ) : null}
 
-      {values.defaultTargetType === 'column' ? (
+        <OptionGroup
+          label="Kategori *"
+          options={careCategoryOptions.map((category) => ({
+            label: formatCareCategory(category),
+            value: category,
+          }))}
+          selectedValue={values.category}
+          onSelect={(value) => updateValue('category', value)}
+        />
+
         <Field
-          label="Kolom target *"
-          onChangeText={(value) => updateValue('defaultTargetColumn', value)}
-          placeholder="Contoh: 1"
-          value={values.defaultTargetColumn}
+          keyboardType="number-pad"
+          label="Periode perawatan (hari)"
+          onChangeText={(value) => updateValue('intervalDays', value)}
+          placeholder="Contoh: 14"
+          value={values.intervalDays}
         />
-      ) : null}
+      </Card>
 
-      {values.defaultTargetType === 'tree' ? (
-        <TreeTargetPicker
-          selectedTreeId={values.defaultTargetTreeId}
-          trees={trees}
-          onSelect={(treeId) => updateValue('defaultTargetTreeId', treeId)}
+      <Card>
+        <TextArea
+          label="Instruksi untuk pekerja"
+          onChangeText={(value) => updateValue('defaultInstruction', value)}
+          placeholder="Tulis instruksi ringkas untuk pekerja"
+          value={values.defaultInstruction}
         />
-      ) : null}
+      </Card>
+
+      <Card>
+        <SectionTitle title="Target Bawaan" subtitle="Target ini masih bisa disesuaikan saat membuat jadwal." />
+        <OptionGroup
+          label="Cakupan target *"
+          options={careSopTargetOptions.map((targetType) => ({
+            label: formatTargetType(targetType),
+            value: targetType,
+          }))}
+          selectedValue={values.defaultTargetType}
+          onSelect={(value) => updateTargetType(value as CareSOPDefaultTargetType)}
+        />
+
+        {values.defaultTargetType === 'row' ? (
+          <Field
+            label="Baris target *"
+            onChangeText={(value) => updateValue('defaultTargetRow', value)}
+            placeholder="Contoh: A"
+            value={values.defaultTargetRow}
+          />
+        ) : null}
+
+        {values.defaultTargetType === 'column' ? (
+          <Field
+            label="Kolom target *"
+            onChangeText={(value) => updateValue('defaultTargetColumn', value)}
+            placeholder="Contoh: 1"
+            value={values.defaultTargetColumn}
+          />
+        ) : null}
+
+        {values.defaultTargetType === 'tree' ? (
+          <TreeTargetPicker
+            selectedTreeId={values.defaultTargetTreeId}
+            trees={trees}
+            onSelect={(treeId) => updateValue('defaultTargetTreeId', treeId)}
+          />
+        ) : null}
+      </Card>
     </View>
   );
 }
@@ -188,7 +203,7 @@ export function ScheduleReferenceSummary({
       <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
         Acuan jadwal berikutnya
       </Text>
-      <SmallBadge label={formatScheduleReferenceStatus(reference)} tone={getReferenceTone(reference)} />
+      <Badge label={formatScheduleReferenceStatus(reference)} tone={getReferenceTone(reference)} />
       {!compact ? (
         <>
           <MetaRow label="Realisasi terakhir" value={formatDateTime(reference.lastPerformedAt)} />
@@ -301,7 +316,7 @@ function TreeTargetPicker({
           {trees.map((tree) => (
             <Button
               key={tree.id}
-              title={`${tree.treeCode} - ${formatTreeLocation(tree)}`}
+              title={`${formatTreeLocation(tree)}`}
               variant={selectedTreeId === tree.id ? 'primary' : 'secondary'}
               onPress={() => onSelect(tree.id)}
             />
@@ -352,28 +367,6 @@ function TextArea({
   );
 }
 
-function SmallBadge({ label, tone }: { label: string; tone: BadgeTone }) {
-  const colors = badgeColors[tone];
-
-  return (
-    <View
-      style={{
-        alignSelf: 'flex-start',
-        backgroundColor: colors.background,
-        borderColor: colors.border,
-        borderRadius: 999,
-        borderWidth: 1,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-      }}
-    >
-      <Text selectable style={{ color: colors.text, fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
 function formatDateTime(value: string | null): string {
   if (!value) {
     return '-';
@@ -411,26 +404,3 @@ function getReferenceTone(reference: CareSOPNextScheduleReference): BadgeTone {
 }
 
 type BadgeTone = 'danger' | 'muted' | 'success' | 'warning';
-
-const badgeColors: Record<BadgeTone, { background: string; border: string; text: string }> = {
-  danger: {
-    background: '#FEE4E2',
-    border: '#FDA29B',
-    text: '#B42318',
-  },
-  muted: {
-    background: '#F2F4F7',
-    border: '#D0D5DD',
-    text: '#475467',
-  },
-  success: {
-    background: '#E8F5EE',
-    border: '#B7DEC9',
-    text: '#2F6F4E',
-  },
-  warning: {
-    background: '#FFF4D6',
-    border: '#F6D77A',
-    text: '#7A5600',
-  },
-};

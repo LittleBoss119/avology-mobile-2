@@ -4,18 +4,19 @@ import { Text, View } from 'react-native';
 
 import { CareTaskSummaryCard } from '../../../../src/components/care-schedule-components';
 import {
-  Button,
+  ChipButton,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MetricCard,
   PageIntro,
   Screen,
 } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getWorkerTasks } from '../../../../src/services/careTaskService';
-import type { CareTask } from '../../../../src/types/domain';
+import type { CareTask, TaskStatus } from '../../../../src/types/domain';
 
-type TaskRangeFilter = 'today' | 'all';
+type TaskRangeFilter = 'today' | 'pending' | 'postponed' | 'completed' | 'all';
 
 export default function WorkerTaskListScreen() {
   const { currentFarm } = useAuth();
@@ -27,12 +28,17 @@ export default function WorkerTaskListScreen() {
   const farmId = currentFarm?.farmId;
 
   const filteredTasks = React.useMemo(() => {
-    if (rangeFilter === 'all') {
-      return tasks;
+    const today = getTodayIsoDate();
+
+    if (rangeFilter === 'today') {
+      return tasks.filter((task) => task.dueDate === today && task.status !== 'completed');
     }
 
-    const today = getTodayIsoDate();
-    return tasks.filter((task) => task.dueDate === today);
+    if (rangeFilter === 'pending' || rangeFilter === 'postponed' || rangeFilter === 'completed') {
+      return tasks.filter((task) => task.status === rangeFilter);
+    }
+
+    return tasks;
   }, [rangeFilter, tasks]);
 
   const loadTasks = React.useCallback(async () => {
@@ -71,11 +77,18 @@ export default function WorkerTaskListScreen() {
       <PageIntro title="Tugas Saya" subtitle="Lihat tugas perawatan yang ditugaskan kepada Anda." />
       <ErrorBanner message={error} />
 
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <MetricCard label="Hari Ini" value={countTodayOpenTasks(tasks)} tone="primary" />
+        <MetricCard label="Belum Selesai" value={countTasksByStatus(tasks, 'pending')} tone="warning" />
+        <MetricCard label="Ditunda" value={countTasksByStatus(tasks, 'postponed')} tone="danger" />
+        <MetricCard label="Selesai" value={countTasksByStatus(tasks, 'completed')} tone="success" />
+      </View>
+
       <RangeFilter selectedRange={rangeFilter} onSelect={setRangeFilter} />
 
       {filteredTasks.length === 0 ? (
         <EmptyState
-          title={tasks.length === 0 ? 'Belum ada tugas' : 'Tidak ada tugas hari ini'}
+          title={tasks.length === 0 ? 'Belum ada tugas' : 'Tidak ada tugas pada pilihan ini'}
           subtitle="Tugas dari pemilik akan muncul di sini."
         />
       ) : (
@@ -106,20 +119,35 @@ function RangeFilter({
       <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
         Tampilkan
       </Text>
-      <View style={{ gap: 8 }}>
-        <Button
-          title="Hari Ini"
-          variant={selectedRange === 'today' ? 'primary' : 'secondary'}
-          onPress={() => onSelect('today')}
-        />
-        <Button
-          title="Semua Tugas"
-          variant={selectedRange === 'all' ? 'primary' : 'secondary'}
-          onPress={() => onSelect('all')}
-        />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {taskRangeFilters.map((filter) => (
+          <ChipButton
+            key={filter.value}
+            active={selectedRange === filter.value}
+            label={filter.label}
+            onPress={() => onSelect(filter.value)}
+          />
+        ))}
       </View>
     </View>
   );
+}
+
+const taskRangeFilters: Array<{ label: string; value: TaskRangeFilter }> = [
+  { label: 'Hari Ini', value: 'today' },
+  { label: 'Belum Selesai', value: 'pending' },
+  { label: 'Ditunda', value: 'postponed' },
+  { label: 'Selesai', value: 'completed' },
+  { label: 'Semua', value: 'all' },
+];
+
+function countTasksByStatus(tasks: CareTask[], status: TaskStatus): number {
+  return tasks.filter((task) => task.status === status).length;
+}
+
+function countTodayOpenTasks(tasks: CareTask[]): number {
+  const today = getTodayIsoDate();
+  return tasks.filter((task) => task.dueDate === today && task.status !== 'completed').length;
 }
 
 function getTodayIsoDate(): string {

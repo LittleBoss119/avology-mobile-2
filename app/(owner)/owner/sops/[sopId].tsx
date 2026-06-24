@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Alert, Text } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import {
   formatCareCategory,
@@ -9,6 +9,7 @@ import {
   ScheduleReferenceSummary,
 } from '../../../../src/components/care-sop-components';
 import {
+  Badge,
   Button,
   Card,
   EmptyState,
@@ -158,14 +159,19 @@ export default function CareSOPDetailScreen() {
         </>
       }
     >
-      <PageIntro title={sop.name} subtitle="Detail template perawatan dan acuan jadwal berikutnya." />
+      <PageIntro title="Template SOP" subtitle="Detail perawatan dan acuan jadwal berikutnya." />
       <ErrorBanner message={error} />
 
-      <Card>
-        <MetaRow label="Kategori" value={formatCareCategory(sop.category)} />
-        <MetaRow label="Interval perawatan" value={formatIntervalDays(sop.intervalDays)} />
+      <Card variant="highlight">
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+          <Badge label={formatCareCategory(sop.category)} tone="success" />
+          <Badge label={sop.isActive ? 'Aktif' : 'Nonaktif'} tone={sop.isActive ? 'success' : 'muted'} />
+        </View>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
+          {sop.name}
+        </Text>
+        <MetaRow label="Periode perawatan" value={formatIntervalDays(sop.intervalDays)} />
         <MetaRow label="Target bawaan" value={formatCareSOPTarget(sop)} />
-        <MetaRow label="Status" value={sop.isActive ? 'Aktif' : 'Nonaktif'} />
       </Card>
 
       <Card>

@@ -7,10 +7,11 @@ import {
   formatTaskStatus,
 } from '../../../../src/components/care-schedule-components';
 import {
-  Button,
+  ChipButton,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MetricCard,
   PageIntro,
   Screen,
 } from '../../../../src/components/ui';
@@ -90,6 +91,12 @@ export default function OwnerTaskListScreen() {
       <PageIntro title="Tugas Pekerja" subtitle="Lihat semua tugas perawatan dalam kebun aktif." />
       <ErrorBanner message={error} />
 
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <MetricCard label="Menunggu" value={countTasksByStatus(tasks, 'pending')} tone="warning" />
+        <MetricCard label="Ditunda" value={countTasksByStatus(tasks, 'postponed')} tone="danger" />
+        <MetricCard label="Selesai" value={countTasksByStatus(tasks, 'completed')} tone="success" />
+      </View>
+
       <StatusFilter selectedStatus={selectedStatus} onSelect={setSelectedStatus} />
 
       {filteredTasks.length === 0 ? (
@@ -125,16 +132,20 @@ function StatusFilter({
       <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
         Status
       </Text>
-      <View style={{ gap: 8 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {statusFilters.map((status) => (
-          <Button
+          <ChipButton
             key={status}
-            title={status === 'all' ? 'Semua' : formatTaskStatus(status)}
-            variant={selectedStatus === status ? 'primary' : 'secondary'}
+            active={selectedStatus === status}
+            label={status === 'all' ? 'Semua' : formatTaskStatus(status)}
             onPress={() => onSelect(status)}
           />
         ))}
       </View>
     </View>
   );
+}
+
+function countTasksByStatus(tasks: CareTask[], status: TaskStatus): number {
+  return tasks.filter((task) => task.status === status).length;
 }

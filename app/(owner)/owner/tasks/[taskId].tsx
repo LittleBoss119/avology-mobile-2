@@ -4,10 +4,12 @@ import { Text, View } from 'react-native';
 
 import {
   formatCareTarget,
+  formatTaskSource,
   formatTaskStatus,
 } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import {
+  Badge,
   Button,
   Card,
   EmptyState,
@@ -117,16 +119,21 @@ export default function OwnerTaskDetailScreen() {
 
   return (
     <Screen footer={<Button title="Kembali ke Tugas" variant="secondary" onPress={() => router.replace('/owner/tasks')} />}>
-      <PageIntro title={task.title} subtitle="Detail tugas pekerja dan riwayat realisasi." />
+      <PageIntro title="Detail Tugas" subtitle="Pantau instruksi, target, pekerja, dan riwayat realisasi." />
       <ErrorBanner message={error} />
 
-      <Card>
-        <MetaRow label="Judul" value={task.title} />
-        <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
+      <Card variant="highlight">
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+          <Badge label={formatTaskStatus(task.status)} tone={getTaskTone(task.status)} />
+          <Badge label={formatTaskSource(task)} tone="muted" />
+        </View>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
+          {task.title}
+        </Text>
         <MetaRow label="Pekerja" value={workerNames[task.assignedTo] ?? 'Pekerja tidak tersedia'} />
-        <MetaRow label="Jatuh tempo" value={task.dueDate} />
-        <MetaRow label="Status" value={formatTaskStatus(task.status)} />
+        <MetaRow label="Tanggal" value={formatDate(task.dueDate)} />
         <MetaRow label="Target" value={formatCareTarget(task)} />
+        <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
       </Card>
 
       <Card>
@@ -153,9 +160,11 @@ export default function OwnerTaskDetailScreen() {
               onPress={() => router.push(`/owner/schedules/${task.careScheduleId}`)}
             />
           </>
+        ) : task.operationalReportId ? (
+          <MetaRow label="Sumber tugas" value="Laporan operasional" />
         ) : (
           <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-            Tugas tidak terhubung ke jadwal perawatan.
+            Tugas tidak terhubung ke jadwal atau laporan.
           </Text>
         )}
       </Card>
@@ -181,10 +190,36 @@ export default function OwnerTaskDetailScreen() {
   );
 }
 
+function getTaskTone(status: CareTaskDetail['status']): 'danger' | 'muted' | 'success' | 'warning' {
+  if (status === 'completed') {
+    return 'success';
+  }
+
+  if (status === 'postponed') {
+    return 'warning';
+  }
+
+  return 'muted';
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 function formatActivityStatus(status: ActivityStatus): string {
   const labels: Record<ActivityStatus, string> = {
     completed: 'Selesai',
-    postponed: 'Tertunda',
+    postponed: 'Ditunda',
   };
 
   return labels[status];

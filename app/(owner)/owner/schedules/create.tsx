@@ -5,7 +5,7 @@ import {
   ManualScheduleForm,
   type ManualScheduleFormValues,
 } from '../../../../src/components/care-schedule-components';
-import { Button, ErrorBanner, LoadingState, PageIntro, Screen } from '../../../../src/components/ui';
+import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { createManualSchedule } from '../../../../src/services/careScheduleService';
 import { getActiveWorkers } from '../../../../src/services/memberService';
@@ -131,13 +131,14 @@ export default function CreateManualScheduleScreen() {
   return (
     <Screen
       footer={
-        <>
-          <Button title="Simpan Jadwal" loading={submitting} onPress={handleSubmit} />
-          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
-        </>
+        <Button title="Simpan Jadwal" loading={submitting} onPress={handleSubmit} />
       }
     >
-      <PageIntro title="Jadwal Manual" subtitle="Buat jadwal perawatan dan tugaskan ke pekerja aktif." />
+      <TopAppBar
+        title="Jadwal Manual"
+        subtitle="Buat jadwal perawatan dan tugaskan ke pekerja aktif."
+        onBack={() => router.back()}
+      />
       <ErrorBanner message={error} />
       <ManualScheduleForm values={values} trees={trees} workers={workers} onChange={setValues} />
     </Screen>

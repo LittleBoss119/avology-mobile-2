@@ -65,7 +65,7 @@ export function formatGrowthPhase(phase?: GrowthPhase | null): string {
 
 export function formatOperationalReportStatus(status: OperationalReportStatus): string {
   const labels: Record<OperationalReportStatus, string> = {
-    in_progress: 'Diproses',
+    in_progress: 'Dikerjakan',
     new: 'Baru',
     rejected: 'Ditolak',
     resolved: 'Selesai',
@@ -103,8 +103,8 @@ export function formatCareCategory(category: CareCategory): string {
 export function formatTaskStatus(status: TaskStatus): string {
   const labels: Record<TaskStatus, string> = {
     completed: 'Selesai',
-    pending: 'Menunggu Dikerjakan',
-    postponed: 'Tertunda',
+    pending: 'Menunggu',
+    postponed: 'Ditunda',
   };
 
   return labels[status];

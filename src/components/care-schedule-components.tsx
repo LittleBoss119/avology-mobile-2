@@ -16,7 +16,7 @@ import {
   formatTreeTargetFallback,
 } from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
-import { Button, Card, EmptyState, Field, MetaRow } from './ui';
+import { appTheme, Badge, Button, Card, DateField, EmptyState, Field, MetaRow, SectionTitle } from './ui';
 import { careCategoryOptions } from './care-sop-components';
 
 export type ManualScheduleFormValues = {
@@ -41,27 +41,39 @@ export const careScheduleTargetOptions: TargetType[] = [
 ];
 
 export function CareScheduleCard({
+  assignedWorkerNames,
   onPress,
   schedule,
+  statusLabel,
+  statusTone = 'muted',
 }: {
+  assignedWorkerNames?: string[];
   onPress?: () => void;
   schedule: CareSchedule;
+  statusLabel?: string;
+  statusTone?: 'danger' | 'muted' | 'success' | 'warning';
 }) {
   const content = (
     <Card>
       <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: 5 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '700' }}>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '900', lineHeight: 24 }}>
             {schedule.title}
           </Text>
-          <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-            {formatCareCategory(schedule.category)}
-          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+            <Badge label={formatCareCategory(schedule.category)} tone="success" />
+            <Badge label={schedule.careSopId ? 'Dari SOP' : 'Manual'} tone={schedule.careSopId ? 'warning' : 'muted'} />
+            {statusLabel ? <Badge label={statusLabel} tone={statusTone} /> : null}
+          </View>
         </View>
-        <SmallBadge label={schedule.careSopId ? 'SOP' : 'Manual'} />
       </View>
-      <MetaRow label="Tanggal" value={schedule.scheduledDate} />
-      <MetaRow label="Target" value={formatCareTarget(schedule)} />
+      <View style={{ backgroundColor: appTheme.primarySoft, borderRadius: 12, gap: 8, padding: 12 }}>
+        <MetaRow label="Target pekerjaan" value={formatCareTarget(schedule)} />
+        <MetaRow label="Jatuh tempo" value={formatDate(schedule.scheduledDate)} />
+        {assignedWorkerNames && assignedWorkerNames.length > 0 ? (
+          <MetaRow label="Pekerja" value={assignedWorkerNames.join(', ')} />
+        ) : null}
+      </View>
     </Card>
   );
 
@@ -87,20 +99,28 @@ export function CareTaskSummaryCard({
     <Card>
       <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: 5 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '900', lineHeight: 23 }}>
             {task.title}
           </Text>
-          <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-            {task.category ? formatCareCategory(task.category) : 'Tanpa kategori'}
-          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+            <Badge label={formatTaskStatus(task.status)} tone={getTaskTone(task.status)} />
+            <Badge label={formatTaskSource(task)} tone="muted" />
+          </View>
         </View>
-        <SmallBadge label={formatTaskStatus(task.status)} />
       </View>
-      {showAssignedWorker ? (
-        <MetaRow label="Pekerja" value={assignedWorkerName ?? 'Pekerja tidak tersedia'} />
+      {task.instruction ? (
+        <Text selectable numberOfLines={2} style={{ color: '#68746D', lineHeight: 20 }}>
+          {task.instruction}
+        </Text>
       ) : null}
-      <MetaRow label="Jatuh tempo" value={task.dueDate} />
-      <MetaRow label="Target" value={formatCareTarget(task)} />
+      <View style={{ backgroundColor: appTheme.primarySoft, borderRadius: 12, gap: 8, padding: 12 }}>
+        <MetaRow label="Target" value={formatCareTarget(task)} />
+        <MetaRow label="Tanggal" value={formatDate(task.dueDate)} />
+        <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
+        {showAssignedWorker ? (
+          <MetaRow label="Pekerja" value={assignedWorkerName ?? 'Pekerja tidak tersedia'} />
+        ) : null}
+      </View>
     </Card>
   );
 
@@ -142,49 +162,59 @@ export function ManualScheduleForm({
 
   return (
     <View style={{ gap: 14 }}>
-      <Field
-        label="Judul jadwal *"
-        onChangeText={(value) => updateValue('title', value)}
-        placeholder="Contoh: Penyiraman area barat"
-        value={values.title}
-      />
+      <Card>
+        <SectionTitle title="Rencana Perawatan" subtitle="Isi pekerjaan utama yang akan menjadi tugas pekerja." />
+        <Field
+          label="Judul jadwal *"
+          onChangeText={(value) => updateValue('title', value)}
+          placeholder="Contoh: Penyiraman area barat"
+          value={values.title}
+        />
 
-      <OptionGroup
-        label="Kategori *"
-        options={careCategoryOptions.map((category) => ({
-          label: formatCareCategory(category),
-          value: category,
-        }))}
-        selectedValue={values.category}
-        onSelect={(value) => updateValue('category', value)}
-      />
+        <OptionGroup
+          label="Kategori *"
+          options={careCategoryOptions.map((category) => ({
+            label: formatCareCategory(category),
+            value: category,
+          }))}
+          selectedValue={values.category}
+          onSelect={(value) => updateValue('category', value)}
+        />
 
-      <Field
-        label="Tanggal jadwal *"
-        onChangeText={(value) => updateValue('scheduledDate', value)}
-        placeholder="YYYY-MM-DD"
-        value={values.scheduledDate}
-      />
+        <DateField
+          label="Tanggal jadwal *"
+          onChangeDate={(value) => updateValue('scheduledDate', value)}
+          value={values.scheduledDate}
+        />
+      </Card>
 
-      <WorkerPicker
-        selectedWorkerId={values.assignedWorkerId}
-        workers={workers}
-        onSelect={(workerId) => updateValue('assignedWorkerId', workerId)}
-      />
+      <Card>
+        <SectionTitle title="Pekerja" subtitle="Pilih pekerja aktif yang menerima tugas ini." />
+        <WorkerPicker
+          selectedWorkerId={values.assignedWorkerId}
+          workers={workers}
+          onSelect={(workerId) => updateValue('assignedWorkerId', workerId)}
+        />
+      </Card>
 
-      <TargetPicker
-        onTargetTypeChange={updateTargetType}
-        onValueChange={updateValue}
-        trees={trees}
-        values={values}
-      />
+      <Card>
+        <SectionTitle title="Target" subtitle="Tentukan cakupan pekerjaan di kebun." />
+        <TargetPicker
+          onTargetTypeChange={updateTargetType}
+          onValueChange={updateValue}
+          trees={trees}
+          values={values}
+        />
+      </Card>
 
-      <TextArea
-        label="Instruksi"
-        onChangeText={(value) => updateValue('instruction', value)}
-        placeholder="Instruksi kerja untuk pekerja"
-        value={values.instruction}
-      />
+      <Card>
+        <TextArea
+          label="Instruksi"
+          onChangeText={(value) => updateValue('instruction', value)}
+          placeholder="Instruksi kerja untuk pekerja"
+          value={values.instruction}
+        />
+      </Card>
     </View>
   );
 }
@@ -300,7 +330,7 @@ function TargetPicker({
               {trees.map((tree) => (
                 <Button
                   key={tree.id}
-                  title={`${tree.treeCode} - ${formatTreeLocation(tree)}`}
+                  title={formatTreeLocation(tree)}
                   variant={values.targetTreeId === tree.id ? 'primary' : 'secondary'}
                   onPress={() => onValueChange('targetTreeId', tree.id)}
                 />
@@ -392,24 +422,42 @@ function TextArea({
   );
 }
 
-function SmallBadge({ label }: { label: string }) {
-  return (
-    <View
-      style={{
-        alignSelf: 'flex-start',
-        backgroundColor: '#F2F4F7',
-        borderColor: '#D0D5DD',
-        borderRadius: 999,
-        borderWidth: 1,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-      }}
-    >
-      <Text selectable style={{ color: '#475467', fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </View>
-  );
+function formatDate(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
-export { formatTaskStatus };
+function formatTaskSource(task: CareTask): string {
+  if (task.careScheduleId) {
+    return 'Dari Jadwal';
+  }
+
+  if (task.operationalReportId) {
+    return 'Dari Laporan';
+  }
+
+  return 'Manual';
+}
+
+function getTaskTone(status: TaskStatus): 'danger' | 'muted' | 'success' | 'warning' {
+  if (status === 'completed') {
+    return 'success';
+  }
+
+  if (status === 'postponed') {
+    return 'warning';
+  }
+
+  return 'muted';
+}
+
+export { formatTaskSource, formatTaskStatus };

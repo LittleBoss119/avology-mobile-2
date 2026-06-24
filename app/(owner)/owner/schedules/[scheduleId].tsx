@@ -8,14 +8,14 @@ import {
 } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import {
-  Button,
+  Badge,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
   MetaRow,
-  PageIntro,
   Screen,
+  TopAppBar,
 } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getCareScheduleDetail } from '../../../../src/services/careScheduleService';
@@ -87,8 +87,8 @@ export default function CareScheduleDetailScreen() {
 
   if (!schedule) {
     return (
-      <Screen footer={<Button title="Kembali" variant="secondary" onPress={() => router.replace('/owner/schedules')} />}>
-        <PageIntro title="Detail Jadwal" subtitle="Data jadwal tidak dapat dimuat." />
+      <Screen>
+        <TopAppBar title="Detail Jadwal" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <EmptyState title="Jadwal tidak ditemukan" subtitle="Jadwal mungkin tidak tersedia atau akses ditolak." />
       </Screen>
@@ -96,16 +96,27 @@ export default function CareScheduleDetailScreen() {
   }
 
   return (
-    <Screen footer={<Button title="Kembali ke Jadwal" variant="secondary" onPress={() => router.replace('/owner/schedules')} />}>
-      <PageIntro title={schedule.title} subtitle="Detail jadwal perawatan dan tugas pekerja yang dihasilkan." />
+    <Screen>
+      <TopAppBar title="Detail Jadwal" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
-      <Card>
-        <MetaRow label="Judul" value={schedule.title} />
-        <MetaRow label="Kategori" value={formatCareCategory(schedule.category)} />
-        <MetaRow label="Tanggal jadwal" value={schedule.scheduledDate} />
-        <MetaRow label="Target" value={formatCareTarget(schedule)} />
-        <MetaRow label="Jenis jadwal" value={schedule.careSopId ? 'Dari SOP' : 'Manual'} />
+      <Card variant="highlight">
+        <View style={{ gap: 8 }}>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 23, fontWeight: '900', lineHeight: 29 }}>
+            {schedule.title}
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+            <Badge label={formatScheduleStatus(schedule)} tone={getScheduleTone(schedule)} />
+            <Badge label={schedule.careSopId ? 'Dari SOP' : 'Manual'} tone={schedule.careSopId ? 'warning' : 'muted'} />
+          </View>
+        </View>
+        <View style={{ gap: 10 }}>
+          <MetaRow label="Kategori" value={formatCareCategory(schedule.category)} />
+          <MetaRow label="Target" value={formatCareTarget(schedule)} />
+          <MetaRow label="Tanggal jadwal" value={formatDate(schedule.scheduledDate)} />
+          <MetaRow label="Pekerja" value={formatScheduleWorkers(schedule, workerNames)} />
+          <MetaRow label="Jumlah tugas" value={`${schedule.tasks.length} tugas`} />
+        </View>
       </Card>
 
       <Card>
@@ -136,4 +147,61 @@ export default function CareScheduleDetailScreen() {
       )}
     </Screen>
   );
+}
+
+function formatScheduleStatus(schedule: CareScheduleDetail): string {
+  if (schedule.tasks.length === 0) {
+    return 'Belum ada tugas';
+  }
+
+  if (schedule.tasks.every((task) => task.status === 'completed')) {
+    return 'Selesai';
+  }
+
+  if (schedule.tasks.some((task) => task.status === 'postponed')) {
+    return 'Tertunda';
+  }
+
+  return 'Belum selesai';
+}
+
+function getScheduleTone(schedule: CareScheduleDetail): 'danger' | 'muted' | 'success' | 'warning' {
+  if (schedule.tasks.length === 0) {
+    return 'muted';
+  }
+
+  if (schedule.tasks.every((task) => task.status === 'completed')) {
+    return 'success';
+  }
+
+  if (schedule.tasks.some((task) => task.status === 'postponed')) {
+    return 'warning';
+  }
+
+  return 'muted';
+}
+
+function formatScheduleWorkers(
+  schedule: CareScheduleDetail,
+  workerNames: Record<string, string>
+): string {
+  const names = Array.from(
+    new Set(schedule.tasks.map((task) => workerNames[task.assignedTo]).filter((name): name is string => Boolean(name)))
+  );
+
+  return names.length > 0 ? names.join(', ') : 'Belum ada pekerja';
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }

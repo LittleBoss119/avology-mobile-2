@@ -29,15 +29,20 @@ import {
 } from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
 import {
+  appTheme,
+  Badge,
   Button,
   Card,
+  ChipButton,
   EmptyState,
   ErrorBanner,
   Field,
   LoadingState,
   MetaRow,
+  MetricCard,
   PageIntro,
   Screen,
+  SectionTitle,
   SuccessBanner,
 } from './ui';
 
@@ -148,34 +153,35 @@ export function WorkerCreateOperationalReportScreen() {
       <SuccessBanner message={success} />
 
       <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '700' }}>
-          Kategori *
-        </Text>
-        <View style={{ gap: 10 }}>
+        <SectionTitle title="Kategori Laporan" subtitle="Pilih jenis kejadian lapangan yang perlu diketahui pemilik." />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {operationalReportCategoryOptions.map((option) => (
-            <Button
+            <ChipButton
               key={option}
-              title={formatOperationalReportCategory(option)}
-              variant={category === option ? 'primary' : 'secondary'}
+              active={category === option}
+              label={formatOperationalReportCategory(option)}
               onPress={() => setCategory(option)}
             />
           ))}
         </View>
       </Card>
 
-      <Field
-        label="Lokasi"
-        onChangeText={setLocationNote}
-        placeholder="Contoh: Gudang alat"
-        value={locationNote}
-      />
+      <Card>
+        <SectionTitle title="Ringkasan Lapangan" subtitle="Isi singkat saja, yang penting jelas untuk tindak lanjut." />
+        <Field
+          label="Lokasi"
+          onChangeText={setLocationNote}
+          placeholder="Contoh: Gudang alat"
+          value={locationNote}
+        />
 
-      <TextArea
-        label="Deskripsi"
-        onChangeText={setDescription}
-        placeholder="Contoh: Selang penyemprot pecah"
-        value={description}
-      />
+        <TextArea
+          label="Catatan laporan"
+          onChangeText={setDescription}
+          placeholder="Contoh: Selang penyemprot pecah"
+          value={description}
+        />
+      </Card>
     </Screen>
   );
 }
@@ -232,6 +238,12 @@ export function WorkerOperationalReportListScreen() {
         subtitle="Lihat laporan kebun yang pernah Anda kirim."
       />
       <ErrorBanner message={error} />
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <MetricCard label="Dikirim" value={reports.length} tone="primary" />
+        <MetricCard label="Dikerjakan" value={countReportsByStatus(reports, 'in_progress')} tone="warning" />
+        <MetricCard label="Selesai" value={countReportsByStatus(reports, 'resolved')} tone="success" />
+      </View>
 
       {reports.length === 0 ? (
         <EmptyState
@@ -315,6 +327,12 @@ export function OwnerOperationalReportListScreen() {
         subtitle="Pantau laporan kebun dari pekerja dan tindak lanjuti bila perlu."
       />
       <ErrorBanner message={error} />
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <MetricCard label="Baru" value={countReportsByStatus(reports, 'new')} tone="danger" />
+        <MetricCard label="Dikerjakan" value={countReportsByStatus(reports, 'in_progress')} tone="warning" />
+        <MetricCard label="Selesai" value={countReportsByStatus(reports, 'resolved')} tone="success" />
+      </View>
 
       <ReportStatusFilter selectedStatus={statusFilter} onSelect={setStatusFilter} />
       <ReportCategoryFilter selectedCategory={categoryFilter} onSelect={setCategoryFilter} />
@@ -400,7 +418,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
   );
 
   async function handleStatusUpdate(status: OperationalReportStatus) {
-    if (!report || status === report.status) {
+    if (!report || status === report.status || updatingStatus) {
       return;
     }
 
@@ -460,8 +478,8 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
       }
     >
       <PageIntro
-        title={formatOperationalReportCategory(report.category)}
-        subtitle="Detail laporan operasional kebun."
+        title="Detail Laporan"
+        subtitle="Ringkasan laporan operasional dan keputusan tindak lanjut."
       />
       <ErrorBanner message={error} />
 
@@ -473,17 +491,14 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
         </Card>
       ) : null}
 
-      <Card>
+      <Card variant="highlight">
         <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
           <View style={{ flex: 1, gap: 5 }}>
-            <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+            <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
               {formatOperationalReportCategory(report.category)}
             </Text>
-            <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-              {formatOperationalReportStatus(report.status)}
-            </Text>
           </View>
-          <SmallBadge label={formatOperationalReportStatus(report.status)} />
+          <Badge label={formatOperationalReportStatus(report.status)} tone={getReportStatusTone(report.status)} />
         </View>
         <MetaRow label="Pelapor" value={workerNames[report.reportedBy] ?? 'Pelapor tidak tersedia'} />
         <MetaRow label="Tanggal dibuat" value={formatDateTime(report.createdAt)} />
@@ -501,16 +516,14 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
 
       <Card>
         <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          Perbarui Status
+          Keputusan Laporan
         </Text>
-        <View style={{ gap: 8 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {operationalReportStatusOptions.map((status) => (
-            <Button
+            <ChipButton
               key={status}
-              title={formatOperationalReportStatus(status)}
-              disabled={Boolean(updatingStatus)}
-              loading={updatingStatus === status}
-              variant={report.status === status ? 'primary' : 'secondary'}
+              active={report.status === status || updatingStatus === status}
+              label={formatOperationalReportStatus(status)}
               onPress={() => handleStatusUpdate(status)}
             />
           ))}
@@ -691,7 +704,7 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
       <ErrorBanner message={error} />
 
       {report ? (
-        <Card>
+        <Card variant="highlight">
           <MetaRow label="Kategori laporan" value={formatOperationalReportCategory(report.category)} />
           <MetaRow label="Status laporan" value={formatOperationalReportStatus(report.status)} />
           <MetaRow label="Tanggal laporan" value={formatDateTime(report.createdAt)} />
@@ -753,18 +766,20 @@ function OperationalReportCard({
     <Card>
       <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: 5 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '900', lineHeight: 23 }}>
             {formatOperationalReportCategory(report.category)}
           </Text>
           <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
             {formatReportSummary(report)}
           </Text>
         </View>
-        <SmallBadge label={formatOperationalReportStatus(report.status)} />
+        <Badge label={formatOperationalReportStatus(report.status)} tone={getReportStatusTone(report.status)} />
       </View>
-      <MetaRow label="Tanggal" value={formatDate(report.createdAt)} />
-      {reporterName ? <MetaRow label="Pelapor" value={reporterName} /> : null}
-      {report.locationNote ? <MetaRow label="Lokasi" value={report.locationNote} /> : null}
+      <View style={{ backgroundColor: appTheme.primarySoft, borderRadius: 12, gap: 8, padding: 12 }}>
+        <MetaRow label="Tanggal" value={formatDate(report.createdAt)} />
+        {reporterName ? <MetaRow label="Pelapor" value={reporterName} /> : null}
+        {report.locationNote ? <MetaRow label="Area/target" value={report.locationNote} /> : null}
+      </View>
     </Card>
   );
 
@@ -789,12 +804,12 @@ function ReportStatusFilter({
       <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
         Status
       </Text>
-      <View style={{ gap: 8 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {filters.map((status) => (
-          <Button
+          <ChipButton
             key={status}
-            title={status === 'all' ? 'Semua' : formatOperationalReportStatus(status)}
-            variant={selectedStatus === status ? 'primary' : 'secondary'}
+            active={selectedStatus === status}
+            label={status === 'all' ? 'Semua' : formatOperationalReportStatus(status)}
             onPress={() => onSelect(status)}
           />
         ))}
@@ -817,12 +832,12 @@ function ReportCategoryFilter({
       <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
         Kategori
       </Text>
-      <View style={{ gap: 8 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {filters.map((category) => (
-          <Button
+          <ChipButton
             key={category}
-            title={category === 'all' ? 'Semua' : formatOperationalReportCategory(category)}
-            variant={selectedCategory === category ? 'primary' : 'secondary'}
+            active={selectedCategory === category}
+            label={category === 'all' ? 'Semua' : formatOperationalReportCategory(category)}
             onPress={() => onSelect(category)}
           />
         ))}
@@ -928,7 +943,7 @@ function TaskTargetPicker({
               {trees.map((tree) => (
                 <Button
                   key={tree.id}
-                  title={`${tree.treeCode} - ${formatTreeLocation(tree)}`}
+                  title={formatTreeLocation(tree)}
                   variant={targetTreeId === tree.id ? 'primary' : 'secondary'}
                   onPress={() => onTargetTreeIdChange(tree.id)}
                 />
@@ -998,25 +1013,24 @@ function getTodayIsoDate(): string {
   return `${year}-${month}-${day}`;
 }
 
-function SmallBadge({ label }: { label: string }) {
-  return (
-    <View
-      style={{
-        alignSelf: 'flex-start',
-        backgroundColor: '#E7F6EC',
-        borderColor: '#A6D9B8',
-        borderCurve: 'continuous',
-        borderRadius: 8,
-        borderWidth: 1,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-      }}
-    >
-      <Text selectable style={{ color: '#2F6F4E', fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </View>
-  );
+function countReportsByStatus(reports: OperationalReport[], status: OperationalReportStatus): number {
+  return reports.filter((report) => report.status === status).length;
+}
+
+function getReportStatusTone(status: OperationalReportStatus): 'danger' | 'muted' | 'success' | 'warning' {
+  if (status === 'resolved') {
+    return 'success';
+  }
+
+  if (status === 'rejected') {
+    return 'muted';
+  }
+
+  if (status === 'new') {
+    return 'danger';
+  }
+
+  return 'warning';
 }
 
 function TextArea({
