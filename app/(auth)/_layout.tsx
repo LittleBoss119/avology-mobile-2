@@ -53,9 +53,9 @@ export default function AuthLayout() {
         contentStyle: { backgroundColor: '#F7FAF3' },
       }}
     >
-      <Stack.Screen name="get-started" options={{ title: 'Avology' }} />
-      <Stack.Screen name="login" options={{ title: 'Masuk' }} />
-      <Stack.Screen name="register" options={{ title: 'Daftar' }} />
+      <Stack.Screen name="get-started" options={{ headerShown: false, title: 'Avology' }} />
+      <Stack.Screen name="login" options={{ headerShown: false, title: 'Masuk' }} />
+      <Stack.Screen name="register" options={{ headerShown: false, title: 'Daftar' }} />
     </Stack>
   );
 }

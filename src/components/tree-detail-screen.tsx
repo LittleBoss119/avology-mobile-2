@@ -27,7 +27,6 @@ import {
   ErrorBanner,
   LoadingState,
   MetaRow,
-  PageIntro,
   Screen,
   TopAppBar,
 } from './ui';
@@ -165,7 +164,7 @@ export function TreeDetailScreen({
   if (!tree) {
     return (
       <Screen>
-        <PageIntro title="Detail Pohon" subtitle="Data pohon tidak dapat dimuat." />
+        <TopAppBar title="Detail Pohon" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <EmptyState title="Pohon tidak ditemukan" subtitle="Pohon mungkin sudah tidak tersedia atau akses ditolak." />
       </Screen>

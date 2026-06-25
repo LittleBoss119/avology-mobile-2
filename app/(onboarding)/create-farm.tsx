@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import React from 'react';
 
-import { Button, ErrorBanner, Field, PageIntro, Screen } from '../../src/components/ui';
+import { Button, ErrorBanner, Field, PageIntro, Screen, TopAppBar } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
 import { createFarm } from '../../src/services/farmService';
 
@@ -44,15 +44,16 @@ export default function CreateFarmScreen() {
 
   return (
     <Screen footer={<Button title="Buat Kebun" loading={submitting} onPress={handleSubmit} />}>
+      <TopAppBar title="Buat Kebun" onBack={() => router.back()} />
       <PageIntro
-        title="Buat Kebun"
+        title="Data Kebun"
         subtitle="Akses pemilik aktif akan dibuat otomatis setelah kebun berhasil tersimpan."
       />
       <ErrorBanner message={error} />
       <Field label="Nama kebun" value={name} onChangeText={setName} placeholder="MS Farm" />
       <Field label="Lokasi" value={location} onChangeText={setLocation} placeholder="Lokasi kebun" />
       <Field
-        label="Luas"
+        label="Luas kebun (meter persegi)"
         value={areaSize}
         onChangeText={setAreaSize}
         placeholder="Contoh: 1.25"

@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import React from 'react';
 
-import { Button, ErrorBanner, Field, PageIntro, Screen } from '../../src/components/ui';
+import { Button, ErrorBanner, Field, PageIntro, Screen, TopAppBar } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
 import { requestJoinFarm } from '../../src/services/memberService';
 
@@ -30,8 +30,9 @@ export default function JoinFarmScreen() {
 
   return (
     <Screen footer={<Button title="Ajukan Bergabung" loading={submitting} onPress={handleSubmit} />}>
+      <TopAppBar title="Gabung Kebun" onBack={() => router.back()} />
       <PageIntro
-        title="Gabung Kebun"
+        title="Kode Kebun"
         subtitle="Masukkan kode kebun dari pemilik. Akses operasional menunggu persetujuan."
       />
       <ErrorBanner message={error} />

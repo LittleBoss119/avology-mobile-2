@@ -12,7 +12,7 @@ export default function OwnerFarmProfileScreen() {
   if (!isOwnerActive(currentFarm)) {
     return (
       <Screen>
-        <PageIntro title="Kebun Saya" subtitle="Profil kebun dan akses operasional." />
+        <PageIntro title="Profil Kebun" subtitle="Profil kebun dan akses operasional." />
         <EmptyState title="Akses tidak tersedia" subtitle="Profil Kebun hanya tersedia untuk pemilik aktif." />
       </Screen>
     );
@@ -20,7 +20,7 @@ export default function OwnerFarmProfileScreen() {
 
   return (
     <Screen>
-      <PageIntro title="Kebun Saya" subtitle="Profil kebun, kode gabung, pekerja, dan SOP." />
+      <PageIntro title="Profil Kebun" subtitle="Profil kebun, kode gabung, pekerja, dan SOP." />
       <ErrorBanner message={error?.message} />
 
       {!farm ? (
@@ -37,7 +37,7 @@ export default function OwnerFarmProfileScreen() {
             value={
               farm.areaSize === null || farm.areaSize === undefined
                 ? null
-                : `${new Intl.NumberFormat('id-ID').format(farm.areaSize)} m2`
+                : `${new Intl.NumberFormat('id-ID').format(farm.areaSize)} meter persegi`
             }
           />
           <MetaRow label="Kode gabung" value={farm.joinCode} />

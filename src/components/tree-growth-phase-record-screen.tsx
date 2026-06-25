@@ -6,7 +6,7 @@ import { createGrowthPhaseRecord } from '../services/growthPhaseService';
 import { getTreeDetail } from '../services/treeService';
 import type { GrowthPhase, Tree } from '../types/domain';
 import { formatGrowthPhase, formatTreeLocation } from '../utils/treeFormat';
-import { Button, Card, ErrorBanner, LoadingState, MetaRow, PageIntro, Screen } from './ui';
+import { Button, Card, ErrorBanner, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
 
 const phaseOptions: GrowthPhase[] = [
   'initial_planting',
@@ -114,7 +114,7 @@ export function TreeGrowthPhaseRecordScreen({
         </>
       }
     >
-      <PageIntro title="Catat Fase" subtitle="Pilih fase pertumbuhan pohon saat ini." />
+      <TopAppBar title="Catat Fase" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
       {tree ? (

@@ -79,11 +79,11 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/index" options={{ headerBackVisible: false, title: 'Pemilik' }} />
           <Stack.Screen name="owner/growth-monitoring" options={{ title: 'Monitoring Fase' }} />
           <Stack.Screen name="owner/trees/index" options={{ headerBackVisible: false, title: 'Pohon' }} />
-          <Stack.Screen name="owner/trees/create" options={{ title: 'Tambah Pohon' }} />
-          <Stack.Screen name="owner/trees/[treeId]" options={{ title: 'Detail Pohon' }} />
-          <Stack.Screen name="owner/trees/[treeId]/edit" options={{ title: 'Edit Pohon' }} />
-          <Stack.Screen name="owner/trees/[treeId]/report" options={{ title: 'Catat Kondisi' }} />
-          <Stack.Screen name="owner/trees/[treeId]/phase" options={{ title: 'Catat Fase' }} />
+          <Stack.Screen name="owner/trees/create" options={{ headerShown: false, title: 'Tambah Pohon' }} />
+          <Stack.Screen name="owner/trees/[treeId]" options={{ headerShown: false, title: 'Detail Pohon' }} />
+          <Stack.Screen name="owner/trees/[treeId]/edit" options={{ headerShown: false, title: 'Edit Pohon' }} />
+          <Stack.Screen name="owner/trees/[treeId]/report" options={{ headerShown: false, title: 'Catat Kondisi' }} />
+          <Stack.Screen name="owner/trees/[treeId]/phase" options={{ headerShown: false, title: 'Catat Fase' }} />
           <Stack.Screen name="owner/sops/index" options={{ title: 'SOP Perawatan' }} />
           <Stack.Screen name="owner/sops/create" options={{ headerShown: false, title: 'Tambah SOP' }} />
           <Stack.Screen name="owner/sops/[sopId]" options={{ headerShown: false, title: 'Detail SOP' }} />

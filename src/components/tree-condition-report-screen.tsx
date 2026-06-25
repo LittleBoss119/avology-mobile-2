@@ -7,7 +7,7 @@ import { getTreeDetail } from '../services/treeService';
 import type { Tree, TreeConditionStatus } from '../types/domain';
 import { formatTreeConditionStatus, formatTreeLocation } from '../utils/treeFormat';
 import { ConditionStatusBadge } from './tree-components';
-import { Button, Card, ErrorBanner, LoadingState, MetaRow, PageIntro, Screen } from './ui';
+import { Button, Card, ErrorBanner, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
 
 const conditionOptions: TreeConditionStatus[] = [
   'healthy',
@@ -116,7 +116,7 @@ export function TreeConditionReportScreen({
         </>
       }
     >
-      <PageIntro title="Catat Kondisi" subtitle="Pilih kondisi pohon saat ini." />
+      <TopAppBar title="Catat Kondisi" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
       {tree ? (

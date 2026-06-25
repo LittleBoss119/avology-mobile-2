@@ -77,12 +77,12 @@ export default function OnboardingLayout() {
       }}
     >
       <Stack.Screen name="onboarding" options={{ title: 'Mulai' }} />
-      <Stack.Screen name="create-farm" options={{ title: 'Buat Kebun' }} />
-      <Stack.Screen name="join-farm" options={{ title: 'Gabung Kebun' }} />
-      <Stack.Screen name="profile" options={{ title: 'Profil Akun' }} />
-      <Stack.Screen name="pending-approval" options={{ title: 'Menunggu Persetujuan' }} />
-      <Stack.Screen name="rejected" options={{ title: 'Akses Ditolak' }} />
-      <Stack.Screen name="removed-access" options={{ title: 'Akses Dinonaktifkan' }} />
+      <Stack.Screen name="create-farm" options={{ headerShown: false, title: 'Buat Kebun' }} />
+      <Stack.Screen name="join-farm" options={{ headerShown: false, title: 'Gabung Kebun' }} />
+      <Stack.Screen name="profile" options={{ title: 'Profil' }} />
+      <Stack.Screen name="pending-approval" options={{ headerShown: false, title: 'Menunggu Persetujuan' }} />
+      <Stack.Screen name="rejected" options={{ headerShown: false, title: 'Akses Ditolak' }} />
+      <Stack.Screen name="removed-access" options={{ headerShown: false, title: 'Akses Dinonaktifkan' }} />
     </Stack>
   );
 }

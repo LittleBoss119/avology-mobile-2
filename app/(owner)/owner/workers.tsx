@@ -93,7 +93,7 @@ export default function WorkerManagementScreen() {
   return (
     <Screen>
       <PageIntro
-        title="Manajemen Pekerja"
+        title="Pekerja Kebun"
         subtitle="Kelola pengajuan, pekerja aktif, dan akses pekerja yang tidak aktif."
       />
       <ErrorBanner message={error} />
