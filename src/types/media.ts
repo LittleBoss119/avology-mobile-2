@@ -58,6 +58,55 @@ export type GetPhotoSignedUrlData = {
   expiresIn: number;
 };
 
+export type TreeMainPhoto = {
+  attachment: PhotoAttachment;
+  signedUrl: string;
+};
+
+export type TreeMainPhotoMap = Record<UUID, TreeMainPhoto>;
+
+export type GetTreeMainPhotoData = TreeMainPhoto | null;
+
+export type UploadTreeMainPhotoInput = {
+  farmId: UUID;
+  treeId: UUID;
+  localUri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+};
+
+export type DeleteTreeMainPhotoInput = {
+  farmId: UUID;
+  treeId: UUID;
+};
+
+export type ConditionRecordPhoto = {
+  attachment: PhotoAttachment;
+  signedUrl: string;
+};
+
+export type ConditionRecordPhotoMap = Record<UUID, ConditionRecordPhoto>;
+
+export type UploadConditionRecordPhotoInput = {
+  farmId: UUID;
+  conditionRecordId: UUID;
+  localUri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  caption?: string | null;
+};
+
+export type GetConditionRecordPhotosInput = {
+  farmId: UUID;
+  conditionRecordId: UUID;
+};
+
+export type ListConditionRecordPhotosForTreeInput = {
+  farmId: UUID;
+  treeId: UUID;
+  conditionRecordIds: UUID[];
+};
+
 export type PickedPhotoAsset = {
   uri: string;
   fileName: string | null;

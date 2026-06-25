@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 
@@ -12,8 +12,10 @@ import {
   Screen,
 } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
+import { listTreeMainPhotosForFarm } from '../../../../src/services/photoAttachmentService';
 import { getTrees } from '../../../../src/services/treeService';
 import type { GrowthPhase, Tree, TreeConditionStatus } from '../../../../src/types/domain';
+import type { TreeMainPhotoMap } from '../../../../src/types/media';
 import {
   formatGrowthPhase,
   formatTreeConditionStatus,
@@ -56,6 +58,7 @@ export default function OwnerTreeListScreen() {
   const [filterOpen, setFilterOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [phaseFilters, setPhaseFilters] = React.useState<GrowthPhase[]>([]);
+  const [photoMap, setPhotoMap] = React.useState<TreeMainPhotoMap>({});
   const [search, setSearch] = React.useState('');
   const [trees, setTrees] = React.useState<Tree[]>([]);
 
@@ -65,6 +68,7 @@ export default function OwnerTreeListScreen() {
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
       setTrees([]);
+      setPhotoMap({});
       return;
     }
 
@@ -78,10 +82,20 @@ export default function OwnerTreeListScreen() {
     if (result.error) {
       setError(result.error.message);
       setTrees([]);
+      setPhotoMap({});
       return;
     }
 
     setTrees(result.data);
+
+    const photoResult = await listTreeMainPhotosForFarm(farmId);
+
+    if (photoResult.error) {
+      setPhotoMap({});
+      return;
+    }
+
+    setPhotoMap(photoResult.data);
   }, [archived, farmId]);
 
   React.useEffect(() => {
@@ -90,9 +104,11 @@ export default function OwnerTreeListScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  React.useEffect(() => {
-    loadTrees().finally(() => setLoading(false));
-  }, [loadTrees]);
+  useFocusEffect(
+    React.useCallback(() => {
+      loadTrees().finally(() => setLoading(false));
+    }, [loadTrees])
+  );
 
   const displayedTrees = React.useMemo(
     () =>
@@ -167,7 +183,11 @@ export default function OwnerTreeListScreen() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
           {displayedTrees.map((tree) => (
             <View key={tree.id} style={{ flexBasis: '47%', flexGrow: 1, minWidth: 154 }}>
-              <TreeCard tree={tree} onPress={() => router.push(`/owner/trees/${tree.id}`)} />
+              <TreeCard
+                photoUrl={photoMap[tree.id]?.signedUrl}
+                tree={tree}
+                onPress={() => router.push(`/owner/trees/${tree.id}`)}
+              />
             </View>
           ))}
         </View>

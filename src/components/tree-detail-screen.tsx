@@ -1,12 +1,20 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Alert, Modal, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, Text, View } from 'react-native';
 
 import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
+import {
+  deleteTreeMainPhoto,
+  getTreeMainPhoto,
+  listConditionRecordPhotosForTree,
+  uploadTreeMainPhoto,
+} from '../services/photoAttachmentService';
 import { archiveTree, getTreeDetail, restoreTree } from '../services/treeService';
 import { useAuth } from '../context/auth-context';
+import { pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type { Tree, TreeConditionReport, TreeHistoryItem } from '../types/domain';
+import type { ConditionRecordPhotoMap, PickedPhotoAsset, TreeMainPhoto } from '../types/media';
 import {
   formatGrowthPhase,
   formatTreeAge,
@@ -46,13 +54,19 @@ export function TreeDetailScreen({
   const [loading, setLoading] = React.useState(true);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [history, setHistory] = React.useState<TreeHistoryItem[]>([]);
+  const [conditionPhotoMap, setConditionPhotoMap] = React.useState<ConditionRecordPhotoMap>({});
+  const [photoActionLoading, setPhotoActionLoading] = React.useState(false);
+  const [photoSourceOpen, setPhotoSourceOpen] = React.useState(false);
   const [reports, setReports] = React.useState<TreeConditionReport[]>([]);
   const [tree, setTree] = React.useState<Tree | null>(null);
+  const [treeMainPhoto, setTreeMainPhoto] = React.useState<TreeMainPhoto | null>(null);
 
   const loadDetail = React.useCallback(async () => {
     if (!treeId) {
       setError('Data pohon tidak ditemukan.');
       setTree(null);
+      setTreeMainPhoto(null);
+      setConditionPhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -65,6 +79,8 @@ export function TreeDetailScreen({
     if (treeResult.error) {
       setError(treeResult.error.message);
       setTree(null);
+      setTreeMainPhoto(null);
+      setConditionPhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -73,6 +89,8 @@ export function TreeDetailScreen({
     if (mode === 'worker' && treeResult.data.isArchived) {
       setError('Pohon yang diarsipkan tidak tersedia untuk pekerja.');
       setTree(null);
+      setTreeMainPhoto(null);
+      setConditionPhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -80,9 +98,10 @@ export function TreeDetailScreen({
 
     setTree(treeResult.data);
 
-    const [reportsResult, historyResult] = await Promise.all([
+    const [reportsResult, historyResult, photoResult] = await Promise.all([
       getTreeConditionReports({ treeId }),
       getTreeHistory({ treeId }),
+      getTreeMainPhoto(treeResult.data.farmId, treeResult.data.id),
     ]);
 
     if (reportsResult.error) {
@@ -97,6 +116,24 @@ export function TreeDetailScreen({
       setHistory([]);
     } else {
       setHistory(historyResult.data);
+    }
+
+    if (photoResult.error) {
+      setTreeMainPhoto(null);
+    } else {
+      setTreeMainPhoto(photoResult.data);
+    }
+
+    if (reportsResult.data && reportsResult.data.length > 0) {
+      const conditionPhotoResult = await listConditionRecordPhotosForTree({
+        conditionRecordIds: reportsResult.data.map((report) => report.id),
+        farmId: treeResult.data.farmId,
+        treeId: treeResult.data.id,
+      });
+
+      setConditionPhotoMap(conditionPhotoResult.data ?? {});
+    } else {
+      setConditionPhotoMap({});
     }
   }, [mode, treeId]);
 
@@ -171,6 +208,119 @@ export function TreeDetailScreen({
     );
   }
 
+  function handleOpenPhotoSource() {
+    setMenuOpen(false);
+    setPhotoSourceOpen(true);
+  }
+
+  async function handlePickPhotoFromGallery() {
+    const result = await pickImageFromGallery();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (!result.data) {
+      setPhotoSourceOpen(false);
+      return;
+    }
+
+    await runTreePhotoUpload(result.data);
+  }
+
+  async function handleTakePhotoFromCamera() {
+    const result = await takePhotoFromCamera();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (!result.data) {
+      setPhotoSourceOpen(false);
+      return;
+    }
+
+    await runTreePhotoUpload(result.data);
+  }
+
+  async function runTreePhotoUpload(asset: PickedPhotoAsset) {
+    if (!tree) {
+      return;
+    }
+
+    setPhotoActionLoading(true);
+    setError(null);
+
+    const result = await uploadTreeMainPhoto({
+      farmId: tree.farmId,
+      fileName: asset.fileName,
+      localUri: asset.uri,
+      mimeType: asset.mimeType,
+      treeId: tree.id,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setPhotoActionLoading(false);
+      return;
+    }
+
+    setTreeMainPhoto(result.data);
+    setPhotoSourceOpen(false);
+    setPhotoActionLoading(false);
+  }
+
+  function handleDeletePhoto() {
+    setMenuOpen(false);
+
+    if (!treeMainPhoto || !tree) {
+      return;
+    }
+
+    Alert.alert(
+      'Hapus foto pohon?',
+      'Foto utama pohon akan dihapus dari penyimpanan. Data pohon dan riwayat tetap tersimpan.',
+      [
+        {
+          text: 'Batal',
+          style: 'cancel',
+        },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: () => {
+            runDeletePhoto();
+          },
+        },
+      ]
+    );
+  }
+
+  async function runDeletePhoto() {
+    if (!tree) {
+      return;
+    }
+
+    setPhotoActionLoading(true);
+    setError(null);
+
+    const result = await deleteTreeMainPhoto({
+      farmId: tree.farmId,
+      treeId: tree.id,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setPhotoActionLoading(false);
+      return;
+    }
+
+    setTreeMainPhoto(null);
+    setPhotoActionLoading(false);
+  }
+
   const displayCode = formatTreeDisplayCode(tree);
 
   return (
@@ -178,23 +328,38 @@ export function TreeDetailScreen({
       <TreeDetailTopBar mode={mode} onMenuPress={() => setMenuOpen(true)} />
       <ErrorBanner message={error} />
 
-      <TreeDetailHero displayCode={displayCode} tree={tree} />
+      <TreeDetailHero
+        displayCode={displayCode}
+        photoLoading={photoActionLoading}
+        photoUrl={treeMainPhoto?.signedUrl}
+        tree={tree}
+      />
       {mode === 'owner' ? (
         <OwnerTreeMenu
-          actionLoading={actionLoading}
+          actionLoading={actionLoading || photoActionLoading}
+          hasPhoto={Boolean(treeMainPhoto)}
           onArchiveToggle={() => {
             setMenuOpen(false);
             handleArchiveToggle();
           }}
           onClose={() => setMenuOpen(false)}
+          onDeletePhoto={handleDeletePhoto}
           onEdit={() => {
             setMenuOpen(false);
             router.push(`${basePath}/${tree.id}/edit`);
           }}
+          onPhotoChange={handleOpenPhotoSource}
           tree={tree}
           visible={menuOpen}
         />
       ) : null}
+      <PhotoSourceSheet
+        loading={photoActionLoading}
+        onCameraPress={handleTakePhotoFromCamera}
+        onClose={() => setPhotoSourceOpen(false)}
+        onGalleryPress={handlePickPhotoFromGallery}
+        visible={photoSourceOpen}
+      />
 
       <SectionTitle title="Informasi Pohon" />
       <InfoGrid mode={mode} tree={tree} />
@@ -202,12 +367,22 @@ export function TreeDetailScreen({
       <ActionSection basePath={basePath} tree={tree} />
 
       <SectionTitle title="Timeline Riwayat" />
-      <TreeHistoryTimeline currentUserId={profile?.id} history={history} viewerMode={mode} />
+      <TreeHistoryTimeline
+        conditionPhotoMap={conditionPhotoMap}
+        currentUserId={profile?.id}
+        history={history}
+        viewerMode={mode}
+      />
 
       {history.length === 0 && reports.length > 0 ? (
         <>
           <SectionTitle title="Laporan Kondisi" />
-          <ConditionReportList currentUserId={profile?.id} reports={reports} viewerMode={mode} />
+          <ConditionReportList
+            conditionPhotoMap={conditionPhotoMap}
+            currentUserId={profile?.id}
+            reports={reports}
+            viewerMode={mode}
+          />
         </>
       ) : null}
     </Screen>
@@ -239,10 +414,39 @@ function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuP
   return <TopAppBar right={right} title="Detail Pohon" onBack={() => router.back()} />;
 }
 
-function TreeDetailHero({ displayCode, tree }: { displayCode: string; tree: Tree }) {
+function TreeDetailHero({
+  displayCode,
+  photoLoading,
+  photoUrl,
+  tree,
+}: {
+  displayCode: string;
+  photoLoading?: boolean;
+  photoUrl?: string | null;
+  tree: Tree;
+}) {
   return (
     <View style={{ gap: 14 }}>
-      <TreeVisualPlaceholder condition={tree.currentCondition} />
+      <View>
+        <TreeVisualPlaceholder condition={tree.currentCondition} photoUrl={photoUrl} />
+        {photoLoading ? (
+          <View
+            style={{
+              alignItems: 'center',
+              backgroundColor: 'rgba(6,95,46,0.66)',
+              borderRadius: 12,
+              bottom: 0,
+              justifyContent: 'center',
+              left: 0,
+              position: 'absolute',
+              right: 0,
+              top: 0,
+            }}
+          >
+            <ActivityIndicator color="#FFFFFF" />
+          </View>
+        ) : null}
+      </View>
       <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: 6 }}>
           <Text selectable style={{ color: appTheme.primary, fontSize: 34, fontWeight: '900' }}>
@@ -340,16 +544,22 @@ function TreeActionButton({
 
 function OwnerTreeMenu({
   actionLoading,
+  hasPhoto,
   onArchiveToggle,
   onClose,
+  onDeletePhoto,
   onEdit,
+  onPhotoChange,
   tree,
   visible,
 }: {
   actionLoading: boolean;
+  hasPhoto: boolean;
   onArchiveToggle: () => void;
   onClose: () => void;
+  onDeletePhoto: () => void;
   onEdit: () => void;
+  onPhotoChange: () => void;
   tree: Tree;
   visible: boolean;
 }) {
@@ -372,6 +582,18 @@ function OwnerTreeMenu({
               shadowRadius: 14,
             }}
           >
+            <MenuItem
+              disabled={actionLoading}
+              label={hasPhoto ? 'Ganti Foto Pohon' : 'Tambah Foto Pohon'}
+              onPress={onPhotoChange}
+            />
+            {hasPhoto ? (
+              <>
+                <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
+                <MenuItem danger disabled={actionLoading} label="Hapus Foto Pohon" onPress={onDeletePhoto} />
+              </>
+            ) : null}
+            <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
             <MenuItem label="Edit Pohon" onPress={onEdit} />
             <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
             <MenuItem
@@ -383,6 +605,50 @@ function OwnerTreeMenu({
           </View>
         </View>
       </Pressable>
+    </Modal>
+  );
+}
+
+function PhotoSourceSheet({
+  loading,
+  onCameraPress,
+  onClose,
+  onGalleryPress,
+  visible,
+}: {
+  loading: boolean;
+  onCameraPress: () => void;
+  onClose: () => void;
+  onGalleryPress: () => void;
+  visible: boolean;
+}) {
+  return (
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.12)', flex: 1 }} onPress={onClose} />
+      <View
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          gap: 12,
+          paddingBottom: 28,
+          paddingHorizontal: 22,
+          paddingTop: 12,
+        }}
+      >
+        <View style={{ alignSelf: 'center', backgroundColor: '#DCE7D5', borderRadius: 999, height: 5, width: 48 }} />
+        <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '900' }}>
+          Foto Pohon
+        </Text>
+        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+          Ambil foto baru atau pilih dari galeri.
+        </Text>
+        <MenuItem disabled={loading} label="Ambil Foto" onPress={onCameraPress} />
+        <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
+        <MenuItem disabled={loading} label="Pilih dari Galeri" onPress={onGalleryPress} />
+        <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
+        <MenuItem disabled={loading} label="Batal" onPress={onClose} />
+      </View>
     </Modal>
   );
 }

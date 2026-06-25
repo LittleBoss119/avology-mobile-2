@@ -169,6 +169,7 @@ export type GrowthPhaseRecord = {
 export type TreeHistoryType = 'condition' | 'phase' | 'care';
 
 export type TreeHistoryItem = {
+  sourceId?: UUID | null;
   treeId: UUID;
   farmId: UUID;
   historyType: TreeHistoryType;

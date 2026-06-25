@@ -1,12 +1,22 @@
 import { supabase } from '../lib/supabase';
 import type { ServiceResult, SuccessData, UUID } from '../types/domain';
 import type {
+  ConditionRecordPhoto,
+  ConditionRecordPhotoMap,
+  DeleteTreeMainPhotoInput,
   DeletePhotoAttachmentInput,
+  GetConditionRecordPhotosInput,
+  GetTreeMainPhotoData,
   GetPhotoSignedUrlData,
+  ListConditionRecordPhotosForTreeInput,
   ListPhotoAttachmentsInput,
   PhotoAttachment,
   PhotoAttachmentEntityType,
   PhotoAttachmentPathFolder,
+  TreeMainPhoto,
+  TreeMainPhotoMap,
+  UploadConditionRecordPhotoInput,
+  UploadTreeMainPhotoInput,
   UploadPhotoAttachmentData,
   UploadPhotoAttachmentInput,
 } from '../types/media';
@@ -46,6 +56,11 @@ type PhotoAttachmentRow = {
   caption: string | null;
   is_primary: boolean;
   created_at: string;
+};
+
+type MembershipRow = {
+  role: 'owner' | 'worker';
+  status: 'pending' | 'active' | 'rejected' | 'removed';
 };
 
 export async function uploadPhotoAttachment(
@@ -115,6 +130,350 @@ export async function uploadPhotoAttachment(
   return ok({
     attachment: mapPhotoAttachment(insertResult.data),
   });
+}
+
+export async function getTreeMainPhoto(
+  farmId: UUID,
+  treeId: UUID
+): Promise<ServiceResult<GetTreeMainPhotoData>> {
+  const photoResult = await getPrimaryTreeMainPhotoRow(farmId, treeId);
+
+  if (photoResult.error) {
+    return fail(photoResult.error);
+  }
+
+  if (!photoResult.data) {
+    return ok(null);
+  }
+
+  const signedUrlResult = await getPhotoSignedUrl(photoResult.data.storage_path);
+
+  if (signedUrlResult.error) {
+    return fail(signedUrlResult.error, 'Gagal memuat foto pohon.');
+  }
+
+  return ok({
+    attachment: mapPhotoAttachment(photoResult.data),
+    signedUrl: signedUrlResult.data.signedUrl,
+  });
+}
+
+export async function uploadTreeMainPhoto(
+  input: UploadTreeMainPhotoInput
+): Promise<ServiceResult<TreeMainPhoto>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const treeId = normalizeRequiredText(input.treeId, 'Pohon tidak valid.');
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (treeId instanceof Error) {
+    return fail(treeId);
+  }
+
+  const accessResult = await ensureActiveOwner(farmId);
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  const previousPhotosResult = await listTreeMainPhotoRows(farmId, treeId);
+
+  if (previousPhotosResult.error) {
+    return fail(previousPhotosResult.error);
+  }
+
+  const uploadResult = await uploadPhotoAttachment({
+    entityId: treeId,
+    entityType: 'tree_main',
+    farmId,
+    fileName: input.fileName,
+    isPrimary: true,
+    localUri: input.localUri,
+    mimeType: input.mimeType,
+  });
+
+  if (uploadResult.error) {
+    return fail(uploadResult.error, 'Foto gagal diunggah.');
+  }
+
+  await deleteSupersededTreeMainPhotos(
+    previousPhotosResult.data.map((photo) => mapPhotoAttachment(photo)),
+    uploadResult.data.attachment.id
+  );
+
+  const signedUrlResult = await getPhotoSignedUrl(uploadResult.data.attachment.storagePath);
+
+  if (signedUrlResult.error) {
+    return fail(signedUrlResult.error, 'Foto berhasil diunggah, tetapi pratinjau gagal dimuat.');
+  }
+
+  return ok({
+    attachment: uploadResult.data.attachment,
+    signedUrl: signedUrlResult.data.signedUrl,
+  });
+}
+
+export async function deleteTreeMainPhoto(
+  input: DeleteTreeMainPhotoInput
+): Promise<ServiceResult<SuccessData>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const treeId = normalizeRequiredText(input.treeId, 'Pohon tidak valid.');
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (treeId instanceof Error) {
+    return fail(treeId);
+  }
+
+  const accessResult = await ensureActiveOwner(farmId);
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  const photosResult = await listTreeMainPhotoRows(farmId, treeId);
+
+  if (photosResult.error) {
+    return fail(photosResult.error);
+  }
+
+  if (photosResult.data.length === 0) {
+    return ok({
+      success: true,
+    });
+  }
+
+  const deleteResults = await Promise.all(
+    photosResult.data.map((photo) => deletePhotoAttachment({ photoId: photo.id }))
+  );
+  const failedDelete = deleteResults.find((result) => result.error);
+
+  if (failedDelete?.error) {
+    return fail(failedDelete.error, 'Gagal menghapus foto pohon.');
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
+export async function listTreeMainPhotosForFarm(
+  farmId: UUID
+): Promise<ServiceResult<TreeMainPhotoMap>> {
+  const normalizedFarmId = normalizeRequiredText(farmId, 'Kebun tidak valid.');
+
+  if (normalizedFarmId instanceof Error) {
+    return fail(normalizedFarmId);
+  }
+
+  const { data, error } = await supabase
+    .from('photo_attachments')
+    .select(PHOTO_ATTACHMENT_SELECT)
+    .eq('farm_id', normalizedFarmId)
+    .eq('entity_type', 'tree_main')
+    .eq('is_primary', true)
+    .order('created_at', { ascending: false })
+    .returns<PhotoAttachmentRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat foto pohon.');
+  }
+
+  const uniqueRowsByTree = new Map<string, PhotoAttachmentRow>();
+
+  for (const row of data ?? []) {
+    if (!uniqueRowsByTree.has(row.entity_id)) {
+      uniqueRowsByTree.set(row.entity_id, row);
+    }
+  }
+
+  const entries = await Promise.all(
+    Array.from(uniqueRowsByTree.entries()).map(async ([treeId, row]) => {
+      const signedUrlResult = await getPhotoSignedUrl(row.storage_path);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return [
+        treeId,
+        {
+          attachment: mapPhotoAttachment(row),
+          signedUrl: signedUrlResult.data.signedUrl,
+        },
+      ] as const;
+    })
+  );
+
+  return ok(
+    Object.fromEntries(
+      entries.filter((entry): entry is [string, TreeMainPhoto] => entry !== null)
+    )
+  );
+}
+
+export async function uploadConditionRecordPhoto(
+  input: UploadConditionRecordPhotoInput
+): Promise<ServiceResult<ConditionRecordPhoto>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const conditionRecordId = normalizeRequiredText(
+    input.conditionRecordId,
+    'Laporan kondisi tidak valid.'
+  );
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (conditionRecordId instanceof Error) {
+    return fail(conditionRecordId);
+  }
+
+  const uploadResult = await uploadPhotoAttachment({
+    caption: input.caption,
+    entityId: conditionRecordId,
+    entityType: 'condition_record',
+    farmId,
+    fileName: input.fileName,
+    isPrimary: false,
+    localUri: input.localUri,
+    mimeType: input.mimeType,
+  });
+
+  if (uploadResult.error) {
+    return fail(uploadResult.error, 'Foto gagal diunggah.');
+  }
+
+  const signedUrlResult = await getPhotoSignedUrl(uploadResult.data.attachment.storagePath);
+
+  if (signedUrlResult.error) {
+    return fail(signedUrlResult.error, 'Foto berhasil diunggah, tetapi pratinjau gagal dimuat.');
+  }
+
+  return ok({
+    attachment: uploadResult.data.attachment,
+    signedUrl: signedUrlResult.data.signedUrl,
+  });
+}
+
+export async function getConditionRecordPhotos(
+  input: GetConditionRecordPhotosInput
+): Promise<ServiceResult<ConditionRecordPhoto[]>> {
+  const photoResult = await listPhotoAttachments({
+    entityId: input.conditionRecordId,
+    entityType: 'condition_record',
+    farmId: input.farmId,
+  });
+
+  if (photoResult.error) {
+    return fail(photoResult.error, 'Gagal memuat foto kondisi.');
+  }
+
+  const photos = await Promise.all(
+    photoResult.data.map(async (attachment) => {
+      const signedUrlResult = await getPhotoSignedUrl(attachment.storagePath);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return {
+        attachment,
+        signedUrl: signedUrlResult.data.signedUrl,
+      };
+    })
+  );
+
+  return ok(
+    photos.filter((photo): photo is ConditionRecordPhoto => photo !== null)
+  );
+}
+
+export async function listConditionRecordPhotosForTree(
+  input: ListConditionRecordPhotosForTreeInput
+): Promise<ServiceResult<ConditionRecordPhotoMap>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const treeId = normalizeRequiredText(input.treeId, 'Pohon tidak valid.');
+  const conditionRecordIds = Array.from(new Set(input.conditionRecordIds.filter(Boolean)));
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (treeId instanceof Error) {
+    return fail(treeId);
+  }
+
+  if (conditionRecordIds.length === 0) {
+    return ok({});
+  }
+
+  const validRecordResult = await supabase
+    .from('tree_condition_reports')
+    .select('id')
+    .eq('farm_id', farmId)
+    .eq('tree_id', treeId)
+    .in('id', conditionRecordIds)
+    .returns<Array<{ id: string }>>();
+
+  if (validRecordResult.error) {
+    return fail(validRecordResult.error, 'Gagal memeriksa laporan kondisi.');
+  }
+
+  const validConditionRecordIds = (validRecordResult.data ?? []).map((row) => row.id);
+
+  if (validConditionRecordIds.length === 0) {
+    return ok({});
+  }
+
+  const { data, error } = await supabase
+    .from('photo_attachments')
+    .select(PHOTO_ATTACHMENT_SELECT)
+    .eq('farm_id', farmId)
+    .eq('entity_type', 'condition_record')
+    .in('entity_id', validConditionRecordIds)
+    .order('created_at', { ascending: false })
+    .returns<PhotoAttachmentRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat foto kondisi.');
+  }
+
+  const uniqueRowsByRecord = new Map<string, PhotoAttachmentRow>();
+
+  for (const row of data ?? []) {
+    if (!uniqueRowsByRecord.has(row.entity_id)) {
+      uniqueRowsByRecord.set(row.entity_id, row);
+    }
+  }
+
+  const entries = await Promise.all(
+    Array.from(uniqueRowsByRecord.entries()).map(async ([conditionRecordId, row]) => {
+      const signedUrlResult = await getPhotoSignedUrl(row.storage_path);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return [
+        conditionRecordId,
+        {
+          attachment: mapPhotoAttachment(row),
+          signedUrl: signedUrlResult.data.signedUrl,
+        },
+      ] as const;
+    })
+  );
+
+  return ok(
+    Object.fromEntries(
+      entries.filter((entry): entry is [string, ConditionRecordPhoto] => entry !== null)
+    )
+  );
 }
 
 export async function listPhotoAttachments(
@@ -346,6 +705,10 @@ function buildPhotoStoragePath(input: {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const random = Math.random().toString(36).slice(2, 10);
 
+  if (input.entityType === 'tree_main') {
+    return `farms/${input.farmId}/${folder}/${input.entityId}/main/${timestamp}-${random}.${input.extension}`;
+  }
+
   return `farms/${input.farmId}/${folder}/${input.entityId}/${timestamp}-${random}.${input.extension}`;
 }
 
@@ -422,6 +785,78 @@ function mapPhotoAttachment(row: PhotoAttachmentRow): PhotoAttachment {
 
 async function removeStorageObjectBestEffort(storagePath: string): Promise<void> {
   await supabase.storage.from(PHOTO_STORAGE_BUCKET).remove([storagePath]);
+}
+
+async function listTreeMainPhotoRows(
+  farmId: UUID,
+  treeId: UUID
+): Promise<ServiceResult<PhotoAttachmentRow[]>> {
+  const { data, error } = await supabase
+    .from('photo_attachments')
+    .select(PHOTO_ATTACHMENT_SELECT)
+    .eq('farm_id', farmId)
+    .eq('entity_type', 'tree_main')
+    .eq('entity_id', treeId)
+    .order('is_primary', { ascending: false })
+    .order('created_at', { ascending: false })
+    .returns<PhotoAttachmentRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat foto pohon.');
+  }
+
+  return ok(data ?? []);
+}
+
+async function getPrimaryTreeMainPhotoRow(
+  farmId: UUID,
+  treeId: UUID
+): Promise<ServiceResult<PhotoAttachmentRow | null>> {
+  const photosResult = await listTreeMainPhotoRows(farmId, treeId);
+
+  if (photosResult.error) {
+    return fail(photosResult.error);
+  }
+
+  return ok(photosResult.data.find((photo) => photo.is_primary) ?? photosResult.data[0] ?? null);
+}
+
+async function deleteSupersededTreeMainPhotos(
+  previousPhotos: PhotoAttachment[],
+  currentPhotoId: UUID
+): Promise<void> {
+  await Promise.all(
+    previousPhotos
+      .filter((photo) => photo.id !== currentPhotoId)
+      .map((photo) => deletePhotoAttachment({ photoId: photo.id }))
+  );
+}
+
+async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessData>> {
+  const userIdResult = await getCurrentUserId();
+
+  if (userIdResult.error) {
+    return fail(userIdResult.error);
+  }
+
+  const { data, error } = await supabase
+    .from('farm_members')
+    .select('role, status')
+    .eq('farm_id', farmId)
+    .eq('user_id', userIdResult.data)
+    .maybeSingle<MembershipRow>();
+
+  if (error) {
+    return fail(error, 'Gagal memeriksa akses kebun.');
+  }
+
+  if (data?.role !== 'owner' || data.status !== 'active') {
+    return fail(new Error('Hanya pemilik aktif yang dapat mengelola foto pohon.'));
+  }
+
+  return ok({
+    success: true,
+  });
 }
 
 function normalizeRequiredText(value: string | null | undefined, message: string): string | Error {

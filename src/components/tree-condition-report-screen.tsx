@@ -1,10 +1,13 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Alert, Image, Text, TextInput, View } from 'react-native';
 
 import { createTreeConditionReport } from '../services/conditionReportService';
+import { uploadConditionRecordPhoto } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
+import { pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type { Tree, TreeConditionStatus } from '../types/domain';
+import type { PickedPhotoAsset } from '../types/media';
 import { formatTreeConditionStatus, formatTreeLocation } from '../utils/treeFormat';
 import { ConditionStatusBadge } from './tree-components';
 import { Button, Card, ErrorBanner, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
@@ -29,6 +32,7 @@ export function TreeConditionReportScreen({
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
+  const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [tree, setTree] = React.useState<Tree | null>(null);
 
@@ -99,8 +103,61 @@ export function TreeConditionReportScreen({
       return;
     }
 
+    if (selectedPhoto) {
+      const photoResult = await uploadConditionRecordPhoto({
+        conditionRecordId: result.data.reportId,
+        farmId: tree.farmId,
+        fileName: selectedPhoto.fileName,
+        localUri: selectedPhoto.uri,
+        mimeType: selectedPhoto.mimeType,
+      });
+
+      if (photoResult.error) {
+        setSubmitting(false);
+        Alert.alert(
+          'Laporan tersimpan',
+          'Laporan kondisi tersimpan, tetapi foto gagal diunggah.',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.replace(`${basePath}/${tree.id}`),
+            },
+          ]
+        );
+        return;
+      }
+    }
+
     setSubmitting(false);
     router.replace(`${basePath}/${tree.id}`);
+  }
+
+  async function handlePickPhotoFromGallery() {
+    const result = await pickImageFromGallery();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setError(null);
+      setSelectedPhoto(result.data);
+    }
+  }
+
+  async function handleTakePhotoFromCamera() {
+    const result = await takePhotoFromCamera();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setError(null);
+      setSelectedPhoto(result.data);
+    }
   }
 
   if (loading) {
@@ -148,7 +205,66 @@ export function TreeConditionReportScreen({
       </Card>
 
       <TextArea label="Catatan" onChangeText={setNote} placeholder="Opsional" value={note} />
+
+      <ConditionPhotoPicker
+        disabled={submitting}
+        photo={selectedPhoto}
+        onCameraPress={handleTakePhotoFromCamera}
+        onGalleryPress={handlePickPhotoFromGallery}
+        onRemove={() => setSelectedPhoto(null)}
+      />
     </Screen>
+  );
+}
+
+function ConditionPhotoPicker({
+  disabled,
+  onCameraPress,
+  onGalleryPress,
+  onRemove,
+  photo,
+}: {
+  disabled: boolean;
+  onCameraPress: () => void;
+  onGalleryPress: () => void;
+  onRemove: () => void;
+  photo: PickedPhotoAsset | null;
+}) {
+  return (
+    <Card>
+      <View style={{ gap: 5 }}>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800' }}>
+          Foto Kondisi
+        </Text>
+        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+          Opsional, untuk mendokumentasikan kondisi pohon.
+        </Text>
+      </View>
+
+      {photo ? (
+        <View style={{ gap: 10 }}>
+          <Image
+            resizeMode="cover"
+            source={{ uri: photo.uri }}
+            style={{
+              borderRadius: 12,
+              height: 150,
+              width: '100%',
+            }}
+          />
+          <Button disabled={disabled} title="Hapus Foto" variant="secondary" onPress={onRemove} />
+        </View>
+      ) : null}
+
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flex: 1 }}>
+          <Button disabled={disabled} title="Ambil Foto" variant="secondary" onPress={onCameraPress} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button disabled={disabled} title="Pilih Galeri" variant="secondary" onPress={onGalleryPress} />
+        </View>
+      </View>
+    </Card>
   );
 }
 

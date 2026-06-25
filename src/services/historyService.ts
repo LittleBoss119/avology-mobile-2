@@ -26,6 +26,13 @@ type TreeHistoryRow = {
   happened_at: string;
 };
 
+type ConditionHistorySourceRow = {
+  id: string;
+  condition_status: string;
+  reported_by: string;
+  reported_at: string;
+};
+
 type TreeFarmRow = {
   id: string;
   farm_id: string;
@@ -73,7 +80,8 @@ export async function getTreeHistory(
     return fail(error, 'Gagal memuat riwayat pohon.');
   }
 
-  const history = (data ?? []).map(mapTreeHistoryItem);
+  const conditionSourceMap = await getConditionHistorySourceMap(input.treeId);
+  const history = (data ?? []).map((row) => mapTreeHistoryItem(row, conditionSourceMap));
   const actorDisplays = await getHistoryActorDisplays(
     treeFarmIdResult.data,
     history.map((item) => item.actorId)
@@ -171,10 +179,40 @@ async function getCurrentUserId(): Promise<ServiceResult<UUID>> {
   return ok(userId);
 }
 
-function mapTreeHistoryItem(row: TreeHistoryRow): TreeHistoryItem {
+async function getConditionHistorySourceMap(
+  treeId: UUID
+): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from('tree_condition_reports')
+    .select('id, condition_status, reported_by, reported_at')
+    .eq('tree_id', treeId)
+    .returns<ConditionHistorySourceRow[]>();
+
+  if (error) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    (data ?? []).map((row) => [
+      buildConditionHistoryKey(row.condition_status, row.reported_by, row.reported_at),
+      row.id,
+    ])
+  );
+}
+
+function mapTreeHistoryItem(
+  row: TreeHistoryRow,
+  conditionSourceMap: Record<string, string>
+): TreeHistoryItem {
+  const conditionSourceId =
+    row.history_type === 'condition'
+      ? conditionSourceMap[buildConditionHistoryKey(row.title, row.actor_id, row.happened_at)] ?? null
+      : null;
+
   return {
     actorName: null,
     actorRole: null,
+    sourceId: conditionSourceId,
     treeId: row.tree_id,
     farmId: row.farm_id,
     historyType: row.history_type,
@@ -183,6 +221,10 @@ function mapTreeHistoryItem(row: TreeHistoryRow): TreeHistoryItem {
     actorId: row.actor_id,
     happenedAt: row.happened_at,
   };
+}
+
+function buildConditionHistoryKey(title: string, actorId: string, happenedAt: string): string {
+  return `${title}|${actorId}|${happenedAt}`;
 }
 
 async function getHistoryActorDisplays(

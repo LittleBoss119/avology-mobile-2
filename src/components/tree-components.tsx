@@ -1,6 +1,6 @@
 import React from 'react';
 import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, Text, View } from 'react-native';
 
 import type {
   GrowthPhase,
@@ -11,6 +11,7 @@ import type {
   TreeHistoryItem,
   TreeHistoryType,
 } from '../types/domain';
+import type { ConditionRecordPhotoMap } from '../types/media';
 import { formatPersonDisplayName } from '../utils/displayFormat';
 import {
   buildTreeDisplayCode,
@@ -29,6 +30,7 @@ export type TreeFormValues = {
 export type TreeCardProps = {
   tree: Tree;
   children?: React.ReactNode;
+  photoUrl?: string | null;
   onPress?: () => void;
 };
 
@@ -57,6 +59,7 @@ export type ConditionReportItemProps = {
 
 export type ConditionReportListProps = {
   reports: ConditionReportListItem[];
+  conditionPhotoMap?: ConditionRecordPhotoMap;
   emptyTitle?: string;
   emptySubtitle?: string;
   currentUserId?: string | null;
@@ -64,6 +67,7 @@ export type ConditionReportListProps = {
 };
 
 export type TreeHistoryTimelineProps = {
+  conditionPhotoMap?: ConditionRecordPhotoMap;
   currentUserId?: string | null;
   history: TreeHistoryItem[];
   viewerMode?: TreeHistoryViewerMode;
@@ -71,7 +75,7 @@ export type TreeHistoryTimelineProps = {
 
 type TreeHistoryViewerMode = 'owner' | 'worker';
 
-export function TreeCard({ children, onPress, tree }: TreeCardProps) {
+export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
 
   const content = (
@@ -86,7 +90,7 @@ export function TreeCard({ children, onPress, tree }: TreeCardProps) {
         padding: 9,
       }}
     >
-      <TreeVisualPlaceholder condition={tree.currentCondition} size="compact">
+      <TreeVisualPlaceholder condition={tree.currentCondition} photoUrl={photoUrl} size="compact">
         {tree.isArchived ? <Badge label="Arsip" tone="muted" /> : <ConditionStatusBadge status={tree.currentCondition} />}
       </TreeVisualPlaceholder>
 
@@ -128,14 +132,22 @@ export function TreeCard({ children, onPress, tree }: TreeCardProps) {
 export function TreeVisualPlaceholder({
   children,
   condition,
+  photoUrl,
   size = 'regular',
 }: {
   children?: React.ReactNode;
   condition?: TreeConditionStatus;
+  photoUrl?: string | null;
   size?: 'compact' | 'regular';
 }) {
   const accent = getVisualAccent(condition);
   const isCompact = size === 'compact';
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const shouldShowImage = Boolean(photoUrl && !imageFailed);
+
+  React.useEffect(() => {
+    setImageFailed(false);
+  }, [photoUrl]);
 
   return (
     <View
@@ -149,50 +161,71 @@ export function TreeVisualPlaceholder({
         padding: isCompact ? 8 : 14,
       }}
     >
-      <View
-        style={{
-          backgroundColor: accent.haze,
-          borderRadius: 999,
-          height: isCompact ? 86 : 180,
-          position: 'absolute',
-          right: isCompact ? -18 : -30,
-          top: isCompact ? -20 : -26,
-          width: isCompact ? 118 : 220,
-        }}
-      />
-      <View
-        style={{
-          backgroundColor: 'rgba(255,255,255,0.34)',
-          borderRadius: 999,
-          bottom: isCompact ? -16 : -34,
-          height: isCompact ? 58 : 112,
-          left: isCompact ? -22 : -30,
-          position: 'absolute',
-          width: isCompact ? 86 : 160,
-        }}
-      />
+      {shouldShowImage ? (
+        <Image
+          onError={() => setImageFailed(true)}
+          resizeMode="cover"
+          source={{ uri: photoUrl ?? undefined }}
+          style={{
+            bottom: 0,
+            left: 0,
+            position: 'absolute',
+            right: 0,
+            top: 0,
+          }}
+        />
+      ) : (
+        <>
+          <View
+            style={{
+              backgroundColor: accent.haze,
+              borderRadius: 999,
+              height: isCompact ? 86 : 180,
+              position: 'absolute',
+              right: isCompact ? -18 : -30,
+              top: isCompact ? -20 : -26,
+              width: isCompact ? 118 : 220,
+            }}
+          />
+          <View
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.34)',
+              borderRadius: 999,
+              bottom: isCompact ? -16 : -34,
+              height: isCompact ? 58 : 112,
+              left: isCompact ? -22 : -30,
+              position: 'absolute',
+              width: isCompact ? 86 : 160,
+            }}
+          />
+        </>
+      )}
       <View style={{ alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' }}>
-        <View style={{ gap: isCompact ? 4 : 8, paddingTop: isCompact ? 16 : 42 }}>
-          <View
-            style={{
-              backgroundColor: accent.leaf,
-              borderRadius: 999,
-              height: isCompact ? 26 : 52,
-              transform: [{ rotate: '-22deg' }],
-              width: isCompact ? 62 : 112,
-            }}
-          />
-          <View
-            style={{
-              backgroundColor: accent.fruit,
-              borderRadius: 999,
-              height: isCompact ? 36 : 64,
-              marginLeft: isCompact ? 38 : 72,
-              marginTop: isCompact ? -8 : -12,
-              width: isCompact ? 28 : 50,
-            }}
-          />
-        </View>
+        {shouldShowImage ? (
+          <View style={{ flex: 1 }} />
+        ) : (
+          <View style={{ gap: isCompact ? 4 : 8, paddingTop: isCompact ? 16 : 42 }}>
+            <View
+              style={{
+                backgroundColor: accent.leaf,
+                borderRadius: 999,
+                height: isCompact ? 26 : 52,
+                transform: [{ rotate: '-22deg' }],
+                width: isCompact ? 62 : 112,
+              }}
+            />
+            <View
+              style={{
+                backgroundColor: accent.fruit,
+                borderRadius: 999,
+                height: isCompact ? 36 : 64,
+                marginLeft: isCompact ? 38 : 72,
+                marginTop: isCompact ? -8 : -12,
+                width: isCompact ? 28 : 50,
+              }}
+            />
+          </View>
+        )}
         <View style={{ alignItems: 'flex-end', gap: 6, zIndex: 1 }}>{children}</View>
       </View>
     </View>
@@ -340,6 +373,7 @@ export function GrowthPhaseBadge({ phase }: GrowthPhaseBadgeProps) {
 }
 
 export function ConditionReportList({
+  conditionPhotoMap = {},
   currentUserId,
   emptySubtitle = 'Laporan kondisi yang dibuat pemilik atau pekerja aktif akan muncul di sini.',
   emptyTitle = 'Belum ada laporan kondisi',
@@ -355,6 +389,7 @@ export function ConditionReportList({
       {reports.map((report) => (
         <ConditionReportItem
           key={report.id}
+          photoUrl={conditionPhotoMap[report.id]?.signedUrl}
           currentUserId={currentUserId}
           report={report}
           viewerMode={viewerMode}
@@ -365,6 +400,7 @@ export function ConditionReportList({
 }
 
 export function TreeHistoryTimeline({
+  conditionPhotoMap = {},
   currentUserId,
   history,
   viewerMode = 'owner',
@@ -383,6 +419,7 @@ export function TreeHistoryTimeline({
       {history.map((item) => (
         <TreeHistoryTimelineItem
           key={`${item.historyType}-${item.happenedAt}-${item.title}`}
+          conditionPhotoMap={conditionPhotoMap}
           currentUserId={currentUserId}
           item={item}
           viewerMode={viewerMode}
@@ -394,10 +431,12 @@ export function TreeHistoryTimeline({
 
 export function ConditionReportItem({
   currentUserId,
+  photoUrl,
   report,
   viewerMode = 'owner',
 }: ConditionReportItemProps & {
   currentUserId?: string | null;
+  photoUrl?: string | null;
   viewerMode?: TreeHistoryViewerMode;
 }) {
   const reporterName = formatActorDisplayName({
@@ -417,20 +456,28 @@ export function ConditionReportItem({
         </Text>
       </View>
       <MetaRow label="Catatan" value={report.note || '-'} />
+      {photoUrl ? <ConditionPhotoThumbnail photoUrl={photoUrl} /> : null}
       <MetaRow label="Dilaporkan oleh" value={reporterName} />
     </Card>
   );
 }
 
 function TreeHistoryTimelineItem({
+  conditionPhotoMap,
   currentUserId,
   item,
   viewerMode,
 }: {
+  conditionPhotoMap: ConditionRecordPhotoMap;
   currentUserId?: string | null;
   item: TreeHistoryItem;
   viewerMode: TreeHistoryViewerMode;
 }) {
+  const photoUrl =
+    item.historyType === 'condition' && item.sourceId
+      ? conditionPhotoMap[item.sourceId]?.signedUrl
+      : null;
+
   return (
     <View style={{ flexDirection: 'row', gap: 10 }}>
       <View style={{ alignItems: 'center', paddingTop: 6 }}>
@@ -475,6 +522,7 @@ function TreeHistoryTimelineItem({
               {item.description}
             </Text>
           ) : null}
+          {photoUrl ? <ConditionPhotoThumbnail photoUrl={photoUrl} /> : null}
           <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
             Dicatat oleh{' '}
             {formatActorDisplayName({
@@ -488,6 +536,63 @@ function TreeHistoryTimelineItem({
         </View>
       </View>
     </View>
+  );
+}
+
+function ConditionPhotoThumbnail({ photoUrl }: { photoUrl: string }) {
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const [previewOpen, setPreviewOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    setImageFailed(false);
+  }, [photoUrl]);
+
+  if (imageFailed) {
+    return null;
+  }
+
+  return (
+    <>
+      <Pressable
+        accessibilityRole="imagebutton"
+        onPress={() => setPreviewOpen(true)}
+        style={{
+          alignSelf: 'flex-start',
+          borderColor: '#DCE7D5',
+          borderRadius: 10,
+          borderWidth: 1,
+          overflow: 'hidden',
+        }}
+      >
+        <Image
+          onError={() => setImageFailed(true)}
+          resizeMode="cover"
+          source={{ uri: photoUrl }}
+          style={{ height: 84, width: 112 }}
+        />
+      </Pressable>
+      <Modal animationType="fade" transparent visible={previewOpen} onRequestClose={() => setPreviewOpen(false)}>
+        <Pressable
+          onPress={() => setPreviewOpen(false)}
+          style={{
+            alignItems: 'center',
+            backgroundColor: 'rgba(30,42,36,0.72)',
+            flex: 1,
+            justifyContent: 'center',
+            padding: 22,
+          }}
+        >
+          <Image
+            resizeMode="contain"
+            source={{ uri: photoUrl }}
+            style={{ borderRadius: 14, height: '78%', width: '100%' }}
+          />
+          <Text selectable style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800', marginTop: 14 }}>
+            Tutup
+          </Text>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
