@@ -232,6 +232,7 @@ export type CareSchedule = {
   targetTreeId: UUID | null;
   customTargetNote: string | null;
   instruction: string | null;
+  requiresPhoto: boolean;
   createdBy?: UUID;
   createdAt?: string;
   updatedAt?: string | null;
@@ -254,6 +255,7 @@ export type CareTask = {
   customTargetNote: string | null;
   dueDate: string;
   status: TaskStatus;
+  requiresPhoto: boolean;
   createdAt?: string;
   updatedAt?: string | null;
 };
@@ -467,6 +469,7 @@ export type CreateScheduleFromSOPInput = {
   targetColumn?: string | null;
   targetTreeId?: UUID | null;
   instruction?: string | null;
+  requiresPhoto?: boolean;
 };
 
 export type CreateScheduleFromSOPData = {
@@ -494,6 +497,7 @@ export type CreateManualScheduleInput = {
   targetTreeId?: UUID | null;
   customTargetNote?: string | null;
   instruction?: string | null;
+  requiresPhoto?: boolean;
 };
 
 export type CreateManualScheduleData = {
@@ -522,6 +526,10 @@ export type CompleteTaskData = {
   activityId: UUID;
 };
 
+export type RollbackCompletedTaskActivityInput = {
+  activityId: UUID;
+};
+
 export type PostponeTaskInput = {
   taskId: UUID;
   note: string;
@@ -542,6 +550,7 @@ export type CreateTaskFromOperationalReportInput = {
   targetColumn?: string | null;
   targetTreeId?: UUID | null;
   customTargetNote?: string | null;
+  requiresPhoto?: boolean;
 };
 
 export type CreateTaskFromOperationalReportData = {

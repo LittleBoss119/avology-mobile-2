@@ -19,7 +19,7 @@ export async function requestCameraPermission(): Promise<
   if (!result.granted) {
     return ok({
       granted: false,
-      message: 'Izin kamera diperlukan untuk mengambil foto.',
+      message: 'Izin kamera belum diberikan.',
     });
   }
 
@@ -37,7 +37,7 @@ export async function requestMediaLibraryPermission(): Promise<
   if (!result.granted) {
     return ok({
       granted: false,
-      message: 'Izin galeri diperlukan untuk memilih foto.',
+      message: 'Izin galeri belum diberikan.',
     });
   }
 
@@ -57,7 +57,7 @@ export async function pickImageFromGallery(): Promise<
   }
 
   if (!permissionResult.data.granted) {
-    return fail(new Error(permissionResult.data.message ?? 'Izin galeri ditolak.'));
+    return fail(new Error(permissionResult.data.message ?? 'Izin galeri belum diberikan.'));
   }
 
   const result = await ImagePicker.launchImageLibraryAsync(imagePickerOptions);
@@ -79,7 +79,7 @@ export async function takePhotoFromCamera(): Promise<
   }
 
   if (!permissionResult.data.granted) {
-    return fail(new Error(permissionResult.data.message ?? 'Izin kamera ditolak.'));
+    return fail(new Error(permissionResult.data.message ?? 'Izin kamera belum diberikan.'));
   }
 
   const result = await ImagePicker.launchCameraAsync(imagePickerOptions);
@@ -103,7 +103,7 @@ function validatePickedAsset(
   }
 
   if (asset.fileSize && asset.fileSize > MAX_PHOTO_SIZE_BYTES) {
-    return fail(new Error('Ukuran foto maksimal 5MB.'));
+    return fail(new Error('Ukuran foto terlalu besar.'));
   }
 
   return ok({

@@ -33,6 +33,7 @@ export type UploadPhotoAttachmentInput = {
   entityType: PhotoAttachmentEntityType;
   entityId: UUID;
   localUri: string;
+  taskId?: UUID | null;
   fileName?: string | null;
   mimeType?: string | null;
   caption?: string | null;
@@ -131,6 +132,33 @@ export type GetOperationalReportPhotosInput = {
 export type ListOperationalReportPhotosForReportsInput = {
   farmId: UUID;
   reportIds: UUID[];
+};
+
+export type TaskProofPhoto = {
+  attachment: PhotoAttachment;
+  signedUrl: string;
+};
+
+export type TaskProofPhotoMap = Record<UUID, TaskProofPhoto>;
+
+export type UploadTaskProofPhotoInput = {
+  farmId: UUID;
+  taskId: UUID;
+  activityId: UUID;
+  localUri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  caption?: string | null;
+};
+
+export type GetTaskProofPhotosInput = {
+  farmId: UUID;
+  activityId: UUID;
+};
+
+export type ListTaskProofPhotosForActivitiesInput = {
+  farmId: UUID;
+  activityIds: UUID[];
 };
 
 export type PickedPhotoAsset = {

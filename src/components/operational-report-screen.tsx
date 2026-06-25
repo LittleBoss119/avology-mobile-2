@@ -11,6 +11,7 @@ import {
 import { getActiveWorkers, getFarmMemberBasicProfiles } from '../services/memberService';
 import {
   getOperationalReportPhotos,
+  listTaskProofPhotosForActivities,
   listOperationalReportPhotosForReports,
   uploadOperationalReportPhoto,
 } from '../services/photoAttachmentService';
@@ -38,12 +39,15 @@ import type {
   OperationalReportPhoto,
   OperationalReportPhotoMap,
   PickedPhotoAsset,
+  TaskProofPhotoMap,
 } from '../types/media';
 import {
   formatCareTarget,
+  ProofRequirementToggle,
   formatTaskStatus,
 } from './care-schedule-components';
 import { formatCareCategory } from './care-sop-components';
+import { TaskProofPhotoPreview } from './task-proof-photo';
 import {
   formatOperationalReportCategory,
   formatOperationalReportStatus,
@@ -693,6 +697,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
   const [error, setError] = React.useState<string | null>(null);
   const [followUpTasks, setFollowUpTasks] = React.useState<CareTaskDetail[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [report, setReport] = React.useState<OperationalReport | null>(null);
   const [reportPhoto, setReportPhoto] = React.useState<OperationalReportPhoto | null>(null);
   const [reportPhotoPreviewOpen, setReportPhotoPreviewOpen] = React.useState(false);
@@ -707,6 +712,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     if (!normalizedReportId) {
       setError('Data laporan tidak ditemukan.');
       setFollowUpTasks([]);
+      setProofPhotoMap({});
       setReport(null);
       setReportPhoto(null);
       setWorkerNames({});
@@ -716,6 +722,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     if (!farmId || currentFarm?.role !== 'owner' || currentFarm.status !== 'active') {
       setError('Hanya pemilik aktif yang dapat melihat detail laporan operasional.');
       setFollowUpTasks([]);
+      setProofPhotoMap({});
       setReport(null);
       setReportPhoto(null);
       setWorkerNames({});
@@ -733,6 +740,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     if (reportResult.error) {
       setError(reportResult.error.message);
       setFollowUpTasks([]);
+      setProofPhotoMap({});
       setReport(null);
       setReportPhoto(null);
     } else {
@@ -753,8 +761,20 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     if (tasksResult.error) {
       setError(tasksResult.error.message);
       setFollowUpTasks([]);
+      setProofPhotoMap({});
     } else {
       setFollowUpTasks(tasksResult.data);
+
+      const proofResult = await listTaskProofPhotosForActivities({
+        activityIds: tasksResult.data.flatMap((task) => task.activities.map((activity) => activity.id)),
+        farmId,
+      });
+
+      if (proofResult.error) {
+        setProofPhotoMap({});
+      } else {
+        setProofPhotoMap(proofResult.data);
+      }
     }
 
     if (workersResult.error) {
@@ -856,6 +876,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
 
       <ReportFollowUpSection
         mode="owner"
+        proofPhotoMap={proofPhotoMap}
         reportStatus={report.status}
         tasks={followUpTasks}
         workerNames={workerNames}
@@ -883,6 +904,7 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
   const [instruction, setInstruction] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [report, setReport] = React.useState<OperationalReport | null>(null);
+  const [requiresPhoto, setRequiresPhoto] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [targetColumn, setTargetColumn] = React.useState('');
   const [targetRow, setTargetRow] = React.useState('');
@@ -1002,6 +1024,7 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
       dueDate,
       instruction,
       operationalReportId: report.id,
+      requiresPhoto,
       targetColumn: targetType === 'column' ? targetColumn : null,
       targetRow: targetType === 'row' ? targetRow : null,
       targetTreeId: targetType === 'tree' ? targetTreeId : null,
@@ -1083,6 +1106,11 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
         onChangeText={setInstruction}
         placeholder="Instruksi tindak lanjut untuk pekerja"
         value={instruction}
+      />
+
+      <ProofRequirementToggle
+        enabled={requiresPhoto}
+        onToggle={() => setRequiresPhoto((current) => !current)}
       />
     </Screen>
   );
@@ -1601,10 +1629,12 @@ function ReportSummary({ compact, reports }: { compact?: boolean; reports: Opera
 
 function ReportFollowUpSection({
   mode,
+  proofPhotoMap = {},
   tasks,
   workerNames,
 }: {
   mode: 'owner' | 'worker';
+  proofPhotoMap?: TaskProofPhotoMap;
   reportStatus: OperationalReportStatus;
   tasks: CareTaskDetail[];
   workerNames: Record<string, string>;
@@ -1627,6 +1657,7 @@ function ReportFollowUpSection({
             <ReportFollowUpTaskCard
               key={task.id}
               mode={mode}
+              proofPhotoMap={proofPhotoMap}
               task={task}
               workerNames={workerNames}
             />
@@ -1639,10 +1670,12 @@ function ReportFollowUpSection({
 
 function ReportFollowUpTaskCard({
   mode,
+  proofPhotoMap,
   task,
   workerNames,
 }: {
   mode: 'owner' | 'worker';
+  proofPhotoMap: TaskProofPhotoMap;
   task: CareTaskDetail;
   workerNames: Record<string, string>;
 }) {
@@ -1665,6 +1698,7 @@ function ReportFollowUpTaskCard({
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
         <Badge label="Dari Laporan" tone="muted" />
         {task.category ? <Badge label={formatCareCategory(task.category)} tone="success" /> : null}
+        {task.requiresPhoto ? <Badge label="Butuh bukti" tone="warning" /> : null}
       </View>
       <View style={{ gap: 9 }}>
         <MetaRow label="Pekerja" value={workerNames[task.assignedTo] ?? 'Pekerja tidak tersedia'} />
@@ -1699,6 +1733,12 @@ function ReportFollowUpTaskCard({
               <MetaRow label="Waktu" value={formatDateTime(activity.performedAt)} />
               <MetaRow label="Pelaksana" value={workerNames[activity.performedBy] ?? 'Pekerja tidak tersedia'} />
               <MetaRow label="Catatan" value={activity.note || '-'} />
+              {mode === 'owner' && activity.status === 'completed' ? (
+                <TaskProofPhotoPreview
+                  emptyText={task.requiresPhoto ? 'Menunggu bukti foto dari pekerja.' : undefined}
+                  photo={proofPhotoMap[activity.id]}
+                />
+              ) : null}
             </View>
           ))}
         </View>

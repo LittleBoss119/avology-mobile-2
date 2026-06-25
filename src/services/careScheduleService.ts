@@ -22,10 +22,10 @@ import type {
 import { fail, ok } from '../utils/serviceResult';
 
 const CARE_SCHEDULE_SELECT =
-  'id, farm_id, care_sop_id, title, category, scheduled_date, target_type, target_row, target_column, target_tree_id, custom_target_note, instruction, created_by, created_at, updated_at';
+  'id, farm_id, care_sop_id, title, category, scheduled_date, target_type, target_row, target_column, target_tree_id, custom_target_note, instruction, requires_photo, created_by, created_at, updated_at';
 
 const CARE_TASK_SELECT =
-  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, created_at, updated_at';
+  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, requires_photo, created_at, updated_at';
 
 const careCategories: CareCategory[] = [
   'watering',
@@ -76,6 +76,7 @@ type CareScheduleRow = {
   target_tree_id: string | null;
   custom_target_note: string | null;
   instruction: string | null;
+  requires_photo: boolean;
   created_by?: string;
   created_at?: string;
   updated_at?: string | null;
@@ -98,6 +99,7 @@ type CareTaskRow = {
   custom_target_note: string | null;
   due_date: string;
   status: TaskStatus;
+  requires_photo: boolean;
   created_at?: string;
   updated_at?: string | null;
 };
@@ -171,6 +173,7 @@ export async function createScheduleFromSOP(
   return createSingleWorkerScheduleWithRpc({
     farmId: input.farmId,
     instruction,
+    requiresPhoto: input.requiresPhoto ?? false,
     scheduledDate,
     sopId: input.sopId,
     target,
@@ -238,6 +241,7 @@ export async function createManualSchedule(
     p_custom_target_note: target.customTargetNote,
     p_farm_id: input.farmId,
     p_instruction: normalizeOptionalText(input.instruction),
+    p_requires_photo: input.requiresPhoto ?? false,
     p_scheduled_date: scheduledDate,
     p_target_column: target.targetColumn,
     p_target_row: target.targetRow,
@@ -336,6 +340,7 @@ export async function getCareScheduleDetail(
 async function createSingleWorkerScheduleWithRpc(input: {
   farmId: UUID;
   instruction: string | null;
+  requiresPhoto: boolean;
   scheduledDate: string;
   sopId: UUID;
   target: NormalizedTarget;
@@ -346,6 +351,7 @@ async function createSingleWorkerScheduleWithRpc(input: {
     p_care_sop_id: input.sopId,
     p_farm_id: input.farmId,
     p_instruction: input.instruction,
+    p_requires_photo: input.requiresPhoto,
     p_scheduled_date: input.scheduledDate,
     p_target_column: input.target.targetColumn,
     p_target_row: input.target.targetRow,
@@ -698,6 +704,7 @@ function mapCareSchedule(row: CareScheduleRow): CareSchedule {
     farmId: row.farm_id,
     id: row.id,
     instruction: row.instruction,
+    requiresPhoto: row.requires_photo,
     scheduledDate: row.scheduled_date,
     targetColumn: row.target_column,
     targetRow: row.target_row,
@@ -721,6 +728,7 @@ function mapCareTask(row: CareTaskRow): CareTask {
     id: row.id,
     instruction: row.instruction,
     operationalReportId: row.operational_report_id,
+    requiresPhoto: row.requires_photo,
     status: row.status,
     targetColumn: row.target_column,
     targetRow: row.target_row,

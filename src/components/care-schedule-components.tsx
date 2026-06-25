@@ -24,6 +24,7 @@ export type ManualScheduleFormValues = {
   category: '' | (typeof careCategoryOptions)[number];
   customTargetNote: string;
   instruction: string;
+  requiresPhoto: boolean;
   scheduledDate: string;
   targetColumn: string;
   targetRow: string;
@@ -112,6 +113,7 @@ export function CareTaskSummaryCard({
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <Badge label={formatTaskSource(task)} maxWidth={100} tone="muted" />
           <Badge label={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} maxWidth={128} tone="success" />
+          {task.requiresPhoto ? <Badge label="Butuh bukti" tone="warning" /> : null}
         </View>
         {task.instruction ? (
           <Text selectable ellipsizeMode="tail" numberOfLines={2} style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
@@ -164,6 +166,13 @@ export function ManualScheduleForm({
       targetRow: targetType === 'row' ? values.targetRow : '',
       targetTreeId: targetType === 'tree' ? values.targetTreeId : '',
       targetType,
+    });
+  }
+
+  function updateRequiresPhoto() {
+    onChange({
+      ...values,
+      requiresPhoto: !values.requiresPhoto,
     });
   }
 
@@ -222,7 +231,38 @@ export function ManualScheduleForm({
           value={values.instruction}
         />
       </Card>
+
+      <ProofRequirementToggle
+        enabled={values.requiresPhoto}
+        onToggle={updateRequiresPhoto}
+      />
     </View>
+  );
+}
+
+export function ProofRequirementToggle({
+  enabled,
+  onToggle,
+}: {
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Card>
+      <View style={{ gap: 6 }}>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800' }}>
+          Butuh bukti foto
+        </Text>
+        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+          Pekerja wajib mengunggah foto saat menyelesaikan tugas.
+        </Text>
+      </View>
+      <Button
+        title={enabled ? 'Bukti Foto Wajib' : 'Bukti Foto Tidak Wajib'}
+        variant={enabled ? 'primary' : 'secondary'}
+        onPress={onToggle}
+      />
+    </Card>
   );
 }
 

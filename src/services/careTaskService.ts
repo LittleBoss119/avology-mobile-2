@@ -18,6 +18,7 @@ import type {
   OperationalReportStatus,
   PostponeTaskData,
   PostponeTaskInput,
+  RollbackCompletedTaskActivityInput,
   ServiceResult,
   SuccessData,
   TargetType,
@@ -27,7 +28,7 @@ import type {
 import { fail, ok } from '../utils/serviceResult';
 
 const CARE_TASK_SELECT =
-  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, created_at, updated_at';
+  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, requires_photo, created_at, updated_at';
 
 const CARE_ACTIVITY_SELECT =
   'id, farm_id, care_task_id, performed_by, status, note, performed_at';
@@ -49,6 +50,7 @@ type CareTaskRow = {
   custom_target_note: string | null;
   due_date: string;
   status: TaskStatus;
+  requires_photo: boolean;
   created_at?: string;
   updated_at?: string | null;
 };
@@ -322,6 +324,7 @@ export async function createTaskFromOperationalReport(
     p_due_date: dueDate,
     p_instruction: normalizeOptionalText(input.instruction),
     p_operational_report_id: reportId,
+    p_requires_photo: input.requiresPhoto ?? false,
     p_target_column: target.targetColumn,
     p_target_row: target.targetRow,
     p_target_tree_id: target.targetTreeId,
@@ -387,6 +390,31 @@ export async function postponeTask(
 
   return ok({
     activityId: data as UUID,
+  });
+}
+
+export async function rollbackCompletedTaskActivity(
+  input: RollbackCompletedTaskActivityInput
+): Promise<ServiceResult<SuccessData>> {
+  const activityId = normalizeRequiredText(
+    input.activityId,
+    'Realisasi tugas tidak ditemukan.'
+  );
+
+  if (activityId instanceof Error) {
+    return fail(activityId);
+  }
+
+  const { error } = await supabase.rpc('rollback_completed_task_activity', {
+    p_activity_id: activityId,
+  });
+
+  if (error) {
+    return fail(error, 'Gagal membatalkan penyelesaian tugas tanpa bukti foto.');
+  }
+
+  return ok({
+    success: true,
   });
 }
 
@@ -562,6 +590,7 @@ function mapCareTask(row: CareTaskRow): CareTask {
     id: row.id,
     instruction: row.instruction,
     operationalReportId: row.operational_report_id,
+    requiresPhoto: row.requires_photo,
     status: row.status,
     targetColumn: row.target_column,
     targetRow: row.target_row,

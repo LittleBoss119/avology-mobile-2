@@ -8,6 +8,7 @@ import {
   formatTaskStatus,
 } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
+import { TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
 import {
   Badge,
   Card,
@@ -24,6 +25,7 @@ import { getCareScheduleDetail } from '../../../../src/services/careScheduleServ
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
 import { getOperationalReportDetail } from '../../../../src/services/operationalReportService';
+import { listTaskProofPhotosForActivities } from '../../../../src/services/photoAttachmentService';
 import type {
   ActivityStatus,
   CareScheduleDetail,
@@ -31,6 +33,7 @@ import type {
   FarmMemberBasicProfile,
   OperationalReport,
 } from '../../../../src/types/domain';
+import type { TaskProofPhotoMap } from '../../../../src/types/media';
 import {
   formatOperationalReportCategory,
   formatOperationalReportStatus,
@@ -42,6 +45,7 @@ export default function OwnerTaskDetailScreen() {
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [report, setReport] = React.useState<OperationalReport | null>(null);
+  const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [schedule, setSchedule] = React.useState<CareScheduleDetail | null>(null);
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
@@ -54,6 +58,7 @@ export default function OwnerTaskDetailScreen() {
     if (!normalizedTaskId) {
       setError('Data tugas tidak ditemukan.');
       setReport(null);
+      setProofPhotoMap({});
       setTask(null);
       setSchedule(null);
       setWorkerNames({});
@@ -63,6 +68,7 @@ export default function OwnerTaskDetailScreen() {
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
       setReport(null);
+      setProofPhotoMap({});
       setTask(null);
       setSchedule(null);
       setWorkerNames({});
@@ -80,9 +86,21 @@ export default function OwnerTaskDetailScreen() {
 
     if (taskResult.error) {
       setError(taskResult.error.message);
+      setProofPhotoMap({});
       setTask(null);
     } else {
       setTask(taskResult.data);
+
+      const proofResult = await listTaskProofPhotosForActivities({
+        activityIds: taskResult.data.activities.map((activity) => activity.id),
+        farmId: taskResult.data.farmId,
+      });
+
+      if (proofResult.error) {
+        setProofPhotoMap({});
+      } else {
+        setProofPhotoMap(proofResult.data);
+      }
 
       if (taskResult.data.careScheduleId) {
         const scheduleResult = await getCareScheduleDetail({
@@ -149,12 +167,14 @@ export default function OwnerTaskDetailScreen() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <Badge label={formatTaskStatus(task.status)} tone={getTaskTone(task.status)} />
           <Badge label={formatTaskSource(task)} tone="muted" />
+          {task.requiresPhoto ? <Badge label="Butuh bukti" tone="warning" /> : null}
         </View>
         <View style={{ gap: 10 }}>
           <MetaRow label="Pekerja" value={workerNames[task.assignedTo] ?? 'Pekerja tidak tersedia'} />
           <MetaRow label="Tanggal" value={formatDate(task.dueDate)} />
           <MetaRow label="Target" value={formatCareTarget(task)} />
           <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
+          <MetaRow label="Bukti foto" value={task.requiresPhoto ? 'Wajib' : 'Tidak wajib'} />
         </View>
       </Card>
 
@@ -206,7 +226,10 @@ export default function OwnerTaskDetailScreen() {
         Realisasi
       </Text>
       {task.activities.length === 0 ? (
-        <EmptyState title="Belum ada realisasi" subtitle="Pekerja belum menyelesaikan atau menunda tugas ini." />
+        <EmptyState
+          title="Belum ada realisasi"
+          subtitle={task.requiresPhoto ? 'Menunggu bukti foto dari pekerja.' : 'Pekerja belum menyelesaikan atau menunda tugas ini.'}
+        />
       ) : (
         <View style={{ gap: 12 }}>
           {task.activities.map((activity) => (
@@ -215,6 +238,17 @@ export default function OwnerTaskDetailScreen() {
               <MetaRow label="Pelaksana" value={workerNames[activity.performedBy] ?? 'Pengguna tidak tersedia'} />
               <MetaRow label="Waktu" value={formatDateTime(activity.performedAt)} />
               <MetaRow label="Catatan" value={activity.note} />
+              {activity.status === 'completed' ? (
+                <>
+                  <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '800' }}>
+                    Bukti Realisasi
+                  </Text>
+                  <TaskProofPhotoPreview
+                    emptyText={task.requiresPhoto ? 'Menunggu bukti foto dari pekerja.' : undefined}
+                    photo={proofPhotoMap[activity.id]}
+                  />
+                </>
+              ) : null}
             </Card>
           ))}
         </View>

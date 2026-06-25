@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Alert, Text, TextInput, View } from 'react-native';
 
 import {
   formatCareTarget,
@@ -8,6 +8,7 @@ import {
   formatTaskStatus,
 } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
+import { TaskProofPhotoPicker, TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
 import {
   Badge,
   Button,
@@ -23,9 +24,16 @@ import {
   completeTask,
   getTaskDetail,
   postponeTask,
+  rollbackCompletedTaskActivity,
 } from '../../../../src/services/careTaskService';
+import { pickImageFromGallery, takePhotoFromCamera } from '../../../../src/lib/media';
 import { getOperationalReportDetail } from '../../../../src/services/operationalReportService';
+import {
+  listTaskProofPhotosForActivities,
+  uploadTaskProofPhoto,
+} from '../../../../src/services/photoAttachmentService';
 import type { ActivityStatus, CareTaskDetail, OperationalReport } from '../../../../src/types/domain';
+import type { PickedPhotoAsset, TaskProofPhotoMap } from '../../../../src/types/media';
 import {
   formatOperationalReportCategory,
   formatOperationalReportStatus,
@@ -39,6 +47,8 @@ export default function WorkerTaskDetailScreen() {
   const [completeNote, setCompleteNote] = React.useState('');
   const [showCompleteInput, setShowCompleteInput] = React.useState(false);
   const [postponeNote, setPostponeNote] = React.useState('');
+  const [proofPhoto, setProofPhoto] = React.useState<PickedPhotoAsset | null>(null);
+  const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [report, setReport] = React.useState<OperationalReport | null>(null);
   const [showPostponeInput, setShowPostponeInput] = React.useState(false);
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
@@ -48,6 +58,7 @@ export default function WorkerTaskDetailScreen() {
 
     if (!normalizedTaskId) {
       setError('Data tugas tidak ditemukan.');
+      setProofPhotoMap({});
       setReport(null);
       setTask(null);
       return;
@@ -60,11 +71,23 @@ export default function WorkerTaskDetailScreen() {
 
     if (result.error) {
       setError(result.error.message);
+      setProofPhotoMap({});
       setTask(null);
       return;
     }
 
     setTask(result.data);
+
+    const proofResult = await listTaskProofPhotosForActivities({
+      activityIds: result.data.activities.map((activity) => activity.id),
+      farmId: result.data.farmId,
+    });
+
+    if (proofResult.error) {
+      setProofPhotoMap({});
+    } else {
+      setProofPhotoMap(proofResult.data);
+    }
 
     if (result.data.operationalReportId) {
       const reportResult = await getOperationalReportDetail({
@@ -95,6 +118,11 @@ export default function WorkerTaskDetailScreen() {
       return;
     }
 
+    if (task.requiresPhoto && !proofPhoto) {
+      setError('Tambahkan bukti foto terlebih dahulu.');
+      return;
+    }
+
     setActionLoading('complete');
     setError(null);
 
@@ -109,7 +137,35 @@ export default function WorkerTaskDetailScreen() {
       return;
     }
 
+    if (proofPhoto) {
+      const proofResult = await uploadTaskProofPhoto({
+        activityId: result.data.activityId,
+        farmId: task.farmId,
+        fileName: proofPhoto.fileName,
+        localUri: proofPhoto.uri,
+        mimeType: proofPhoto.mimeType,
+        taskId: task.id,
+      });
+
+      if (proofResult.error) {
+        if (task.requiresPhoto) {
+          const rollbackResult = await rollbackCompletedTaskActivity({ activityId: result.data.activityId });
+          setError(
+            rollbackResult.error
+              ? 'Foto bukti gagal diunggah. Status tugas perlu diperiksa kembali.'
+              : 'Foto bukti gagal diunggah. Tugas belum ditandai selesai.'
+          );
+          setActionLoading(null);
+          await loadDetail();
+          return;
+        }
+
+        Alert.alert('Tugas selesai', 'Tugas selesai, tetapi bukti foto gagal diunggah.');
+      }
+    }
+
     setCompleteNote('');
+    setProofPhoto(null);
     setShowCompleteInput(false);
     await loadDetail();
     setActionLoading(null);
@@ -146,9 +202,38 @@ export default function WorkerTaskDetailScreen() {
     }
 
     setPostponeNote('');
+    setProofPhoto(null);
     setShowPostponeInput(false);
     await loadDetail();
     setActionLoading(null);
+  }
+
+  async function handlePickProofFromGallery() {
+    const result = await pickImageFromGallery();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setError(null);
+      setProofPhoto(result.data);
+    }
+  }
+
+  async function handleTakeProofFromCamera() {
+    const result = await takePhotoFromCamera();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setError(null);
+      setProofPhoto(result.data);
+    }
   }
 
   if (loading) {
@@ -213,6 +298,7 @@ export default function WorkerTaskDetailScreen() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <Badge label={formatTaskStatus(task.status)} tone={getTaskTone(task.status)} />
           <Badge label={formatTaskSource(task)} tone="muted" />
+          {task.requiresPhoto ? <Badge label="Butuh bukti" tone="warning" /> : null}
         </View>
         <View style={{ gap: 10 }}>
           <MetaRow label="Tanggal" value={formatDate(task.dueDate)} />
@@ -220,6 +306,17 @@ export default function WorkerTaskDetailScreen() {
           <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
         </View>
       </Card>
+
+      {task.requiresPhoto || showCompleteInput ? (
+        <TaskProofPhotoPicker
+          disabled={actionLoading !== null || isCompleted}
+          photo={proofPhoto}
+          required={task.requiresPhoto}
+          onCameraPress={handleTakeProofFromCamera}
+          onGalleryPress={handlePickProofFromGallery}
+          onRemove={() => setProofPhoto(null)}
+        />
+      ) : null}
 
       <Card>
         <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '900' }}>
@@ -261,6 +358,9 @@ export default function WorkerTaskDetailScreen() {
               <MetaRow label="Status" value={formatActivityStatus(activity.status)} />
               <MetaRow label="Waktu" value={formatDateTime(activity.performedAt)} />
               <MetaRow label="Catatan" value={activity.note} />
+              {activity.status === 'completed' ? (
+                <TaskProofPhotoPreview photo={proofPhotoMap[activity.id]} />
+              ) : null}
             </Card>
           ))}
         </View>

@@ -8,6 +8,7 @@ import {
   formatCareSOPTarget,
   ScheduleReferenceSummary,
 } from '../../../../../src/components/care-sop-components';
+import { ProofRequirementToggle } from '../../../../../src/components/care-schedule-components';
 import {
   Button,
   Card,
@@ -41,6 +42,7 @@ import { formatTreeLocation } from '../../../../../src/utils/treeFormat';
 type ScheduleFormValues = {
   assignedWorkerId: string;
   instruction: string;
+  requiresPhoto: boolean;
   scheduledDate: string;
   targetColumn: string;
   targetRow: string;
@@ -51,6 +53,7 @@ type ScheduleFormValues = {
 const initialValues: ScheduleFormValues = {
   assignedWorkerId: '',
   instruction: '',
+  requiresPhoto: false,
   scheduledDate: '',
   targetColumn: '',
   targetRow: '',
@@ -146,6 +149,7 @@ export default function CreateScheduleFromSOPScreen() {
       setValues({
         assignedWorkerId: '',
         instruction: sopResult.data.defaultInstruction ?? '',
+        requiresPhoto: false,
         scheduledDate:
           referenceResult.error || !referenceResult.data.nextDueDate
             ? getTodayIsoDate()
@@ -189,6 +193,13 @@ export default function CreateScheduleFromSOPScreen() {
     }));
   }
 
+  function toggleRequiresPhoto() {
+    setValues((current) => ({
+      ...current,
+      requiresPhoto: !current.requiresPhoto,
+    }));
+  }
+
   async function handleSubmit() {
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
@@ -219,6 +230,7 @@ export default function CreateScheduleFromSOPScreen() {
       assignedWorkerIds: [values.assignedWorkerId],
       farmId,
       instruction: values.instruction,
+      requiresPhoto: values.requiresPhoto,
       scheduledDate: values.scheduledDate,
       sopId: sop.id,
       targetColumn: values.targetType === 'column' ? values.targetColumn : null,
@@ -329,6 +341,11 @@ export default function CreateScheduleFromSOPScreen() {
           value={values.instruction}
         />
       </Card>
+
+      <ProofRequirementToggle
+        enabled={values.requiresPhoto}
+        onToggle={toggleRequiresPhoto}
+      />
     </Screen>
   );
 }

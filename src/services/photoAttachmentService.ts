@@ -11,19 +11,24 @@ import type {
   ListConditionRecordPhotosForTreeInput,
   ListOperationalReportPhotosForReportsInput,
   ListPhotoAttachmentsInput,
+  ListTaskProofPhotosForActivitiesInput,
   OperationalReportPhoto,
   OperationalReportPhotoMap,
   PhotoAttachment,
   PhotoAttachmentEntityType,
   PhotoAttachmentPathFolder,
+  TaskProofPhoto,
+  TaskProofPhotoMap,
   TreeMainPhoto,
   TreeMainPhotoMap,
   UploadConditionRecordPhotoInput,
   UploadOperationalReportPhotoInput,
+  UploadTaskProofPhotoInput,
   UploadTreeMainPhotoInput,
   UploadPhotoAttachmentData,
   UploadPhotoAttachmentInput,
   GetOperationalReportPhotosInput,
+  GetTaskProofPhotosInput,
 } from '../types/media';
 import { fail, ok } from '../utils/serviceResult';
 
@@ -94,6 +99,7 @@ export async function uploadPhotoAttachment(
     entityType: normalized.entityType,
     extension: resolveFileExtension(normalized.fileName, fileResult.data.mimeType),
     farmId: normalized.farmId,
+    taskId: normalized.taskId,
   });
 
   const finalFileName = normalized.fileName ?? storagePath.split('/').at(-1) ?? null;
@@ -106,7 +112,7 @@ export async function uploadPhotoAttachment(
     });
 
   if (uploadResult.error) {
-    return fail(uploadResult.error, 'Gagal mengunggah foto. Periksa koneksi lalu coba lagi.');
+    return fail(new Error('Foto gagal diunggah.'));
   }
 
   const insertResult = await supabase
@@ -647,6 +653,163 @@ export async function listOperationalReportPhotosForReports(
   );
 }
 
+export async function uploadTaskProofPhoto(
+  input: UploadTaskProofPhotoInput
+): Promise<ServiceResult<TaskProofPhoto>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const taskId = normalizeRequiredText(input.taskId, 'Tugas tidak valid.');
+  const activityId = normalizeRequiredText(input.activityId, 'Realisasi tugas tidak valid.');
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (taskId instanceof Error) {
+    return fail(taskId);
+  }
+
+  if (activityId instanceof Error) {
+    return fail(activityId);
+  }
+
+  const uploadResult = await uploadPhotoAttachment({
+    caption: input.caption,
+    entityId: activityId,
+    entityType: 'task_proof',
+    farmId,
+    fileName: input.fileName,
+    isPrimary: false,
+    localUri: input.localUri,
+    mimeType: input.mimeType,
+    taskId,
+  });
+
+  if (uploadResult.error) {
+    return fail(uploadResult.error, 'Foto bukti gagal diunggah.');
+  }
+
+  const signedUrlResult = await getPhotoSignedUrl(uploadResult.data.attachment.storagePath);
+
+  if (signedUrlResult.error) {
+    return fail(signedUrlResult.error, 'Foto bukti berhasil diunggah, tetapi pratinjau gagal dimuat.');
+  }
+
+  return ok({
+    attachment: uploadResult.data.attachment,
+    signedUrl: signedUrlResult.data.signedUrl,
+  });
+}
+
+export async function getTaskProofPhotos(
+  input: GetTaskProofPhotosInput
+): Promise<ServiceResult<TaskProofPhoto[]>> {
+  const photoResult = await listPhotoAttachments({
+    entityId: input.activityId,
+    entityType: 'task_proof',
+    farmId: input.farmId,
+  });
+
+  if (photoResult.error) {
+    return fail(photoResult.error, 'Gagal memuat bukti foto tugas.');
+  }
+
+  const photos = await Promise.all(
+    photoResult.data.map(async (attachment) => {
+      const signedUrlResult = await getPhotoSignedUrl(attachment.storagePath);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return {
+        attachment,
+        signedUrl: signedUrlResult.data.signedUrl,
+      };
+    })
+  );
+
+  return ok(
+    photos.filter((photo): photo is TaskProofPhoto => photo !== null)
+  );
+}
+
+export async function listTaskProofPhotosForActivities(
+  input: ListTaskProofPhotosForActivitiesInput
+): Promise<ServiceResult<TaskProofPhotoMap>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const activityIds = Array.from(new Set(input.activityIds.filter(Boolean)));
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (activityIds.length === 0) {
+    return ok({});
+  }
+
+  const validActivityResult = await supabase
+    .from('care_activities')
+    .select('id')
+    .eq('farm_id', farmId)
+    .in('id', activityIds)
+    .returns<Array<{ id: string }>>();
+
+  if (validActivityResult.error) {
+    return fail(validActivityResult.error, 'Gagal memeriksa realisasi tugas.');
+  }
+
+  const validActivityIds = (validActivityResult.data ?? []).map((row) => row.id);
+
+  if (validActivityIds.length === 0) {
+    return ok({});
+  }
+
+  const { data, error } = await supabase
+    .from('photo_attachments')
+    .select(PHOTO_ATTACHMENT_SELECT)
+    .eq('farm_id', farmId)
+    .eq('entity_type', 'task_proof')
+    .in('entity_id', validActivityIds)
+    .order('created_at', { ascending: false })
+    .returns<PhotoAttachmentRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat bukti foto tugas.');
+  }
+
+  const uniqueRowsByActivity = new Map<string, PhotoAttachmentRow>();
+
+  for (const row of data ?? []) {
+    if (!uniqueRowsByActivity.has(row.entity_id)) {
+      uniqueRowsByActivity.set(row.entity_id, row);
+    }
+  }
+
+  const entries = await Promise.all(
+    Array.from(uniqueRowsByActivity.entries()).map(async ([activityId, row]) => {
+      const signedUrlResult = await getPhotoSignedUrl(row.storage_path);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return [
+        activityId,
+        {
+          attachment: mapPhotoAttachment(row),
+          signedUrl: signedUrlResult.data.signedUrl,
+        },
+      ] as const;
+    })
+  );
+
+  return ok(
+    Object.fromEntries(
+      entries.filter((entry): entry is [string, TaskProofPhoto] => entry !== null)
+    )
+  );
+}
+
 export async function listPhotoAttachments(
   input: ListPhotoAttachmentsInput
 ): Promise<ServiceResult<PhotoAttachment[]>> {
@@ -688,7 +851,7 @@ export async function getPhotoSignedUrl(
     .createSignedUrl(path, expiresIn);
 
   if (error) {
-    return fail(error, 'Gagal membuat akses sementara foto.');
+    return fail(new Error('Gagal memuat foto.'));
   }
 
   return ok({
@@ -767,6 +930,12 @@ function normalizeUploadInput(
     return entityType;
   }
 
+  const taskId = normalizeOptionalText(input.taskId);
+
+  if (entityType === 'task_proof' && !taskId) {
+    return new Error('Tugas untuk bukti foto tidak valid.');
+  }
+
   return {
     caption: normalizeOptionalText(input.caption),
     entityId,
@@ -776,6 +945,7 @@ function normalizeUploadInput(
     isPrimary: input.isPrimary ?? false,
     localUri,
     mimeType: normalizeOptionalText(input.mimeType),
+    taskId,
   };
 }
 
@@ -833,7 +1003,7 @@ async function loadLocalImageFile(
     }
 
     if (blob.size > MAX_PHOTO_SIZE_BYTES) {
-      return fail(new Error('Ukuran foto maksimal 5MB.'));
+      return fail(new Error('Ukuran foto terlalu besar.'));
     }
 
     return ok({
@@ -871,6 +1041,7 @@ function buildPhotoStoragePath(input: {
   entityType: PhotoAttachmentEntityType;
   entityId: UUID;
   extension: string;
+  taskId: UUID | null;
 }): string {
   const folder = entityPathFolders[input.entityType];
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -878,6 +1049,10 @@ function buildPhotoStoragePath(input: {
 
   if (input.entityType === 'tree_main') {
     return `farms/${input.farmId}/${folder}/${input.entityId}/main/${timestamp}-${random}.${input.extension}`;
+  }
+
+  if (input.entityType === 'task_proof') {
+    return `farms/${input.farmId}/${folder}/${input.taskId}/${input.entityId}/${timestamp}-${random}.${input.extension}`;
   }
 
   return `farms/${input.farmId}/${folder}/${input.entityId}/${timestamp}-${random}.${input.extension}`;
