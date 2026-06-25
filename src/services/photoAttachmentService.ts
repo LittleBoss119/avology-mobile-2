@@ -9,16 +9,21 @@ import type {
   GetTreeMainPhotoData,
   GetPhotoSignedUrlData,
   ListConditionRecordPhotosForTreeInput,
+  ListOperationalReportPhotosForReportsInput,
   ListPhotoAttachmentsInput,
+  OperationalReportPhoto,
+  OperationalReportPhotoMap,
   PhotoAttachment,
   PhotoAttachmentEntityType,
   PhotoAttachmentPathFolder,
   TreeMainPhoto,
   TreeMainPhotoMap,
   UploadConditionRecordPhotoInput,
+  UploadOperationalReportPhotoInput,
   UploadTreeMainPhotoInput,
   UploadPhotoAttachmentData,
   UploadPhotoAttachmentInput,
+  GetOperationalReportPhotosInput,
 } from '../types/media';
 import { fail, ok } from '../utils/serviceResult';
 
@@ -476,6 +481,172 @@ export async function listConditionRecordPhotosForTree(
   );
 }
 
+export async function uploadOperationalReportPhoto(
+  input: UploadOperationalReportPhotoInput
+): Promise<ServiceResult<OperationalReportPhoto>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const reportId = normalizeRequiredText(input.reportId, 'Laporan operasional tidak valid.');
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (reportId instanceof Error) {
+    return fail(reportId);
+  }
+
+  const reportAccessResult = await ensureOperationalReportAccessibleForPhoto(farmId, reportId);
+
+  if (reportAccessResult.error) {
+    return fail(reportAccessResult.error);
+  }
+
+  const uploadResult = await uploadPhotoAttachment({
+    caption: input.caption,
+    entityId: reportId,
+    entityType: 'operational_report',
+    farmId,
+    fileName: input.fileName,
+    isPrimary: false,
+    localUri: input.localUri,
+    mimeType: input.mimeType,
+  });
+
+  if (uploadResult.error) {
+    return fail(uploadResult.error, 'Foto gagal diunggah.');
+  }
+
+  const signedUrlResult = await getPhotoSignedUrl(uploadResult.data.attachment.storagePath);
+
+  if (signedUrlResult.error) {
+    return fail(signedUrlResult.error, 'Foto berhasil diunggah, tetapi pratinjau gagal dimuat.');
+  }
+
+  return ok({
+    attachment: uploadResult.data.attachment,
+    signedUrl: signedUrlResult.data.signedUrl,
+  });
+}
+
+export async function getOperationalReportPhotos(
+  input: GetOperationalReportPhotosInput
+): Promise<ServiceResult<OperationalReportPhoto[]>> {
+  const reportAccessResult = await ensureOperationalReportAccessibleForPhoto(
+    input.farmId,
+    input.reportId
+  );
+
+  if (reportAccessResult.error) {
+    return fail(reportAccessResult.error);
+  }
+
+  const photoResult = await listPhotoAttachments({
+    entityId: input.reportId,
+    entityType: 'operational_report',
+    farmId: input.farmId,
+  });
+
+  if (photoResult.error) {
+    return fail(photoResult.error, 'Gagal memuat foto laporan.');
+  }
+
+  const photos = await Promise.all(
+    photoResult.data.map(async (attachment) => {
+      const signedUrlResult = await getPhotoSignedUrl(attachment.storagePath);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return {
+        attachment,
+        signedUrl: signedUrlResult.data.signedUrl,
+      };
+    })
+  );
+
+  return ok(
+    photos.filter((photo): photo is OperationalReportPhoto => photo !== null)
+  );
+}
+
+export async function listOperationalReportPhotosForReports(
+  input: ListOperationalReportPhotosForReportsInput
+): Promise<ServiceResult<OperationalReportPhotoMap>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const reportIds = Array.from(new Set(input.reportIds.filter(Boolean)));
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (reportIds.length === 0) {
+    return ok({});
+  }
+
+  const validReportResult = await supabase
+    .from('operational_reports')
+    .select('id')
+    .eq('farm_id', farmId)
+    .in('id', reportIds)
+    .returns<Array<{ id: string }>>();
+
+  if (validReportResult.error) {
+    return fail(validReportResult.error, 'Gagal memeriksa laporan operasional.');
+  }
+
+  const validReportIds = (validReportResult.data ?? []).map((row) => row.id);
+
+  if (validReportIds.length === 0) {
+    return ok({});
+  }
+
+  const { data, error } = await supabase
+    .from('photo_attachments')
+    .select(PHOTO_ATTACHMENT_SELECT)
+    .eq('farm_id', farmId)
+    .eq('entity_type', 'operational_report')
+    .in('entity_id', validReportIds)
+    .order('created_at', { ascending: false })
+    .returns<PhotoAttachmentRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat foto laporan.');
+  }
+
+  const uniqueRowsByReport = new Map<string, PhotoAttachmentRow>();
+
+  for (const row of data ?? []) {
+    if (!uniqueRowsByReport.has(row.entity_id)) {
+      uniqueRowsByReport.set(row.entity_id, row);
+    }
+  }
+
+  const entries = await Promise.all(
+    Array.from(uniqueRowsByReport.entries()).map(async ([reportId, row]) => {
+      const signedUrlResult = await getPhotoSignedUrl(row.storage_path);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return [
+        reportId,
+        {
+          attachment: mapPhotoAttachment(row),
+          signedUrl: signedUrlResult.data.signedUrl,
+        },
+      ] as const;
+    })
+  );
+
+  return ok(
+    Object.fromEntries(
+      entries.filter((entry): entry is [string, OperationalReportPhoto] => entry !== null)
+    )
+  );
+}
+
 export async function listPhotoAttachments(
   input: ListPhotoAttachmentsInput
 ): Promise<ServiceResult<PhotoAttachment[]>> {
@@ -785,6 +956,30 @@ function mapPhotoAttachment(row: PhotoAttachmentRow): PhotoAttachment {
 
 async function removeStorageObjectBestEffort(storagePath: string): Promise<void> {
   await supabase.storage.from(PHOTO_STORAGE_BUCKET).remove([storagePath]);
+}
+
+async function ensureOperationalReportAccessibleForPhoto(
+  farmId: UUID,
+  reportId: UUID
+): Promise<ServiceResult<SuccessData>> {
+  const { data, error } = await supabase
+    .from('operational_reports')
+    .select('id, farm_id')
+    .eq('id', reportId)
+    .eq('farm_id', farmId)
+    .maybeSingle<{ id: string; farm_id: string }>();
+
+  if (error) {
+    return fail(error, 'Gagal memeriksa akses laporan operasional.');
+  }
+
+  if (!data) {
+    return fail(new Error('Laporan operasional tidak ditemukan atau tidak dapat diakses.'));
+  }
+
+  return ok({
+    success: true,
+  });
 }
 
 async function listTreeMainPhotoRows(

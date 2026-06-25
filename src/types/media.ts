@@ -107,6 +107,32 @@ export type ListConditionRecordPhotosForTreeInput = {
   conditionRecordIds: UUID[];
 };
 
+export type OperationalReportPhoto = {
+  attachment: PhotoAttachment;
+  signedUrl: string;
+};
+
+export type OperationalReportPhotoMap = Record<UUID, OperationalReportPhoto>;
+
+export type UploadOperationalReportPhotoInput = {
+  farmId: UUID;
+  reportId: UUID;
+  localUri: string;
+  fileName?: string | null;
+  mimeType?: string | null;
+  caption?: string | null;
+};
+
+export type GetOperationalReportPhotosInput = {
+  farmId: UUID;
+  reportId: UUID;
+};
+
+export type ListOperationalReportPhotosForReportsInput = {
+  farmId: UUID;
+  reportIds: UUID[];
+};
+
 export type PickedPhotoAsset = {
   uri: string;
   fileName: string | null;
