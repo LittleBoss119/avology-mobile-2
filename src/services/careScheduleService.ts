@@ -76,7 +76,7 @@ type CareScheduleRow = {
   target_tree_id: string | null;
   custom_target_note: string | null;
   instruction: string | null;
-  requires_photo: boolean;
+  requires_photo: boolean | null;
   created_by?: string;
   created_at?: string;
   updated_at?: string | null;
@@ -99,7 +99,7 @@ type CareTaskRow = {
   custom_target_note: string | null;
   due_date: string;
   status: TaskStatus;
-  requires_photo: boolean;
+  requires_photo: boolean | null;
   created_at?: string;
   updated_at?: string | null;
 };
@@ -704,7 +704,7 @@ function mapCareSchedule(row: CareScheduleRow): CareSchedule {
     farmId: row.farm_id,
     id: row.id,
     instruction: row.instruction,
-    requiresPhoto: row.requires_photo,
+    requiresPhoto: row.requires_photo ?? false,
     scheduledDate: row.scheduled_date,
     targetColumn: row.target_column,
     targetRow: row.target_row,
@@ -728,7 +728,7 @@ function mapCareTask(row: CareTaskRow): CareTask {
     id: row.id,
     instruction: row.instruction,
     operationalReportId: row.operational_report_id,
-    requiresPhoto: row.requires_photo,
+    requiresPhoto: row.requires_photo ?? false,
     status: row.status,
     targetColumn: row.target_column,
     targetRow: row.target_row,

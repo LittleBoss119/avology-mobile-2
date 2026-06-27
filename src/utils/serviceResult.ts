@@ -2,8 +2,11 @@ import type { ServiceError, ServiceResult } from '../types/domain';
 
 type ErrorLike = {
   code?: string;
+  details?: string;
+  hint?: string;
   message?: string;
   name?: string;
+  status?: number;
 };
 
 const uuidPattern = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i;
@@ -69,9 +72,13 @@ export function fail<T>(
   error: unknown,
   fallbackMessage = 'Terjadi kesalahan. Silakan coba lagi.'
 ): ServiceResult<T> {
+  const serviceError = toServiceError(error, fallbackMessage);
+
+  logDevelopmentServiceError(error, serviceError);
+
   return {
     data: null,
-    error: toServiceError(error, fallbackMessage),
+    error: serviceError,
   };
 }
 
@@ -126,4 +133,38 @@ function isTechnicalMessage(message: string): boolean {
     normalized.includes('rpc ') ||
     normalized.includes('stack trace')
   );
+}
+
+function logDevelopmentServiceError(error: unknown, serviceError: ServiceError): void {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) {
+    return;
+  }
+
+  const errorLike = error as ErrorLike | null | undefined;
+  const rawMessage = errorLike?.message ?? serviceError.rawMessage;
+  const shouldLog =
+    Boolean(errorLike?.code || errorLike?.details || errorLike?.hint || errorLike?.status)
+    || (rawMessage ? isTechnicalMessage(rawMessage) : false);
+
+  if (!shouldLog) {
+    return;
+  }
+
+  console.debug('[service-error]', {
+    code: errorLike?.code ?? serviceError.code ?? null,
+    details: sanitizeDebugText(errorLike?.details),
+    hint: sanitizeDebugText(errorLike?.hint),
+    message: sanitizeDebugText(rawMessage),
+    name: errorLike?.name ?? null,
+    status: errorLike?.status ?? null,
+    userMessage: serviceError.message,
+  });
+}
+
+function sanitizeDebugText(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return value.replace(uuidPattern, '[uuid]');
 }

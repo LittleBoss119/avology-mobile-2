@@ -50,7 +50,7 @@ type CareTaskRow = {
   custom_target_note: string | null;
   due_date: string;
   status: TaskStatus;
-  requires_photo: boolean;
+  requires_photo: boolean | null;
   created_at?: string;
   updated_at?: string | null;
 };
@@ -590,7 +590,7 @@ function mapCareTask(row: CareTaskRow): CareTask {
     id: row.id,
     instruction: row.instruction,
     operationalReportId: row.operational_report_id,
-    requiresPhoto: row.requires_photo,
+    requiresPhoto: row.requires_photo ?? false,
     status: row.status,
     targetColumn: row.target_column,
     targetRow: row.target_row,
