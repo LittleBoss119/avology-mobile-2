@@ -1,12 +1,14 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
+import { colors, radius, spacing, typography } from '../constants/theme';
 import { createGrowthPhaseRecord } from '../services/growthPhaseService';
 import { getTreeDetail } from '../services/treeService';
 import type { GrowthPhase, Tree } from '../types/domain';
-import { formatGrowthPhase, formatTreeLocation } from '../utils/treeFormat';
-import { Button, Card, ErrorBanner, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
+import { formatGrowthPhase, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
+import { GrowthPhaseBadge } from './tree-components';
+import { Button, Card, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
 
 const phaseOptions: GrowthPhase[] = [
   'initial_planting',
@@ -118,70 +120,110 @@ export function TreeGrowthPhaseRecordScreen({
       <ErrorBanner message={error} />
 
       {tree ? (
-        <Card>
-          <MetaRow label="Kode pohon" value={tree.treeCode} />
+        <Card variant="highlight">
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+            Konteks Pohon
+          </Text>
+          <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
           <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-          <MetaRow label="Fase saat ini" value={formatGrowthPhase(tree.currentGrowthPhase)} />
+          <View style={{ gap: spacing.xs }}>
+            <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
+              Fase saat ini
+            </Text>
+            {tree.currentGrowthPhase ? (
+              <GrowthPhaseBadge phase={tree.currentGrowthPhase} />
+            ) : (
+              <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>
+                {formatGrowthPhase(tree.currentGrowthPhase)}
+              </Text>
+            )}
+          </View>
         </Card>
       ) : null}
 
-      <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '700' }}>
-          Fase baru
-        </Text>
-        <View style={{ gap: 10 }}>
+      <FormSection title="Fase Baru" description="Pilih fase pertumbuhan terbaru yang terlihat di pohon.">
+        <View style={{ gap: spacing.sm }}>
           {phaseOptions.map((option) => (
-            <Button
+            <SelectableOption
               key={option}
-              title={formatGrowthPhase(option)}
-              variant={phase === option ? 'primary' : 'secondary'}
+              active={phase === option}
+              label={formatPhaseOption(option)}
               onPress={() => setPhase(option)}
             />
           ))}
         </View>
-      </Card>
+      </FormSection>
 
-      <TextArea label="Catatan" onChangeText={setNote} placeholder="Opsional" value={note} />
+      <FormSection title="Catatan" description="Catat tanda pertumbuhan yang terlihat di pohon.">
+        <TextArea onChangeText={setNote} placeholder="Opsional" value={note} />
+      </FormSection>
     </Screen>
   );
 }
 
-function TextArea({
+function SelectableOption({
+  active,
   label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        backgroundColor: active ? colors.primarySoft : colors.surface,
+        borderColor: active ? colors.primary : colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        padding: spacing.md,
+      }}
+    >
+      <Text selectable style={{ color: active ? colors.primary : colors.text, fontSize: 15, fontWeight: '800' }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function TextArea({
   onChangeText,
   placeholder,
   value,
 }: {
-  label: string;
   onChangeText: (value: string) => void;
   placeholder?: string;
   value: string;
 }) {
   return (
-    <View style={{ gap: 7 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
-        {label}
-      </Text>
+    <View style={{ gap: spacing.sm }}>
       <TextInput
         multiline
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#94A098"
+        placeholderTextColor={colors.textSoft}
         style={{
-          backgroundColor: '#FFFFFF',
-          borderColor: '#DDE4DA',
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
           borderCurve: 'continuous',
-          borderRadius: 8,
+          borderRadius: radius.md,
           borderWidth: 1,
-          color: '#1E2A24',
+          color: colors.text,
           fontSize: 16,
           minHeight: 96,
-          paddingHorizontal: 14,
-          paddingTop: 12,
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.md,
           textAlignVertical: 'top',
         }}
         value={value}
       />
     </View>
   );
+}
+
+function formatPhaseOption(phase: GrowthPhase): string {
+  return phase === 'harvesting' ? 'Siap Panen / Panen' : formatGrowthPhase(phase);
 }

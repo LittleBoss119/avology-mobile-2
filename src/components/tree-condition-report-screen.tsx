@@ -1,16 +1,17 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Image, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
+import { colors, radius, spacing, typography } from '../constants/theme';
 import { createTreeConditionReport } from '../services/conditionReportService';
 import { uploadConditionRecordPhoto } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
 import { pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type { Tree, TreeConditionStatus } from '../types/domain';
 import type { PickedPhotoAsset } from '../types/media';
-import { formatTreeConditionStatus, formatTreeLocation } from '../utils/treeFormat';
+import { formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { ConditionStatusBadge } from './tree-components';
-import { Button, Card, ErrorBanner, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
+import { Button, Card, ErrorBanner, FormSection, LoadingState, MetaRow, PhotoPickerCard, Screen, TopAppBar } from './ui';
 
 const conditionOptions: TreeConditionStatus[] = [
   'healthy',
@@ -246,34 +247,38 @@ export function TreeConditionReportScreen({
       <ErrorBanner message={error} />
 
       {tree ? (
-        <Card>
-          <MetaRow label="Kode pohon" value={tree.treeCode} />
-          <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-          <MetaRow label="Varietas" value={tree.variety} />
-          <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
-            Kondisi terakhir
+        <Card variant="highlight">
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+            Konteks Pohon
           </Text>
-          <ConditionStatusBadge status={tree.currentCondition} />
+          <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
+          <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
+          <MetaRow label="Varietas" value={tree.variety ?? 'Belum diisi'} />
+          <View style={{ gap: spacing.xs }}>
+            <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
+              Kondisi terakhir
+            </Text>
+            <ConditionStatusBadge status={tree.currentCondition} />
+          </View>
         </Card>
       ) : null}
 
-      <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '700' }}>
-          Kondisi baru
-        </Text>
-        <View style={{ gap: 10 }}>
+      <FormSection title="Kondisi Baru" description="Pilih kondisi terbaru yang terlihat pada pohon.">
+        <View style={{ gap: spacing.sm }}>
           {conditionOptions.map((status) => (
-            <Button
+            <SelectableOption
               key={status}
-              title={formatTreeConditionStatus(status)}
-              variant={conditionStatus === status ? 'primary' : 'secondary'}
+              active={conditionStatus === status}
+              label={formatTreeConditionStatus(status)}
               onPress={() => setConditionStatus(status)}
             />
           ))}
         </View>
-      </Card>
+      </FormSection>
 
-      <TextArea label="Catatan" onChangeText={setNote} placeholder="Opsional" value={note} />
+      <FormSection title="Catatan" description="Tambahkan gejala, tindakan, atau kondisi visual pohon.">
+        <TextArea onChangeText={setNote} placeholder="Opsional" value={note} />
+      </FormSection>
 
       <ConditionPhotoPicker
         disabled={submitting}
@@ -300,75 +305,76 @@ function ConditionPhotoPicker({
   photo: PickedPhotoAsset | null;
 }) {
   return (
-    <Card>
-      <View style={{ gap: 5 }}>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800' }}>
-          Foto Kondisi
-        </Text>
-        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-          Opsional, untuk mendokumentasikan kondisi pohon.
-        </Text>
-      </View>
+    <PhotoPickerCard
+      choosePhotoLabel="Pilih Galeri"
+      description="Opsional, untuk mendokumentasikan kondisi pohon."
+      imageUri={photo?.uri}
+      loading={disabled}
+      removeLabel="Hapus Foto"
+      takePhotoLabel="Ambil Foto"
+      title="Foto Kondisi"
+      onChoosePhoto={onGalleryPress}
+      onRemovePhoto={photo ? onRemove : undefined}
+      onTakePhoto={onCameraPress}
+    />
+  );
+}
 
-      {photo ? (
-        <View style={{ gap: 10 }}>
-          <Image
-            resizeMode="cover"
-            source={{ uri: photo.uri }}
-            style={{
-              borderRadius: 12,
-              height: 150,
-              width: '100%',
-            }}
-          />
-          <Button disabled={disabled} title="Hapus Foto" variant="secondary" onPress={onRemove} />
-        </View>
-      ) : null}
-
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <View style={{ flex: 1 }}>
-          <Button disabled={disabled} title="Ambil Foto" variant="secondary" onPress={onCameraPress} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button disabled={disabled} title="Pilih Galeri" variant="secondary" onPress={onGalleryPress} />
-        </View>
-      </View>
-    </Card>
+function SelectableOption({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        backgroundColor: active ? colors.primarySoft : colors.surface,
+        borderColor: active ? colors.primary : colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        padding: spacing.md,
+      }}
+    >
+      <Text selectable style={{ color: active ? colors.primary : colors.text, fontSize: 15, fontWeight: '800' }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
 function TextArea({
-  label,
   onChangeText,
   placeholder,
   value,
 }: {
-  label: string;
   onChangeText: (value: string) => void;
   placeholder?: string;
   value: string;
 }) {
   return (
-    <View style={{ gap: 7 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
-        {label}
-      </Text>
+    <View style={{ gap: spacing.sm }}>
       <TextInput
         multiline
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#94A098"
+        placeholderTextColor={colors.textSoft}
         style={{
-          backgroundColor: '#FFFFFF',
-          borderColor: '#DDE4DA',
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
           borderCurve: 'continuous',
-          borderRadius: 8,
+          borderRadius: radius.md,
           borderWidth: 1,
-          color: '#1E2A24',
+          color: colors.text,
           fontSize: 16,
           minHeight: 96,
-          paddingHorizontal: 14,
-          paddingTop: 12,
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.md,
           textAlignVertical: 'top',
         }}
         value={value}

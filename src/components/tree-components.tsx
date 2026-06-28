@@ -476,13 +476,13 @@ function DateActionButton({
 export function ConditionStatusBadge({ status }: ConditionStatusBadgeProps) {
   const tone = getConditionTone(status);
 
-  return <Badge label={formatCompactConditionStatus(status)} tone={tone} />;
+  return <Badge label={formatCompactConditionStatus(status)} maxWidth={180} tone={tone} />;
 }
 
 export function GrowthPhaseBadge({ phase }: GrowthPhaseBadgeProps) {
   const tone = getGrowthPhaseTone(phase);
 
-  return <Badge label={formatCompactGrowthPhase(phase)} tone={tone} />;
+  return <Badge label={formatCompactGrowthPhase(phase)} maxWidth={180} tone={tone} />;
 }
 
 export function ConditionReportList({
@@ -521,8 +521,8 @@ export function TreeHistoryTimeline({
   if (history.length === 0) {
     return (
       <EmptyState
-        title="Belum ada riwayat pohon"
-        subtitle="Riwayat kondisi, fase pertumbuhan, dan aktivitas perawatan pohon akan muncul di sini."
+        title="Belum ada riwayat"
+        subtitle="Catatan kondisi, fase, dan perawatan akan muncul di sini."
       />
     );
   }
@@ -562,9 +562,9 @@ export function ConditionReportItem({
 
   return (
     <Card>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md }}>
         <ConditionStatusBadge status={report.conditionStatus} />
-        <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
+        <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
           {formatDateTime(report.reportedAt)}
         </Text>
       </View>
@@ -672,8 +672,9 @@ function ConditionPhotoThumbnail({ photoUrl }: { photoUrl: string }) {
         onPress={() => setPreviewOpen(true)}
         style={{
           alignSelf: 'flex-start',
-          borderColor: '#DCE7D5',
-          borderRadius: 10,
+          borderColor: colors.border,
+          borderCurve: 'continuous',
+          borderRadius: radius.md,
           borderWidth: 1,
           overflow: 'hidden',
         }}
@@ -876,10 +877,10 @@ function formatCompactConditionStatus(status: TreeConditionStatus): string {
   const labels: Record<TreeConditionStatus, string> = {
     damaged: 'Rusak',
     dead: 'Mati',
-    disease_indicated: 'Penyakit',
+    disease_indicated: 'Terindikasi Penyakit',
     healthy: 'Sehat',
-    needs_attention: 'Perlu dicek',
-    pest_attacked: 'Hama',
+    needs_attention: 'Perlu Perhatian',
+    pest_attacked: 'Terserang Hama',
   };
 
   return labels[status];
@@ -889,8 +890,8 @@ function formatCompactGrowthPhase(phase: GrowthPhase): string {
   const labels: Record<GrowthPhase, string> = {
     flowering: 'Berbunga',
     fruiting: 'Berbuah',
-    harvesting: 'Panen',
-    initial_planting: 'Awal',
+    harvesting: 'Siap Panen / Panen',
+    initial_planting: 'Awal Tanam',
     vegetative: 'Vegetatif',
   };
 
