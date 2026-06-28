@@ -1,3 +1,5 @@
+import * as FileSystem from 'expo-file-system/legacy';
+
 import { supabase } from '../lib/supabase';
 import type { ServiceResult, SuccessData, UUID } from '../types/domain';
 import type {
@@ -73,6 +75,39 @@ type MembershipRow = {
   status: 'pending' | 'active' | 'rejected' | 'removed';
 };
 
+type PhotoUploadDebugError = {
+  code?: string;
+  details?: string;
+  hint?: string;
+  message?: string;
+  name?: string;
+  status?: number;
+  statusCode?: string;
+};
+
+type PhotoUploadDebugInput = {
+  entityId: UUID;
+  entityType: PhotoAttachmentEntityType;
+  error?: unknown;
+  farmId: UUID;
+  fileName?: string | null;
+  fileSize?: number | null;
+  localUri?: string | null;
+  mimeType?: string | null;
+  readAttempts?: string[] | null;
+  readMethod?: LocalImageFileData['readMethod'] | null;
+  storagePath: string;
+  taskId?: UUID | null;
+};
+
+type LocalImageFileData = {
+  uploadBody: ArrayBuffer | Blob;
+  fileSize: number;
+  mimeType: string;
+  readAttempts: string[];
+  readMethod: 'base64' | 'expo-file-system-base64' | 'fetch-blob';
+};
+
 export async function uploadPhotoAttachment(
   input: UploadPhotoAttachmentInput
 ): Promise<ServiceResult<UploadPhotoAttachmentData>> {
@@ -88,7 +123,12 @@ export async function uploadPhotoAttachment(
     return fail(userIdResult.error);
   }
 
-  const fileResult = await loadLocalImageFile(normalized.localUri, normalized.mimeType);
+  const fileResult = await loadLocalImageFile({
+    fallbackBase64: normalized.base64,
+    fallbackMimeType: normalized.mimeType,
+    fileName: normalized.fileName,
+    localUri: normalized.localUri,
+  });
 
   if (fileResult.error) {
     return fail(fileResult.error);
@@ -104,14 +144,42 @@ export async function uploadPhotoAttachment(
 
   const finalFileName = normalized.fileName ?? storagePath.split('/').at(-1) ?? null;
 
+  logPhotoUploadDebug('upload-start', {
+    entityId: normalized.entityId,
+    entityType: normalized.entityType,
+    farmId: normalized.farmId,
+    fileName: finalFileName,
+    fileSize: fileResult.data.fileSize,
+    localUri: normalized.localUri,
+    mimeType: fileResult.data.mimeType,
+    readAttempts: fileResult.data.readAttempts,
+    readMethod: fileResult.data.readMethod,
+    storagePath,
+    taskId: normalized.taskId,
+  });
+
   const uploadResult = await supabase.storage
     .from(PHOTO_STORAGE_BUCKET)
-    .upload(storagePath, fileResult.data.blob, {
+    .upload(storagePath, fileResult.data.uploadBody, {
       contentType: fileResult.data.mimeType,
       upsert: false,
     });
 
   if (uploadResult.error) {
+    logPhotoUploadDebug('storage-upload-failed', {
+      entityId: normalized.entityId,
+      entityType: normalized.entityType,
+      error: uploadResult.error,
+      farmId: normalized.farmId,
+      fileName: finalFileName,
+      fileSize: fileResult.data.fileSize,
+      localUri: normalized.localUri,
+      mimeType: fileResult.data.mimeType,
+      readAttempts: fileResult.data.readAttempts,
+      readMethod: fileResult.data.readMethod,
+      storagePath,
+      taskId: normalized.taskId,
+    });
     return fail(new Error('Foto gagal diunggah.'));
   }
 
@@ -134,7 +202,33 @@ export async function uploadPhotoAttachment(
     .single<PhotoAttachmentRow>();
 
   if (insertResult.error) {
-    await removeStorageObjectBestEffort(storagePath);
+    logPhotoUploadDebug('metadata-insert-failed', {
+      entityId: normalized.entityId,
+      entityType: normalized.entityType,
+      error: insertResult.error,
+      farmId: normalized.farmId,
+      fileName: finalFileName,
+      fileSize: fileResult.data.fileSize,
+      localUri: normalized.localUri,
+      mimeType: fileResult.data.mimeType,
+      readAttempts: fileResult.data.readAttempts,
+      readMethod: fileResult.data.readMethod,
+      storagePath,
+      taskId: normalized.taskId,
+    });
+    await removeStorageObjectBestEffort(storagePath, {
+      entityId: normalized.entityId,
+      entityType: normalized.entityType,
+      farmId: normalized.farmId,
+      fileName: finalFileName,
+      fileSize: fileResult.data.fileSize,
+      localUri: normalized.localUri,
+      mimeType: fileResult.data.mimeType,
+      readAttempts: fileResult.data.readAttempts,
+      readMethod: fileResult.data.readMethod,
+      storagePath,
+      taskId: normalized.taskId,
+    });
     return fail(insertResult.error, 'Foto terunggah, tetapi metadata gagal disimpan.');
   }
 
@@ -196,6 +290,7 @@ export async function uploadTreeMainPhoto(
   }
 
   const uploadResult = await uploadPhotoAttachment({
+    base64: input.base64,
     entityId: treeId,
     entityType: 'tree_main',
     farmId,
@@ -345,6 +440,7 @@ export async function uploadConditionRecordPhoto(
   }
 
   const uploadResult = await uploadPhotoAttachment({
+    base64: input.base64,
     caption: input.caption,
     entityId: conditionRecordId,
     entityType: 'condition_record',
@@ -508,6 +604,7 @@ export async function uploadOperationalReportPhoto(
   }
 
   const uploadResult = await uploadPhotoAttachment({
+    base64: input.base64,
     caption: input.caption,
     entityId: reportId,
     entityType: 'operational_report',
@@ -673,6 +770,7 @@ export async function uploadTaskProofPhoto(
   }
 
   const uploadResult = await uploadPhotoAttachment({
+    base64: input.base64,
     caption: input.caption,
     entityId: activityId,
     entityType: 'task_proof',
@@ -944,6 +1042,7 @@ function normalizeUploadInput(
     fileName: normalizeOptionalText(input.fileName),
     isPrimary: input.isPrimary ?? false,
     localUri,
+    base64: normalizeOptionalText(input.base64),
     mimeType: normalizeOptionalText(input.mimeType),
     taskId,
   };
@@ -976,44 +1075,210 @@ function normalizeListInput(
   };
 }
 
-async function loadLocalImageFile(
-  localUri: string,
-  fallbackMimeType: string | null
-): Promise<ServiceResult<{ blob: Blob; fileSize: number; mimeType: string }>> {
+async function loadLocalImageFile(input: {
+  fallbackBase64: string | null;
+  fallbackMimeType: string | null;
+  fileName: string | null;
+  localUri: string;
+}): Promise<ServiceResult<LocalImageFileData>> {
+  const readAttempts: string[] = [];
+  const base64Result = readImageFileFromBase64(input, readAttempts);
+
+  if (!(base64Result instanceof Error)) {
+    return ok(base64Result);
+  }
+
+  logLocalPhotoReadDebug('local-read-base64-failed', input, base64Result, readAttempts);
+
+  const fileSystemResult = await readImageFileWithExpoFileSystem(input, readAttempts);
+
+  if (!(fileSystemResult instanceof Error)) {
+    return ok(fileSystemResult);
+  }
+
+  logLocalPhotoReadDebug('local-read-filesystem-failed', input, fileSystemResult, readAttempts);
+
+  const fetchResult = await readImageFileWithFetch(input, readAttempts);
+
+  if (!(fetchResult instanceof Error)) {
+    return ok(fetchResult);
+  }
+
+  logLocalPhotoReadDebug('local-read-fetch-failed', input, fetchResult, readAttempts);
+
+  return fail(new Error('File foto tidak dapat dibaca.'));
+}
+
+async function readImageFileWithFetch(input: {
+  fallbackMimeType: string | null;
+  fileName: string | null;
+  localUri: string;
+}, readAttempts: string[]): Promise<LocalImageFileData | Error> {
   try {
-    const response = await fetch(localUri);
+    const response = await fetch(input.localUri);
 
     if (!response.ok) {
-      return fail(new Error('File foto tidak dapat dibaca.'));
+      const message = `fetch_blob_failed: Fetch local photo returned ${response.status}.`;
+      readAttempts.push(message);
+      return new Error(message);
     }
 
     const blob = await response.blob();
-    const mimeType = normalizeMimeType(blob.type || fallbackMimeType);
+    return validateLocalImageUploadBody({
+      blob,
+      fallbackMimeType: input.fallbackMimeType,
+      fileName: input.fileName,
+      localUri: input.localUri,
+      readAttempts,
+      readMethod: 'fetch-blob',
+    });
+  } catch (error) {
+    const message = `fetch_blob_failed: ${getErrorMessage(error)}`;
+    readAttempts.push(message);
+    return new Error(message);
+  }
+}
+
+async function readImageFileWithExpoFileSystem(input: {
+  fallbackMimeType: string | null;
+  fileName: string | null;
+  localUri: string;
+}, readAttempts: string[]): Promise<LocalImageFileData | Error> {
+  try {
+    const base64 = await FileSystem.readAsStringAsync(input.localUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const mimeType = resolveLocalImageMimeType({
+      fallbackMimeType: input.fallbackMimeType,
+      fileName: input.fileName,
+      localUri: input.localUri,
+    });
 
     if (!mimeType) {
-      return fail(new Error('Tipe file foto tidak dikenali.'));
+      const message = 'filesystem_read_failed: Photo MIME type could not be resolved.';
+      readAttempts.push(message);
+      return new Error(message);
     }
 
-    if (!isImageMimeType(mimeType)) {
-      return fail(new Error('File yang dipilih harus berupa gambar.'));
-    }
-
-    if (blob.size <= 0) {
-      return fail(new Error('File foto kosong atau tidak dapat dibaca.'));
-    }
-
-    if (blob.size > MAX_PHOTO_SIZE_BYTES) {
-      return fail(new Error('Ukuran foto terlalu besar.'));
-    }
-
-    return ok({
-      blob,
-      fileSize: blob.size,
-      mimeType,
+    return validateLocalImageUploadBody({
+      arrayBuffer: base64ToArrayBuffer(base64),
+      fallbackMimeType: mimeType,
+      fileName: input.fileName,
+      localUri: input.localUri,
+      readAttempts,
+      readMethod: 'expo-file-system-base64',
     });
-  } catch {
-    return fail(new Error('Gagal membaca file foto dari perangkat.'));
+  } catch (error) {
+    const message = `filesystem_read_failed: ${getErrorMessage(error)}`;
+    readAttempts.push(message);
+    return new Error(message);
   }
+}
+
+function readImageFileFromBase64(input: {
+  fallbackBase64: string | null;
+  fallbackMimeType: string | null;
+  fileName: string | null;
+  localUri: string;
+}, readAttempts: string[]): LocalImageFileData | Error {
+  try {
+    if (!input.fallbackBase64) {
+      readAttempts.push('base64_missing');
+      return new Error('base64_missing');
+    }
+
+    const mimeType = resolveLocalImageMimeType({
+      fallbackMimeType: input.fallbackMimeType,
+      fileName: input.fileName,
+      localUri: input.localUri,
+    });
+
+    if (!mimeType) {
+      const message = 'base64_failed: Photo MIME type could not be resolved.';
+      readAttempts.push(message);
+      return new Error(message);
+    }
+
+    return validateLocalImageUploadBody({
+      arrayBuffer: base64ToArrayBuffer(input.fallbackBase64),
+      fallbackMimeType: mimeType,
+      fileName: input.fileName,
+      localUri: input.localUri,
+      readAttempts,
+      readMethod: 'base64',
+    });
+  } catch (error) {
+    const message = `base64_failed: ${getErrorMessage(error)}`;
+    readAttempts.push(message);
+    return new Error(message);
+  }
+}
+
+function validateLocalImageUploadBody(input: {
+  arrayBuffer?: ArrayBuffer;
+  blob?: Blob;
+  fallbackMimeType: string | null;
+  fileName: string | null;
+  localUri: string;
+  readAttempts: string[];
+  readMethod: LocalImageFileData['readMethod'];
+}): LocalImageFileData | Error {
+  const mimeType = resolveLocalImageMimeType({
+    blobType: input.blob?.type,
+    fallbackMimeType: input.fallbackMimeType,
+    fileName: input.fileName,
+    localUri: input.localUri,
+  });
+
+  if (!mimeType) {
+    return new Error('Tipe file foto tidak dikenali.');
+  }
+
+  if (!isImageMimeType(mimeType)) {
+    return new Error('File yang dipilih harus berupa gambar.');
+  }
+
+  const fileSize = input.arrayBuffer?.byteLength ?? input.blob?.size ?? 0;
+
+  if (fileSize <= 0) {
+    return new Error('File foto kosong atau tidak dapat dibaca.');
+  }
+
+  if (fileSize > MAX_PHOTO_SIZE_BYTES) {
+    return new Error('Ukuran foto terlalu besar.');
+  }
+
+  if (input.arrayBuffer) {
+    return {
+      uploadBody: input.arrayBuffer,
+      fileSize,
+      mimeType,
+      readAttempts: [...input.readAttempts],
+      readMethod: input.readMethod,
+    };
+  }
+
+  if (!input.blob) {
+    return new Error('File foto kosong atau tidak dapat dibaca.');
+  }
+
+  if (input.blob.type === mimeType) {
+    return {
+      uploadBody: input.blob,
+      fileSize,
+      mimeType,
+      readAttempts: [...input.readAttempts],
+      readMethod: input.readMethod,
+    };
+  }
+
+  return {
+    uploadBody: input.blob.slice(0, input.blob.size, mimeType),
+    fileSize,
+    mimeType,
+    readAttempts: [...input.readAttempts],
+    readMethod: input.readMethod,
+  };
 }
 
 async function getCurrentUserId(): Promise<ServiceResult<UUID>> {
@@ -1107,6 +1372,106 @@ function normalizeMimeType(value: string | null | undefined): string | null {
   return normalized || null;
 }
 
+function resolveLocalImageMimeType(input: {
+  blobType?: string | null;
+  fallbackMimeType?: string | null;
+  fileName?: string | null;
+  localUri?: string | null;
+}): string | null {
+  const explicitMimeType = normalizeMimeType(input.blobType || input.fallbackMimeType);
+
+  if (explicitMimeType) {
+    return explicitMimeType;
+  }
+
+  const extension = input.fileName?.split('.').pop()?.toLowerCase()
+    ?? input.localUri?.split('?')[0]?.split('.').pop()?.toLowerCase();
+
+  if (extension === 'png') {
+    return 'image/png';
+  }
+
+  if (extension === 'webp') {
+    return 'image/webp';
+  }
+
+  if (extension === 'heic') {
+    return 'image/heic';
+  }
+
+  if (extension === 'heif') {
+    return 'image/heif';
+  }
+
+  if (extension === 'jpg' || extension === 'jpeg') {
+    return 'image/jpeg';
+  }
+
+  return 'image/jpeg';
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const cleanBase64 = (base64.includes(',') ? base64.split(',').pop() ?? '' : base64)
+    .replace(/\s/g, '');
+  const padding = cleanBase64.endsWith('==') ? 2 : cleanBase64.endsWith('=') ? 1 : 0;
+  const byteLength = Math.floor((cleanBase64.length * 3) / 4) - padding;
+  const bytes = new Uint8Array(byteLength);
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let byteIndex = 0;
+
+  for (let index = 0; index < cleanBase64.length; index += 4) {
+    const first = alphabet.indexOf(cleanBase64[index] ?? 'A');
+    const second = alphabet.indexOf(cleanBase64[index + 1] ?? 'A');
+    const thirdChar = cleanBase64[index + 2];
+    const fourthChar = cleanBase64[index + 3];
+    const third = thirdChar && thirdChar !== '=' ? alphabet.indexOf(thirdChar) : 0;
+    const fourth = fourthChar && fourthChar !== '=' ? alphabet.indexOf(fourthChar) : 0;
+
+    if (first < 0 || second < 0 || third < 0 || fourth < 0) {
+      throw new Error('Base64 foto tidak valid.');
+    }
+
+    const chunk = (first << 18) | (second << 12) | (third << 6) | fourth;
+
+    if (byteIndex < byteLength) {
+      bytes[byteIndex] = (chunk >> 16) & 255;
+      byteIndex += 1;
+    }
+
+    if (byteIndex < byteLength) {
+      bytes[byteIndex] = (chunk >> 8) & 255;
+      byteIndex += 1;
+    }
+
+    if (byteIndex < byteLength) {
+      bytes[byteIndex] = chunk & 255;
+      byteIndex += 1;
+    }
+  }
+
+  return bytes;
+}
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const bytes = base64ToUint8Array(base64);
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  ) as ArrayBuffer;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  return 'Unknown error';
+}
+
 function isImageMimeType(value: string): boolean {
   return value.startsWith('image/');
 }
@@ -1129,8 +1494,79 @@ function mapPhotoAttachment(row: PhotoAttachmentRow): PhotoAttachment {
   };
 }
 
-async function removeStorageObjectBestEffort(storagePath: string): Promise<void> {
-  await supabase.storage.from(PHOTO_STORAGE_BUCKET).remove([storagePath]);
+function logPhotoUploadDebug(
+  stage: string,
+  input: PhotoUploadDebugInput
+): void {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) {
+    return;
+  }
+
+  const errorLike = input.error as PhotoUploadDebugError | null | undefined;
+  const log = input.error ? console.warn : console.debug;
+
+  log('[photo-upload]', {
+    code: errorLike?.code ?? null,
+    details: errorLike?.details ?? null,
+    entityId: input.entityId,
+    entityType: input.entityType,
+    farmId: input.farmId,
+    fileName: input.fileName ?? null,
+    fileSize: input.fileSize ?? null,
+    hint: errorLike?.hint ?? null,
+    localUri: input.localUri ?? null,
+    message: input.error ? errorLike?.message ?? String(input.error) : null,
+    mimeType: input.mimeType ?? null,
+    name: errorLike?.name ?? null,
+    readAttempts: input.readAttempts ?? null,
+    readMethod: input.readMethod ?? null,
+    stage,
+    status: errorLike?.status ?? errorLike?.statusCode ?? null,
+    storagePath: input.storagePath,
+    taskId: input.taskId ?? null,
+  });
+}
+
+function logLocalPhotoReadDebug(
+  stage: string,
+  input: {
+    fallbackBase64?: string | null;
+    fallbackMimeType?: string | null;
+    fileName?: string | null;
+    localUri: string;
+  },
+  error: Error,
+  readAttempts: string[]
+): void {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) {
+    return;
+  }
+
+  console.warn('[photo-local-read]', {
+    base64Length: input.fallbackBase64?.length ?? null,
+    fileName: input.fileName ?? null,
+    hasBase64: Boolean(input.fallbackBase64),
+    message: error.message,
+    mimeType: input.fallbackMimeType ?? null,
+    name: error.name,
+    readAttempts,
+    stage,
+    uriPrefix: input.localUri.slice(0, 32),
+  });
+}
+
+async function removeStorageObjectBestEffort(
+  storagePath: string,
+  debugInput?: PhotoUploadDebugInput
+): Promise<void> {
+  const result = await supabase.storage.from(PHOTO_STORAGE_BUCKET).remove([storagePath]);
+
+  if (result.error && debugInput) {
+    logPhotoUploadDebug('cleanup-failed', {
+      ...debugInput,
+      error: result.error,
+    });
+  }
 }
 
 async function ensureOperationalReportAccessibleForPhoto(

@@ -7,8 +7,10 @@ import { fail, ok } from '../utils/serviceResult';
 
 const imagePickerOptions: ImagePicker.ImagePickerOptions = {
   allowsEditing: false,
+  base64: true,
   mediaTypes: ['images'],
   quality: 0.9,
+  shouldDownloadFromNetwork: true,
 };
 
 export async function requestCameraPermission(): Promise<
@@ -66,7 +68,7 @@ export async function pickImageFromGallery(): Promise<
     return ok(null);
   }
 
-  return validatePickedAsset(result.assets[0]);
+  return validatePickedAsset(result.assets[0], 'gallery');
 }
 
 export async function takePhotoFromCamera(): Promise<
@@ -88,17 +90,20 @@ export async function takePhotoFromCamera(): Promise<
     return ok(null);
   }
 
-  return validatePickedAsset(result.assets[0]);
+  return validatePickedAsset(result.assets[0], 'camera');
 }
 
 function validatePickedAsset(
-  asset: ImagePicker.ImagePickerAsset | undefined
+  asset: ImagePicker.ImagePickerAsset | undefined,
+  source: 'camera' | 'gallery'
 ): ServiceResult<PickedPhotoAsset> {
   if (!asset?.uri) {
     return fail(new Error('Foto tidak ditemukan.'));
   }
 
-  if (asset.mimeType && !asset.mimeType.startsWith('image/')) {
+  const mimeType = normalizePickedMimeType(asset);
+
+  if (!mimeType.startsWith('image/')) {
     return fail(new Error('File yang dipilih harus berupa gambar.'));
   }
 
@@ -106,12 +111,71 @@ function validatePickedAsset(
     return fail(new Error('Ukuran foto terlalu besar.'));
   }
 
-  return ok({
+  const pickedPhoto: PickedPhotoAsset = {
+    assetId: asset.assetId ?? null,
+    base64: asset.base64 ?? null,
     fileName: asset.fileName ?? null,
     fileSize: asset.fileSize ?? null,
     height: asset.height ?? null,
-    mimeType: asset.mimeType ?? null,
+    mimeType,
     uri: asset.uri,
     width: asset.width ?? null,
-  });
+  };
+
+  logPickedPhotoDebug(source, pickedPhoto);
+
+  return ok(pickedPhoto);
+}
+
+function logPickedPhotoDebug(source: 'camera' | 'gallery', photo: PickedPhotoAsset): void {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) {
+    return;
+  }
+
+  const payload = {
+    assetId: photo.assetId,
+    base64Length: photo.base64?.length ?? null,
+    fileName: photo.fileName,
+    fileSize: photo.fileSize,
+    hasBase64: Boolean(photo.base64),
+    mimeType: photo.mimeType,
+    source,
+    uriPrefix: photo.uri.slice(0, 32),
+  };
+
+  if (!photo.base64) {
+    console.warn('[picked-photo-missing-base64]', payload);
+    return;
+  }
+
+  console.debug('[picked-photo]', payload);
+}
+
+function normalizePickedMimeType(asset: ImagePicker.ImagePickerAsset): string {
+  const normalizedMimeType = asset.mimeType?.trim().toLowerCase();
+
+  if (normalizedMimeType) {
+    return normalizedMimeType;
+  }
+
+  const extension = asset.fileName?.split('.').pop()?.toLowerCase()
+    ?? asset.uri.split('?')[0]?.split('.').pop()?.toLowerCase();
+
+  if (extension === 'png') {
+    return 'image/png';
+  }
+
+  if (extension === 'webp') {
+    return 'image/webp';
+  }
+
+  if (extension === 'heic') {
+    return 'image/heic';
+  }
+
+  if (extension === 'heif') {
+    return 'image/heif';
+  }
+
+  return 'image/jpeg';
 }

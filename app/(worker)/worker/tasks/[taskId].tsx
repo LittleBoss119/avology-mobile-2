@@ -140,6 +140,7 @@ export default function WorkerTaskDetailScreen() {
     if (proofPhoto) {
       const proofResult = await uploadTaskProofPhoto({
         activityId: result.data.activityId,
+        base64: proofPhoto.base64,
         farmId: task.farmId,
         fileName: proofPhoto.fileName,
         localUri: proofPhoto.uri,

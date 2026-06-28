@@ -33,6 +33,7 @@ export type UploadPhotoAttachmentInput = {
   entityType: PhotoAttachmentEntityType;
   entityId: UUID;
   localUri: string;
+  base64?: string | null;
   taskId?: UUID | null;
   fileName?: string | null;
   mimeType?: string | null;
@@ -72,6 +73,7 @@ export type UploadTreeMainPhotoInput = {
   farmId: UUID;
   treeId: UUID;
   localUri: string;
+  base64?: string | null;
   fileName?: string | null;
   mimeType?: string | null;
 };
@@ -92,6 +94,7 @@ export type UploadConditionRecordPhotoInput = {
   farmId: UUID;
   conditionRecordId: UUID;
   localUri: string;
+  base64?: string | null;
   fileName?: string | null;
   mimeType?: string | null;
   caption?: string | null;
@@ -119,6 +122,7 @@ export type UploadOperationalReportPhotoInput = {
   farmId: UUID;
   reportId: UUID;
   localUri: string;
+  base64?: string | null;
   fileName?: string | null;
   mimeType?: string | null;
   caption?: string | null;
@@ -146,6 +150,7 @@ export type UploadTaskProofPhotoInput = {
   taskId: UUID;
   activityId: UUID;
   localUri: string;
+  base64?: string | null;
   fileName?: string | null;
   mimeType?: string | null;
   caption?: string | null;
@@ -163,6 +168,8 @@ export type ListTaskProofPhotosForActivitiesInput = {
 
 export type PickedPhotoAsset = {
   uri: string;
+  assetId: string | null;
+  base64: string | null;
   fileName: string | null;
   mimeType: string | null;
   fileSize: number | null;

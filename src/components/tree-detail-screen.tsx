@@ -254,6 +254,7 @@ export function TreeDetailScreen({
     setError(null);
 
     const result = await uploadTreeMainPhoto({
+      base64: asset.base64,
       farmId: tree.farmId,
       fileName: asset.fileName,
       localUri: asset.uri,

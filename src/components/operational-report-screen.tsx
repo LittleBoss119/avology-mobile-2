@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Alert, Image, Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Image, Modal, Pressable, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '../context/auth-context';
 import { pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
@@ -113,6 +113,7 @@ export function WorkerCreateOperationalReportScreen() {
   const [description, setDescription] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [locationNote, setLocationNote] = React.useState('');
+  const [pendingOperationalReportId, setPendingOperationalReportId] = React.useState<string | null>(null);
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [success, setSuccess] = React.useState<string | null>(null);
@@ -129,6 +130,11 @@ export function WorkerCreateOperationalReportScreen() {
   async function handleSubmit() {
     if (!currentFarm?.farmId || currentFarm.role !== 'worker' || currentFarm.status !== 'active') {
       setError('Hanya pekerja aktif yang dapat membuat laporan operasional.');
+      return;
+    }
+
+    if (pendingOperationalReportId) {
+      await retryPendingPhotoUpload(pendingOperationalReportId);
       return;
     }
 
@@ -160,28 +166,97 @@ export function WorkerCreateOperationalReportScreen() {
     }
 
     if (selectedPhoto) {
-      const photoResult = await uploadOperationalReportPhoto({
-        farmId: currentFarm.farmId,
-        fileName: selectedPhoto.fileName,
-        localUri: selectedPhoto.uri,
-        mimeType: selectedPhoto.mimeType,
-        reportId: result.data.reportId,
-      });
+      const photoUploaded = await uploadSelectedPhoto(result.data.reportId);
 
-      if (photoResult.error) {
+      if (!photoUploaded) {
+        setPendingOperationalReportId(result.data.reportId);
         setSubmitting(false);
-        Alert.alert(
-          'Laporan tersimpan',
-          'Laporan tersimpan, tetapi foto gagal diunggah.',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.replace('/worker/reports'),
-            },
-          ]
+        setError(
+          'Laporan tersimpan, tetapi foto gagal diunggah. Tekan Simpan Laporan lagi untuk mencoba unggah foto.'
         );
         return;
       }
+    }
+
+    setSelectedPhoto(null);
+    finishOperationalReport();
+  }
+
+  async function retryPendingPhotoUpload(reportId: string) {
+    if (!currentFarm?.farmId || currentFarm.role !== 'worker' || currentFarm.status !== 'active') {
+      setError('Hanya pekerja aktif yang dapat membuat laporan operasional.');
+      return;
+    }
+
+    if (!selectedPhoto) {
+      setPendingOperationalReportId(null);
+      finishOperationalReport();
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    const photoUploaded = await uploadSelectedPhoto(reportId);
+
+    if (!photoUploaded) {
+      setSubmitting(false);
+      setError(
+        'Foto masih gagal diunggah. Periksa koneksi atau pilih ulang foto, lalu coba lagi.'
+      );
+      return;
+    }
+
+    setPendingOperationalReportId(null);
+    setSelectedPhoto(null);
+    finishOperationalReport();
+  }
+
+  async function uploadSelectedPhoto(reportId: string): Promise<boolean> {
+    if (!currentFarm?.farmId || !selectedPhoto) {
+      return true;
+    }
+
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.debug('[operational-photo-upload]', {
+        assetId: selectedPhoto.assetId,
+        base64Length: selectedPhoto.base64?.length ?? null,
+        farmId: currentFarm.farmId,
+        fileName: selectedPhoto.fileName,
+        fileSize: selectedPhoto.fileSize,
+        hasBase64: Boolean(selectedPhoto.base64),
+        mimeType: selectedPhoto.mimeType,
+        reportId,
+        uriPrefix: selectedPhoto.uri.slice(0, 32),
+      });
+    }
+
+    const photoResult = await uploadOperationalReportPhoto({
+      base64: selectedPhoto.base64,
+      farmId: currentFarm.farmId,
+      fileName: selectedPhoto.fileName,
+      localUri: selectedPhoto.uri,
+      mimeType: selectedPhoto.mimeType,
+      reportId,
+    });
+
+    if (photoResult.error && typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[operational-photo-upload-failed]', {
+        code: photoResult.error.code ?? null,
+        farmId: currentFarm.farmId,
+        message: photoResult.error.message,
+        rawMessage: photoResult.error.rawMessage ?? null,
+        reportId,
+      });
+    }
+
+    return !photoResult.error;
+  }
+
+  function finishOperationalReport() {
+    if (redirectTimer.current) {
+      clearTimeout(redirectTimer.current);
     }
 
     setSubmitting(false);

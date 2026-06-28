@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Alert, Image, Text, TextInput, View } from 'react-native';
+import { Image, Text, TextInput, View } from 'react-native';
 
 import { createTreeConditionReport } from '../services/conditionReportService';
 import { uploadConditionRecordPhoto } from '../services/photoAttachmentService';
@@ -32,6 +32,7 @@ export function TreeConditionReportScreen({
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
+  const [pendingConditionRecordId, setPendingConditionRecordId] = React.useState<string | null>(null);
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [tree, setTree] = React.useState<Tree | null>(null);
@@ -82,6 +83,11 @@ export function TreeConditionReportScreen({
       return;
     }
 
+    if (pendingConditionRecordId) {
+      await retryPendingPhotoUpload(pendingConditionRecordId);
+      return;
+    }
+
     if (!conditionStatus) {
       setError('Kondisi pohon wajib dipilih.');
       return;
@@ -104,32 +110,95 @@ export function TreeConditionReportScreen({
     }
 
     if (selectedPhoto) {
-      const photoResult = await uploadConditionRecordPhoto({
-        conditionRecordId: result.data.reportId,
-        farmId: tree.farmId,
-        fileName: selectedPhoto.fileName,
-        localUri: selectedPhoto.uri,
-        mimeType: selectedPhoto.mimeType,
-      });
+      const photoUploaded = await uploadSelectedPhoto(result.data.reportId);
 
-      if (photoResult.error) {
+      if (!photoUploaded) {
+        setPendingConditionRecordId(result.data.reportId);
         setSubmitting(false);
-        Alert.alert(
-          'Laporan tersimpan',
-          'Laporan kondisi tersimpan, tetapi foto gagal diunggah.',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.replace(`${basePath}/${tree.id}`),
-            },
-          ]
+        setError(
+          'Laporan kondisi tersimpan, tetapi foto gagal diunggah. Tekan Simpan Kondisi lagi untuk mencoba unggah foto.'
         );
         return;
       }
     }
 
+    setSelectedPhoto(null);
     setSubmitting(false);
     router.replace(`${basePath}/${tree.id}`);
+  }
+
+  async function retryPendingPhotoUpload(conditionRecordId: string) {
+    if (!tree) {
+      setError('Data pohon tidak ditemukan.');
+      return;
+    }
+
+    if (!selectedPhoto) {
+      setPendingConditionRecordId(null);
+      router.replace(`${basePath}/${tree.id}`);
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    const photoUploaded = await uploadSelectedPhoto(conditionRecordId);
+
+    if (!photoUploaded) {
+      setSubmitting(false);
+      setError(
+        'Foto masih gagal diunggah. Periksa koneksi atau pilih ulang foto, lalu coba lagi.'
+      );
+      return;
+    }
+
+    setPendingConditionRecordId(null);
+    setSelectedPhoto(null);
+    setSubmitting(false);
+    router.replace(`${basePath}/${tree.id}`);
+  }
+
+  async function uploadSelectedPhoto(conditionRecordId: string): Promise<boolean> {
+    if (!tree || !selectedPhoto) {
+      return true;
+    }
+
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.debug('[condition-photo-upload]', {
+        assetId: selectedPhoto.assetId,
+        base64Length: selectedPhoto.base64?.length ?? null,
+        conditionRecordId,
+        farmId: tree.farmId,
+        fileName: selectedPhoto.fileName,
+        fileSize: selectedPhoto.fileSize,
+        hasBase64: Boolean(selectedPhoto.base64),
+        mimeType: selectedPhoto.mimeType,
+        treeId: tree.id,
+        uriPrefix: selectedPhoto.uri.slice(0, 32),
+      });
+    }
+
+    const photoResult = await uploadConditionRecordPhoto({
+      base64: selectedPhoto.base64,
+      conditionRecordId,
+      farmId: tree.farmId,
+      fileName: selectedPhoto.fileName,
+      localUri: selectedPhoto.uri,
+      mimeType: selectedPhoto.mimeType,
+    });
+
+    if (photoResult.error && typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[condition-photo-upload-failed]', {
+        code: photoResult.error.code ?? null,
+        conditionRecordId,
+        farmId: tree.farmId,
+        message: photoResult.error.message,
+        rawMessage: photoResult.error.rawMessage ?? null,
+        treeId: tree.id,
+      });
+    }
+
+    return !photoResult.error;
   }
 
   async function handlePickPhotoFromGallery() {
