@@ -51,7 +51,6 @@ import { formatCareCategory } from './care-sop-components';
 import { TaskProofPhotoPreview } from './task-proof-photo';
 import {
   formatOperationalReportCategory,
-  formatOperationalReportStatus,
   formatTargetType,
 } from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
@@ -66,12 +65,13 @@ import {
   EmptyState,
   ErrorBanner,
   Field,
+  FormSection,
   LoadingState,
   MetaRow,
+  PhotoPickerCard,
   Screen,
   SearchFilterRow,
   SectionHeader,
-  SectionTitle,
   SuccessBanner,
   TopAppBar,
 } from './ui';
@@ -173,7 +173,7 @@ export function WorkerCreateOperationalReportScreen() {
         setPendingOperationalReportId(result.data.reportId);
         setSubmitting(false);
         setError(
-          'Laporan tersimpan, tetapi foto gagal diunggah. Tekan Simpan Laporan lagi untuk mencoba unggah foto.'
+          'Laporan tersimpan, tetapi foto gagal diunggah. Tekan Kirim Laporan lagi untuk mencoba unggah foto.'
         );
         return;
       }
@@ -298,15 +298,20 @@ export function WorkerCreateOperationalReportScreen() {
   return (
     <Screen
       footer={
-        <Button title="Simpan Laporan" loading={submitting} onPress={handleSubmit} />
+        <>
+          <Button title="Kirim Laporan" loading={submitting} onPress={handleSubmit} />
+          <Button disabled={submitting} title="Batal" variant="secondary" onPress={() => router.back()} />
+        </>
       }
     >
       <TopAppBar title="Buat Laporan" onBack={() => router.back()} />
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
 
-      <Card>
-        <SectionTitle title="Kategori Laporan" subtitle="Pilih jenis kejadian lapangan yang perlu diketahui pemilik." />
+      <FormSection
+        title="Informasi Laporan"
+        description="Pilih kategori, lalu isi lokasi atau catatan minimal salah satu."
+      >
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {operationalReportCategoryOptions.map((option) => (
             <ChipButton
@@ -317,24 +322,26 @@ export function WorkerCreateOperationalReportScreen() {
             />
           ))}
         </View>
-      </Card>
 
-      <Card>
-        <SectionTitle title="Ringkasan Lapangan" subtitle="Isi singkat saja, yang penting jelas untuk tindak lanjut." />
         <Field
-          label="Lokasi"
+          label="Target/Lokasi"
           onChangeText={setLocationNote}
-          placeholder="Contoh: Gudang alat"
+          placeholder="Contoh: Gudang alat, Baris A, atau area dekat pompa"
           value={locationNote}
         />
+      </FormSection>
 
+      <FormSection
+        title="Catatan Lapangan"
+        description="Jelaskan kondisi lapangan, pekerjaan, atau masalah yang perlu diketahui pemilik."
+      >
         <TextArea
           label="Catatan laporan"
           onChangeText={setDescription}
           placeholder="Contoh: Selang penyemprot pecah"
           value={description}
         />
-      </Card>
+      </FormSection>
 
       <OperationalReportPhotoPicker
         disabled={submitting}
@@ -1100,63 +1107,83 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
       footer={
         <>
           <Button
-            title="Buat Tugas"
+            title="Simpan Tugas"
             disabled={!canSubmitFollowUpTask}
             loading={submitting}
             onPress={handleSubmit}
           />
+          <Button disabled={submitting} title="Batal" variant="secondary" onPress={() => router.back()} />
         </>
       }
     >
-      <TopAppBar title="Buat Tugas" onBack={() => router.back()} />
+      <TopAppBar title="Tugas Tindak Lanjut" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
       {report ? (
-        <Card variant="highlight">
+        <Card variant="softGreen">
+          <SectionHeader
+            title={`Laporan ${formatOperationalReportCategory(report.category)}`}
+            description="Gunakan konteks laporan ini untuk membuat tugas tindak lanjut."
+          />
           <MetaRow label="Kategori laporan" value={formatOperationalReportCategory(report.category)} />
-          <MetaRow label="Status laporan" value={formatOperationalReportStatus(report.status)} />
+          <MetaRow label="Status laporan" value={formatReportStatusDisplay(report.status)} />
           <MetaRow label="Tanggal laporan" value={formatDateTime(report.createdAt)} />
-          <MetaRow label="Lokasi" value={report.locationNote} />
+          <MetaRow label="Target/Lokasi" value={report.locationNote} />
           <MetaRow label="Deskripsi" value={report.description || 'Deskripsi belum diisi'} />
         </Card>
       ) : null}
 
-      <Field
-        label="Judul tugas *"
-        onChangeText={setTitle}
-        placeholder="Contoh: Perbaiki alat semprot"
-        value={title}
-      />
+      <FormSection
+        title="Rencana Tugas"
+        description="Tentukan pekerjaan dan pekerja yang akan menindaklanjuti laporan."
+      >
+        <Field
+          label="Judul tugas *"
+          onChangeText={setTitle}
+          placeholder="Contoh: Perbaiki alat semprot"
+          value={title}
+        />
 
-      <DateField label="Tanggal jatuh tempo *" onChangeDate={setDueDate} value={dueDate} />
+        <DateField label="Tanggal *" onChangeDate={setDueDate} value={dueDate} />
 
-      <WorkerPicker assignedWorkerId={assignedWorkerId} onSelect={setAssignedWorkerId} workers={workers} />
+        <WorkerPicker assignedWorkerId={assignedWorkerId} onSelect={setAssignedWorkerId} workers={workers} />
+      </FormSection>
 
-      <TaskTargetPicker
-        customTargetNote={customTargetNote}
-        onCustomTargetNoteChange={setCustomTargetNote}
-        onTargetColumnChange={setTargetColumn}
-        onTargetRowChange={setTargetRow}
-        onTargetTreeIdChange={setTargetTreeId}
-        onTargetTypeChange={updateTargetType}
-        targetColumn={targetColumn}
-        targetRow={targetRow}
-        targetTreeId={targetTreeId}
-        targetType={targetType}
-        trees={trees}
-      />
+      <FormSection
+        title="Target Tugas"
+        description="Pilih area atau pohon yang perlu dikerjakan."
+      >
+        <TaskTargetPicker
+          customTargetNote={customTargetNote}
+          onCustomTargetNoteChange={setCustomTargetNote}
+          onTargetColumnChange={setTargetColumn}
+          onTargetRowChange={setTargetRow}
+          onTargetTreeIdChange={setTargetTreeId}
+          onTargetTypeChange={updateTargetType}
+          targetColumn={targetColumn}
+          targetRow={targetRow}
+          targetTreeId={targetTreeId}
+          targetType={targetType}
+          trees={trees}
+        />
+      </FormSection>
 
-      <TextArea
-        label="Instruksi"
-        onChangeText={setInstruction}
-        placeholder="Instruksi tindak lanjut untuk pekerja"
-        value={instruction}
-      />
+      <FormSection
+        title="Instruksi dan Bukti"
+        description="Instruksi ini akan muncul di detail tugas pekerja."
+      >
+        <TextArea
+          label="Instruksi"
+          onChangeText={setInstruction}
+          placeholder="Instruksi tindak lanjut untuk pekerja"
+          value={instruction}
+        />
 
-      <ProofRequirementToggle
-        enabled={requiresPhoto}
-        onToggle={() => setRequiresPhoto((current) => !current)}
-      />
+        <ProofRequirementToggle
+          enabled={requiresPhoto}
+          onToggle={() => setRequiresPhoto((current) => !current)}
+        />
+      </FormSection>
     </Screen>
   );
 }
@@ -1327,7 +1354,10 @@ function OwnerReportDecisionSection({
   if (reportStatus === 'new') {
     return (
       <Card>
-        <SectionHeader title="Tindak Lanjut" />
+        <SectionHeader
+          title="Tindak Lanjut"
+          description="Pilih respons untuk laporan yang belum ditangani."
+        />
         <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
           Laporan belum direspons. Pilih tindak lanjut yang paling sesuai dengan kondisi lapangan.
         </Text>
@@ -1340,7 +1370,7 @@ function OwnerReportDecisionSection({
             </Text>
           )}
           <Button
-            title="Tandai Selesai Tanpa Tugas"
+            title="Tandai Selesai"
             loading={updatingStatus === 'resolved'}
             variant="secondary"
             onPress={() => onUpdateStatus('resolved')}
@@ -1359,7 +1389,10 @@ function OwnerReportDecisionSection({
   if (reportStatus === 'in_progress') {
     return (
       <Card>
-        <SectionHeader title="Tindak Lanjut" />
+        <SectionHeader
+          title="Tindak Lanjut"
+          description="Pantau penyelesaian tugas yang dibuat dari laporan ini."
+        />
         {allFollowUpTasksCompleted ? (
           <>
             <Text selectable style={{ color: appTheme.primary, fontWeight: '800', lineHeight: 21 }}>
@@ -1387,6 +1420,10 @@ function OwnerReportDecisionSection({
   return (
     <Card>
       <SectionHeader title="Tindak Lanjut" />
+      <Badge
+        label={formatReportStatusDisplay(reportStatus)}
+        tone={getReportStatusTone(reportStatus)}
+      />
       <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
         {reportStatus === 'resolved' ? 'Laporan selesai.' : 'Laporan ditolak.'}
       </Text>
@@ -1462,40 +1499,18 @@ function OperationalReportPhotoPicker({
   photo: PickedPhotoAsset | null;
 }) {
   return (
-    <Card>
-      <View style={{ gap: 5 }}>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800' }}>
-          Foto Laporan
-        </Text>
-        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-          Opsional, untuk memperjelas kondisi di lapangan.
-        </Text>
-      </View>
-
-      {photo ? (
-        <View style={{ gap: 10 }}>
-          <Image
-            resizeMode="cover"
-            source={{ uri: photo.uri }}
-            style={{
-              borderRadius: 12,
-              height: 150,
-              width: '100%',
-            }}
-          />
-          <Button disabled={disabled} title="Hapus Foto" variant="secondary" onPress={onRemove} />
-        </View>
-      ) : null}
-
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <View style={{ flex: 1 }}>
-          <Button disabled={disabled} title="Ambil Foto" variant="secondary" onPress={onCameraPress} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button disabled={disabled} title="Pilih Galeri" variant="secondary" onPress={onGalleryPress} />
-        </View>
-      </View>
-    </Card>
+    <PhotoPickerCard
+      choosePhotoLabel="Pilih Galeri"
+      description="Opsional, tambahkan foto sebagai bukti kondisi lapangan."
+      imageUri={photo?.uri ?? null}
+      loading={disabled}
+      removeLabel="Hapus Foto"
+      takePhotoLabel="Ambil Foto"
+      title="Foto Laporan"
+      onChoosePhoto={onGalleryPress}
+      onRemovePhoto={photo ? onRemove : undefined}
+      onTakePhoto={onCameraPress}
+    />
   );
 }
 
