@@ -9,7 +9,7 @@ type NavigationItem = {
   match: string[];
 };
 
-type NavigationIconName = 'calendar' | 'document' | 'home' | 'leaf' | 'user' | 'checklist';
+type NavigationIconName = 'calendar' | 'document' | 'farm' | 'home' | 'leaf' | 'user' | 'checklist';
 
 export function RoleBottomNavigation({ role }: { role: 'owner' | 'worker' }) {
   const pathname = usePathname();
@@ -111,10 +111,10 @@ const ownerNavigationItems: NavigationItem[] = [
     match: ['/owner/reports'],
   },
   {
-    href: '/owner/profile',
-    icon: 'user',
-    label: 'Akun',
-    match: ['/owner/profile', '/owner/farm-profile', '/owner/workers', '/owner/sops'],
+    href: '/owner/farm',
+    icon: 'farm',
+    label: 'Kebun',
+    match: ['/owner/farm', '/owner/profile', '/owner/farm-profile', '/owner/workers', '/owner/sops'],
   },
 ];
 
@@ -152,10 +152,10 @@ const workerNavigationItems: NavigationItem[] = [
     match: ['/worker/reports'],
   },
   {
-    href: '/worker/profile',
-    icon: 'user',
-    label: 'Akun',
-    match: ['/worker/profile'],
+    href: '/worker/farm',
+    icon: 'farm',
+    label: 'Kebun',
+    match: ['/worker/farm', '/worker/profile'],
   },
 ];
 
@@ -170,6 +170,7 @@ const ownerTopLevelPaths = [
   '/owner/schedules',
   '/owner/tasks',
   '/owner/reports',
+  '/owner/farm',
   '/owner/profile',
   '/owner/farm-profile',
   '/owner/workers',
@@ -181,6 +182,7 @@ const workerTopLevelPaths = [
   '/worker/tasks',
   '/worker/trees',
   '/worker/reports',
+  '/worker/farm',
   '/worker/profile',
 ];
 
@@ -249,6 +251,24 @@ function NavigationIcon({ active, name }: { active: boolean; name: NavigationIco
       <View style={{ borderColor: color, borderRadius: 3, borderWidth: 2, gap: 2, height: 16, padding: 3, width: 13 }}>
         <View style={{ backgroundColor: color, borderRadius: 999, height: 2, width: 6 }} />
         <View style={{ backgroundColor: color, borderRadius: 999, height: 2, width: 5 }} />
+      </View>
+    );
+  }
+
+  if (name === 'farm') {
+    return (
+      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ borderColor: color, borderRadius: 3, borderWidth: 2, height: 13, width: 17 }} />
+        <View
+          style={{
+            backgroundColor: color,
+            height: 10,
+            marginTop: -11,
+            transform: [{ rotate: '-30deg' }],
+            width: 2,
+          }}
+        />
+        <View style={{ backgroundColor: color, height: 2, marginTop: 2, width: 12 }} />
       </View>
     );
   }

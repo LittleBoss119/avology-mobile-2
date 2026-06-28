@@ -97,6 +97,7 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/reports/index" options={{ headerBackVisible: false, title: 'Laporan Operasional' }} />
           <Stack.Screen name="owner/reports/[reportId]" options={{ headerShown: false, title: 'Detail Laporan' }} />
           <Stack.Screen name="owner/reports/[reportId]/task" options={{ headerShown: false, title: 'Buat Tugas' }} />
+          <Stack.Screen name="owner/farm" options={{ headerBackVisible: false, title: 'Kebun' }} />
           <Stack.Screen name="owner/workers" options={{ title: 'Manajemen Pekerja' }} />
           <Stack.Screen name="owner/profile" options={{ headerBackVisible: false, title: 'Profil' }} />
           <Stack.Screen name="owner/farm-profile" options={{ title: 'Kebun Saya' }} />
