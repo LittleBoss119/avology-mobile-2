@@ -2,14 +2,16 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { colors, radius, spacing, typography } from '../../../src/constants/theme';
 import {
-  appTheme,
   Badge,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MetricCard,
   Screen,
+  SectionHeader,
 } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/auth-context';
 import { getOwnerDashboardSummary } from '../../../src/services/dashboardService';
@@ -26,6 +28,7 @@ type PriorityInsight = {
   title: string;
   description: string;
   value: number;
+  route: string;
   tone?: 'danger' | 'warning';
 };
 
@@ -49,7 +52,7 @@ export default function OwnerDashboardScreen() {
     const result = await getOwnerDashboardSummary({ farmId });
 
     if (result.error) {
-      setError(result.error.message);
+      setError('Data beranda belum bisa dimuat.');
       setSummary(null);
       return;
     }
@@ -90,7 +93,7 @@ export default function OwnerDashboardScreen() {
         />
       ) : null}
 
-      <SectionTitle title="Insight Kebun" />
+      <SectionHeader title="Insight Kebun" description="Angka penting untuk keputusan cepat hari ini." />
       {summary ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
           {stats.map((stat) => (
@@ -99,7 +102,7 @@ export default function OwnerDashboardScreen() {
         </View>
       ) : null}
 
-      <SectionTitle title="Prioritas" />
+      <SectionHeader title="Prioritas" />
       {priorities.length > 0 ? (
         <View style={{ gap: 10 }}>
           {priorities.map((priority) => (
@@ -107,19 +110,35 @@ export default function OwnerDashboardScreen() {
           ))}
         </View>
       ) : summary ? (
-        <EmptyState title="Belum ada hal mendesak hari ini" subtitle="Pantau kembali setelah ada laporan, tugas, atau kondisi pohon baru." />
+        <Card variant="softGreen">
+          <Badge label="Stabil" tone="success" />
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+            Tidak ada prioritas mendesak hari ini.
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Pantau kembali setelah ada laporan, tugas, atau kondisi pohon baru.
+          </Text>
+        </Card>
       ) : error ? (
         <EmptyState
-          title="Dashboard belum dapat ditampilkan"
+          title="Data beranda belum bisa dimuat"
           subtitle="Buka kembali halaman ini setelah koneksi atau akses kebun tersedia."
         />
       ) : null}
 
-      <SectionTitle title="Aksi Cepat" />
+      <SectionHeader title="Aktivitas Terbaru" />
+      <Card>
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+          Aktivitas terbaru belum tersedia di ringkasan beranda.
+        </Text>
+      </Card>
+
+      <SectionHeader title="Aksi Cepat" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         <DashboardActionButton label="Tambah Pohon" meta="Data kebun" onPress={() => router.push('/owner/trees/create')} primary />
         <DashboardActionButton label="Buat Jadwal" meta="Perawatan" onPress={() => router.push('/owner/schedules/create')} />
         <DashboardActionButton label="Lihat Laporan" meta="Lapangan" onPress={() => router.push('/owner/reports')} />
+        <DashboardActionButton label="Kelola Kebun" meta="Kebun" onPress={() => router.push('/owner/farm')} />
       </View>
     </Screen>
   );
@@ -135,14 +154,22 @@ function DashboardIntro({
   roleLabel: string;
 }) {
   return (
-    <View style={{ gap: 9, paddingTop: 8 }}>
-      <Badge label={roleLabel} tone="success" />
-      <View style={{ gap: 4 }}>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 30, fontWeight: '900', letterSpacing: 0 }}>
+    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
+      <Badge label={roleLabel} tone="info" />
+      <View style={{ gap: spacing.xs }}>
+        <Text
+          selectable
+          style={{
+            color: colors.text,
+            fontSize: typography.h1.fontSize,
+            fontWeight: typography.h1.fontWeight,
+            lineHeight: typography.h1.lineHeight,
+          }}
+        >
           Halo, {name}
         </Text>
-        <Text selectable style={{ color: '#68746D', fontSize: 16, lineHeight: 23 }}>
-          {farmName ? `Pantau ${farmName} dari ringkasan hari ini.` : 'Pantau kebun aktif Anda hari ini.'}
+        <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
+          {farmName ? `Pantau kondisi ${farmName} hari ini.` : 'Pantau kondisi kebun aktif hari ini.'}
         </Text>
       </View>
     </View>
@@ -159,15 +186,7 @@ function OwnerHero({
   summary: OwnerDashboardSummary | null;
 }) {
   return (
-    <View
-      style={{
-        backgroundColor: appTheme.primary,
-        borderRadius: 16,
-        gap: 18,
-        overflow: 'hidden',
-        padding: 18,
-      }}
-    >
+    <Card variant="heroGreen">
       <View style={{ gap: 6 }}>
         <Text selectable style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '900' }}>
           Kondisi Kebun
@@ -199,7 +218,7 @@ function OwnerHero({
         <HeroMetric label="Sehat" value={summary?.healthyTrees ?? 0} />
         <HeroMetric label="Perhatian" value={summary?.problemTrees ?? 0} warning />
       </View>
-    </View>
+    </Card>
   );
 }
 
@@ -209,7 +228,8 @@ function HeroMetric({ label, value, warning }: { label: string; value: number; w
       style={{
         backgroundColor: 'rgba(255,255,255,0.12)',
         borderColor: 'rgba(255,255,255,0.25)',
-        borderRadius: 12,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
         borderWidth: 1,
         flex: 1,
         gap: 4,
@@ -226,62 +246,34 @@ function HeroMetric({ label, value, warning }: { label: string; value: number; w
   );
 }
 
-function SectionTitle({ title }: { title: string }) {
-  return (
-    <Text selectable style={{ color: '#1E2A24', fontSize: 19, fontWeight: '800', paddingTop: 4 }}>
-      {title}
-    </Text>
-  );
-}
-
 function PriorityCard({ priority }: { priority: PriorityInsight }) {
-  const toneColor = priority.tone === 'danger' ? '#B42318' : '#7A5600';
+  const toneColor = priority.tone === 'danger' ? colors.danger : colors.warning;
 
   return (
-    <Card>
-      <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
-        <View style={{ flex: 1, gap: 5 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800' }}>
-            {priority.title}
-          </Text>
-          <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-            {priority.description}
+    <Pressable onPress={() => router.push(priority.route)}>
+      <Card variant={priority.tone === 'danger' ? 'danger' : 'warning'}>
+        <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
+          <View style={{ flex: 1, gap: 5 }}>
+            <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '800' }}>
+              {priority.title}
+            </Text>
+            <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
+              {priority.description}
+            </Text>
+          </View>
+          <Text selectable style={{ color: toneColor, fontSize: 24, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+            {priority.value}
           </Text>
         </View>
-        <Text selectable style={{ color: toneColor, fontSize: 24, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
-          {priority.value}
-        </Text>
-      </View>
-    </Card>
+      </Card>
+    </Pressable>
   );
 }
 
 function DashboardStatCard({ stat }: { stat: DashboardStat }) {
-  const toneColor =
-    stat.tone === 'danger' ? '#B42318' : stat.tone === 'muted' ? '#68746D' : '#2F6F4E';
+  const tone = stat.tone === 'danger' ? 'danger' : stat.tone === 'muted' ? 'muted' : 'primary';
 
-  return (
-    <View style={{ flexBasis: '47%', flexGrow: 1, minWidth: 140 }}>
-      <Card>
-        <View style={{ justifyContent: 'space-between', minHeight: 76 }}>
-          <Text selectable numberOfLines={2} style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
-            {stat.label}
-          </Text>
-          <Text
-            selectable
-            style={{
-              color: toneColor,
-              fontSize: 28,
-              fontVariant: ['tabular-nums'],
-              fontWeight: '800',
-            }}
-          >
-            {stat.value}
-          </Text>
-        </View>
-      </Card>
-    </View>
-  );
+  return <MetricCard label={stat.label} tone={tone} value={stat.value} />;
 }
 
 function DashboardActionButton({
@@ -299,22 +291,23 @@ function DashboardActionButton({
     <Pressable
       onPress={onPress}
       style={{
-        backgroundColor: primary ? appTheme.primary : '#FFFFFF',
-        borderColor: primary ? appTheme.primary : '#DCE7D5',
-        borderRadius: 14,
+        backgroundColor: primary ? colors.primary : colors.surface,
+        borderColor: primary ? colors.primary : colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
         borderWidth: 1,
         flexBasis: '30%',
         flexGrow: 1,
-        gap: 4,
+        gap: spacing.xs,
         minHeight: 74,
         minWidth: 104,
-        padding: 12,
+        padding: spacing.md,
       }}
     >
-      <Text selectable style={{ color: primary ? '#DDEFE2' : '#68746D', fontSize: 12, fontWeight: '700' }}>
+      <Text selectable style={{ color: primary ? colors.primarySoft : colors.textMuted, fontSize: 12, fontWeight: '700' }}>
         {meta}
       </Text>
-      <Text selectable style={{ color: primary ? '#FFFFFF' : '#1E2A24', fontSize: 14, fontWeight: '900', lineHeight: 18 }}>
+      <Text selectable style={{ color: primary ? colors.surface : colors.text, fontSize: 14, fontWeight: '900', lineHeight: 18 }}>
         {label}
       </Text>
     </Pressable>
@@ -350,36 +343,42 @@ function buildPriorities(summary: OwnerDashboardSummary): PriorityInsight[] {
     {
       title: 'Pohon perlu perhatian',
       description: 'Cek kondisi pohon yang tidak sehat.',
+      route: '/owner/trees',
       tone: 'danger',
       value: summary.problemTrees,
     },
     {
       title: 'Tugas belum selesai',
       description: 'Pantau pekerjaan perawatan yang masih terbuka.',
+      route: '/owner/schedules',
       tone: 'danger',
       value: summary.unfinishedTasks,
     },
     {
       title: 'Tugas hari ini',
       description: 'Pastikan pekerjaan yang jatuh tempo hari ini siap dikerjakan.',
+      route: '/owner/schedules',
       tone: 'warning',
       value: summary.todayTasks,
     },
     {
       title: 'Laporan operasional baru',
       description: 'Tinjau laporan lapangan dari pekerja.',
+      route: '/owner/reports',
       tone: 'danger',
       value: summary.newOperationalReports,
     },
     {
       title: 'Pengajuan pekerja',
       description: 'Ada pengajuan akses yang menunggu keputusan.',
+      route: '/owner/workers',
       tone: 'warning',
       value: summary.pendingWorkers,
     },
     {
       title: 'SOP jatuh tempo',
       description: 'Jadwal perawatan perlu dibuat atau ditindaklanjuti.',
+      route: '/owner/sops',
       tone: 'warning',
       value: summary.dueOrOverdueSops,
     },

@@ -2,14 +2,16 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { colors, radius, spacing, typography } from '../../../src/constants/theme';
 import {
-  appTheme,
   Badge,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MetricCard,
   Screen,
+  SectionHeader,
 } from '../../../src/components/ui';
 import { useAuth } from '../../../src/context/auth-context';
 import { getWorkerDashboardSummary } from '../../../src/services/dashboardService';
@@ -46,7 +48,7 @@ export default function WorkerDashboardScreen() {
     });
 
     if (result.error) {
-      setError(result.error.message);
+      setError('Data beranda belum bisa dimuat.');
       setSummary(null);
       return;
     }
@@ -81,12 +83,12 @@ export default function WorkerDashboardScreen() {
 
       {isEmpty ? (
         <EmptyState
-          title="Belum ada tugas"
-          subtitle="Tugas dari pemilik akan muncul di dashboard ini."
+          title="Tidak ada tugas hari ini"
+          subtitle="Tugas baru akan muncul jika pemilik membuat jadwal."
         />
       ) : null}
 
-      <SectionTitle title="Ringkasan Tugas" />
+      <SectionHeader title="Ringkasan Tugas" description="Ringkasan tugas yang tersedia dari data saat ini." />
       {summary ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
           {stats.map((stat) => (
@@ -95,19 +97,32 @@ export default function WorkerDashboardScreen() {
         </View>
       ) : error ? (
         <EmptyState
-          title="Dashboard belum dapat ditampilkan"
+          title="Data beranda belum bisa dimuat"
           subtitle="Buka kembali halaman ini setelah koneksi atau akses kebun tersedia."
         />
       ) : null}
 
-      <SectionTitle title="Prioritas Berikutnya" />
+      <SectionHeader title="Prioritas Tugas" />
       <NextTaskSummary summary={summary} />
 
-      <SectionTitle title="Aksi Lapangan" />
+      <SectionHeader title="Laporan Terakhir" />
+      <Pressable onPress={() => router.push('/worker/reports')}>
+        <Card>
+          <Badge label="Laporan" tone="info" />
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+            Pantau laporan operasional kamu
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Detail laporan terakhir belum tersedia di ringkasan beranda. Buka daftar laporan untuk melihat status terbaru.
+          </Text>
+        </Card>
+      </Pressable>
+
+      <SectionHeader title="Aksi Cepat" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         <DashboardActionButton label="Lihat Tugas" meta="Hari ini" onPress={() => router.push('/worker/tasks')} primary />
-        <DashboardActionButton label="Lapor Kondisi" meta="Pohon" onPress={() => router.push('/worker/trees')} />
         <DashboardActionButton label="Buat Laporan" meta="Lapangan" onPress={() => router.push('/worker/reports/create')} />
+        <DashboardActionButton label="Lihat Pohon" meta="Pohon" onPress={() => router.push('/worker/trees')} />
       </View>
     </Screen>
   );
@@ -123,14 +138,22 @@ function DashboardIntro({
   roleLabel: string;
 }) {
   return (
-    <View style={{ gap: 9, paddingTop: 8 }}>
-      <Badge label={roleLabel} tone="success" />
-      <View style={{ gap: 4 }}>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 30, fontWeight: '900', letterSpacing: 0 }}>
+    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
+      <Badge label={roleLabel} tone="neutral" />
+      <View style={{ gap: spacing.xs }}>
+        <Text
+          selectable
+          style={{
+            color: colors.text,
+            fontSize: typography.h1.fontSize,
+            fontWeight: typography.h1.fontWeight,
+            lineHeight: typography.h1.lineHeight,
+          }}
+        >
           Halo, {name}
         </Text>
-        <Text selectable style={{ color: '#68746D', fontSize: 16, lineHeight: 23 }}>
-          {farmName ? `Fokus pekerjaan lapangan di ${farmName}.` : 'Fokus pekerjaan lapangan hari ini.'}
+        <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
+          {farmName ? `Tugas kamu di ${farmName} hari ini.` : 'Tugas kamu hari ini.'}
         </Text>
       </View>
     </View>
@@ -149,36 +172,29 @@ function WorkerHero({
   const hasTodayTask = Boolean(summary && summary.todayTasks > 0);
 
   return (
-    <View
-      style={{
-        backgroundColor: hasTodayTask ? appTheme.primary : appTheme.primarySoft,
-        borderColor: hasTodayTask ? appTheme.primary : '#B8D8BF',
-        borderRadius: 16,
-        borderWidth: 1,
-        gap: 14,
-        padding: 18,
-      }}
-    >
+    <Card variant={hasTodayTask ? 'heroGreen' : 'softGreen'}>
       <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: 8 }}>
-          <Text selectable style={{ color: hasTodayTask ? '#FFFFFF' : appTheme.text, fontSize: 20, fontWeight: '900' }}>
+          <Text selectable style={{ color: hasTodayTask ? colors.surface : colors.text, fontSize: 20, fontWeight: '900' }}>
             Tugas Hari Ini
           </Text>
-          <Text selectable style={{ color: hasTodayTask ? '#DDEFE2' : appTheme.muted, lineHeight: 21 }}>
+          <Text selectable style={{ color: hasTodayTask ? colors.primarySoft : colors.textMuted, lineHeight: 21 }}>
             {hasTodayTask
               ? 'Ada pekerjaan yang perlu diprioritaskan hari ini.'
               : 'Tidak ada tugas jatuh tempo hari ini.'}
           </Text>
         </View>
-        <Text selectable style={{ color: hasTodayTask ? '#FFFFFF' : appTheme.primary, fontSize: 52, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+        <Text selectable style={{ color: hasTodayTask ? colors.surface : colors.primary, fontSize: 52, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
           {summary?.todayTasks ?? 0}
         </Text>
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Badge label={farmName ?? 'Kebun aktif'} tone={hasTodayTask ? 'success' : 'muted'} />
         <Badge label={status} tone="success" />
+        <Badge label={`${summary?.unfinishedTasks ?? 0} belum`} tone={(summary?.unfinishedTasks ?? 0) > 0 ? 'warning' : 'muted'} />
+        <Badge label={`${summary?.completedTasks ?? 0} selesai`} tone={(summary?.completedTasks ?? 0) > 0 ? 'success' : 'muted'} />
       </View>
-    </View>
+    </Card>
   );
 }
 
@@ -194,68 +210,48 @@ function NextTaskSummary({ summary }: { summary: WorkerDashboardSummary | null }
 
   if (summary.todayTasks > 0) {
     return (
-      <Card>
-        <Badge label="Hari ini" tone="warning" />
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
-          {summary.todayTasks} tugas perlu dikerjakan
-        </Text>
-        <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-          Buka daftar tugas untuk melihat target dan instruksi pekerjaan.
-        </Text>
-      </Card>
+      <Pressable onPress={() => router.push('/worker/tasks')}>
+        <Card variant="warning">
+          <Badge label="Hari ini" tone="warning" />
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+            {summary.todayTasks} tugas perlu dikerjakan
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Buka daftar tugas untuk melihat target dan instruksi pekerjaan.
+          </Text>
+        </Card>
+      </Pressable>
     );
   }
 
   if (summary.unfinishedTasks > 0) {
     return (
-      <Card>
-        <Badge label="Belum selesai" tone="warning" />
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
-          {summary.unfinishedTasks} tugas masih terbuka
-        </Text>
-        <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-          Cek daftar tugas untuk melanjutkan pekerjaan yang tertunda.
-        </Text>
-      </Card>
+      <Pressable onPress={() => router.push('/worker/tasks')}>
+        <Card variant="warning">
+          <Badge label="Belum" tone="warning" />
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+            {summary.unfinishedTasks} tugas masih terbuka
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Cek daftar tugas untuk melanjutkan pekerjaan yang tertunda.
+          </Text>
+        </Card>
+      </Pressable>
     );
   }
 
-  return <EmptyState title="Belum ada tugas prioritas" subtitle="Tugas dari pemilik akan muncul saat ada pekerjaan baru." />;
-}
-
-function SectionTitle({ title }: { title: string }) {
   return (
-    <Text selectable style={{ color: '#1E2A24', fontSize: 19, fontWeight: '800', paddingTop: 4 }}>
-      {title}
-    </Text>
+    <EmptyState
+      title="Tidak ada tugas hari ini"
+      subtitle="Tugas baru akan muncul jika pemilik membuat jadwal."
+    />
   );
 }
 
 function WorkerStatCard({ stat }: { stat: WorkerStat }) {
-  const toneColor = stat.tone === 'muted' ? '#68746D' : '#2F6F4E';
+  const tone = stat.tone === 'muted' ? 'muted' : 'primary';
 
-  return (
-    <View style={{ flexBasis: '30%', flexGrow: 1, minWidth: 100 }}>
-      <Card>
-        <View style={{ justifyContent: 'space-between', minHeight: 74 }}>
-          <Text selectable numberOfLines={2} style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
-            {stat.label}
-          </Text>
-          <Text
-            selectable
-            style={{
-              color: toneColor,
-              fontSize: 28,
-              fontVariant: ['tabular-nums'],
-              fontWeight: '800',
-            }}
-          >
-            {stat.value}
-          </Text>
-        </View>
-      </Card>
-    </View>
-  );
+  return <MetricCard label={stat.label} tone={tone} value={stat.value} />;
 }
 
 function DashboardActionButton({
@@ -273,22 +269,23 @@ function DashboardActionButton({
     <Pressable
       onPress={onPress}
       style={{
-        backgroundColor: primary ? appTheme.primary : '#FFFFFF',
-        borderColor: primary ? appTheme.primary : '#DCE7D5',
-        borderRadius: 14,
+        backgroundColor: primary ? colors.primary : colors.surface,
+        borderColor: primary ? colors.primary : colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
         borderWidth: 1,
         flexBasis: '30%',
         flexGrow: 1,
-        gap: 4,
+        gap: spacing.xs,
         minHeight: 74,
         minWidth: 104,
-        padding: 12,
+        padding: spacing.md,
       }}
     >
-      <Text selectable style={{ color: primary ? '#DDEFE2' : '#68746D', fontSize: 12, fontWeight: '700' }}>
+      <Text selectable style={{ color: primary ? colors.primarySoft : colors.textMuted, fontSize: 12, fontWeight: '700' }}>
         {meta}
       </Text>
-      <Text selectable style={{ color: primary ? '#FFFFFF' : '#1E2A24', fontSize: 14, fontWeight: '900', lineHeight: 18 }}>
+      <Text selectable style={{ color: primary ? colors.surface : colors.text, fontSize: 14, fontWeight: '900', lineHeight: 18 }}>
         {label}
       </Text>
     </Pressable>
