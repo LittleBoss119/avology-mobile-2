@@ -2,7 +2,8 @@ import React from 'react';
 import { Image, Modal, Pressable, Text, View } from 'react-native';
 
 import type { PickedPhotoAsset, TaskProofPhoto } from '../types/media';
-import { appTheme, Button } from './ui';
+import { colors, radius, spacing, typography } from '../constants/theme';
+import { Badge, Button } from './ui';
 
 export function TaskProofPhotoPicker({
   disabled,
@@ -22,21 +23,25 @@ export function TaskProofPhotoPicker({
   return (
     <View
       style={{
-        backgroundColor: '#FFFFFF',
-        borderColor: required ? '#D7A33D' : '#DCE7D5',
-        borderRadius: 12,
+        backgroundColor: colors.surface,
+        borderColor: required ? colors.warningBorder : colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.xl,
         borderWidth: 1,
-        gap: 12,
-        padding: 14,
+        gap: spacing.md,
+        padding: spacing.lg,
       }}
     >
-      <View style={{ gap: 5 }}>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800' }}>
-          Bukti Foto
-        </Text>
-        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+      <View style={{ gap: spacing.xs }}>
+        <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
+          <Text selectable style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '800' }}>
+            Bukti Foto
+          </Text>
+          {required ? <Badge label="Wajib" tone="warning" /> : null}
+        </View>
+        <Text selectable style={{ color: colors.textMuted, lineHeight: typography.small.lineHeight }}>
           {required
-            ? 'Tugas ini membutuhkan bukti foto sebelum diselesaikan.'
+            ? 'Foto wajib diunggah sebelum tugas dapat diselesaikan.'
             : 'Opsional, untuk menambahkan bukti realisasi tugas.'}
         </Text>
       </View>
@@ -47,7 +52,7 @@ export function TaskProofPhotoPicker({
             resizeMode="cover"
             source={{ uri: photo.uri }}
             style={{
-              borderRadius: 12,
+              borderRadius: radius.lg,
               height: 150,
               width: '100%',
             }}
@@ -89,7 +94,7 @@ export function TaskProofPhotoPreview({
     }
 
     return (
-      <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+      <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
         {emptyText}
       </Text>
     );
@@ -100,16 +105,16 @@ export function TaskProofPhotoPreview({
       <View
         style={{
           alignItems: 'center',
-          backgroundColor: appTheme.primarySoft,
-          borderColor: '#D7E5D3',
-          borderRadius: 12,
+          backgroundColor: colors.primarySoft,
+          borderColor: colors.primaryBorder,
+          borderRadius: radius.lg,
           borderWidth: 1,
           minHeight: 96,
           justifyContent: 'center',
-          padding: 12,
+          padding: spacing.md,
         }}
       >
-        <Text selectable style={{ color: '#68746D', lineHeight: 20, textAlign: 'center' }}>
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 20, textAlign: 'center' }}>
           Bukti foto belum dapat dimuat.
         </Text>
       </View>
@@ -124,7 +129,7 @@ export function TaskProofPhotoPreview({
           source={{ uri: photo.signedUrl }}
           onError={() => setImageFailed(true)}
           style={{
-            borderRadius: 12,
+            borderRadius: radius.lg,
             height: 118,
             width: '100%',
           }}
@@ -143,7 +148,7 @@ export function TaskProofPhotoPreview({
               resizeMode="contain"
               source={{ uri: photo.signedUrl }}
               style={{
-                borderRadius: 12,
+                borderRadius: radius.lg,
                 height: '82%',
                 width: '100%',
               }}

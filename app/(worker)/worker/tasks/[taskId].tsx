@@ -1,11 +1,10 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Alert, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
 import {
   formatCareTarget,
   formatTaskSource,
-  formatTaskStatus,
 } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import { TaskProofPhotoPicker, TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
@@ -15,11 +14,14 @@ import {
   Card,
   EmptyState,
   ErrorBanner,
+  FormSection,
   LoadingState,
   MetaRow,
   Screen,
+  SectionHeader,
   TopAppBar,
 } from '../../../../src/components/ui';
+import { colors, radius, spacing, typography } from '../../../../src/constants/theme';
 import {
   completeTask,
   getTaskDetail,
@@ -252,61 +254,121 @@ export default function WorkerTaskDetailScreen() {
   }
 
   const isCompleted = task.status === 'completed';
+  const selectedAction: 'complete' | 'postpone' | null = showCompleteInput
+    ? 'complete'
+    : showPostponeInput
+      ? 'postpone'
+      : null;
+
+  function selectCompletion() {
+    setShowCompleteInput(true);
+    setShowPostponeInput(false);
+  }
+
+  function selectPostpone() {
+    setShowPostponeInput(true);
+    setShowCompleteInput(false);
+  }
+
+  function handleCancelRealization() {
+    if (!selectedAction) {
+      router.back();
+      return;
+    }
+
+    setShowCompleteInput(false);
+    setShowPostponeInput(false);
+  }
 
   return (
     <Screen
       footer={
-        <>
-          {showPostponeInput ? (
-            <TextArea
-              label="Catatan penundaan *"
-              onChangeText={setPostponeNote}
-              placeholder="Contoh: Stok air belum tersedia"
-              value={postponeNote}
+        isCompleted ? null : (
+          <View style={{ gap: spacing.sm }}>
+            <Button
+              title="Simpan Realisasi"
+              disabled={!selectedAction || actionLoading !== null}
+              loading={actionLoading !== null}
+              onPress={selectedAction === 'postpone' ? handlePostpone : handleComplete}
             />
-          ) : null}
-          {showCompleteInput ? (
-            <TextArea
-              label="Catatan penyelesaian (opsional)"
-              onChangeText={setCompleteNote}
-              placeholder="Contoh: Pekerjaan selesai sesuai instruksi"
-              value={completeNote}
-            />
-          ) : null}
-          <Button
-            title={showCompleteInput ? 'Kirim Penyelesaian' : 'Selesaikan Tugas'}
-            disabled={isCompleted || actionLoading === 'postpone'}
-            loading={actionLoading === 'complete'}
-            onPress={handleComplete}
-          />
-          <Button
-            title={showPostponeInput ? 'Kirim Penundaan' : 'Tunda Tugas'}
-            disabled={isCompleted || actionLoading === 'complete'}
-            loading={actionLoading === 'postpone'}
-            variant="secondary"
-            onPress={handlePostpone}
-          />
-        </>
+            <Button title={selectedAction ? 'Batal' : 'Kembali'} variant="secondary" onPress={handleCancelRealization} />
+          </View>
+        )
       }
     >
       <TopAppBar title="Detail Tugas" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
-      <Card variant="highlight">
-        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
+      <Card variant="softGreen">
+        <Text
+          selectable
+          style={{
+            color: colors.text,
+            fontSize: typography.h2.fontSize,
+            fontWeight: typography.h2.fontWeight,
+            lineHeight: typography.h2.lineHeight,
+          }}
+        >
           {task.title}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-          <Badge label={formatTaskStatus(task.status)} tone={getTaskTone(task.status)} />
-          <Badge label={formatTaskSource(task)} tone="muted" />
+          <Badge label={formatTaskStatusLabel(task.status)} tone={getTaskTone(task.status)} />
           {task.requiresPhoto ? <Badge label="Butuh bukti" tone="warning" /> : null}
+          <Badge label={formatTaskSource(task)} tone="muted" />
         </View>
         <View style={{ gap: 10 }}>
-          <MetaRow label="Tanggal" value={formatDate(task.dueDate)} />
-          <MetaRow label="Target" value={formatCareTarget(task)} />
           <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
+          <MetaRow label="Target" value={formatCareTarget(task)} />
+          <MetaRow label="Tanggal" value={formatDate(task.dueDate)} />
+          <MetaRow label="Sumber" value={formatTaskSource(task)} />
         </View>
       </Card>
+
+      <Card>
+        <Text selectable style={{ color: colors.text, fontSize: 18, fontWeight: '900' }}>
+          Instruksi
+        </Text>
+        <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
+          {task.instruction || 'Belum ada instruksi tambahan.'}
+        </Text>
+      </Card>
+
+      {!isCompleted ? (
+        <FormSection title="Realisasi" description="Tambahkan keterangan hasil pekerjaan atau alasan penundaan.">
+          <View style={{ gap: spacing.sm }}>
+            <RealizationOption
+              active={selectedAction === 'complete'}
+              description="Tandai tugas selesai sesuai instruksi."
+              label="Selesai"
+              onPress={selectCompletion}
+            />
+            <RealizationOption
+              active={selectedAction === 'postpone'}
+              description="Tunda tugas dan tulis alasan penundaan."
+              label="Tertunda"
+              onPress={selectPostpone}
+            />
+          </View>
+
+          {showCompleteInput ? (
+            <TextArea
+              label="Catatan Realisasi"
+              onChangeText={setCompleteNote}
+              placeholder="Contoh: Pekerjaan selesai sesuai instruksi"
+              value={completeNote}
+            />
+          ) : null}
+
+          {showPostponeInput ? (
+            <TextArea
+              label="Catatan Realisasi *"
+              onChangeText={setPostponeNote}
+              placeholder="Contoh: Stok air belum tersedia"
+              value={postponeNote}
+            />
+          ) : null}
+        </FormSection>
+      ) : null}
 
       {task.requiresPhoto || showCompleteInput ? (
         <TaskProofPhotoPicker
@@ -319,18 +381,9 @@ export default function WorkerTaskDetailScreen() {
         />
       ) : null}
 
-      <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '900' }}>
-          Instruksi
-        </Text>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 16, lineHeight: 23 }}>
-          {task.instruction || '-'}
-        </Text>
-      </Card>
-
       {task.operationalReportId ? (
         <Card>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
             Sumber Laporan
           </Text>
           {report ? (
@@ -340,16 +393,14 @@ export default function WorkerTaskDetailScreen() {
               <MetaRow label="Status laporan" value={formatOperationalReportStatus(report.status)} />
             </>
           ) : (
-            <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+            <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
               Tugas ini berasal dari laporan operasional.
             </Text>
           )}
         </Card>
       ) : null}
 
-      <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
-        Realisasi
-      </Text>
+      <SectionHeader title="Riwayat Realisasi" />
       {task.activities.length === 0 ? (
         <EmptyState title="Belum ada realisasi" subtitle="Selesaikan atau tunda tugas untuk menyimpan realisasi." />
       ) : (
@@ -383,25 +434,25 @@ function TextArea({
 }) {
   return (
     <View style={{ gap: 7 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
       <TextInput
         multiline
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#94A098"
+        placeholderTextColor={colors.textSoft}
         style={{
-          backgroundColor: '#FFFFFF',
-          borderColor: '#DDE4DA',
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
           borderCurve: 'continuous',
-          borderRadius: 8,
+          borderRadius: radius.md,
           borderWidth: 1,
-          color: '#1E2A24',
+          color: colors.text,
           fontSize: 16,
           minHeight: 96,
-          paddingHorizontal: 14,
-          paddingTop: 12,
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.md,
           textAlignVertical: 'top',
         }}
         value={value}
@@ -410,13 +461,60 @@ function TextArea({
   );
 }
 
+function RealizationOption({
+  active,
+  description,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  description: string;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={{
+        backgroundColor: active ? colors.primarySoft : colors.surface,
+        borderColor: active ? colors.primary : colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        gap: spacing.xs,
+        padding: spacing.md,
+      }}
+    >
+      <Text selectable style={{ color: active ? colors.primary : colors.text, fontSize: 16, fontWeight: '800' }}>
+        {label}
+      </Text>
+      <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+        {description}
+      </Text>
+    </Pressable>
+  );
+}
+
 function formatActivityStatus(status: ActivityStatus): string {
   const labels: Record<ActivityStatus, string> = {
     completed: 'Selesai',
-    postponed: 'Ditunda',
+    postponed: 'Tertunda',
   };
 
   return labels[status];
+}
+
+function formatTaskStatusLabel(status: CareTaskDetail['status']): string {
+  if (status === 'completed') {
+    return 'Selesai';
+  }
+
+  if (status === 'postponed') {
+    return 'Tertunda';
+  }
+
+  return 'Belum';
 }
 
 function getTaskTone(status: CareTaskDetail['status']): 'danger' | 'muted' | 'success' | 'warning' {
