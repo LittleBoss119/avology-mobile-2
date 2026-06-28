@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { Button, Card, ErrorBanner, MetaRow, PageIntro, Screen } from '../../src/components/ui';
+import { Badge, Button, Card, ErrorBanner, MetaRow, Screen } from '../../src/components/ui';
+import { colors, radius, spacing, typography } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/auth-context';
 
 export default function OnboardingDecisionScreen() {
@@ -17,12 +18,51 @@ export default function OnboardingDecisionScreen() {
     }
   }
 
+  const displayName = profile?.fullName?.trim() || 'Pengguna Avology';
+  const initial = displayName.charAt(0).toUpperCase() || 'A';
+
   return (
-    <Screen
-      footer={
-        <>
+    <Screen>
+      <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md }}>
+        <View
+          style={{
+            alignItems: 'center',
+            backgroundColor: colors.primarySoft,
+            borderColor: colors.primaryBorder,
+            borderRadius: radius.round,
+            borderWidth: 1,
+            height: 48,
+            justifyContent: 'center',
+            width: 48,
+          }}
+        >
+          <Text selectable style={{ color: colors.primary, fontSize: 20, fontWeight: '900' }}>
+            {initial}
+          </Text>
+        </View>
+        <View style={{ flex: 1, gap: spacing.xs }}>
+          <Text selectable style={{ color: colors.text, fontSize: typography.h1.fontSize, fontWeight: '800', lineHeight: typography.h1.lineHeight }}>
+            Halo, {displayName}
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
+            Hubungkan akun dengan kebun untuk mulai bekerja.
+          </Text>
+        </View>
+      </View>
+
+      <ErrorBanner message={error?.message} />
+
+      <Card variant="highlight">
+        <View style={{ gap: spacing.sm }}>
+          <Badge label="Pemilik" tone="info" />
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+            Buat Kebun
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Untuk pemilik yang ingin mengelola kebun baru. Buat data kebun dan dapatkan kode untuk mengundang pekerja.
+          </Text>
           <Button
-            title="Buat Kebun sebagai Pemilik"
+            title="Buat Kebun"
             onPress={() =>
               router.push({
                 pathname: '/create-farm',
@@ -30,8 +70,20 @@ export default function OnboardingDecisionScreen() {
               })
             }
           />
+        </View>
+      </Card>
+
+      <Card>
+        <View style={{ gap: spacing.sm }}>
+          <Badge label="Pekerja" tone="neutral" />
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+            Gabung Kebun
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Untuk pekerja yang menerima kode dari pemilik. Ajukan akses, lalu tunggu persetujuan pemilik.
+          </Text>
           <Button
-            title="Gabung sebagai Pekerja"
+            title="Gabung Kebun"
             variant="secondary"
             onPress={() =>
               router.push({
@@ -40,22 +92,20 @@ export default function OnboardingDecisionScreen() {
               })
             }
           />
-          <Button title="Profil Akun" variant="secondary" size="small" onPress={() => router.push('/profile')} />
-          <Button title="Keluar" variant="secondary" onPress={handleLogout} />
-        </>
-      }
-    >
-      <PageIntro
-        title="Pilih Akses"
-        subtitle="Buat kebun baru sebagai pemilik atau ajukan bergabung menggunakan kode kebun."
-      />
-      <ErrorBanner message={error?.message} />
+        </View>
+      </Card>
+
       <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          Akun aktif
+        <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+          Akun Saya
         </Text>
         <MetaRow label="Nama" value={profile?.fullName} />
         <MetaRow label="Nomor HP" value={profile?.phone} />
+        {profile?.email ? <MetaRow label="Email login" value={profile.email} /> : null}
+        <View style={{ gap: spacing.md }}>
+          <Button title="Profil Akun" variant="secondary" size="small" onPress={() => router.push('/profile')} />
+          <Button title="Keluar Akun" variant="secondary" onPress={handleLogout} />
+        </View>
       </Card>
     </Screen>
   );

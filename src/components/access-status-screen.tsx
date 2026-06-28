@@ -1,9 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
+import { Text, View } from 'react-native';
 
+import { colors, spacing, typography } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
 import { formatMemberStatus, formatRole } from '../utils/displayFormat';
-import { Button, Card, ErrorBanner, LoadingState, MetaRow, PageIntro, Screen } from './ui';
+import { Badge, Button, Card, ErrorBanner, LoadingState, MetaRow, Screen } from './ui';
 
 export function AccessStatusScreen({
   title,
@@ -12,7 +14,7 @@ export function AccessStatusScreen({
   title: string;
   subtitle: string;
 }) {
-  const { currentFarm, error, refresh, signOut } = useAuth();
+  const { currentFarm, error, profile, refresh, signOut } = useAuth();
   const [refreshing, setRefreshing] = React.useState(false);
   const [loggingOut, setLoggingOut] = React.useState(false);
 
@@ -57,11 +59,19 @@ export function AccessStatusScreen({
   const canReturnToAccessFlow = currentFarm.status === 'rejected' || currentFarm.status === 'removed';
   const canManuallyCheckStatus = currentFarm.status === 'pending';
   const inactiveRecoveryParams = { inactiveRecovery: '1' };
+  const displayName = profile?.fullName?.trim() || 'Pengguna Avology';
+  const statusTone = getStatusTone(currentFarm.status);
+  const statusCardVariant = currentFarm.status === 'pending' ? 'warning' : 'danger';
+  const noticeText = getNoticeText(currentFarm.status);
+  const statusTitle = currentFarm.status === 'pending' ? 'Status Pengajuan' : title;
 
   return (
     <Screen
       footer={
         <>
+          {canManuallyCheckStatus ? (
+            <Button title="Perbarui Status" loading={refreshing} onPress={handleRefresh} />
+          ) : null}
           {canReturnToAccessFlow ? (
             <>
               <Button
@@ -87,19 +97,54 @@ export function AccessStatusScreen({
             </>
           ) : null}
           <Button title="Profil Akun" variant="secondary" size="small" onPress={() => router.push('/profile')} />
-          {canManuallyCheckStatus ? (
-            <Button title="Cek Status" variant="secondary" size="small" loading={refreshing} onPress={handleRefresh} />
-          ) : null}
           <Button title="Keluar" variant="secondary" loading={loggingOut} onPress={handleLogout} />
         </>
       }
     >
-      <PageIntro title={title} subtitle={subtitle} />
+      <View style={{ gap: spacing.sm }}>
+        <View style={{ alignItems: 'flex-start' }}>
+          <Badge label={formatRole(currentFarm.role)} tone="info" />
+        </View>
+        <Text selectable style={{ color: colors.text, fontSize: typography.h1.fontSize, fontWeight: '800', lineHeight: typography.h1.lineHeight }}>
+          Halo, {displayName}
+        </Text>
+        <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
+          {subtitle}
+        </Text>
+      </View>
       <ErrorBanner message={error?.message} />
-      <Card>
+      <Card variant={statusCardVariant}>
+        <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' }}>
+          <Text selectable style={{ color: colors.text, flex: 1, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+            {statusTitle}
+          </Text>
+          <Badge label={formatMemberStatus(currentFarm.status)} tone={statusTone} />
+        </View>
+        <MetaRow label="Kebun tujuan" value={currentFarm.farm?.name ?? 'Belum tersedia'} />
         <MetaRow label="Peran" value={formatRole(currentFarm.role)} />
         <MetaRow label="Status" value={formatMemberStatus(currentFarm.status)} />
       </Card>
+      <Card variant={currentFarm.status === 'pending' ? 'info' : 'danger'}>
+        <Text selectable style={{ color: currentFarm.status === 'pending' ? colors.info : colors.danger, fontWeight: '800', lineHeight: 21 }}>
+          {noticeText}
+        </Text>
+      </Card>
     </Screen>
   );
+}
+
+function getStatusTone(status: string): 'danger' | 'pending' {
+  return status === 'pending' ? 'pending' : 'danger';
+}
+
+function getNoticeText(status: string): string {
+  if (status === 'pending') {
+    return 'Perbarui status setelah pemilik memproses pengajuan. Selama menunggu, data kebun belum dapat diakses.';
+  }
+
+  if (status === 'removed') {
+    return 'Akses kebun sudah dinonaktifkan. Kamu dapat kembali ke pilihan akses untuk membuat kebun sendiri atau mengajukan akses baru.';
+  }
+
+  return 'Pengajuan akses ditolak. Kamu dapat kembali ke pilihan akses atau menggunakan kode kebun lain jika tersedia.';
 }

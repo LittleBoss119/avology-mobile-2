@@ -76,7 +76,7 @@ export default function OnboardingLayout() {
         contentStyle: { backgroundColor: '#F7FAF3' },
       }}
     >
-      <Stack.Screen name="onboarding" options={{ title: 'Mulai' }} />
+      <Stack.Screen name="onboarding" options={{ headerShown: false, title: 'Pilih Akses' }} />
       <Stack.Screen name="create-farm" options={{ headerShown: false, title: 'Buat Kebun' }} />
       <Stack.Screen name="join-farm" options={{ headerShown: false, title: 'Gabung Kebun' }} />
       <Stack.Screen name="profile" options={{ headerShown: false, title: 'Profil Akun' }} />

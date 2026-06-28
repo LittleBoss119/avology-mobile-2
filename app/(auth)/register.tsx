@@ -1,8 +1,10 @@
 import { router } from 'expo-router';
 import React from 'react';
+import { Text } from 'react-native';
 
 import { registerUser } from '../../src/services/authService';
 import { BrandMark, Button, Card, ErrorBanner, Field, PageIntro, Screen } from '../../src/components/ui';
+import { colors } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/auth-context';
 
 export default function RegisterScreen() {
@@ -41,7 +43,7 @@ export default function RegisterScreen() {
       footer={
         <>
           <Button title="Daftar" loading={submitting} onPress={handleSubmit} />
-          <Button title="Sudah punya akun" variant="secondary" onPress={() => router.replace('/login')} />
+          <Button title="Sudah punya akun? Masuk" variant="secondary" onPress={() => router.replace('/login')} />
         </>
       }
     >
@@ -53,6 +55,9 @@ export default function RegisterScreen() {
         <Field label="Nomor HP" value={phone} onChangeText={setPhone} placeholder="08..." keyboardType="phone-pad" />
         <Field label="Email" value={email} onChangeText={setEmail} placeholder="nama@email.com" keyboardType="email-address" />
         <Field label="Password" value={password} onChangeText={setPassword} placeholder="Minimal 6 karakter" secureTextEntry />
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+          Setelah akun dibuat, kamu bisa memilih membuat kebun sendiri atau bergabung menggunakan kode kebun.
+        </Text>
       </Card>
     </Screen>
   );

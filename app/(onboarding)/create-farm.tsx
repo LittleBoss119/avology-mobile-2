@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import React from 'react';
 
-import { Button, ErrorBanner, Field, PageIntro, Screen, TopAppBar } from '../../src/components/ui';
+import { Button, ErrorBanner, Field, FormSection, Screen, TopAppBar } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
 import { createFarm } from '../../src/services/farmService';
 
@@ -43,22 +43,32 @@ export default function CreateFarmScreen() {
   }
 
   return (
-    <Screen footer={<Button title="Buat Kebun" loading={submitting} onPress={handleSubmit} />}>
+    <Screen
+      footer={
+        <>
+          <Button title="Simpan Kebun" loading={submitting} onPress={handleSubmit} />
+          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
+        </>
+      }
+    >
       <TopAppBar title="Buat Kebun" onBack={() => router.back()} />
-      <PageIntro
-        title="Data Kebun"
-        subtitle="Akses pemilik aktif akan dibuat otomatis setelah kebun berhasil tersimpan."
-      />
       <ErrorBanner message={error} />
-      <Field label="Nama kebun" value={name} onChangeText={setName} placeholder="MS Farm" />
-      <Field label="Lokasi" value={location} onChangeText={setLocation} placeholder="Lokasi kebun" />
-      <Field
-        label="Luas kebun (meter persegi)"
-        value={areaSize}
-        onChangeText={setAreaSize}
-        placeholder="Contoh: 1.25"
-        keyboardType="decimal-pad"
-      />
+      <FormSection
+        title="Data Kebun"
+        description="Akses pemilik aktif akan dibuat otomatis setelah kebun berhasil tersimpan."
+      >
+        <Field label="Nama Kebun *" value={name} onChangeText={setName} placeholder="MS Farm" />
+        <Field label="Lokasi *" value={location} onChangeText={setLocation} placeholder="Lokasi kebun" />
+      </FormSection>
+      <FormSection title="Informasi Tambahan" description="Isi luas lahan jika data sudah tersedia.">
+        <Field
+          label="Luas Lahan (m²)"
+          value={areaSize}
+          onChangeText={setAreaSize}
+          placeholder="Contoh: 6500"
+          keyboardType="decimal-pad"
+        />
+      </FormSection>
     </Screen>
   );
 }
