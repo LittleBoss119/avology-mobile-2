@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
+import { View } from 'react-native';
 
 import {
   CareSOPForm,
@@ -139,7 +140,10 @@ export default function EditCareSOPScreen() {
   return (
     <Screen
       footer={
-        <Button title="Simpan Perubahan" loading={submitting} onPress={handleSubmit} />
+        <View style={{ gap: 10 }}>
+          <Button title="Simpan Perubahan" loading={submitting} onPress={handleSubmit} />
+          <Button title="Batal" variant="secondary" onPress={() => router.back()} />
+        </View>
       }
     >
       <TopAppBar title="Edit SOP" onBack={() => router.back()} />

@@ -2,14 +2,19 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { CareSOPCard } from '../../../../src/components/care-sop-components';
+import { CareSOPCard, formatCareCategory } from '../../../../src/components/care-sop-components';
 import {
   appTheme,
+  Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  SearchFilterRow,
+  SectionHeader,
   Screen,
+  TopAppBar,
 } from '../../../../src/components/ui';
+import { colors, radius } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import {
   getCareSOPNextScheduleReference,
@@ -22,6 +27,7 @@ export default function CareSOPListScreen() {
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [references, setReferences] = React.useState<Record<string, CareSOPNextScheduleReference>>({});
+  const [search, setSearch] = React.useState('');
   const [sops, setSops] = React.useState<CareSOP[]>([]);
 
   const farmId = currentFarm?.farmId;
@@ -74,19 +80,27 @@ export default function CareSOPListScreen() {
     return <LoadingState message="Memuat SOP perawatan..." />;
   }
 
+  const normalizedSearch = search.trim().toLowerCase();
+  const displayedSops = normalizedSearch
+    ? sops.filter((sop) =>
+        [sop.name, sop.category, formatCareCategory(sop.category)]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedSearch)
+      )
+    : sops;
+
   return (
     <Screen
       floatingAction={<FloatingAddButton onPress={() => router.push('/owner/sops/create')} />}
       floatingActionBottom={86}
     >
-      <View style={{ gap: 5, paddingTop: 6 }}>
-        <Text selectable style={{ color: appTheme.primary, fontSize: 31, fontWeight: '900', letterSpacing: 0 }}>
-          Template SOP
-        </Text>
-        <Text selectable style={{ color: appTheme.muted, fontSize: 15, lineHeight: 22 }}>
-          Simpan template perawatan untuk membuat jadwal lebih cepat.
-        </Text>
-      </View>
+      <TopAppBar
+        title="SOP Perawatan"
+        subtitle="Template instruksi untuk membuat jadwal lebih cepat."
+        onBack={() => router.back()}
+      />
       <ErrorBanner message={error} />
 
       <SOPSummary
@@ -95,23 +109,35 @@ export default function CareSOPListScreen() {
         total={sops.length}
       />
 
-      <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text selectable style={{ color: appTheme.text, fontSize: 19, fontWeight: '900' }}>
-          Daftar SOP
-        </Text>
-        <Text selectable style={{ color: appTheme.primary, fontSize: 13, fontWeight: '800' }}>
-          Perawatan
-        </Text>
-      </View>
+      <SearchFilterRow
+        onChangeText={setSearch}
+        placeholder="Cari nama SOP atau kategori"
+        value={search}
+      />
 
-      {sops.length === 0 ? (
+      <SectionHeader title="Daftar SOP">
+        <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text selectable style={{ color: colors.textMuted, fontSize: 14 }}>
+            {displayedSops.length} SOP
+          </Text>
+          <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
+            Perawatan
+          </Text>
+        </View>
+      </SectionHeader>
+
+      {displayedSops.length === 0 ? (
         <EmptyState
-          title="Belum ada SOP"
-          subtitle="Tambahkan SOP perawatan pertama untuk menyimpan instruksi dan interval kerja."
+          title={sops.length === 0 ? 'Belum ada SOP' : 'SOP tidak ditemukan'}
+          subtitle={
+            sops.length === 0
+              ? 'Buat template SOP agar jadwal perawatan bisa dibuat lebih cepat dan konsisten.'
+              : 'Coba gunakan kata kunci lain.'
+          }
         />
       ) : (
         <View style={{ gap: 12 }}>
-          {sops.map((sop) => (
+          {displayedSops.map((sop) => (
             <CareSOPCard
               key={sop.id}
               reference={references[sop.id]}
@@ -135,14 +161,7 @@ function SOPSummary({
   total: number;
 }) {
   return (
-    <View
-      style={{
-        backgroundColor: appTheme.primary,
-        borderRadius: 18,
-        gap: 14,
-        padding: 18,
-      }}
-    >
+    <Card variant="heroGreen">
       <Text selectable style={{ color: '#DDEFE2', fontSize: 15, fontWeight: '800' }}>
         SOP Perawatan
       </Text>
@@ -153,7 +172,7 @@ function SOPSummary({
         <SummaryPill label="Aktif" value={active} />
         <SummaryPill label="Nonaktif" value={inactive} />
       </View>
-    </View>
+    </Card>
   );
 }
 
@@ -163,7 +182,7 @@ function SummaryPill({ label, value }: { label: string; value: number }) {
       style={{
         backgroundColor: 'rgba(255,255,255,0.1)',
         borderColor: 'rgba(255,255,255,0.22)',
-        borderRadius: 14,
+        borderRadius: radius.lg,
         borderWidth: 1,
         flex: 1,
         gap: 3,

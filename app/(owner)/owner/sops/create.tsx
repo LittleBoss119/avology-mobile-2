@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import React from 'react';
+import { View } from 'react-native';
 
 import {
   CareSOPForm,
@@ -115,7 +116,10 @@ export default function CreateCareSOPScreen() {
   return (
     <Screen
       footer={
-        <Button title="Simpan SOP" loading={submitting} onPress={handleSubmit} />
+        <View style={{ gap: 10 }}>
+          <Button title="Simpan SOP" loading={submitting} onPress={handleSubmit} />
+          <Button title="Batal" variant="secondary" onPress={() => router.back()} />
+        </View>
       }
     >
       <TopAppBar title="Tambah SOP" onBack={() => router.back()} />

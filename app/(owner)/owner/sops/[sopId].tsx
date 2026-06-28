@@ -9,7 +9,6 @@ import {
   ScheduleReferenceSummary,
 } from '../../../../src/components/care-sop-components';
 import {
-  appTheme,
   Badge,
   Button,
   Card,
@@ -20,6 +19,7 @@ import {
   Screen,
   TopAppBar,
 } from '../../../../src/components/ui';
+import { colors, radius, spacing, typography } from '../../../../src/constants/theme';
 import {
   getCareSOPDetail,
   getCareSOPNextScheduleReference,
@@ -146,13 +146,14 @@ export default function CareSOPDetailScreen() {
   return (
     <Screen
       footer={
-        <>
+        <View style={{ gap: spacing.sm }}>
           <Button
             title="Buat Jadwal dari SOP"
             disabled={!sop.isActive}
             onPress={() => router.push(`/owner/sops/${sop.id}/schedule`)}
           />
-        </>
+          <Button title="Edit SOP" variant="secondary" onPress={() => router.push(`/owner/sops/${sop.id}/edit`)} />
+        </View>
       }
     >
       <TopAppBar
@@ -173,8 +174,16 @@ export default function CareSOPDetailScreen() {
       />
       <ErrorBanner message={error} />
 
-      <Card variant="highlight">
-        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
+      <Card variant="softGreen">
+        <Text
+          selectable
+          style={{
+            color: colors.text,
+            fontSize: typography.h2.fontSize,
+            fontWeight: typography.h2.fontWeight,
+            lineHeight: typography.h2.lineHeight,
+          }}
+        >
           {sop.name}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
@@ -188,22 +197,31 @@ export default function CareSOPDetailScreen() {
       </Card>
 
       <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          Instruksi Bawaan
+        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          Instruksi Default
         </Text>
-        <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
-          {sop.defaultInstruction || '-'}
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+          {sop.defaultInstruction || 'Belum ada instruksi default.'}
         </Text>
       </Card>
 
       <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          Penggunaan
+        </Text>
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+          SOP ini dapat digunakan sebagai dasar pembuatan jadwal perawatan.
+        </Text>
+      </Card>
+
+      <Card>
+        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
           Acuan Jadwal
         </Text>
         {reference ? (
           <ScheduleReferenceSummary reference={reference} />
         ) : (
-          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
             Acuan jadwal belum dapat dimuat.
           </Text>
         )}
@@ -220,16 +238,16 @@ function MenuButton({ onPress }: { onPress: () => void }) {
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderColor: '#DCE7D5',
-        borderRadius: 999,
+        backgroundColor: colors.surface,
+        borderColor: colors.border,
+        borderRadius: radius.round,
         borderWidth: 1,
         height: 44,
         justifyContent: 'center',
         width: 44,
       }}
     >
-      <Text selectable style={{ color: appTheme.primary, fontSize: 20, fontWeight: '900', lineHeight: 22 }}>
+      <Text selectable style={{ color: colors.primary, fontSize: 20, fontWeight: '900', lineHeight: 22 }}>
         ...
       </Text>
     </Pressable>
@@ -256,9 +274,9 @@ function SOPActionMenu({
       <Pressable style={{ flex: 1 }} onPress={onClose}>
         <View
           style={{
-            backgroundColor: '#FFFFFF',
-            borderColor: '#DCE7D5',
-            borderRadius: 16,
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            borderRadius: radius.lg,
             borderWidth: 1,
             gap: 4,
             padding: 6,
@@ -297,14 +315,14 @@ function MenuActionItem({
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => ({
-        backgroundColor: pressed ? appTheme.primarySoft : '#FFFFFF',
-        borderRadius: 12,
+        backgroundColor: pressed ? colors.primarySoft : colors.surface,
+        borderRadius: radius.md,
         opacity: disabled ? 0.6 : 1,
         paddingHorizontal: 12,
         paddingVertical: 11,
       })}
     >
-      <Text selectable style={{ color: tone === 'danger' ? '#B42318' : appTheme.text, fontSize: 14, fontWeight: '800' }}>
+      <Text selectable style={{ color: tone === 'danger' ? colors.danger : colors.text, fontSize: 14, fontWeight: '800' }}>
         {label}
       </Text>
     </Pressable>

@@ -14,7 +14,8 @@ import {
   formatTreeTargetFallback,
 } from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
-import { appTheme, Badge, Button, Card, EmptyState, Field, MetaRow, SectionTitle } from './ui';
+import { colors, radius, spacing } from '../constants/theme';
+import { Badge, Button, Card, EmptyState, Field, FormSection, MetaRow } from './ui';
 
 export type CareSOPFormValues = {
   name: string;
@@ -59,7 +60,7 @@ export function CareSOPCard({
             selectable
             ellipsizeMode="tail"
             numberOfLines={1}
-            style={{ color: appTheme.primary, flex: 1, fontSize: 17, fontWeight: '900' }}
+            style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '900', lineHeight: 23 }}
           >
             {sop.name}
           </Text>
@@ -68,12 +69,20 @@ export function CareSOPCard({
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <Badge label={formatCareCategoryShort(sop.category)} maxWidth={116} tone="success" />
         </View>
+        {sop.defaultInstruction ? (
+          <Text selectable ellipsizeMode="tail" numberOfLines={2} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+            {sop.defaultInstruction}
+          </Text>
+        ) : null}
         <View style={{ gap: 3 }}>
-          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: appTheme.muted, fontSize: 13, lineHeight: 18 }}>
+          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
             {formatIntervalDays(sop.intervalDays)} - {formatCareSOPTarget(sop)}
           </Text>
-          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: appTheme.muted, fontSize: 13, lineHeight: 18 }}>
+          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
             Acuan: {reference ? formatScheduleReferenceShortStatus(reference) : 'Belum ada'}
+          </Text>
+          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textSoft, fontSize: 12, lineHeight: 16 }}>
+            Diperbarui: {formatDateOnly(sop.updatedAt ?? sop.createdAt ?? '')}
           </Text>
         </View>
       </View>
@@ -115,8 +124,7 @@ export function CareSOPForm({
 
   return (
     <View style={{ gap: 14 }}>
-      <Card>
-        <SectionTitle title="Template Perawatan" subtitle="Simpan nama, kategori, dan periode kerja yang sering berulang." />
+      <FormSection title="Informasi SOP" description="Simpan nama, kategori, dan periode kerja yang sering berulang.">
         <Field
           label="Nama SOP *"
           onChangeText={(value) => updateValue('name', value)}
@@ -141,19 +149,21 @@ export function CareSOPForm({
           placeholder="Contoh: 14"
           value={values.intervalDays}
         />
-      </Card>
+      </FormSection>
 
-      <Card>
+      <FormSection
+        title="Instruksi Default"
+        description="Instruksi ini akan menjadi acuan saat membuat jadwal dari SOP."
+      >
         <TextArea
-          label="Instruksi untuk pekerja"
+          label="Instruksi Default"
           onChangeText={(value) => updateValue('defaultInstruction', value)}
           placeholder="Tulis instruksi ringkas untuk pekerja"
           value={values.defaultInstruction}
         />
-      </Card>
+      </FormSection>
 
-      <Card>
-        <SectionTitle title="Target Bawaan" subtitle="Target ini masih bisa disesuaikan saat membuat jadwal." />
+      <FormSection title="Target Bawaan" description="Target ini masih bisa disesuaikan saat membuat jadwal.">
         <OptionGroup
           label="Cakupan target *"
           options={careSopTargetOptions.map((targetType) => ({
@@ -189,7 +199,7 @@ export function CareSOPForm({
             onSelect={(treeId) => updateValue('defaultTargetTreeId', treeId)}
           />
         ) : null}
-      </Card>
+      </FormSection>
     </View>
   );
 }
@@ -203,7 +213,7 @@ export function ScheduleReferenceSummary({
 }) {
   return (
     <View style={{ gap: compact ? 6 : 10 }}>
-      <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
+      <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
         Acuan jadwal berikutnya
       </Text>
       <Badge label={formatScheduleReferenceStatus(reference)} tone={getReferenceTone(reference)} />
@@ -216,7 +226,7 @@ export function ScheduleReferenceSummary({
           ) : null}
         </>
       ) : reference.nextDueDate ? (
-        <Text selectable numberOfLines={1} style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
+        <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
           {formatDateOnly(reference.nextDueDate)}
         </Text>
       ) : null}
@@ -313,7 +323,7 @@ function OptionGroup<TValue extends string>({
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
       <View style={{ gap: 8 }}>
@@ -341,7 +351,7 @@ function TreeTargetPicker({
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         Pohon target *
       </Text>
       {trees.length === 0 ? (
@@ -375,25 +385,25 @@ function TextArea({
 }) {
   return (
     <View style={{ gap: 7 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
       <TextInput
         multiline
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#94A098"
+        placeholderTextColor={colors.textSoft}
         style={{
-          backgroundColor: '#FFFFFF',
-          borderColor: '#DDE4DA',
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
           borderCurve: 'continuous',
-          borderRadius: 8,
+          borderRadius: radius.md,
           borderWidth: 1,
-          color: '#1E2A24',
+          color: colors.text,
           fontSize: 16,
           minHeight: 104,
-          paddingHorizontal: 14,
-          paddingTop: 12,
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.md,
           textAlignVertical: 'top',
         }}
         value={value}
@@ -423,6 +433,10 @@ function formatDateTime(value: string | null): string {
 }
 
 function formatDateOnly(value: string): string {
+  if (!value) {
+    return 'Belum tersedia';
+  }
+
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
