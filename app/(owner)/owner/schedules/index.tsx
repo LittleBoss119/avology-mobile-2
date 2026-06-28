@@ -1,19 +1,24 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
+import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import {
   appTheme,
   Badge,
   Button,
   Card,
   ChipButton,
+  CompactMetaItem,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  SearchFilterRow,
+  SectionHeader,
   Screen,
 } from '../../../../src/components/ui';
+import { colors, radius, spacing, typography } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getCareScheduleDetail, getCareSchedules } from '../../../../src/services/careScheduleService';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
@@ -26,7 +31,7 @@ type ScheduleVisualStatus = 'completed' | 'postponed' | 'unfinished';
 const statusFilters: Array<{ label: string; value: ScheduleStatusFilter }> = [
   { label: 'Semua', value: 'all' },
   { label: 'Hari ini', value: 'today' },
-  { label: 'Belum selesai', value: 'unfinished' },
+  { label: 'Belum', value: 'unfinished' },
   { label: 'Selesai', value: 'completed' },
   { label: 'Tertunda', value: 'postponed' },
 ];
@@ -34,7 +39,7 @@ const statusFilters: Array<{ label: string; value: ScheduleStatusFilter }> = [
 const sourceFilters: Array<{ label: string; value: ScheduleSourceFilter }> = [
   { label: 'Semua', value: 'all' },
   { label: 'Manual', value: 'manual' },
-  { label: 'Dari SOP', value: 'sop' },
+  { label: 'SOP', value: 'sop' },
 ];
 
 export default function CareScheduleListScreen() {
@@ -135,22 +140,17 @@ export default function CareScheduleListScreen() {
       floatingAction={<FloatingAddButton onPress={() => setCreateMenuOpen(true)} />}
       floatingActionBottom={86}
     >
-      <View style={{ gap: 5, paddingTop: 6 }}>
-        <Text selectable style={{ color: appTheme.primary, fontSize: 31, fontWeight: '900', letterSpacing: 0 }}>
-          Agenda Kebun
-        </Text>
-        <Text selectable style={{ color: appTheme.muted, fontSize: 15, lineHeight: 22 }}>
-          Pantau jadwal kerja dan perawatan yang perlu diselesaikan.
-        </Text>
-      </View>
+      <RootHeader />
       <ErrorBanner message={error} />
 
       <ScheduleHero summary={summary} />
 
-      <SearchFilterBar
+      <SearchFilterRow
+        filterActive={statusFilter !== 'all' || sourceFilter !== 'all'}
         onFilterPress={() => setFilterOpen(true)}
-        onSearchChange={setSearch}
-        search={search}
+        onChangeText={setSearch}
+        placeholder="Cari judul, target, atau pekerja"
+        value={search}
       />
 
       <ActiveFilterSummary
@@ -173,19 +173,25 @@ export default function CareScheduleListScreen() {
         visible={createMenuOpen}
       />
 
-      <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text selectable style={{ color: appTheme.text, fontSize: 19, fontWeight: '900' }}>
-          Daftar Jadwal
-        </Text>
-        <Text selectable style={{ color: appTheme.primary, fontSize: 13, fontWeight: '800' }}>
-          Terdekat
-        </Text>
-      </View>
+      <SectionHeader title="Daftar Jadwal">
+        <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text selectable style={{ color: colors.textMuted, fontSize: typography.small.fontSize }}>
+            {displayedSchedules.length} jadwal
+          </Text>
+          <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
+            Terdekat
+          </Text>
+        </View>
+      </SectionHeader>
 
       {displayedSchedules.length === 0 ? (
         <EmptyState
           title={schedules.length === 0 ? 'Belum ada jadwal' : 'Tidak ada jadwal pada pencarian ini'}
-          subtitle="Buat jadwal dari SOP atau manual untuk menghasilkan tugas pekerja."
+          subtitle={
+            schedules.length === 0
+              ? 'Buat jadwal perawatan agar pekerja mendapatkan tugas yang jelas.'
+              : 'Coba ubah kata kunci atau filter jadwal.'
+          }
         />
       ) : (
         <View style={{ gap: 10 }}>
@@ -204,17 +210,34 @@ export default function CareScheduleListScreen() {
   );
 }
 
+function RootHeader() {
+  return (
+    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
+      <Badge label="Pemilik" maxWidth={96} tone="info" />
+      <View style={{ gap: spacing.xs }}>
+        <Text
+          selectable
+          style={{
+            color: colors.text,
+            fontSize: typography.h1.fontSize,
+            fontWeight: typography.h1.fontWeight,
+            letterSpacing: 0,
+            lineHeight: typography.h1.lineHeight,
+          }}
+        >
+          Jadwal Perawatan
+        </Text>
+        <Text selectable style={{ color: colors.textMuted, fontSize: typography.body.fontSize, lineHeight: 24 }}>
+          Pantau jadwal kerja dan perawatan yang perlu diselesaikan.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function ScheduleHero({ summary }: { summary: ReturnType<typeof buildScheduleSummary> }) {
   return (
-    <View
-      style={{
-        backgroundColor: appTheme.primary,
-        borderRadius: 18,
-        gap: 16,
-        overflow: 'hidden',
-        padding: 18,
-      }}
-    >
+    <Card variant="heroGreen">
       <View style={{ gap: 4 }}>
         <Text selectable style={{ color: '#DDEFE2', fontSize: 15, fontWeight: '800' }}>
           Hari Ini
@@ -229,9 +252,9 @@ function ScheduleHero({ summary }: { summary: ReturnType<typeof buildScheduleSum
       <View style={{ flexDirection: 'row', gap: 9 }}>
         <HeroMetric label="Belum" value={summary.unfinished} tone="warning" />
         <HeroMetric label="Selesai" value={summary.completed} tone="success" />
-        <HeroMetric label="Tertunda" value={summary.postponed} tone="danger" />
+        <HeroMetric label="Tertunda" value={summary.postponed} tone="warning" />
       </View>
-    </View>
+    </Card>
   );
 }
 
@@ -251,7 +274,7 @@ function HeroMetric({
       style={{
         backgroundColor: 'rgba(255,255,255,0.1)',
         borderColor: 'rgba(255,255,255,0.22)',
-        borderRadius: 14,
+        borderRadius: radius.lg,
         borderWidth: 1,
         flex: 1,
         gap: 3,
@@ -268,59 +291,6 @@ function HeroMetric({
   );
 }
 
-function SearchFilterBar({
-  onFilterPress,
-  onSearchChange,
-  search,
-}: {
-  onFilterPress: () => void;
-  onSearchChange: (value: string) => void;
-  search: string;
-}) {
-  return (
-    <View style={{ alignItems: 'center', flexDirection: 'row', gap: 10 }}>
-      <View
-        style={{
-          alignItems: 'center',
-          backgroundColor: '#FFFFFF',
-          borderColor: '#DCE7D5',
-          borderRadius: 15,
-          borderWidth: 1,
-          flex: 1,
-          flexDirection: 'row',
-          minHeight: 54,
-          paddingLeft: 14,
-        }}
-      >
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={onSearchChange}
-          placeholder="Cari judul, target, atau pekerja"
-          placeholderTextColor="#94A098"
-          style={{ color: '#1E2A24', flex: 1, fontSize: 15, minHeight: 52, paddingHorizontal: 12 }}
-          value={search}
-        />
-      </View>
-      <Pressable
-        accessibilityLabel="Buka filter jadwal"
-        accessibilityRole="button"
-        onPress={onFilterPress}
-        style={{
-          alignItems: 'center',
-          backgroundColor: appTheme.primary,
-          borderRadius: 15,
-          height: 54,
-          justifyContent: 'center',
-          width: 54,
-        }}
-      >
-        <FilterGlyph />
-      </Pressable>
-    </View>
-  );
-}
-
 function ActiveFilterSummary({
   sourceFilter,
   statusFilter,
@@ -333,7 +303,7 @@ function ActiveFilterSummary({
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: -6 }}>
       <Badge label={`${total} jadwal`} tone="muted" />
-      {statusFilter !== 'all' ? <Badge label={getStatusFilterLabel(statusFilter)} tone="success" /> : null}
+      {statusFilter !== 'all' ? <Badge label={getStatusFilterLabel(statusFilter)} tone="info" /> : null}
       {sourceFilter !== 'all' ? <Badge label={getSourceFilterLabel(sourceFilter)} tone="warning" /> : null}
     </View>
   );
@@ -369,7 +339,9 @@ function CompactScheduleCard({
             <Badge label={formatScheduleStatusLabel(status)} maxWidth={116} tone={getScheduleStatusTone(status)} />
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            <Badge label={schedule.careSopId ? 'Dari SOP' : 'Manual'} maxWidth={96} tone={schedule.careSopId ? 'warning' : 'muted'} />
+            <Badge label={formatCareCategory(schedule.category)} maxWidth={140} tone="success" />
+            <Badge label={schedule.careSopId ? 'SOP' : 'Manual'} maxWidth={96} tone={schedule.careSopId ? 'warning' : 'muted'} />
+            {schedule.requiresPhoto ? <Badge label="Butuh bukti" maxWidth={116} tone="warning" /> : null}
           </View>
           <ScheduleCardMeta
             date={formatDate(schedule.scheduledDate)}
@@ -394,50 +366,12 @@ function ScheduleCardMeta({
   return (
     <View style={{ gap: 4 }}>
       <View style={{ alignItems: 'center', flexDirection: 'row', gap: 10 }}>
-        <MetadataItem icon="calendar" label={date} />
-        <MetadataItem icon="target" label={target} />
+        <CompactMetaItem icon="calendar" label={date} />
+        <CompactMetaItem icon="target" label={target} />
       </View>
       {workers.length > 0 ? (
-        <MetadataItem icon="user" label={workers.join(', ')} />
+        <CompactMetaItem icon="user" label={workers.join(', ')} />
       ) : null}
-    </View>
-  );
-}
-
-function MetadataItem({ icon, label }: { icon: 'calendar' | 'target' | 'user'; label: string }) {
-  return (
-    <View style={{ alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 5 }}>
-      <MetadataIcon name={icon} />
-      <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: appTheme.muted, flexShrink: 1, fontSize: 13, lineHeight: 18 }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function MetadataIcon({ name }: { name: 'calendar' | 'target' | 'user' }) {
-  const color = '#68746D';
-
-  if (name === 'calendar') {
-    return (
-      <View style={{ borderColor: color, borderRadius: 3, borderWidth: 1.5, height: 14, width: 13 }}>
-        <View style={{ backgroundColor: color, height: 1.5, marginTop: 3 }} />
-      </View>
-    );
-  }
-
-  if (name === 'target') {
-    return (
-      <View style={{ alignItems: 'center', borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 14, justifyContent: 'center', width: 14 }}>
-        <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, width: 6 }} />
-      </View>
-    );
-  }
-
-  return (
-    <View style={{ alignItems: 'center', width: 14 }}>
-      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, width: 6 }} />
-      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, marginTop: -1, width: 12 }} />
     </View>
   );
 }
@@ -594,34 +528,6 @@ function FloatingAddButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-function FilterGlyph() {
-  return (
-    <View style={{ gap: 4 }}>
-      <SliderGlyphLine knobLeft={3} />
-      <SliderGlyphLine knobLeft={12} />
-      <SliderGlyphLine knobLeft={7} />
-    </View>
-  );
-}
-
-function SliderGlyphLine({ knobLeft }: { knobLeft: number }) {
-  return (
-    <View style={{ height: 4, justifyContent: 'center', width: 22 }}>
-      <View style={{ backgroundColor: '#DDEFE2', borderRadius: 999, height: 2, width: 22 }} />
-      <View
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 999,
-          height: 6,
-          left: knobLeft,
-          position: 'absolute',
-          width: 6,
-        }}
-      />
-    </View>
-  );
-}
-
 function buildScheduleSummary(
   schedules: CareSchedule[],
   details: Record<string, CareScheduleDetail>
@@ -708,16 +614,16 @@ function formatScheduleStatusLabel(status: ScheduleVisualStatus): string {
     return 'Tertunda';
   }
 
-  return 'Belum selesai';
+  return 'Belum';
 }
 
-function getScheduleStatusTone(status: ScheduleVisualStatus): 'danger' | 'muted' | 'success' | 'warning' {
+function getScheduleStatusTone(status: ScheduleVisualStatus): 'muted' | 'success' | 'warning' {
   if (status === 'completed') {
     return 'success';
   }
 
   if (status === 'postponed') {
-    return 'danger';
+    return 'warning';
   }
 
   return 'warning';
