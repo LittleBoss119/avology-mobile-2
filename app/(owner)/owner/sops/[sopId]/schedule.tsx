@@ -10,17 +10,19 @@ import {
 } from '../../../../../src/components/care-sop-components';
 import { ProofRequirementToggle } from '../../../../../src/components/care-schedule-components';
 import {
+  Badge,
   Button,
-  Card,
   DateField,
   EmptyState,
   ErrorBanner,
   Field,
+  FormSection,
   LoadingState,
   MetaRow,
   Screen,
   TopAppBar,
 } from '../../../../../src/components/ui';
+import { colors, radius, spacing } from '../../../../../src/constants/theme';
 import { useAuth } from '../../../../../src/context/auth-context';
 import { createScheduleFromSOP } from '../../../../../src/services/careScheduleService';
 import {
@@ -265,7 +267,7 @@ export default function CreateScheduleFromSOPScreen() {
   if (!sop) {
     return (
       <Screen>
-        <TopAppBar title="Buat Jadwal" onBack={() => router.back()} />
+        <TopAppBar title="Buat dari SOP" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <EmptyState title="SOP tidak ditemukan" subtitle="SOP mungkin tidak tersedia atau akses ditolak." />
       </Screen>
@@ -275,42 +277,46 @@ export default function CreateScheduleFromSOPScreen() {
   return (
     <Screen
       footer={
-        <Button
-          title="Buat Jadwal dan Tugas"
-          disabled={!sop.isActive}
-          loading={submitting}
-          onPress={handleSubmit}
-        />
+        <View style={{ gap: 10 }}>
+          <Button
+            title="Simpan Jadwal"
+            disabled={!sop.isActive}
+            loading={submitting}
+            onPress={handleSubmit}
+          />
+          <Button title="Batal" variant="secondary" onPress={() => router.back()} />
+        </View>
       }
     >
-      <TopAppBar title="Buat Jadwal" onBack={() => router.back()} />
+      <TopAppBar title="Buat dari SOP" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
-      <Card variant="highlight">
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          {sop.name}
-        </Text>
-        <MetaRow label="Kategori" value={formatCareCategory(sop.category)} />
-        <MetaRow label="Target SOP" value={formatCareSOPTarget(sop)} />
-        <MetaRow label="Status SOP" value={sop.isActive ? 'Aktif' : 'Nonaktif'} />
-      </Card>
+      <FormSection title="Pilih SOP" description="SOP yang dipilih menjadi dasar jadwal dan tugas pekerja.">
+        <View style={{ gap: spacing.sm }}>
+          <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
+            <Text selectable style={{ color: colors.text, flex: 1, fontSize: 17, fontWeight: '900', lineHeight: 23 }}>
+              {sop.name}
+            </Text>
+            <Badge label={sop.isActive ? 'Aktif' : 'Nonaktif'} maxWidth={92} tone={sop.isActive ? 'success' : 'muted'} />
+          </View>
+          <MetaRow label="Kategori" value={formatCareCategory(sop.category)} />
+          <MetaRow label="Target SOP" value={formatCareSOPTarget(sop)} />
+          <MetaRow label="Instruksi default" value={sop.defaultInstruction || 'Belum ada instruksi default.'} />
+          <MetaRow label="Butuh bukti foto default" value="Tidak wajib" />
+        </View>
+      </FormSection>
 
       {reference ? (
-        <Card>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-            Acuan Jadwal
-          </Text>
+        <FormSection title="Acuan Jadwal" description="Referensi jadwal berikutnya dari histori SOP.">
           <ScheduleReferenceSummary reference={reference} />
-        </Card>
+        </FormSection>
       ) : null}
 
-      <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
-          Jadwal dan Pekerja
-        </Text>
+      <FormSection title="Jadwal" description="Tentukan tanggal dan pekerja yang menerima tugas.">
         <DateField
-          label="Tanggal jadwal *"
+          label="Tanggal Jadwal *"
           onChangeDate={(value) => updateValue('scheduledDate', value)}
+          placeholder="Pilih tanggal jadwal"
           value={values.scheduledDate}
         />
 
@@ -319,28 +325,25 @@ export default function CreateScheduleFromSOPScreen() {
           workers={workers}
           onSelect={selectWorker}
         />
-      </Card>
+      </FormSection>
 
-      <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '800' }}>
-          Target Pekerjaan
-        </Text>
+      <FormSection title="Target" description="Target bawaan SOP masih bisa disesuaikan untuk jadwal ini.">
         <TargetPicker
           onTargetTypeChange={updateTargetType}
           onValueChange={updateValue}
           trees={trees}
           values={values}
         />
-      </Card>
+      </FormSection>
 
-      <Card>
+      <FormSection title="Instruksi Tambahan">
         <TextArea
           label="Instruksi"
           onChangeText={(value) => updateValue('instruction', value)}
           placeholder="Instruksi kerja untuk pekerja"
           value={values.instruction}
         />
-      </Card>
+      </FormSection>
 
       <ProofRequirementToggle
         enabled={values.requiresPhoto}
@@ -361,8 +364,8 @@ function WorkerPicker({
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
-        Pekerja aktif *
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
+        Pekerja Aktif *
       </Text>
       {workers.length === 0 ? (
         <EmptyState title="Belum ada pekerja aktif" subtitle="Setujui pekerja terlebih dahulu sebelum membuat tugas." />
@@ -396,7 +399,7 @@ function TargetPicker({
   return (
     <View style={{ gap: 12 }}>
       <OptionGroup
-        label="Target jadwal *"
+        label="Target Jadwal *"
         options={careSopTargetOptions.map((targetType) => ({
           label: formatTargetType(targetType),
           value: targetType,
@@ -425,7 +428,7 @@ function TargetPicker({
 
       {values.targetType === 'tree' ? (
         <View style={{ gap: 8 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
             Pohon target *
           </Text>
           {trees.length === 0 ? (
@@ -461,7 +464,7 @@ function OptionGroup<TValue extends string>({
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
       <View style={{ gap: 8 }}>
@@ -491,25 +494,25 @@ function TextArea({
 }) {
   return (
     <View style={{ gap: 7 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
       <TextInput
         multiline
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#94A098"
+        placeholderTextColor={colors.textSoft}
         style={{
-          backgroundColor: '#FFFFFF',
-          borderColor: '#DDE4DA',
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
           borderCurve: 'continuous',
-          borderRadius: 8,
+          borderRadius: radius.md,
           borderWidth: 1,
-          color: '#1E2A24',
+          color: colors.text,
           fontSize: 16,
           minHeight: 104,
-          paddingHorizontal: 14,
-          paddingTop: 12,
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.md,
           textAlignVertical: 'top',
         }}
         value={value}

@@ -520,10 +520,12 @@ export function Field({
 export function DateField({
   label,
   onChangeDate,
+  placeholder = 'Pilih tanggal',
   value,
 }: {
   label: string;
   onChangeDate: (value: string) => void;
+  placeholder?: string;
   value: string;
 }) {
   const [showPicker, setShowPicker] = React.useState(false);
@@ -563,11 +565,11 @@ export function DateField({
           paddingHorizontal: spacing.lg,
         }}
       >
-        <DateFieldCalendarIcon />
-        <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
-          {formatFriendlyDate(value)}
-        </Text>
-      </Pressable>
+          <DateFieldCalendarIcon />
+          <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
+            {formatFriendlyDate(value, placeholder)}
+          </Text>
+        </Pressable>
       {showPicker ? (
         <DateTimePicker
           display="default"
@@ -1141,11 +1143,11 @@ function formatIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function formatFriendlyDate(value: string): string {
+function formatFriendlyDate(value: string, placeholder = 'Pilih tanggal'): string {
   const date = parseIsoDate(value);
 
   if (!date) {
-    return 'Pilih tanggal';
+    return placeholder;
   }
 
   return date.toLocaleDateString('id-ID', {

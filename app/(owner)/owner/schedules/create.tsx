@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import React from 'react';
+import { View } from 'react-native';
 
 import {
   ManualScheduleForm,
@@ -133,7 +134,10 @@ export default function CreateManualScheduleScreen() {
   return (
     <Screen
       footer={
-        <Button title="Simpan Jadwal" loading={submitting} onPress={handleSubmit} />
+        <View style={{ gap: 10 }}>
+          <Button title="Simpan Jadwal" loading={submitting} onPress={handleSubmit} />
+          <Button title="Batal" variant="secondary" onPress={() => router.back()} />
+        </View>
       }
     >
       <TopAppBar title="Jadwal Manual" onBack={() => router.back()} />

@@ -16,7 +16,8 @@ import {
   formatTreeTargetFallback,
 } from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
-import { appTheme, Badge, Button, Card, CompactMetaItem, DateField, EmptyState, Field, MetaRow, SectionTitle } from './ui';
+import { colors, radius, spacing } from '../constants/theme';
+import { appTheme, Badge, Button, Card, CompactMetaItem, DateField, EmptyState, Field, FormSection, MetaRow } from './ui';
 import { careCategoryOptions } from './care-sop-components';
 
 export type ManualScheduleFormValues = {
@@ -178,10 +179,9 @@ export function ManualScheduleForm({
 
   return (
     <View style={{ gap: 14 }}>
-      <Card>
-        <SectionTitle title="Rencana Perawatan" subtitle="Isi pekerjaan utama yang akan menjadi tugas pekerja." />
+      <FormSection title="Rencana Perawatan" description="Isi pekerjaan utama yang akan menjadi tugas pekerja.">
         <Field
-          label="Judul jadwal *"
+          label="Judul Jadwal *"
           onChangeText={(value) => updateValue('title', value)}
           placeholder="Contoh: Penyiraman area barat"
           value={values.title}
@@ -198,39 +198,38 @@ export function ManualScheduleForm({
         />
 
         <DateField
-          label="Tanggal jadwal *"
+          label="Tanggal Jadwal *"
           onChangeDate={(value) => updateValue('scheduledDate', value)}
+          placeholder="Pilih tanggal jadwal"
           value={values.scheduledDate}
         />
-      </Card>
+      </FormSection>
 
-      <Card>
-        <SectionTitle title="Pekerja" subtitle="Pilih pekerja aktif yang menerima tugas ini." />
+      <FormSection title="Pekerja" description="Pilih pekerja aktif yang menerima tugas ini.">
         <WorkerPicker
           selectedWorkerId={values.assignedWorkerId}
           workers={workers}
           onSelect={(workerId) => updateValue('assignedWorkerId', workerId)}
         />
-      </Card>
+      </FormSection>
 
-      <Card>
-        <SectionTitle title="Target" subtitle="Tentukan cakupan pekerjaan di kebun." />
+      <FormSection title="Target" description="Tentukan cakupan pekerjaan di kebun.">
         <TargetPicker
           onTargetTypeChange={updateTargetType}
           onValueChange={updateValue}
           trees={trees}
           values={values}
         />
-      </Card>
+      </FormSection>
 
-      <Card>
+      <FormSection title="Instruksi">
         <TextArea
           label="Instruksi"
           onChangeText={(value) => updateValue('instruction', value)}
           placeholder="Instruksi kerja untuk pekerja"
           value={values.instruction}
         />
-      </Card>
+      </FormSection>
 
       <ProofRequirementToggle
         enabled={values.requiresPhoto}
@@ -248,21 +247,58 @@ export function ProofRequirementToggle({
   onToggle: () => void;
 }) {
   return (
-    <Card>
-      <View style={{ gap: 6 }}>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800' }}>
-          Butuh bukti foto
-        </Text>
-        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-          Pekerja wajib mengunggah foto saat menyelesaikan tugas.
-        </Text>
+    <FormSection
+      title="Butuh Bukti Foto"
+      description="Jika wajib, pekerja harus mengunggah foto sebelum menyelesaikan tugas."
+    >
+      <View
+        style={{
+          backgroundColor: colors.surfaceMuted,
+          borderColor: colors.border,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          flexDirection: 'row',
+          gap: spacing.sm,
+          padding: spacing.xs,
+        }}
+      >
+        <ProofOptionButton active={!enabled} label="Tidak Wajib" onPress={enabled ? onToggle : undefined} />
+        <ProofOptionButton active={enabled} label="Wajib" onPress={!enabled ? onToggle : undefined} />
       </View>
-      <Button
-        title={enabled ? 'Bukti Foto Wajib' : 'Bukti Foto Tidak Wajib'}
-        variant={enabled ? 'primary' : 'secondary'}
-        onPress={onToggle}
-      />
-    </Card>
+    </FormSection>
+  );
+}
+
+function ProofOptionButton({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={!onPress}
+      onPress={onPress}
+      style={{
+        alignItems: 'center',
+        backgroundColor: active ? colors.primary : colors.surface,
+        borderColor: active ? colors.primary : colors.border,
+        borderRadius: radius.md,
+        borderWidth: 1,
+        flex: 1,
+        justifyContent: 'center',
+        minHeight: 44,
+        paddingHorizontal: spacing.md,
+      }}
+    >
+      <Text selectable style={{ color: active ? colors.surface : colors.text, fontSize: 14, fontWeight: '800' }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -303,8 +339,8 @@ function WorkerPicker({
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
-        Pekerja aktif *
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
+        Pekerja Aktif *
       </Text>
       {workers.length === 0 ? (
         <EmptyState title="Belum ada pekerja aktif" subtitle="Setujui pekerja terlebih dahulu sebelum membuat tugas." />
@@ -338,7 +374,7 @@ function TargetPicker({
   return (
     <View style={{ gap: 12 }}>
       <OptionGroup
-        label="Target jadwal *"
+        label="Target Jadwal *"
         options={careScheduleTargetOptions.map((targetType) => ({
           label: formatTargetType(targetType),
           value: targetType,
@@ -367,7 +403,7 @@ function TargetPicker({
 
       {values.targetType === 'tree' ? (
         <View style={{ gap: 8 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
             Pohon target *
           </Text>
           {trees.length === 0 ? (
@@ -412,7 +448,7 @@ function OptionGroup<TValue extends string>({
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
       <View style={{ gap: 8 }}>
@@ -442,25 +478,25 @@ function TextArea({
 }) {
   return (
     <View style={{ gap: 7 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
       <TextInput
         multiline
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#94A098"
+        placeholderTextColor={colors.textSoft}
         style={{
-          backgroundColor: '#FFFFFF',
-          borderColor: '#DDE4DA',
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
           borderCurve: 'continuous',
-          borderRadius: 8,
+          borderRadius: radius.md,
           borderWidth: 1,
-          color: '#1E2A24',
+          color: colors.text,
           fontSize: 16,
           minHeight: 104,
-          paddingHorizontal: 14,
-          paddingTop: 12,
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.md,
           textAlignVertical: 'top',
         }}
         value={value}
