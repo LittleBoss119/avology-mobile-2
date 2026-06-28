@@ -1,99 +1,202 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import { Badge, Button, Card, ErrorBanner, MetaRow, PageIntro, Screen, SectionHeader } from '../../../src/components/ui';
+import { Badge, Card, MetaRow, PageIntro, Screen, SectionHeader } from '../../../src/components/ui';
+import { colors, radius, spacing, typography } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
+import { getFarmActorDisplayProfiles } from '../../../src/services/memberService';
+import { getTrees } from '../../../src/services/treeService';
+import type { FarmActorDisplayProfile } from '../../../src/types/domain';
 import { formatMemberStatus, formatPersonDisplayName, formatRole } from '../../../src/utils/displayFormat';
 
+type WorkerFarmHubData = {
+  actors: FarmActorDisplayProfile[];
+  totalTrees: number | null;
+};
+
 export default function WorkerFarmHubScreen() {
-  const { currentFarm, profile, signOut } = useAuth();
-  const [loggingOut, setLoggingOut] = React.useState(false);
-  const [logoutError, setLogoutError] = React.useState<string | null>(null);
+  const { currentFarm, profile } = useAuth();
+  const [hubData, setHubData] = React.useState<WorkerFarmHubData>({
+    actors: [],
+    totalTrees: null,
+  });
   const farm = currentFarm?.farm;
+  const farmId = currentFarm?.farmId;
+  const ownerName = findOwnerName(hubData.actors);
 
-  async function handleLogout() {
-    setLoggingOut(true);
-    setLogoutError(null);
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
 
-    const result = await signOut();
+      async function loadHubData() {
+        if (!farmId) {
+          return;
+        }
 
-    if (result) {
-      setLogoutError(result.message);
-      setLoggingOut(false);
-      return;
-    }
+        const [actorsResult, treesResult] = await Promise.all([
+          getFarmActorDisplayProfiles(farmId),
+          getTrees({ archived: false, farmId }),
+        ]);
 
-    setLoggingOut(false);
-    router.replace('/get-started');
-  }
+        if (!isActive) {
+          return;
+        }
+
+        setHubData({
+          actors: actorsResult.data ?? [],
+          totalTrees: treesResult.data?.length ?? null,
+        });
+
+        logOptionalHubError('anggota kebun', actorsResult.error?.message);
+        logOptionalHubError('jumlah pohon', treesResult.error?.message);
+      }
+
+      loadHubData();
+
+      return () => {
+        isActive = false;
+      };
+    }, [farmId])
+  );
 
   return (
     <Screen>
-      <PageIntro title="Kebun" subtitle="Informasi kebun tempat kamu bekerja dan akses akun." />
-      <ErrorBanner message={logoutError} />
+      <RootHeader roleLabel="Pekerja" subtitle="Informasi kebun tempat kamu bekerja." title="Kebun" />
 
       <Card variant="highlight">
-        <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'space-between' }}>
-          <View style={{ flex: 1, gap: 4 }}>
-            <Text selectable style={{ color: '#102016', fontSize: 18, fontWeight: '800' }}>
-              {farm?.name ?? 'Kebun aktif'}
-            </Text>
-            <Text selectable style={{ color: '#647067', lineHeight: 20 }}>
-              {farm?.location ?? 'Data lokasi kebun belum tersedia.'}
-            </Text>
-          </View>
-          <Badge label={formatRole(currentFarm?.role)} tone="success" />
+        <SectionHeader description="Data kebun ditampilkan sebagai informasi baca saja." title="Data Kebun" />
+        <MetaRow label="Nama kebun" value={farm?.name} />
+        <MetaRow label="Lokasi" value={farm?.location} />
+        <MetaRow label="Luas" value={formatArea(farm?.areaSize)} />
+        <MetaRow label="Owner" value={ownerName ?? 'Belum tersedia'} />
+        <MetaRow label="Total pohon aktif" value={formatCount(hubData.totalTrees, 'pohon')} />
+      </Card>
+
+      <Card>
+        <SectionHeader description="Status keanggotaan pada kebun aktif." title="Status Akses" />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+          <Badge label={formatRole(currentFarm?.role)} tone="info" />
+          <Badge label={formatMemberStatus(currentFarm?.status)} tone={currentFarm?.status === 'active' ? 'success' : 'warning'} />
         </View>
-        <MetaRow label="Status akses" value={formatMemberStatus(currentFarm?.status)} />
+        <MetaRow label="Peran" value={formatRole(currentFarm?.role)} />
+        <MetaRow label="Status" value={formatMemberStatus(currentFarm?.status)} />
         <MetaRow label="Bergabung sejak" value={formatDate(currentFarm?.joinedAt)} />
       </Card>
 
-      <HubSection
-        description="Data kebun berasal dari akses aktif saat ini. Detail tambahan akan dipoles pada batch visual berikutnya."
-        title="Informasi Kebun"
-      >
-        <MetaRow label="Nama kebun" value={farm?.name} />
-        <MetaRow label="Lokasi" value={farm?.location} />
-      </HubSection>
+      <Card>
+        <SectionHeader description="Ringkasan anggota yang tersedia dari data akses kebun." title="Anggota Kebun" />
+        {hubData.actors.length > 0 ? (
+          <View style={{ gap: spacing.sm }}>
+            {hubData.actors.slice(0, 4).map((actor) => (
+              <MemberRow key={actor.userId} actor={actor} />
+            ))}
+          </View>
+        ) : (
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Data anggota lain belum tersedia di halaman ini.
+          </Text>
+        )}
+      </Card>
 
-      <HubSection
-        description="Peran dan status akses mengikuti data keanggotaan yang sudah aktif."
-        title="Status Akses"
-      >
-        <MetaRow label="Peran" value={formatRole(currentFarm?.role)} />
-        <MetaRow label="Status" value={formatMemberStatus(currentFarm?.status)} />
-      </HubSection>
-
-      <HubSection
-        description="Profil akun dan keluar akun tetap berada di halaman Profil Akun."
-        title="Akun Saya"
-      >
+      <Card>
+        <SectionHeader description="Data pribadi akun Avology." title="Akun Saya" />
         <MetaRow label="Nama" value={formatPersonDisplayName(profile?.fullName, 'Pekerja kebun')} />
-        <MetaRow label="Nomor HP" value={profile?.phone} />
         {profile?.email ? <MetaRow label="Email login" value={profile.email} /> : null}
-        <Button title="Buka Profil Akun" variant="secondary" onPress={() => router.push('/worker/profile')} />
-        <Button title="Keluar Akun" variant="danger" loading={loggingOut} onPress={handleLogout} />
-      </HubSection>
+        <MetaRow label="Nomor HP" value={profile?.phone} />
+        <NavRow label="Profil Akun" onPress={() => router.push('/worker/profile')} />
+      </Card>
     </Screen>
   );
 }
 
-function HubSection({
-  children,
-  description,
+function RootHeader({
+  roleLabel,
+  subtitle,
   title,
 }: {
-  children: React.ReactNode;
-  description: string;
+  roleLabel: string;
+  subtitle: string;
   title: string;
 }) {
   return (
-    <Card>
-      <SectionHeader description={description} title={title} />
-      {children}
-    </Card>
+    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
+      <Badge label={roleLabel} tone="info" />
+      <Text selectable style={{ color: colors.text, fontSize: typography.h1.fontSize, fontWeight: '800', lineHeight: typography.h1.lineHeight }}>
+        {title}
+      </Text>
+      <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
+        {subtitle}
+      </Text>
+    </View>
   );
+}
+
+function NavRow({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        backgroundColor: pressed ? colors.surfaceMuted : colors.surface,
+        borderColor: colors.border,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        flexDirection: 'row',
+        gap: spacing.md,
+        justifyContent: 'space-between',
+        padding: spacing.md,
+      })}
+    >
+      <Text selectable style={{ color: colors.text, flex: 1, fontSize: 15, fontWeight: '800' }}>
+        {label}
+      </Text>
+      <Text selectable style={{ color: colors.primary, fontSize: 20, fontWeight: '900' }}>
+        {'>'}
+      </Text>
+    </Pressable>
+  );
+}
+
+function MemberRow({ actor }: { actor: FarmActorDisplayProfile }) {
+  return (
+    <View
+      style={{
+        borderColor: colors.border,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        gap: spacing.xs,
+        padding: spacing.md,
+      }}
+    >
+      <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
+        {actor.fullName}
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+        <Badge label={formatRole(actor.role)} tone={actor.role === 'owner' ? 'info' : 'neutral'} />
+        <Badge label={formatMemberStatus(actor.status)} tone={actor.status === 'active' ? 'success' : 'warning'} />
+      </View>
+    </View>
+  );
+}
+
+function findOwnerName(actors: FarmActorDisplayProfile[]): string | null {
+  return actors.find((actor) => actor.role === 'owner' && actor.status === 'active')?.fullName ?? null;
+}
+
+function formatArea(value?: number | null): string {
+  if (value === null || value === undefined) {
+    return 'Belum tersedia';
+  }
+
+  return `${new Intl.NumberFormat('id-ID').format(value)} m²`;
+}
+
+function formatCount(value: number | null | undefined, unit: string): string {
+  if (value === null || value === undefined) {
+    return 'Belum tersedia';
+  }
+
+  return `${new Intl.NumberFormat('id-ID').format(value)} ${unit}`;
 }
 
 function formatDate(value?: string | null): string | null {
@@ -106,4 +209,10 @@ function formatDate(value?: string | null): string | null {
     month: 'short',
     year: 'numeric',
   });
+}
+
+function logOptionalHubError(label: string, message?: string | null) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__ && message) {
+    console.debug('[worker-farm] Optional data unavailable', { label, message });
+  }
 }
