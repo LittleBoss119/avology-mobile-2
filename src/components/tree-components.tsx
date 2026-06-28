@@ -11,14 +11,14 @@ import type {
   TreeHistoryItem,
   TreeHistoryType,
 } from '../types/domain';
-import type { ConditionRecordPhotoMap } from '../types/media';
+import type { ConditionRecordPhotoMap, PickedPhotoAsset } from '../types/media';
 import { formatPersonDisplayName } from '../utils/displayFormat';
 import {
   buildTreeDisplayCode,
   formatGrowthPhase,
   formatTreeDisplayCode,
 } from '../utils/treeFormat';
-import { appTheme, Badge, Card, EmptyState, Field, MetaRow } from './ui';
+import { appTheme, Badge, Button, Card, EmptyState, Field, MetaRow } from './ui';
 
 export type TreeFormValues = {
   rowPosition: string;
@@ -37,6 +37,18 @@ export type TreeCardProps = {
 export type TreeFormProps = {
   values: TreeFormValues;
   onChange: (values: TreeFormValues) => void;
+};
+
+export type TreeMainPhotoFormSectionProps = {
+  currentPhotoUrl?: string | null;
+  deleteRequested?: boolean;
+  disabled: boolean;
+  photo: PickedPhotoAsset | null;
+  onCameraPress: () => void;
+  onDeleteExisting?: () => void;
+  onGalleryPress: () => void;
+  onRemoveSelected: () => void;
+  onRestoreExisting?: () => void;
 };
 
 export type ConditionStatusBadgeProps = {
@@ -329,6 +341,79 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
         </View>
       </View>
     </View>
+  );
+}
+
+export function TreeMainPhotoFormSection({
+  currentPhotoUrl,
+  deleteRequested = false,
+  disabled,
+  onCameraPress,
+  onDeleteExisting,
+  onGalleryPress,
+  onRemoveSelected,
+  onRestoreExisting,
+  photo,
+}: TreeMainPhotoFormSectionProps) {
+  const previewUri = photo?.uri ?? (deleteRequested ? null : currentPhotoUrl);
+  const hasExistingPhoto = Boolean(currentPhotoUrl);
+  const canRemove = Boolean(photo || (hasExistingPhoto && !deleteRequested));
+
+  function handleRemovePress() {
+    if (photo) {
+      onRemoveSelected();
+      return;
+    }
+
+    onDeleteExisting?.();
+  }
+
+  return (
+    <Card>
+      <View style={{ gap: 5 }}>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800' }}>
+          Foto Pohon
+        </Text>
+        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+          Opsional, untuk mengenali pohon di daftar dan detail.
+        </Text>
+      </View>
+
+      {previewUri ? (
+        <Image
+          resizeMode="cover"
+          source={{ uri: previewUri }}
+          style={{
+            borderRadius: 12,
+            height: 170,
+            width: '100%',
+          }}
+        />
+      ) : null}
+
+      {deleteRequested && !photo ? (
+        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+          Foto pohon saat ini akan dihapus setelah perubahan disimpan.
+        </Text>
+      ) : null}
+
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flex: 1 }}>
+          <Button disabled={disabled} title="Ambil Foto" variant="secondary" onPress={onCameraPress} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button disabled={disabled} title="Pilih Galeri" variant="secondary" onPress={onGalleryPress} />
+        </View>
+      </View>
+
+      {canRemove ? (
+        <Button disabled={disabled} title="Hapus Foto" variant="secondary" onPress={handleRemovePress} />
+      ) : null}
+
+      {deleteRequested && !photo && onRestoreExisting ? (
+        <Button disabled={disabled} title="Batalkan Hapus Foto" variant="secondary" onPress={onRestoreExisting} />
+      ) : null}
+    </Card>
   );
 }
 

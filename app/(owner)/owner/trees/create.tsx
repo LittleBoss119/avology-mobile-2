@@ -1,14 +1,19 @@
 import { router, Stack } from 'expo-router';
 import React from 'react';
+import { Alert } from 'react-native';
 
 import {
   formatDateForDb,
+  TreeMainPhotoFormSection,
   TreeForm,
   type TreeFormValues,
 } from '../../../../src/components/tree-components';
 import { Button, ErrorBanner, Screen, TopAppBar } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
+import { pickImageFromGallery, takePhotoFromCamera } from '../../../../src/lib/media';
+import { uploadTreeMainPhoto } from '../../../../src/services/photoAttachmentService';
 import { createTree } from '../../../../src/services/treeService';
+import type { PickedPhotoAsset } from '../../../../src/types/media';
 
 const initialValues: TreeFormValues = {
   rowPosition: '',
@@ -20,6 +25,7 @@ const initialValues: TreeFormValues = {
 export default function OwnerCreateTreeScreen() {
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [values, setValues] = React.useState<TreeFormValues>(initialValues);
 
@@ -51,8 +57,62 @@ export default function OwnerCreateTreeScreen() {
       return;
     }
 
+    if (selectedPhoto) {
+      const photoResult = await uploadTreeMainPhoto({
+        base64: selectedPhoto.base64,
+        farmId: currentFarm.farmId,
+        fileName: selectedPhoto.fileName,
+        localUri: selectedPhoto.uri,
+        mimeType: selectedPhoto.mimeType,
+        treeId: result.data.treeId,
+      });
+
+      if (photoResult.error) {
+        setSubmitting(false);
+        Alert.alert(
+          'Pohon tersimpan',
+          'Pohon tersimpan, tetapi foto gagal diunggah. Foto dapat ditambahkan dari detail pohon.',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.replace(`/owner/trees/${result.data.treeId}`),
+            },
+          ]
+        );
+        return;
+      }
+    }
+
     setSubmitting(false);
     router.replace('/owner/trees');
+  }
+
+  async function handlePickPhotoFromGallery() {
+    const result = await pickImageFromGallery();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setError(null);
+      setSelectedPhoto(result.data);
+    }
+  }
+
+  async function handleTakePhotoFromCamera() {
+    const result = await takePhotoFromCamera();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setError(null);
+      setSelectedPhoto(result.data);
+    }
   }
 
   return (
@@ -74,6 +134,13 @@ export default function OwnerCreateTreeScreen() {
         <TopAppBar title="Tambah Pohon" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <TreeForm values={values} onChange={setValues} />
+        <TreeMainPhotoFormSection
+          disabled={submitting}
+          photo={selectedPhoto}
+          onCameraPress={handleTakePhotoFromCamera}
+          onGalleryPress={handlePickPhotoFromGallery}
+          onRemoveSelected={() => setSelectedPhoto(null)}
+        />
       </Screen>
     </>
   );
