@@ -2,6 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, Text, View } from 'react-native';
 
+import { colors, radius, spacing, typography } from '../constants/theme';
 import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import {
@@ -36,6 +37,7 @@ import {
   LoadingState,
   MetaRow,
   Screen,
+  SectionHeader,
   TopAppBar,
 } from './ui';
 
@@ -362,12 +364,11 @@ export function TreeDetailScreen({
         visible={photoSourceOpen}
       />
 
-      <SectionTitle title="Informasi Pohon" />
       <InfoGrid mode={mode} tree={tree} />
 
       <ActionSection basePath={basePath} tree={tree} />
 
-      <SectionTitle title="Timeline Riwayat" />
+      <SectionTitle subtitle="Riwayat kondisi, fase tumbuh, dan aktivitas yang tercatat." title="Timeline Riwayat" />
       <TreeHistoryTimeline
         conditionPhotoMap={conditionPhotoMap}
         currentUserId={profile?.id}
@@ -377,7 +378,7 @@ export function TreeDetailScreen({
 
       {history.length === 0 && reports.length > 0 ? (
         <>
-          <SectionTitle title="Laporan Kondisi" />
+          <SectionTitle subtitle="Laporan kondisi tampil sebagai cadangan jika timeline belum tersedia." title="Laporan Kondisi" />
           <ConditionReportList
             conditionPhotoMap={conditionPhotoMap}
             currentUserId={profile?.id}
@@ -427,7 +428,7 @@ function TreeDetailHero({
   tree: Tree;
 }) {
   return (
-    <View style={{ gap: 14 }}>
+    <Card variant="highlight">
       <View>
         <TreeVisualPlaceholder condition={tree.currentCondition} photoUrl={photoUrl} />
         {photoLoading ? (
@@ -435,7 +436,7 @@ function TreeDetailHero({
             style={{
               alignItems: 'center',
               backgroundColor: 'rgba(6,95,46,0.66)',
-              borderRadius: 12,
+              borderRadius: radius.xl,
               bottom: 0,
               justifyContent: 'center',
               left: 0,
@@ -448,12 +449,12 @@ function TreeDetailHero({
           </View>
         ) : null}
       </View>
-      <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
-        <View style={{ flex: 1, gap: 6 }}>
-          <Text selectable style={{ color: appTheme.primary, fontSize: 34, fontWeight: '900' }}>
+      <View style={{ flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' }}>
+        <View style={{ flex: 1, gap: spacing.xs }}>
+          <Text selectable style={{ color: colors.primary, fontSize: 32, fontWeight: '900', lineHeight: 38 }}>
             {displayCode}
           </Text>
-          <Text selectable style={{ color: appTheme.muted, fontSize: 16, lineHeight: 22 }}>
+          <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 22 }}>
             {tree.variety || 'Varietas belum diisi'}
           </Text>
         </View>
@@ -461,7 +462,7 @@ function TreeDetailHero({
           <ConditionStatusBadge status={tree.currentCondition} />
         </View>
       </View>
-    </View>
+    </Card>
   );
 }
 
@@ -480,9 +481,10 @@ function InfoGrid({ mode, tree }: { mode: TreeDetailMode; tree: Tree }) {
 
   return (
     <Card>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 16 }}>
+      <SectionHeader title="Informasi Pohon" description="Identitas dan kondisi utama pohon." />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.lg }}>
         {items.map((item) => (
-          <View key={item.label} style={{ flexBasis: '50%', gap: 3, paddingRight: 12 }}>
+          <View key={item.label} style={{ flexBasis: '50%', gap: spacing.xs, paddingRight: spacing.md }}>
             <MetaRow label={item.label} value={item.value} />
           </View>
         ))}
@@ -499,14 +501,17 @@ function ActionSection({
   tree: Tree;
 }) {
   return (
-    <View style={{ flexDirection: 'row', gap: 10 }}>
-      <TreeActionButton
-        label="Catat Kondisi"
-        onPress={() => router.push(`${basePath}/${tree.id}/report`)}
-        tone="primary"
-      />
-      <TreeActionButton label="Catat Fase" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
-    </View>
+    <Card>
+      <SectionHeader title="Aksi Pohon" description="Catat kondisi atau fase terbaru pohon ini." />
+      <View style={{ flexDirection: 'row', gap: spacing.md }}>
+        <TreeActionButton
+          label="Catat Kondisi"
+          onPress={() => router.push(`${basePath}/${tree.id}/report`)}
+          tone="primary"
+        />
+        <TreeActionButton label="Catat Fase" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
+      </View>
+    </Card>
   );
 }
 
@@ -526,9 +531,10 @@ function TreeActionButton({
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: isPrimary ? appTheme.primary : '#FFFFFF',
-        borderColor: isPrimary ? appTheme.primary : '#DCE7D5',
-        borderRadius: 14,
+        backgroundColor: isPrimary ? colors.primary : colors.surface,
+        borderColor: isPrimary ? colors.primary : colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
         borderWidth: 1,
         flex: 1,
         justifyContent: 'center',
@@ -536,7 +542,7 @@ function TreeActionButton({
         paddingHorizontal: 10,
       }}
     >
-      <Text selectable style={{ color: isPrimary ? '#FFFFFF' : appTheme.primary, fontSize: 14, fontWeight: '900' }}>
+      <Text selectable style={{ color: isPrimary ? colors.white : colors.primary, fontSize: 14, fontWeight: '900' }}>
         {label}
       </Text>
     </Pressable>
@@ -641,13 +647,13 @@ function PhotoSourceSheet({
         <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '900' }}>
           Foto Pohon
         </Text>
-        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
           Ambil foto baru atau pilih dari galeri.
         </Text>
         <MenuItem disabled={loading} label="Ambil Foto" onPress={onCameraPress} />
-        <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
+        <View style={{ backgroundColor: colors.divider, height: 1 }} />
         <MenuItem disabled={loading} label="Pilih dari Galeri" onPress={onGalleryPress} />
-        <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
+        <View style={{ backgroundColor: colors.divider, height: 1 }} />
         <MenuItem disabled={loading} label="Batal" onPress={onClose} />
       </View>
     </Modal>
@@ -667,18 +673,25 @@ function MenuItem({
 }) {
   return (
     <Pressable disabled={disabled} onPress={onPress} style={{ opacity: disabled ? 0.6 : 1, padding: 14 }}>
-      <Text selectable style={{ color: danger ? '#B42318' : '#1E2A24', fontSize: 15, fontWeight: '800' }}>
+      <Text selectable style={{ color: danger ? colors.danger : colors.text, fontSize: 15, fontWeight: '800' }}>
         {label}
       </Text>
     </Pressable>
   );
 }
 
-function SectionTitle({ title }: { title: string }) {
+function SectionTitle({ subtitle, title }: { subtitle?: string; title: string }) {
   return (
-    <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '800', paddingTop: 4 }}>
-      {title}
-    </Text>
+    <View style={{ gap: spacing.xs, paddingTop: spacing.xs }}>
+      <Text selectable style={{ color: colors.text, fontSize: typography.h2.fontSize, fontWeight: '800', lineHeight: typography.h2.lineHeight }}>
+        {title}
+      </Text>
+      {subtitle ? (
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+          {subtitle}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 

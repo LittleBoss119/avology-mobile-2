@@ -1,16 +1,18 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 
 import { TreeCard } from '../../../../src/components/tree-components';
 import {
   Badge,
+  Button,
   EmptyState,
   ErrorBanner,
   LoadingState,
-  PageIntro,
+  SearchFilterRow,
   Screen,
 } from '../../../../src/components/ui';
+import { colors, spacing, typography } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { listTreeMainPhotosForFarm } from '../../../../src/services/photoAttachmentService';
 import { getTrees } from '../../../../src/services/treeService';
@@ -63,6 +65,7 @@ export default function OwnerTreeListScreen() {
   const [trees, setTrees] = React.useState<Tree[]>([]);
 
   const farmId = currentFarm?.farmId;
+  const farmName = currentFarm?.farm?.name ?? 'kebun aktif';
 
   const loadTrees = React.useCallback(async () => {
     if (!farmId) {
@@ -143,12 +146,18 @@ export default function OwnerTreeListScreen() {
 
   return (
     <Screen floatingAction={<FloatingAddButton onPress={() => router.push('/owner/trees/create')} />}>
-      <PageIntro
+      <RootHeader
+        roleLabel="Pemilik"
         title="Data Pohon"
-        subtitle={`${trees.length} pohon ${archived ? 'diarsipkan' : 'aktif'} terdaftar di kebun ini.`}
+        subtitle={`${trees.length} pohon ${archived ? 'diarsipkan' : 'aktif'} di ${farmName}.`}
       />
       <ErrorBanner message={error} />
-      <SearchFilterBar onFilterPress={() => setFilterOpen(true)} onSearchChange={setSearch} search={search} />
+      <SearchFilterBar
+        filterActive={hasActiveSearchOrFilter}
+        onFilterPress={() => setFilterOpen(true)}
+        onSearchChange={setSearch}
+        search={search}
+      />
       <ResultCount active={hasActiveSearchOrFilter} count={displayedTrees.length} />
       <ActiveFilterSummary
         ageRange={ageRange}
@@ -171,18 +180,21 @@ export default function OwnerTreeListScreen() {
       />
 
       {displayedTrees.length === 0 ? (
-        <EmptyState
-          title={archived ? 'Belum ada pohon diarsipkan' : 'Belum ada pohon aktif'}
-          subtitle={
-            archived
-              ? 'Pohon yang diarsipkan pemilik akan muncul di sini.'
-              : 'Tambahkan pohon pertama untuk mulai mencatat kondisi.'
-          }
-        />
+        <View style={{ gap: spacing.md }}>
+          <EmptyState
+            title={archived ? 'Belum ada pohon diarsipkan' : 'Belum ada pohon'}
+            subtitle={
+              archived
+                ? 'Pohon yang diarsipkan pemilik akan muncul di sini.'
+                : 'Tambahkan pohon pertama untuk mulai memantau kebun.'
+            }
+          />
+          {!archived ? <Button title="Tambah Pohon" onPress={() => router.push('/owner/trees/create')} /> : null}
+        </View>
       ) : (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
           {displayedTrees.map((tree) => (
-            <View key={tree.id} style={{ flexBasis: '47%', flexGrow: 1, minWidth: 154 }}>
+            <View key={tree.id} style={{ flexBasis: '47%', flexGrow: 1, minWidth: 156 }}>
               <TreeCard
                 photoUrl={photoMap[tree.id]?.signedUrl}
                 tree={tree}
@@ -196,67 +208,54 @@ export default function OwnerTreeListScreen() {
   );
 }
 
+function RootHeader({
+  roleLabel,
+  subtitle,
+  title,
+}: {
+  roleLabel: string;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
+      <Badge label={roleLabel} tone="info" />
+      <Text selectable style={{ color: colors.text, fontSize: typography.h1.fontSize, fontWeight: '800', lineHeight: typography.h1.lineHeight }}>
+        {title}
+      </Text>
+      <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
+        {subtitle}
+      </Text>
+    </View>
+  );
+}
+
 function SearchFilterBar({
+  filterActive,
   onFilterPress,
   onSearchChange,
   search,
 }: {
+  filterActive: boolean;
   onFilterPress: () => void;
   onSearchChange: (value: string) => void;
   search: string;
 }) {
   return (
-    <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 10 }}>
-      <View style={{ flex: 1, gap: 7 }}>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
-          Cari pohon
-        </Text>
-        <View
-          style={{
-            alignItems: 'center',
-            backgroundColor: '#FFFFFF',
-            borderColor: '#DCE7D5',
-            borderRadius: 14,
-            borderWidth: 1,
-            flexDirection: 'row',
-            minHeight: 52,
-            paddingLeft: 14,
-          }}
-        >
-          <TextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            onChangeText={onSearchChange}
-            placeholder="Kode atau varietas"
-            placeholderTextColor="#94A098"
-            style={{ color: '#1E2A24', flex: 1, fontSize: 16, minHeight: 50, paddingRight: 14 }}
-            value={search}
-          />
-        </View>
-      </View>
-      <Pressable
-        onPress={onFilterPress}
-        style={{
-          alignItems: 'center',
-          backgroundColor: '#065F2E',
-          borderRadius: 14,
-          height: 52,
-          justifyContent: 'center',
-          width: 52,
-        }}
-        accessibilityLabel="Buka filter pohon"
-        accessibilityRole="button"
-      >
-        <FilterGlyph />
-      </Pressable>
-    </View>
+    <SearchFilterRow
+      filterActive={filterActive}
+      onChangeText={onSearchChange}
+      onFilterPress={onFilterPress}
+      placeholder="Cari kode atau varietas"
+      value={search}
+    />
   );
 }
 
 function ResultCount({ active, count }: { active: boolean; count: number }) {
   return (
-    <Text selectable style={{ color: '#68746D', fontSize: 13, fontWeight: '700', marginTop: -6 }}>
-      {active ? `${count} hasil ditemukan` : `Menampilkan ${count} pohon`}
+    <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700', marginTop: -6 }}>
+      {active ? `Menampilkan ${count} pohon` : `Menampilkan ${count} pohon`}
     </Text>
   );
 }
@@ -318,7 +317,7 @@ function OwnerFilterPanel({
       <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.12)', flex: 1 }} onPress={onClose} />
       <View
         style={{
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.surface,
           borderTopLeftRadius: 30,
           borderTopRightRadius: 30,
           gap: 20,
@@ -327,13 +326,13 @@ function OwnerFilterPanel({
           paddingTop: 10,
         }}
       >
-        <View style={{ alignSelf: 'center', backgroundColor: '#DCE7D5', borderRadius: 999, height: 5, width: 48 }} />
+        <View style={{ alignSelf: 'center', backgroundColor: colors.border, borderRadius: 999, height: 5, width: 48 }} />
         <View style={{ alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
           <View style={{ flex: 1, gap: 4 }}>
-            <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '900' }}>
+            <Text selectable style={{ color: colors.text, fontSize: 20, fontWeight: '900' }}>
               Filter Pohon
             </Text>
-            <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+            <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
               Pilih kondisi, fase, umur, dan status pohon.
             </Text>
           </View>
@@ -396,8 +395,8 @@ function FloatingAddButton({ onPress }: { onPress: () => void }) {
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: '#065F2E',
-        borderColor: '#B8D8BF',
+        backgroundColor: colors.primary,
+        borderColor: colors.primaryBorder,
         borderRadius: 999,
         borderWidth: 1,
         height: 58,
@@ -445,15 +444,15 @@ function SheetDoneButton({ onPress }: { onPress: () => void }) {
     <Pressable
       onPress={onPress}
       style={{
-        backgroundColor: '#E7F3EA',
-        borderColor: '#B8D8BF',
+        backgroundColor: colors.primarySoft,
+        borderColor: colors.primaryBorder,
         borderRadius: 999,
         borderWidth: 1,
         paddingHorizontal: 15,
         paddingVertical: 9,
       }}
     >
-      <Text selectable style={{ color: '#065F2E', fontSize: 14, fontWeight: '900' }}>
+      <Text selectable style={{ color: colors.primary, fontSize: 14, fontWeight: '900' }}>
         Selesai
       </Text>
     </Pressable>
@@ -463,7 +462,7 @@ function SheetDoneButton({ onPress }: { onPress: () => void }) {
 function FilterSection({ children, title }: { children: React.ReactNode; title: string }) {
   return (
     <View style={{ gap: 9 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '800' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
         {title}
       </Text>
       {children}
@@ -488,15 +487,15 @@ function FilterChip({
     <Pressable
       onPress={onPress}
       style={{
-        backgroundColor: active ? '#065F2E' : '#FFFFFF',
-        borderColor: active ? '#065F2E' : '#DCE7D5',
+        backgroundColor: active ? colors.primary : colors.surface,
+        borderColor: active ? colors.primary : colors.border,
         borderRadius: 999,
         borderWidth: 1,
         paddingHorizontal: 14,
         paddingVertical: 9,
       }}
     >
-      <Text selectable style={{ color: active ? '#FFFFFF' : '#1E2A24', fontWeight: '700' }}>
+      <Text selectable style={{ color: active ? colors.white : colors.text, fontWeight: '700' }}>
         {label}
       </Text>
     </Pressable>

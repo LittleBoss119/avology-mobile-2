@@ -12,11 +12,14 @@ import type {
   TreeHistoryType,
 } from '../types/domain';
 import type { ConditionRecordPhotoMap, PickedPhotoAsset } from '../types/media';
+import { colors, radius, spacing, typography } from '../constants/theme';
 import { formatPersonDisplayName } from '../utils/displayFormat';
 import {
   buildTreeDisplayCode,
   formatGrowthPhase,
+  formatTreeAge,
   formatTreeDisplayCode,
+  formatTreeLocation,
 } from '../utils/treeFormat';
 import { appTheme, Badge, Button, Card, EmptyState, Field, MetaRow } from './ui';
 
@@ -89,44 +92,50 @@ type TreeHistoryViewerMode = 'owner' | 'worker';
 
 export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
+  const location = formatTreeLocation(tree);
+  const age = formatTreeAge(tree.plantedAt);
 
   const content = (
     <View
       style={{
-        backgroundColor: '#FFFFFF',
-        borderColor: '#DCE7D5',
-        borderRadius: 12,
+        backgroundColor: colors.surface,
+        borderColor: colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.xl,
         borderWidth: 1,
-        gap: 9,
-        minHeight: 178,
-        padding: 9,
+        gap: spacing.md,
+        minHeight: 238,
+        overflow: 'hidden',
+        padding: spacing.sm,
       }}
     >
       <TreeVisualPlaceholder condition={tree.currentCondition} photoUrl={photoUrl} size="compact">
         {tree.isArchived ? <Badge label="Arsip" tone="muted" /> : <ConditionStatusBadge status={tree.currentCondition} />}
       </TreeVisualPlaceholder>
 
-      <View style={{ gap: 3 }}>
-        <Text selectable style={{ color: appTheme.primary, fontSize: 21, fontWeight: '900' }}>
+      <View style={{ gap: spacing.xs, paddingHorizontal: spacing.xs, paddingBottom: spacing.xs }}>
+        <Text selectable numberOfLines={1} style={{ color: colors.primary, fontSize: 22, fontWeight: '900' }}>
           {displayCode}
         </Text>
         <Text
           selectable
           numberOfLines={1}
-          style={{ color: appTheme.text, fontSize: 14, fontWeight: '700', lineHeight: 18 }}
+          style={{ color: colors.text, fontSize: 14, fontWeight: '800', lineHeight: 19 }}
         >
           {tree.variety || 'Varietas belum diisi'}
         </Text>
-        <Text
-          selectable
-          numberOfLines={1}
-          style={{
-            color: tree.currentGrowthPhase ? appTheme.muted : '#94A098',
-            fontSize: 13,
-            lineHeight: 18,
-          }}
-        >
-          {tree.currentGrowthPhase ? formatCompactGrowthPhase(tree.currentGrowthPhase) : 'Belum dicatat'}
+        <View style={{ alignItems: 'flex-start', paddingTop: spacing.xs }}>
+          {tree.currentGrowthPhase ? (
+            <GrowthPhaseBadge phase={tree.currentGrowthPhase} />
+          ) : (
+            <Badge label="Fase belum dicatat" maxWidth={150} tone="neutral" />
+          )}
+        </View>
+        <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 17 }}>
+          {location}
+        </Text>
+        <Text selectable numberOfLines={1} style={{ color: colors.textSoft, fontSize: 12, lineHeight: 17 }}>
+          {age}
         </Text>
       </View>
 
@@ -166,11 +175,12 @@ export function TreeVisualPlaceholder({
       style={{
         backgroundColor: accent.background,
         borderColor: accent.border,
-        borderRadius: 12,
+        borderCurve: 'continuous',
+        borderRadius: isCompact ? radius.lg : radius.xl,
         borderWidth: 1,
-        minHeight: isCompact ? 92 : 188,
+        minHeight: isCompact ? 118 : 220,
         overflow: 'hidden',
-        padding: isCompact ? 8 : 14,
+        padding: isCompact ? spacing.sm : spacing.lg,
       }}
     >
       {shouldShowImage ? (
@@ -221,19 +231,19 @@ export function TreeVisualPlaceholder({
               style={{
                 backgroundColor: accent.leaf,
                 borderRadius: 999,
-                height: isCompact ? 26 : 52,
+                height: isCompact ? 34 : 52,
                 transform: [{ rotate: '-22deg' }],
-                width: isCompact ? 62 : 112,
+                width: isCompact ? 72 : 112,
               }}
             />
             <View
               style={{
                 backgroundColor: accent.fruit,
                 borderRadius: 999,
-                height: isCompact ? 36 : 64,
-                marginLeft: isCompact ? 38 : 72,
+                height: isCompact ? 42 : 64,
+                marginLeft: isCompact ? 44 : 72,
                 marginTop: isCompact ? -8 : -12,
-                width: isCompact ? 28 : 50,
+                width: isCompact ? 32 : 50,
               }}
             />
           </View>
@@ -500,7 +510,7 @@ export function TreeHistoryTimeline({
   }
 
   return (
-    <View style={{ gap: 12 }}>
+    <View style={{ gap: spacing.md }}>
       {history.map((item) => (
         <TreeHistoryTimelineItem
           key={`${item.historyType}-${item.happenedAt}-${item.title}`}
@@ -564,8 +574,8 @@ function TreeHistoryTimelineItem({
       : null;
 
   return (
-    <View style={{ flexDirection: 'row', gap: 10 }}>
-      <View style={{ alignItems: 'center', paddingTop: 6 }}>
+    <View style={{ flexDirection: 'row', gap: spacing.md }}>
+      <View style={{ alignItems: 'center', paddingTop: spacing.sm }}>
         <View
           style={{
             alignItems: 'center',
@@ -580,35 +590,36 @@ function TreeHistoryTimelineItem({
             {getTimelineMarker(item.historyType)}
           </Text>
         </View>
-        <View style={{ backgroundColor: '#DCE7D5', flex: 1, marginTop: 6, width: 1 }} />
+        <View style={{ backgroundColor: colors.divider, flex: 1, marginTop: spacing.sm, width: 1 }} />
       </View>
       <View style={{ flex: 1 }}>
         <View
           style={{
-            backgroundColor: '#FFFFFF',
-            borderColor: '#DCE7D5',
-            borderRadius: 12,
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            borderCurve: 'continuous',
+            borderRadius: radius.xl,
             borderWidth: 1,
-            gap: 8,
-            padding: 12,
+            gap: spacing.sm,
+            padding: spacing.md,
           }}
         >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
             <Badge label={formatHistoryType(item.historyType)} tone={getHistoryTone(item.historyType)} />
-            <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
+            <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
               {formatDateTime(item.happenedAt)}
             </Text>
           </View>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800', lineHeight: 22 }}>
+          <Text selectable style={{ color: colors.text, fontSize: typography.bodyStrong.fontSize, fontWeight: '800', lineHeight: typography.bodyStrong.lineHeight }}>
             {formatHistoryTitle(item)}
           </Text>
           {item.description ? (
-            <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+            <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
               {item.description}
             </Text>
           ) : null}
           {photoUrl ? <ConditionPhotoThumbnail photoUrl={photoUrl} /> : null}
-          <Text selectable style={{ color: '#68746D', fontSize: 13 }}>
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
             Dicatat oleh{' '}
             {formatActorDisplayName({
               actorId: item.actorId,
