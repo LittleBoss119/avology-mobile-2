@@ -21,7 +21,7 @@ import {
   formatTreeDisplayCode,
   formatTreeLocation,
 } from '../utils/treeFormat';
-import { appTheme, Badge, Button, Card, EmptyState, Field, MetaRow } from './ui';
+import { appTheme, Badge, Button, Card, EmptyState, Field, FormSection, MetaRow, PhotoPickerCard } from './ui';
 
 export type TreeFormValues = {
   rowPosition: string;
@@ -38,6 +38,8 @@ export type TreeCardProps = {
 };
 
 export type TreeFormProps = {
+  dateSectionDescription?: string;
+  dateSectionTitle?: string;
   values: TreeFormValues;
   onChange: (values: TreeFormValues) => void;
 };
@@ -254,7 +256,12 @@ export function TreeVisualPlaceholder({
   );
 }
 
-export function TreeForm({ onChange, values }: TreeFormProps) {
+export function TreeForm({
+  dateSectionDescription = 'Lengkapi tanggal tanam jika sudah diketahui.',
+  dateSectionTitle = 'Kondisi Awal',
+  onChange,
+  values,
+}: TreeFormProps) {
   const previewCode = buildTreeDisplayCode(values);
   const [datePickerOpen, setDatePickerOpen] = React.useState(false);
 
@@ -285,71 +292,103 @@ export function TreeForm({ onChange, values }: TreeFormProps) {
   }
 
   return (
-    <View style={{ gap: 14 }}>
-      <MetaRow label="Kode pohon" value={previewCode ?? 'Lokasi belum lengkap'} />
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <View style={{ flex: 1 }}>
-          <Field
-            label="Baris"
-            onChangeText={(value) => updateTextValue('rowPosition', value)}
-            placeholder="A"
-            value={values.rowPosition}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Field
-            label="Kolom"
-            onChangeText={(value) => updateTextValue('columnPosition', value)}
-            placeholder="1"
-            value={values.columnPosition}
-          />
-        </View>
-      </View>
-      <Field
-        label="Varietas"
-        onChangeText={(value) => updateTextValue('variety', value)}
-        placeholder="Contoh: Alpukat mentega"
-        value={values.variety}
-      />
-      <View style={{ gap: 8 }}>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '700' }}>
-          Tanggal tanam
-        </Text>
-        <Pressable
-          accessibilityLabel="Pilih tanggal tanam"
-          accessibilityRole="button"
-          onPress={() => setDatePickerOpen(true)}
+    <View style={{ gap: spacing.xl }}>
+      <FormSection
+        title="Identitas Pohon"
+        description="Kode pohon dibuat otomatis dari posisi baris dan kolom."
+      >
+        <View
           style={{
-            backgroundColor: '#FFFFFF',
-            borderColor: '#DCE7D5',
-            borderRadius: 12,
+            backgroundColor: colors.surfaceMuted,
+            borderColor: colors.border,
+            borderCurve: 'continuous',
+            borderRadius: radius.lg,
             borderWidth: 1,
-            paddingHorizontal: 14,
-            paddingVertical: 14,
+            gap: spacing.xs,
+            padding: spacing.md,
           }}
         >
-          <Text selectable style={{ color: values.plantedAt ? '#1E2A24' : '#94A098', fontSize: 16, fontWeight: '800' }}>
-            {formatDateForDisplay(values.plantedAt)}
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
+            Kode pohon otomatis
           </Text>
-        </Pressable>
-        {datePickerOpen ? (
-          <DateTimePicker
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            mode="date"
-            onDismiss={handleDateDismiss}
-            onNeutralButtonPress={handleDateDismiss}
-            onValueChange={handleDateValueChange}
-            value={values.plantedAt ?? new Date()}
-          />
-        ) : null}
-        <Text selectable style={{ color: '#68746D', fontSize: 13, lineHeight: 19 }}>
-          Kosongkan jika tanggal tanam belum diketahui.
-        </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <DateActionButton label="Gunakan hari ini" onPress={() => updateDateValue(new Date())} />
-          {values.plantedAt ? <DateActionButton label="Kosongkan" muted onPress={() => updateDateValue(null)} /> : null}
+          <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '900' }}>
+            {previewCode ?? 'Lokasi belum lengkap'}
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19 }}>
+            Isi baris dan kolom untuk membentuk kode pohon.
+          </Text>
         </View>
-      </View>
+        <View style={{ flexDirection: 'row', gap: spacing.md }}>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="Baris *"
+              onChangeText={(value) => updateTextValue('rowPosition', value)}
+              placeholder="A"
+              value={values.rowPosition}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="Kolom *"
+              onChangeText={(value) => updateTextValue('columnPosition', value)}
+              placeholder="1"
+              value={values.columnPosition}
+            />
+          </View>
+        </View>
+        <Field
+          label="Varietas *"
+          onChangeText={(value) => updateTextValue('variety', value)}
+          placeholder="Contoh: Alpukat mentega"
+          value={values.variety}
+        />
+      </FormSection>
+
+      <FormSection
+        title={dateSectionTitle}
+        description={dateSectionDescription}
+      >
+        <View style={{ gap: spacing.sm }}>
+          <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
+            Tanggal Tanam
+          </Text>
+          <Pressable
+            accessibilityLabel="Pilih tanggal tanam"
+            accessibilityRole="button"
+            onPress={() => setDatePickerOpen(true)}
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderCurve: 'continuous',
+              borderRadius: radius.md,
+              borderWidth: 1,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.md,
+            }}
+          >
+            <Text selectable style={{ color: values.plantedAt ? colors.text : colors.textSoft, fontSize: 16, fontWeight: '800' }}>
+              {formatDateForDisplay(values.plantedAt)}
+            </Text>
+          </Pressable>
+          {datePickerOpen ? (
+            <DateTimePicker
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              mode="date"
+              onDismiss={handleDateDismiss}
+              onNeutralButtonPress={handleDateDismiss}
+              onValueChange={handleDateValueChange}
+              value={values.plantedAt ?? new Date()}
+            />
+          ) : null}
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19 }}>
+            Kosongkan jika tanggal tanam belum diketahui.
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+            <DateActionButton label="Gunakan hari ini" onPress={() => updateDateValue(new Date())} />
+            {values.plantedAt ? <DateActionButton label="Kosongkan" muted onPress={() => updateDateValue(null)} /> : null}
+          </View>
+        </View>
+      </FormSection>
     </View>
   );
 }
@@ -379,51 +418,30 @@ export function TreeMainPhotoFormSection({
   }
 
   return (
-    <Card>
-      <View style={{ gap: 5 }}>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 16, fontWeight: '800' }}>
-          Foto Pohon
-        </Text>
-        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
-          Opsional, untuk mengenali pohon di daftar dan detail.
-        </Text>
-      </View>
-
-      {previewUri ? (
-        <Image
-          resizeMode="cover"
-          source={{ uri: previewUri }}
-          style={{
-            borderRadius: 12,
-            height: 170,
-            width: '100%',
-          }}
-        />
-      ) : null}
+    <View style={{ gap: spacing.md }}>
+      <PhotoPickerCard
+        choosePhotoLabel="Pilih Galeri"
+        description="Opsional, digunakan sebagai identitas visual pohon."
+        imageUri={previewUri}
+        loading={disabled}
+        removeLabel="Hapus Foto"
+        takePhotoLabel="Ambil Foto"
+        title="Foto Pohon"
+        onChoosePhoto={onGalleryPress}
+        onRemovePhoto={canRemove ? handleRemovePress : undefined}
+        onTakePhoto={onCameraPress}
+      />
 
       {deleteRequested && !photo ? (
-        <Text selectable style={{ color: '#68746D', lineHeight: 20 }}>
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
           Foto pohon saat ini akan dihapus setelah perubahan disimpan.
         </Text>
-      ) : null}
-
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <View style={{ flex: 1 }}>
-          <Button disabled={disabled} title="Ambil Foto" variant="secondary" onPress={onCameraPress} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button disabled={disabled} title="Pilih Galeri" variant="secondary" onPress={onGalleryPress} />
-        </View>
-      </View>
-
-      {canRemove ? (
-        <Button disabled={disabled} title="Hapus Foto" variant="secondary" onPress={handleRemovePress} />
       ) : null}
 
       {deleteRequested && !photo && onRestoreExisting ? (
         <Button disabled={disabled} title="Batalkan Hapus Foto" variant="secondary" onPress={onRestoreExisting} />
       ) : null}
-    </Card>
+    </View>
   );
 }
 
@@ -440,15 +458,15 @@ function DateActionButton({
     <Pressable
       onPress={onPress}
       style={{
-        backgroundColor: muted ? '#FFFFFF' : '#E7F3EA',
-        borderColor: muted ? '#DCE7D5' : '#B8D8BF',
-        borderRadius: 999,
+        backgroundColor: muted ? colors.surface : colors.primarySoft,
+        borderColor: muted ? colors.border : colors.primaryBorder,
+        borderRadius: radius.round,
         borderWidth: 1,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
       }}
     >
-      <Text selectable style={{ color: muted ? '#68746D' : '#065F2E', fontSize: 13, fontWeight: '800' }}>
+      <Text selectable style={{ color: muted ? colors.textMuted : colors.primary, fontSize: 13, fontWeight: '800' }}>
         {label}
       </Text>
     </Pressable>

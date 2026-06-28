@@ -232,7 +232,12 @@ export default function OwnerEditTreeScreen() {
       >
         <TopAppBar title="Edit Pohon" onBack={() => router.back()} />
         <ErrorBanner message={error} />
-        <TreeForm values={values} onChange={setValues} />
+        <TreeForm
+          dateSectionDescription="Perbarui tanggal tanam jika ada perubahan."
+          dateSectionTitle="Data Pertumbuhan"
+          values={values}
+          onChange={setValues}
+        />
         <TreeMainPhotoFormSection
           currentPhotoUrl={currentPhoto?.signedUrl}
           deleteRequested={deletePhotoRequested}
