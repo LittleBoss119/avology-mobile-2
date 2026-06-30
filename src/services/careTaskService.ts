@@ -22,9 +22,17 @@ import type {
   ServiceResult,
   SuccessData,
   TargetType,
+  UpdateLatestTaskRealizationData,
+  UpdateLatestTaskRealizationInput,
   TaskStatus,
   UUID,
 } from '../types/domain';
+import {
+  deletePhotoAttachment,
+  getTaskProofPhotos,
+  uploadTaskProofPhoto,
+} from './photoAttachmentService';
+import type { TaskProofPhoto } from '../types/media';
 import { fail, ok } from '../utils/serviceResult';
 
 const CARE_TASK_SELECT =
@@ -418,6 +426,116 @@ export async function rollbackCompletedTaskActivity(
   });
 }
 
+export async function updateLatestTaskRealization(
+  input: UpdateLatestTaskRealizationInput
+): Promise<ServiceResult<UpdateLatestTaskRealizationData>> {
+  if (input.status !== 'completed' && input.status !== 'postponed') {
+    return fail(new Error('Status realisasi tidak valid.'));
+  }
+
+  const taskResult = await supabase
+    .from('care_tasks')
+    .select(CARE_TASK_SELECT)
+    .eq('id', input.taskId)
+    .maybeSingle<CareTaskRow>();
+
+  if (taskResult.error) {
+    return fail(taskResult.error, 'Gagal memeriksa tugas.');
+  }
+
+  if (!taskResult.data) {
+    return fail(new Error('Tugas tidak ditemukan atau tidak dapat diakses.'));
+  }
+
+  const accessResult = await ensureActiveAssignedWorker(taskResult.data);
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  const latestActivityResult = await getLatestActivityForTask(input.taskId);
+
+  if (latestActivityResult.error) {
+    return fail(latestActivityResult.error);
+  }
+
+  const latestActivity = latestActivityResult.data;
+
+  if (!latestActivity) {
+    return fail(new Error('Realisasi tugas belum tersedia untuk diedit.'));
+  }
+
+  if (input.activityId && input.activityId !== latestActivity.id) {
+    return fail(new Error('Hanya realisasi terbaru yang dapat diedit.'));
+  }
+
+  const proofResult = await getTaskProofPhotos({
+    activityId: latestActivity.id,
+    farmId: taskResult.data.farm_id,
+  });
+  const existingProofs = proofResult.data ?? [];
+  const hasExistingProof = existingProofs.length > 0;
+  const hasNewProof = Boolean(input.proofPhoto?.uri);
+  const willRemoveExistingProof = input.removeExistingProof === true;
+
+  if (
+    taskResult.data.requires_photo
+    && input.status === 'completed'
+    && !hasNewProof
+    && (!hasExistingProof || willRemoveExistingProof)
+  ) {
+    return fail(new Error('Foto wajib untuk menyelesaikan tugas ini.'));
+  }
+
+  if (input.status === 'postponed' && !normalizeOptionalText(input.note)) {
+    return fail(new Error('Catatan penundaan wajib diisi.'));
+  }
+
+  if (taskResult.data.status !== input.status) {
+    const updateTaskResult = await supabase
+      .from('care_tasks')
+      .update({
+        status: input.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', taskResult.data.id);
+
+    if (updateTaskResult.error) {
+      return fail(updateTaskResult.error, 'Gagal memperbarui status tugas.');
+    }
+  }
+
+  const nextNote = normalizeOptionalText(input.note);
+
+  if (latestActivity.status !== input.status || latestActivity.note !== nextNote) {
+    const updateActivityResult = await supabase
+      .from('care_activities')
+      .update({
+        note: nextNote,
+        status: input.status,
+      })
+      .eq('id', latestActivity.id);
+
+    if (updateActivityResult.error) {
+      return fail(updateActivityResult.error, 'Gagal memperbarui realisasi tugas.');
+    }
+  }
+
+  const warningMessage = await updateTaskProofPhoto({
+    activityId: latestActivity.id,
+    existingProofs,
+    farmId: taskResult.data.farm_id,
+    proofPhoto: input.proofPhoto,
+    removeExistingProof: willRemoveExistingProof,
+    taskId: taskResult.data.id,
+  });
+
+  return ok({
+    activityId: latestActivity.id,
+    warningMessage,
+  });
+}
+
 async function ensureActiveOwner(
   farmId: UUID,
   forbiddenMessage = 'Hanya pemilik aktif yang dapat melihat tugas kebun.'
@@ -487,6 +605,72 @@ async function getExistingActiveFollowUpTask(
   return ok(data);
 }
 
+async function getLatestActivityForTask(
+  taskId: UUID
+): Promise<ServiceResult<CareActivity | null>> {
+  const { data, error } = await supabase
+    .from('care_activities')
+    .select(CARE_ACTIVITY_SELECT)
+    .eq('care_task_id', taskId)
+    .order('performed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle<CareActivityRow>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat realisasi terbaru.');
+  }
+
+  return ok(data ? mapCareActivity(data) : null);
+}
+
+async function updateTaskProofPhoto(input: {
+  activityId: UUID;
+  existingProofs: TaskProofPhoto[];
+  farmId: UUID;
+  proofPhoto?: UpdateLatestTaskRealizationInput['proofPhoto'];
+  removeExistingProof: boolean;
+  taskId: UUID;
+}): Promise<string | null> {
+  if (!input.proofPhoto?.uri && !input.removeExistingProof) {
+    return null;
+  }
+
+  if (input.proofPhoto?.uri) {
+    const uploadResult = await uploadTaskProofPhoto({
+      activityId: input.activityId,
+      base64: input.proofPhoto.base64,
+      farmId: input.farmId,
+      fileName: input.proofPhoto.fileName,
+      localUri: input.proofPhoto.uri,
+      mimeType: input.proofPhoto.mimeType,
+      taskId: input.taskId,
+    });
+
+    if (uploadResult.error) {
+      return 'Realisasi berhasil diperbarui, tetapi foto bukti gagal diunggah.';
+    }
+
+    const deleteWarning = await deleteTaskProofPhotos(
+      input.existingProofs.filter((photo) => photo.attachment.id !== uploadResult.data.attachment.id)
+    );
+
+    return deleteWarning;
+  }
+
+  return deleteTaskProofPhotos(input.existingProofs);
+}
+
+async function deleteTaskProofPhotos(photos: TaskProofPhoto[]): Promise<string | null> {
+  const deleteResults = await Promise.all(
+    photos.map((photo) => deletePhotoAttachment({ photoId: photo.attachment.id }))
+  );
+  const failedDelete = deleteResults.find((result) => result.error);
+
+  return failedDelete?.error
+    ? 'Realisasi berhasil diperbarui, tetapi foto bukti lama belum dapat dihapus.'
+    : null;
+}
+
 async function ensureActiveWorker(farmId: UUID): Promise<ServiceResult<SuccessData>> {
   const membershipResult = await getCurrentUserMembership(farmId);
 
@@ -496,6 +680,35 @@ async function ensureActiveWorker(farmId: UUID): Promise<ServiceResult<SuccessDa
 
   if (membershipResult.data?.role !== 'worker' || membershipResult.data.status !== 'active') {
     return fail(new Error('Hanya pekerja aktif yang dapat melihat tugasnya.'));
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
+async function ensureActiveAssignedWorker(
+  task: CareTaskRow
+): Promise<ServiceResult<SuccessData>> {
+  const userIdResult = await getCurrentUserId();
+
+  if (userIdResult.error) {
+    return fail(userIdResult.error);
+  }
+
+  const membershipResult = await getCurrentUserMembership(task.farm_id);
+
+  if (membershipResult.error) {
+    return fail(membershipResult.error);
+  }
+
+  const isAssignedActiveWorker =
+    membershipResult.data?.role === 'worker'
+    && membershipResult.data.status === 'active'
+    && task.assigned_to === userIdResult.data;
+
+  if (!isAssignedActiveWorker) {
+    return fail(new Error('Hanya pekerja yang ditugaskan yang dapat mengedit realisasi ini.'));
   }
 
   return ok({

@@ -572,6 +572,27 @@ export type RollbackCompletedTaskActivityInput = {
   activityId: UUID;
 };
 
+export type TaskRealizationProofPhotoInput = {
+  uri: string;
+  base64?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+};
+
+export type UpdateLatestTaskRealizationInput = {
+  taskId: UUID;
+  activityId?: UUID;
+  status: ActivityStatus;
+  note?: string | null;
+  proofPhoto?: TaskRealizationProofPhotoInput | null;
+  removeExistingProof?: boolean;
+};
+
+export type UpdateLatestTaskRealizationData = {
+  activityId: UUID;
+  warningMessage?: string | null;
+};
+
 export type PostponeTaskInput = {
   taskId: UUID;
   note: string;

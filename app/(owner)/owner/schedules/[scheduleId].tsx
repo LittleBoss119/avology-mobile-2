@@ -19,15 +19,28 @@ import {
 import { colors, spacing, typography } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getCareScheduleDetail } from '../../../../src/services/careScheduleService';
+import { getTaskDetail } from '../../../../src/services/careTaskService';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
-import type { CareScheduleDetail, CareTask, FarmMemberBasicProfile, TaskStatus } from '../../../../src/types/domain';
+import { listTaskProofPhotosForActivities } from '../../../../src/services/photoAttachmentService';
+import type {
+  ActivityStatus,
+  CareActivity,
+  CareScheduleDetail,
+  CareTask,
+  CareTaskDetail,
+  FarmMemberBasicProfile,
+  TaskStatus,
+} from '../../../../src/types/domain';
+import type { TaskProofPhotoMap } from '../../../../src/types/media';
 
 export default function CareScheduleDetailScreen() {
   const { currentFarm } = useAuth();
   const { scheduleId } = useLocalSearchParams<{ scheduleId: string }>();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [schedule, setSchedule] = React.useState<CareScheduleDetail | null>(null);
+  const [taskDetailMap, setTaskDetailMap] = React.useState<Record<string, CareTaskDetail>>({});
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
 
   const farmId = currentFarm?.farmId;
@@ -37,14 +50,18 @@ export default function CareScheduleDetailScreen() {
 
     if (!normalizedScheduleId) {
       setError('Data jadwal tidak ditemukan.');
+      setProofPhotoMap({});
       setSchedule(null);
+      setTaskDetailMap({});
       setWorkerNames({});
       return;
     }
 
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
+      setProofPhotoMap({});
       setSchedule(null);
+      setTaskDetailMap({});
       setWorkerNames({});
       return;
     }
@@ -58,9 +75,12 @@ export default function CareScheduleDetailScreen() {
 
     if (scheduleResult.error) {
       setError(scheduleResult.error.message);
+      setProofPhotoMap({});
       setSchedule(null);
+      setTaskDetailMap({});
     } else {
       setSchedule(scheduleResult.data);
+      await loadTaskRealizationSummaries(scheduleResult.data);
     }
 
     if (workersResult.error) {
@@ -73,6 +93,38 @@ export default function CareScheduleDetailScreen() {
       );
     }
   }, [farmId, scheduleId]);
+
+  async function loadTaskRealizationSummaries(scheduleDetail: CareScheduleDetail) {
+    if (scheduleDetail.tasks.length === 0) {
+      setProofPhotoMap({});
+      setTaskDetailMap({});
+      return;
+    }
+
+    const taskResults = await Promise.all(
+      scheduleDetail.tasks.map((task) => getTaskDetail({ taskId: task.id }))
+    );
+    const taskDetails = taskResults
+      .map((result) => result.data)
+      .filter((taskDetail): taskDetail is CareTaskDetail => Boolean(taskDetail));
+    const activityIds = taskDetails.flatMap((taskDetail) =>
+      taskDetail.activities.map((activity) => activity.id)
+    );
+
+    setTaskDetailMap(Object.fromEntries(taskDetails.map((taskDetail) => [taskDetail.id, taskDetail])));
+
+    if (activityIds.length === 0) {
+      setProofPhotoMap({});
+      return;
+    }
+
+    const proofResult = await listTaskProofPhotosForActivities({
+      activityIds,
+      farmId: scheduleDetail.farmId,
+    });
+
+    setProofPhotoMap(proofResult.data ?? {});
+  }
 
   useFocusEffect(
     React.useCallback(() => {
@@ -149,6 +201,9 @@ export default function CareScheduleDetailScreen() {
               key={task.id}
               task={task}
               assignedWorkerName={workerNames[task.assignedTo]}
+              proofPhotoMap={proofPhotoMap}
+              taskDetail={taskDetailMap[task.id]}
+              workerNames={workerNames}
               onPress={() => router.push(`/owner/tasks/${task.id}`)}
             />
           ))}
@@ -204,12 +259,21 @@ function formatScheduleWorkers(
 function OwnerScheduleTaskCard({
   assignedWorkerName,
   onPress,
+  proofPhotoMap,
   task,
+  taskDetail,
+  workerNames,
 }: {
   assignedWorkerName?: string;
   onPress: () => void;
+  proofPhotoMap: TaskProofPhotoMap;
   task: CareTask;
+  taskDetail?: CareTaskDetail;
+  workerNames: Record<string, string>;
 }) {
+  const latestActivity = taskDetail?.activities[0] ?? null;
+  const latestProof = latestActivity ? proofPhotoMap[latestActivity.id] : undefined;
+
   return (
     <Pressable onPress={onPress}>
       <Card>
@@ -259,10 +323,43 @@ function OwnerScheduleTaskCard({
             </View>
             <CompactMetaItem icon="user" label={assignedWorkerName ?? 'Pekerja belum tersedia'} />
           </View>
+
+          {latestActivity ? (
+            <View
+              style={{
+                backgroundColor: colors.surfaceMuted,
+                borderColor: colors.border,
+                borderRadius: 12,
+                borderWidth: 1,
+                gap: spacing.xs,
+                padding: spacing.md,
+              }}
+            >
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+                <Badge label={`Realisasi: ${formatActivityStatus(latestActivity.status)}`} tone={getActivityTone(latestActivity.status)} />
+                {latestProof ? <Badge label="Ada bukti" tone="success" /> : <Badge label="Tanpa bukti" tone="muted" />}
+              </View>
+              <MetaRow label="Pelaksana" value={workerNames[latestActivity.performedBy] ?? assignedWorkerName ?? 'Pekerja tidak tersedia'} />
+              <MetaRow label="Waktu realisasi" value={formatDateTime(latestActivity.performedAt)} />
+              {latestActivity.note ? <MetaRow label="Catatan realisasi" value={latestActivity.note} /> : null}
+            </View>
+          ) : (
+            <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+              Belum ada realisasi dari pekerja.
+            </Text>
+          )}
         </View>
       </Card>
     </Pressable>
   );
+}
+
+function formatActivityStatus(status: ActivityStatus): string {
+  return status === 'completed' ? 'Selesai' : 'Tertunda';
+}
+
+function getActivityTone(status: ActivityStatus): 'success' | 'warning' {
+  return status === 'completed' ? 'success' : 'warning';
 }
 
 function formatTaskStatusForOwner(status: TaskStatus): string {
@@ -298,6 +395,22 @@ function formatDate(value: string): string {
 
   return date.toLocaleDateString('id-ID', {
     day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString('id-ID', {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
     month: 'short',
     year: 'numeric',
   });

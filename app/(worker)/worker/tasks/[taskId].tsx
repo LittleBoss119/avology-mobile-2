@@ -19,6 +19,7 @@ import {
   MetaRow,
   Screen,
   SectionHeader,
+  SuccessBanner,
   TopAppBar,
 } from '../../../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../../../src/constants/theme';
@@ -27,6 +28,7 @@ import {
   getTaskDetail,
   postponeTask,
   rollbackCompletedTaskActivity,
+  updateLatestTaskRealization,
 } from '../../../../src/services/careTaskService';
 import { pickImageFromGallery, takePhotoFromCamera } from '../../../../src/lib/media';
 import { getOperationalReportDetail } from '../../../../src/services/operationalReportService';
@@ -43,16 +45,22 @@ import {
 
 export default function WorkerTaskDetailScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
-  const [actionLoading, setActionLoading] = React.useState<'complete' | 'postpone' | null>(null);
+  const [actionLoading, setActionLoading] = React.useState<'complete' | 'edit' | 'postpone' | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [completeNote, setCompleteNote] = React.useState('');
+  const [editNote, setEditNote] = React.useState('');
+  const [editProofPhoto, setEditProofPhoto] = React.useState<PickedPhotoAsset | null>(null);
+  const [editStatus, setEditStatus] = React.useState<ActivityStatus>('completed');
+  const [editingActivityId, setEditingActivityId] = React.useState<string | null>(null);
   const [showCompleteInput, setShowCompleteInput] = React.useState(false);
   const [postponeNote, setPostponeNote] = React.useState('');
   const [proofPhoto, setProofPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [report, setReport] = React.useState<OperationalReport | null>(null);
+  const [removeExistingEditProof, setRemoveExistingEditProof] = React.useState(false);
   const [showPostponeInput, setShowPostponeInput] = React.useState(false);
+  const [success, setSuccess] = React.useState<string | null>(null);
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
 
   const loadDetail = React.useCallback(async () => {
@@ -67,6 +75,7 @@ export default function WorkerTaskDetailScreen() {
     }
 
     setError(null);
+    setSuccess(null);
     setReport(null);
 
     const result = await getTaskDetail({ taskId: normalizedTaskId });
@@ -127,6 +136,7 @@ export default function WorkerTaskDetailScreen() {
 
     setActionLoading('complete');
     setError(null);
+    setSuccess(null);
 
     const result = await completeTask({
       note: completeNote,
@@ -192,6 +202,7 @@ export default function WorkerTaskDetailScreen() {
 
     setActionLoading('postpone');
     setError(null);
+    setSuccess(null);
 
     const result = await postponeTask({
       note: postponeNote,
@@ -207,6 +218,63 @@ export default function WorkerTaskDetailScreen() {
     setPostponeNote('');
     setProofPhoto(null);
     setShowPostponeInput(false);
+    await loadDetail();
+    setActionLoading(null);
+  }
+
+  async function handleUpdateLatestRealization() {
+    if (!task || !editingActivityId) {
+      return;
+    }
+
+    const existingProof = proofPhotoMap[editingActivityId];
+
+    if (
+      task.requiresPhoto
+      && editStatus === 'completed'
+      && !editProofPhoto
+      && (!existingProof || removeExistingEditProof)
+    ) {
+      setError('Foto wajib untuk menyelesaikan tugas ini');
+      return;
+    }
+
+    if (editStatus === 'postponed' && !editNote.trim()) {
+      setError('Catatan penundaan wajib diisi.');
+      return;
+    }
+
+    setActionLoading('edit');
+    setError(null);
+    setSuccess(null);
+
+    const result = await updateLatestTaskRealization({
+      activityId: editingActivityId,
+      note: editNote,
+      proofPhoto: editProofPhoto
+        ? {
+            base64: editProofPhoto.base64,
+            fileName: editProofPhoto.fileName,
+            mimeType: editProofPhoto.mimeType,
+            uri: editProofPhoto.uri,
+          }
+        : null,
+      removeExistingProof: removeExistingEditProof,
+      status: editStatus,
+      taskId: task.id,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setActionLoading(null);
+      return;
+    }
+
+    setSuccess('Realisasi berhasil diperbarui');
+    if (result.data.warningMessage) {
+      setError(result.data.warningMessage);
+    }
+    resetEditForm();
     await loadDetail();
     setActionLoading(null);
   }
@@ -239,6 +307,36 @@ export default function WorkerTaskDetailScreen() {
     }
   }
 
+  async function handlePickEditProofFromGallery() {
+    const result = await pickImageFromGallery();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setError(null);
+      setEditProofPhoto(result.data);
+      setRemoveExistingEditProof(false);
+    }
+  }
+
+  async function handleTakeEditProofFromCamera() {
+    const result = await takePhotoFromCamera();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setError(null);
+      setEditProofPhoto(result.data);
+      setRemoveExistingEditProof(false);
+    }
+  }
+
   if (loading) {
     return <LoadingState message="Memuat detail tugas..." />;
   }
@@ -254,6 +352,9 @@ export default function WorkerTaskDetailScreen() {
   }
 
   const isCompleted = task.status === 'completed';
+  const isEditingRealization = Boolean(editingActivityId);
+  const latestActivity = task.activities[0] ?? null;
+  const latestActivityProof = latestActivity ? proofPhotoMap[latestActivity.id] : undefined;
   const selectedAction: 'complete' | 'postpone' | null = showCompleteInput
     ? 'complete'
     : showPostponeInput
@@ -261,16 +362,23 @@ export default function WorkerTaskDetailScreen() {
       : null;
 
   function selectCompletion() {
+    resetEditForm();
     setShowCompleteInput(true);
     setShowPostponeInput(false);
   }
 
   function selectPostpone() {
+    resetEditForm();
     setShowPostponeInput(true);
     setShowCompleteInput(false);
   }
 
   function handleCancelRealization() {
+    if (isEditingRealization) {
+      resetEditForm();
+      return;
+    }
+
     if (!selectedAction) {
       router.back();
       return;
@@ -280,10 +388,39 @@ export default function WorkerTaskDetailScreen() {
     setShowPostponeInput(false);
   }
 
+  function startEditRealization(activity: CareTaskDetail['activities'][number]) {
+    setShowCompleteInput(false);
+    setShowPostponeInput(false);
+    setEditNote(activity.note ?? '');
+    setEditProofPhoto(null);
+    setEditStatus(activity.status);
+    setEditingActivityId(activity.id);
+    setRemoveExistingEditProof(false);
+    setError(null);
+    setSuccess(null);
+  }
+
+  function resetEditForm() {
+    setEditNote('');
+    setEditProofPhoto(null);
+    setEditingActivityId(null);
+    setRemoveExistingEditProof(false);
+  }
+
   return (
     <Screen
       footer={
-        isCompleted ? null : (
+        isEditingRealization ? (
+          <View style={{ gap: spacing.sm }}>
+            <Button
+              title="Simpan Edit Realisasi"
+              loading={actionLoading === 'edit'}
+              disabled={actionLoading !== null}
+              onPress={handleUpdateLatestRealization}
+            />
+            <Button title="Batal" variant="secondary" disabled={actionLoading !== null} onPress={resetEditForm} />
+          </View>
+        ) : isCompleted ? null : (
           <View style={{ gap: spacing.sm }}>
             <Button
               title="Simpan Realisasi"
@@ -298,6 +435,7 @@ export default function WorkerTaskDetailScreen() {
     >
       <TopAppBar title="Detail Tugas" onBack={() => router.back()} />
       <ErrorBanner message={error} />
+      <SuccessBanner message={success} />
 
       <Card variant="softGreen">
         <Text
@@ -381,6 +519,67 @@ export default function WorkerTaskDetailScreen() {
         />
       ) : null}
 
+      {isEditingRealization ? (
+        <FormSection title="Edit realisasi" description="Perbarui status, catatan, atau bukti realisasi terbaru.">
+          <View style={{ gap: spacing.sm }}>
+            <RealizationOption
+              active={editStatus === 'completed'}
+              description="Tandai tugas selesai sesuai instruksi."
+              label="Selesai"
+              onPress={() => setEditStatus('completed')}
+            />
+            <RealizationOption
+              active={editStatus === 'postponed'}
+              description="Tunda tugas dan tulis alasan penundaan."
+              label="Tertunda"
+              onPress={() => setEditStatus('postponed')}
+            />
+          </View>
+
+          <TextArea
+            label={editStatus === 'postponed' ? 'Catatan Realisasi *' : 'Catatan Realisasi'}
+            onChangeText={setEditNote}
+            placeholder={editStatus === 'postponed' ? 'Contoh: Stok air belum tersedia' : 'Contoh: Pekerjaan selesai sesuai instruksi'}
+            value={editNote}
+          />
+
+          <View style={{ gap: spacing.sm }}>
+            <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
+              Bukti realisasi
+            </Text>
+            {task.requiresPhoto && editStatus === 'completed' ? (
+              <Text selectable style={{ color: colors.warning, lineHeight: 20 }}>
+                Foto wajib untuk menyelesaikan tugas ini
+              </Text>
+            ) : null}
+            {latestActivityProof && !removeExistingEditProof && !editProofPhoto ? (
+              <>
+                <TaskProofPhotoPreview photo={latestActivityProof} />
+                <Button
+                  title="Hapus Foto"
+                  variant="secondary"
+                  disabled={actionLoading !== null}
+                  onPress={() => setRemoveExistingEditProof(true)}
+                />
+              </>
+            ) : null}
+            {removeExistingEditProof && !editProofPhoto ? (
+              <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
+                Foto bukti saat ini akan dihapus setelah edit disimpan.
+              </Text>
+            ) : null}
+            <TaskProofPhotoPicker
+              disabled={actionLoading !== null}
+              photo={editProofPhoto}
+              required={task.requiresPhoto && editStatus === 'completed'}
+              onCameraPress={handleTakeEditProofFromCamera}
+              onGalleryPress={handlePickEditProofFromGallery}
+              onRemove={() => setEditProofPhoto(null)}
+            />
+          </View>
+        </FormSection>
+      ) : null}
+
       {task.operationalReportId ? (
         <Card>
           <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
@@ -405,13 +604,21 @@ export default function WorkerTaskDetailScreen() {
         <EmptyState title="Belum ada realisasi" subtitle="Selesaikan atau tunda tugas untuk menyimpan realisasi." />
       ) : (
         <View style={{ gap: 12 }}>
-          {task.activities.map((activity) => (
+          {task.activities.map((activity, index) => (
             <Card key={activity.id}>
               <MetaRow label="Status" value={formatActivityStatus(activity.status)} />
               <MetaRow label="Waktu" value={formatDateTime(activity.performedAt)} />
               <MetaRow label="Catatan" value={activity.note} />
               {activity.status === 'completed' ? (
                 <TaskProofPhotoPreview photo={proofPhotoMap[activity.id]} />
+              ) : null}
+              {index === 0 && !isEditingRealization ? (
+                <Button
+                  title="Edit realisasi"
+                  variant="secondary"
+                  disabled={actionLoading !== null}
+                  onPress={() => startEditRealization(activity)}
+                />
               ) : null}
             </Card>
           ))}
