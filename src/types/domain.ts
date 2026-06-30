@@ -801,6 +801,10 @@ export type MembershipActionInput = {
   membershipId: UUID;
 };
 
+export type LeaveCurrentFarmInput = {
+  farmId: UUID;
+};
+
 export type SuccessData = {
   success: true;
 };

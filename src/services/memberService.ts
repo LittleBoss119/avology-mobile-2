@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import type {
   FarmMemberBasicProfile,
   FarmActorDisplayProfile,
+  LeaveCurrentFarmInput,
   MembershipActionInput,
   MemberRole,
   MemberStatus,
@@ -189,6 +190,22 @@ export async function removeWorker(
   return updateWorkerMembership('remove_worker', input.membershipId, 'Gagal mengeluarkan pekerja.');
 }
 
+export async function leaveCurrentFarm(
+  input: LeaveCurrentFarmInput
+): Promise<ServiceResult<SuccessData>> {
+  const { error } = await supabase.rpc('leave_current_farm', {
+    p_farm_id: input.farmId,
+  });
+
+  if (error) {
+    return fail(new Error(mapLeaveCurrentFarmError(error)));
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
 async function updateWorkerMembership(
   rpcName: 'approve_worker' | 'reject_worker' | 'remove_worker',
   membershipId: UUID,
@@ -266,4 +283,26 @@ function mapWorkerMembership(
     updatedAt: row.updated_at,
     userId: row.user_id,
   };
+}
+
+function mapLeaveCurrentFarmError(error: { code?: string; message?: string }): string {
+  if (error.code === 'PGRST202') {
+    return 'Fitur keluar dari kebun belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.';
+  }
+
+  const message = error.message?.toLowerCase() ?? '';
+
+  if (message.includes('active worker membership not found')) {
+    return 'Akses pekerja aktif tidak ditemukan.';
+  }
+
+  if (message.includes('user is not authenticated')) {
+    return 'Silakan login terlebih dahulu.';
+  }
+
+  if (message.includes('could not find the function')) {
+    return 'Fitur keluar dari kebun belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.';
+  }
+
+  return 'Gagal keluar dari kebun. Coba lagi.';
 }

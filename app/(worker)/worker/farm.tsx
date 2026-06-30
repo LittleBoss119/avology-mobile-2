@@ -1,11 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 
-import { Badge, Card, MetaRow, PageIntro, Screen, SectionHeader } from '../../../src/components/ui';
+import { Badge, Button, Card, ErrorBanner, MetaRow, PageIntro, Screen, SectionHeader } from '../../../src/components/ui';
 import { colors, radius, spacing, typography } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
-import { getFarmActorDisplayProfiles } from '../../../src/services/memberService';
+import { getFarmActorDisplayProfiles, leaveCurrentFarm } from '../../../src/services/memberService';
 import { getTrees } from '../../../src/services/treeService';
 import type { FarmActorDisplayProfile } from '../../../src/types/domain';
 import { formatMemberStatus, formatPersonDisplayName, formatRole } from '../../../src/utils/displayFormat';
@@ -16,14 +16,17 @@ type WorkerFarmHubData = {
 };
 
 export default function WorkerFarmHubScreen() {
-  const { currentFarm, profile } = useAuth();
+  const { currentFarm, profile, refresh } = useAuth();
+  const [error, setError] = React.useState<string | null>(null);
   const [hubData, setHubData] = React.useState<WorkerFarmHubData>({
     actors: [],
     totalTrees: null,
   });
+  const [leavingFarm, setLeavingFarm] = React.useState(false);
   const farm = currentFarm?.farm;
   const farmId = currentFarm?.farmId;
   const ownerName = findOwnerName(hubData.actors);
+  const canLeaveFarm = currentFarm?.role === 'worker' && currentFarm.status === 'active' && Boolean(farmId);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -60,9 +63,48 @@ export default function WorkerFarmHubScreen() {
     }, [farmId])
   );
 
+  function handleLeaveFarmPress() {
+    Alert.alert(
+      'Keluar dari kebun?',
+      'Akses kamu ke kebun ini akan dinonaktifkan. Riwayat tugas dan laporan tetap tersimpan.',
+      [
+        { style: 'cancel', text: 'Batal' },
+        {
+          onPress: () => {
+            void handleConfirmLeaveFarm();
+          },
+          style: 'destructive',
+          text: 'Keluar dari kebun',
+        },
+      ]
+    );
+  }
+
+  async function handleConfirmLeaveFarm() {
+    if (!farmId || leavingFarm) {
+      return;
+    }
+
+    setLeavingFarm(true);
+    setError(null);
+
+    const result = await leaveCurrentFarm({ farmId });
+
+    if (result.error) {
+      setError(result.error.message);
+      setLeavingFarm(false);
+      return;
+    }
+
+    await refresh();
+    setLeavingFarm(false);
+    router.replace('/removed-access');
+  }
+
   return (
     <Screen>
       <RootHeader roleLabel="Pekerja" subtitle="Informasi kebun tempat kamu bekerja." title="Kebun" />
+      <ErrorBanner message={error} />
 
       <Card variant="highlight">
         <SectionHeader description="Data kebun ditampilkan sebagai informasi baca saja." title="Data Kebun" />
@@ -106,6 +148,21 @@ export default function WorkerFarmHubScreen() {
         <MetaRow label="Nomor HP" value={profile?.phone} />
         <NavRow label="Profil Akun" onPress={() => router.push('/worker/profile')} />
       </Card>
+
+      {canLeaveFarm ? (
+        <Card variant="danger">
+          <SectionHeader
+            title="Keluar dari kebun"
+            description="Akses kerja akan dinonaktifkan, tetapi riwayat tugas dan laporan tetap tersimpan."
+          />
+          <Button
+            title="Keluar dari kebun"
+            loading={leavingFarm}
+            variant="danger"
+            onPress={handleLeaveFarmPress}
+          />
+        </Card>
+      ) : null}
     </Screen>
   );
 }
