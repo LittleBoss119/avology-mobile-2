@@ -507,6 +507,36 @@ export type UpdateOperationalReportStatusInput = {
   status: OperationalReportStatus;
 };
 
+export type OperationalReportEditEligibility = {
+  canEdit: boolean;
+  reason?: string | null;
+};
+
+export type GetOperationalReportEditEligibilityInput = {
+  operationalReportId: UUID;
+};
+
+export type OperationalReportPhotoInput = {
+  uri: string;
+  base64?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+};
+
+export type UpdateOwnOperationalReportInput = {
+  operationalReportId: UUID;
+  category: OperationalReportCategory;
+  locationNote?: string | null;
+  description?: string | null;
+  photo?: OperationalReportPhotoInput | null;
+  removeExistingPhoto?: boolean;
+};
+
+export type UpdateOwnOperationalReportData = {
+  reportId: UUID;
+  warningMessage?: string | null;
+};
+
 export type GetCareSOPsInput = {
   farmId: UUID;
   activeOnly?: boolean;

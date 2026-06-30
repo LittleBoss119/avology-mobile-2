@@ -2,18 +2,28 @@ import { supabase } from '../lib/supabase';
 import type {
   CreateOperationalReportData,
   CreateOperationalReportInput,
+  GetOperationalReportEditEligibilityInput,
   GetOperationalReportDetailInput,
   GetOperationalReportsInput,
   MemberRole,
   MemberStatus,
   OperationalReport,
   OperationalReportCategory,
+  OperationalReportEditEligibility,
   OperationalReportStatus,
   ServiceResult,
   SuccessData,
+  UpdateOwnOperationalReportData,
+  UpdateOwnOperationalReportInput,
   UpdateOperationalReportStatusInput,
   UUID,
 } from '../types/domain';
+import {
+  deletePhotoAttachment,
+  getOperationalReportPhotos,
+  uploadOperationalReportPhoto,
+} from './photoAttachmentService';
+import type { OperationalReportPhoto } from '../types/media';
 import { fail, ok } from '../utils/serviceResult';
 
 const OPERATIONAL_REPORT_SELECT =
@@ -54,6 +64,10 @@ type OperationalReportRow = {
 type MembershipRow = {
   role: MemberRole;
   status: MemberStatus;
+};
+
+type FollowUpTaskIdRow = {
+  id: string;
 };
 
 export async function createOperationalReport(
@@ -232,6 +246,219 @@ export async function updateOperationalReportStatus(
   return ok({
     success: true,
   });
+}
+
+export async function getOperationalReportEditEligibility(
+  input: GetOperationalReportEditEligibilityInput
+): Promise<ServiceResult<OperationalReportEditEligibility>> {
+  const reportResult = await getOperationalReportDetail({
+    operationalReportId: input.operationalReportId,
+  });
+
+  if (reportResult.error) {
+    return fail(reportResult.error);
+  }
+
+  return getOperationalReportEditEligibilityFromReport(reportResult.data);
+}
+
+export async function updateOwnOperationalReport(
+  input: UpdateOwnOperationalReportInput
+): Promise<ServiceResult<UpdateOwnOperationalReportData>> {
+  const reportId = normalizeRequiredText(
+    input.operationalReportId,
+    'Laporan operasional tidak ditemukan.'
+  );
+
+  if (reportId instanceof Error) {
+    return fail(reportId);
+  }
+
+  const reportResult = await getOperationalReportDetail({
+    operationalReportId: reportId,
+  });
+
+  if (reportResult.error) {
+    return fail(reportResult.error);
+  }
+
+  const eligibilityResult = await getOperationalReportEditEligibilityFromReport(reportResult.data);
+
+  if (eligibilityResult.error) {
+    return fail(eligibilityResult.error);
+  }
+
+  if (!eligibilityResult.data.canEdit) {
+    return fail(new Error(eligibilityResult.data.reason ?? 'Laporan ini tidak bisa diedit.'));
+  }
+
+  const category = validateOperationalReportCategory(input.category);
+
+  if (category instanceof Error) {
+    return fail(category);
+  }
+
+  const locationNote = normalizeOptionalText(input.locationNote);
+  const description = normalizeOptionalText(input.description);
+
+  if (!locationNote && !description) {
+    return fail(new Error('Isi lokasi atau deskripsi laporan operasional.'));
+  }
+
+  const { error } = await supabase
+    .from('operational_reports')
+    .update({
+      category,
+      description,
+      location_note: locationNote,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', reportResult.data.id);
+
+  if (error) {
+    return fail(error, 'Gagal memperbarui laporan operasional.');
+  }
+
+  const warningMessage = await updateOperationalReportPhoto({
+    farmId: reportResult.data.farmId,
+    photo: input.photo,
+    removeExistingPhoto: input.removeExistingPhoto === true,
+    reportId: reportResult.data.id,
+  });
+
+  return ok({
+    reportId: reportResult.data.id,
+    warningMessage,
+  });
+}
+
+async function getOperationalReportEditEligibilityFromReport(
+  report: OperationalReport
+): Promise<ServiceResult<OperationalReportEditEligibility>> {
+  const accessResult = await ensureActiveWorker(report.farmId);
+
+  if (accessResult.error) {
+    return ok({
+      canEdit: false,
+      reason: 'Akses worker tidak aktif.',
+    });
+  }
+
+  const userIdResult = await getCurrentUserId();
+
+  if (userIdResult.error) {
+    return fail(userIdResult.error);
+  }
+
+  if (report.reportedBy !== userIdResult.data) {
+    return ok({
+      canEdit: false,
+      reason: 'Hanya pembuat laporan yang bisa mengedit laporan ini.',
+    });
+  }
+
+  if (
+    report.status !== 'new' ||
+    Boolean(report.respondedAt) ||
+    Boolean(report.respondedBy) ||
+    Boolean(normalizeOptionalText(report.ownerResponseNote))
+  ) {
+    return ok({
+      canEdit: false,
+      reason: 'Laporan ini sudah ditindaklanjuti owner dan tidak bisa diedit.',
+    });
+  }
+
+  const followUpTaskResult = await getOperationalReportFollowUpTaskExists(report.id);
+
+  if (followUpTaskResult.error) {
+    return fail(followUpTaskResult.error);
+  }
+
+  if (followUpTaskResult.data) {
+    return ok({
+      canEdit: false,
+      reason: 'Laporan ini sudah memiliki tugas tindak lanjut dan tidak bisa diedit.',
+    });
+  }
+
+  return ok({
+    canEdit: true,
+    reason: null,
+  });
+}
+
+async function getOperationalReportFollowUpTaskExists(
+  reportId: UUID
+): Promise<ServiceResult<boolean>> {
+  const { data, error } = await supabase
+    .from('care_tasks')
+    .select('id')
+    .eq('operational_report_id', reportId)
+    .limit(1)
+    .returns<FollowUpTaskIdRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memeriksa tugas tindak lanjut laporan.');
+  }
+
+  return ok((data ?? []).length > 0);
+}
+
+async function updateOperationalReportPhoto(input: {
+  farmId: UUID;
+  photo?: UpdateOwnOperationalReportInput['photo'];
+  removeExistingPhoto: boolean;
+  reportId: UUID;
+}): Promise<string | null> {
+  if (!input.photo?.uri && !input.removeExistingPhoto) {
+    return null;
+  }
+
+  const existingPhotoResult = await getOperationalReportPhotos({
+    farmId: input.farmId,
+    reportId: input.reportId,
+  });
+
+  if (existingPhotoResult.error) {
+    return 'Laporan berhasil diperbarui, tetapi foto lama belum dapat diperiksa.';
+  }
+
+  const existingPhotos = existingPhotoResult.data;
+
+  if (input.photo?.uri) {
+    const uploadResult = await uploadOperationalReportPhoto({
+      base64: input.photo.base64,
+      farmId: input.farmId,
+      fileName: input.photo.fileName,
+      localUri: input.photo.uri,
+      mimeType: input.photo.mimeType,
+      reportId: input.reportId,
+    });
+
+    if (uploadResult.error) {
+      return 'Laporan berhasil diperbarui, tetapi foto laporan gagal diunggah.';
+    }
+
+    return deleteOperationalReportPhotos(
+      existingPhotos.filter((photo) => photo.attachment.id !== uploadResult.data.attachment.id)
+    );
+  }
+
+  return deleteOperationalReportPhotos(existingPhotos);
+}
+
+async function deleteOperationalReportPhotos(
+  photos: OperationalReportPhoto[]
+): Promise<string | null> {
+  const results = await Promise.all(
+    photos.map((photo) => deletePhotoAttachment({ photoId: photo.attachment.id }))
+  );
+  const failedDelete = results.find((result) => result.error);
+
+  return failedDelete?.error
+    ? 'Laporan berhasil diperbarui, tetapi foto laporan lama belum dapat dihapus.'
+    : null;
 }
 
 async function ensureActiveFarmMember(farmId: UUID): Promise<ServiceResult<SuccessData>> {

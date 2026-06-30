@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Image, Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, Text, TextInput, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
@@ -18,8 +18,10 @@ import {
 } from '../services/photoAttachmentService';
 import {
   createOperationalReport,
+  getOperationalReportEditEligibility,
   getOperationalReportDetail,
   getOperationalReports,
+  updateOwnOperationalReport,
   updateOperationalReportStatus,
 } from '../services/operationalReportService';
 import { getTrees } from '../services/treeService';
@@ -569,6 +571,13 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
     );
   }
 
+  const canEditReport =
+    report.status === 'new' &&
+    !report.respondedAt &&
+    !report.respondedBy &&
+    !report.ownerResponseNote &&
+    followUpTasks.length === 0;
+
   return (
     <Screen>
       <TopAppBar title="Detail Laporan" onBack={() => router.back()} />
@@ -582,6 +591,16 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
       />
 
       <ReportDetailSummaryCard report={report} />
+
+      {canEditReport ? (
+        <Card>
+          <SectionHeader title="Edit laporan" />
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Laporan masih menunggu respons owner dan dapat diperbarui.
+          </Text>
+          <Button title="Edit laporan" onPress={() => router.push(`/worker/reports/${report.id}/edit`)} />
+        </Card>
+      ) : null}
 
       <Card>
         <SectionHeader title="Catatan" />
@@ -603,6 +622,308 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
           {getWorkerOwnerStatusMessage(report.status, followUpTasks.length > 0)}
         </Text>
       </Card>
+    </Screen>
+  );
+}
+
+export function WorkerEditOperationalReportScreen({ reportId }: { reportId?: string }) {
+  const { currentFarm } = useAuth();
+  const [blockedReason, setBlockedReason] = React.useState<string | null>(null);
+  const [category, setCategory] = React.useState<OperationalReportCategory | null>(null);
+  const [description, setDescription] = React.useState('');
+  const [error, setError] = React.useState<string | null>(null);
+  const [existingPhoto, setExistingPhoto] = React.useState<OperationalReportPhoto | null>(null);
+  const [existingPhotoPreviewOpen, setExistingPhotoPreviewOpen] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [locationNote, setLocationNote] = React.useState('');
+  const [removeExistingPhoto, setRemoveExistingPhoto] = React.useState(false);
+  const [report, setReport] = React.useState<OperationalReport | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const farmId = currentFarm?.farmId;
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function loadReport() {
+      const normalizedReportId = reportId?.trim();
+
+      if (!normalizedReportId) {
+        setError('Data laporan tidak ditemukan.');
+        setLoading(false);
+        return;
+      }
+
+      if (!farmId || currentFarm?.role !== 'worker' || currentFarm.status !== 'active') {
+        setError('Akses worker tidak aktif.');
+        setLoading(false);
+        return;
+      }
+
+      setError(null);
+      setBlockedReason(null);
+
+      const [reportResult, eligibilityResult] = await Promise.all([
+        getOperationalReportDetail({ operationalReportId: normalizedReportId }),
+        getOperationalReportEditEligibility({ operationalReportId: normalizedReportId }),
+      ]);
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (reportResult.error) {
+        setError(reportResult.error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (reportResult.data.reportedBy !== currentFarm.userId) {
+        setError('Hanya pembuat laporan yang bisa mengedit laporan ini.');
+        setLoading(false);
+        return;
+      }
+
+      setReport(reportResult.data);
+      setCategory(reportResult.data.category);
+      setDescription(reportResult.data.description ?? '');
+      setLocationNote(reportResult.data.locationNote ?? '');
+
+      if (eligibilityResult.error) {
+        setBlockedReason(eligibilityResult.error.message);
+      } else if (!eligibilityResult.data.canEdit) {
+        setBlockedReason(eligibilityResult.data.reason ?? 'Laporan ini tidak bisa diedit.');
+      }
+
+      const photoResult = await getOperationalReportPhotos({
+        farmId: reportResult.data.farmId,
+        reportId: reportResult.data.id,
+      });
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (photoResult.error) {
+        setExistingPhoto(null);
+      } else {
+        setExistingPhoto(photoResult.data[0] ?? null);
+      }
+
+      setLoading(false);
+    }
+
+    loadReport();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentFarm?.role, currentFarm?.status, currentFarm?.userId, farmId, reportId]);
+
+  async function handleSubmit() {
+    if (!report) {
+      setError('Data laporan tidak ditemukan.');
+      return;
+    }
+
+    if (blockedReason) {
+      setError(blockedReason);
+      return;
+    }
+
+    if (!category) {
+      setError('Kategori laporan wajib dipilih.');
+      return;
+    }
+
+    if (!locationNote.trim() && !description.trim()) {
+      setError('Isi lokasi atau deskripsi laporan.');
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    const result = await updateOwnOperationalReport({
+      category,
+      description,
+      locationNote,
+      operationalReportId: report.id,
+      photo: selectedPhoto
+        ? {
+            base64: selectedPhoto.base64,
+            fileName: selectedPhoto.fileName,
+            mimeType: selectedPhoto.mimeType,
+            uri: selectedPhoto.uri,
+          }
+        : null,
+      removeExistingPhoto,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setSubmitting(false);
+      return;
+    }
+
+    setSubmitting(false);
+
+    Alert.alert('Laporan berhasil diperbarui', result.data.warningMessage ?? '', [
+      {
+        text: 'OK',
+        onPress: () => router.replace(`/worker/reports/${report.id}`),
+      },
+    ]);
+  }
+
+  async function handlePickPhotoFromGallery() {
+    const result = await pickImageFromGallery();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setError(null);
+      setRemoveExistingPhoto(false);
+      setSelectedPhoto(result.data);
+    }
+  }
+
+  async function handleTakePhotoFromCamera() {
+    const result = await takePhotoFromCamera();
+
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setError(null);
+      setRemoveExistingPhoto(false);
+      setSelectedPhoto(result.data);
+    }
+  }
+
+  if (loading) {
+    return <LoadingState message="Memuat laporan..." />;
+  }
+
+  if (!report) {
+    return (
+      <Screen>
+        <TopAppBar title="Edit laporan" onBack={() => router.back()} />
+        <ErrorBanner message={error} />
+        <EmptyState title="Laporan tidak ditemukan" subtitle="Laporan mungkin tidak tersedia atau akses ditolak." />
+      </Screen>
+    );
+  }
+
+  if (blockedReason) {
+    return (
+      <Screen>
+        <TopAppBar title="Edit laporan" onBack={() => router.back()} />
+        <ErrorBanner message={error} />
+        <Card variant="warning">
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+            Laporan tidak bisa diedit
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            {blockedReason}
+          </Text>
+        </Card>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen
+      footer={
+        <>
+          <Button title="Simpan perubahan" loading={submitting} onPress={handleSubmit} />
+          <Button disabled={submitting} title="Batal" variant="secondary" onPress={() => router.back()} />
+        </>
+      }
+    >
+      <TopAppBar title="Edit laporan" onBack={() => router.back()} />
+      <ErrorBanner message={error} />
+
+      <FormSection
+        title="Informasi Laporan"
+        description="Pilih kategori, lalu isi lokasi atau catatan minimal salah satu."
+      >
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {operationalReportCategoryOptions.map((option) => (
+            <ChipButton
+              key={option}
+              active={category === option}
+              label={formatOperationalReportCategory(option)}
+              onPress={() => setCategory(option)}
+            />
+          ))}
+        </View>
+
+        <Field
+          label="Target/Lokasi"
+          onChangeText={setLocationNote}
+          placeholder="Contoh: Gudang alat, Baris A, atau area dekat pompa"
+          value={locationNote}
+        />
+      </FormSection>
+
+      <FormSection
+        title="Catatan Lapangan"
+        description="Jelaskan kondisi lapangan, pekerjaan, atau masalah yang perlu diketahui pemilik."
+      >
+        <TextArea
+          label="Catatan laporan"
+          onChangeText={setDescription}
+          placeholder="Contoh: Selang penyemprot pecah"
+          value={description}
+        />
+      </FormSection>
+
+      {existingPhoto && !selectedPhoto && !removeExistingPhoto ? (
+        <>
+          <OperationalReportPhotoSection
+            photo={existingPhoto}
+            previewOpen={existingPhotoPreviewOpen}
+            onClosePreview={() => setExistingPhotoPreviewOpen(false)}
+            onOpenPreview={() => setExistingPhotoPreviewOpen(true)}
+          />
+          <Button
+            title="Hapus Foto"
+            variant="secondary"
+            disabled={submitting}
+            onPress={() => setRemoveExistingPhoto(true)}
+          />
+        </>
+      ) : null}
+
+      {existingPhoto && removeExistingPhoto && !selectedPhoto ? (
+        <Card>
+          <SectionHeader title="Foto Laporan" />
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Foto laporan saat ini akan dihapus setelah perubahan disimpan.
+          </Text>
+          <Button
+            title="Batalkan hapus foto"
+            variant="secondary"
+            disabled={submitting}
+            onPress={() => setRemoveExistingPhoto(false)}
+          />
+        </Card>
+      ) : null}
+
+      <OperationalReportPhotoPicker
+        disabled={submitting}
+        photo={selectedPhoto}
+        onCameraPress={handleTakePhotoFromCamera}
+        onGalleryPress={handlePickPhotoFromGallery}
+        onRemove={() => setSelectedPhoto(null)}
+      />
     </Screen>
   );
 }
