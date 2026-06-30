@@ -40,6 +40,12 @@ type GrowthPhaseHistorySourceRow = {
   recorded_at: string;
 };
 
+type HarvestHistorySourceRow = {
+  id: string;
+  harvested_by: string;
+  harvested_at: string;
+};
+
 type TreeFarmRow = {
   id: string;
   farm_id: string;
@@ -87,12 +93,13 @@ export async function getTreeHistory(
     return fail(error, 'Gagal memuat riwayat pohon.');
   }
 
-  const [conditionSourceMap, growthPhaseSourceMap] = await Promise.all([
+  const [conditionSourceMap, growthPhaseSourceMap, harvestSourceMap] = await Promise.all([
     getConditionHistorySourceMap(input.treeId),
     getGrowthPhaseHistorySourceMap(input.treeId),
+    getHarvestHistorySourceMap(input.treeId),
   ]);
   const history = (data ?? []).map((row) =>
-    mapTreeHistoryItem(row, conditionSourceMap, growthPhaseSourceMap)
+    mapTreeHistoryItem(row, conditionSourceMap, growthPhaseSourceMap, harvestSourceMap)
   );
   const actorDisplays = await getHistoryActorDisplays(
     treeFarmIdResult.data,
@@ -233,10 +240,32 @@ async function getGrowthPhaseHistorySourceMap(
   );
 }
 
+async function getHarvestHistorySourceMap(
+  treeId: UUID
+): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from('harvest_records')
+    .select('id, harvested_by, harvested_at')
+    .eq('tree_id', treeId)
+    .returns<HarvestHistorySourceRow[]>();
+
+  if (error) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    (data ?? []).map((row) => [
+      buildHarvestHistoryKey(row.harvested_by, row.harvested_at),
+      row.id,
+    ])
+  );
+}
+
 function mapTreeHistoryItem(
   row: TreeHistoryRow,
   conditionSourceMap: Record<string, string>,
-  growthPhaseSourceMap: Record<string, string>
+  growthPhaseSourceMap: Record<string, string>,
+  harvestSourceMap: Record<string, string>
 ): TreeHistoryItem {
   const conditionSourceId =
     row.history_type === 'condition'
@@ -246,11 +275,15 @@ function mapTreeHistoryItem(
     row.history_type === 'phase'
       ? growthPhaseSourceMap[buildGrowthPhaseHistoryKey(row.title, row.actor_id, row.happened_at)] ?? null
       : null;
+  const harvestSourceId =
+    row.history_type === 'harvest'
+      ? harvestSourceMap[buildHarvestHistoryKey(row.actor_id, row.happened_at)] ?? null
+      : null;
 
   return {
     actorName: null,
     actorRole: null,
-    sourceId: conditionSourceId ?? growthPhaseSourceId,
+    sourceId: conditionSourceId ?? growthPhaseSourceId ?? harvestSourceId,
     treeId: row.tree_id,
     farmId: row.farm_id,
     historyType: row.history_type,
@@ -267,6 +300,10 @@ function buildConditionHistoryKey(title: string, actorId: string, happenedAt: st
 
 function buildGrowthPhaseHistoryKey(title: string, actorId: string, happenedAt: string): string {
   return `${title}|${actorId}|${happenedAt}`;
+}
+
+function buildHarvestHistoryKey(actorId: string, happenedAt: string): string {
+  return `${actorId}|${happenedAt}`;
 }
 
 async function getHistoryActorDisplays(

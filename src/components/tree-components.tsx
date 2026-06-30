@@ -11,7 +11,12 @@ import type {
   TreeHistoryItem,
   TreeHistoryType,
 } from '../types/domain';
-import type { ConditionRecordPhotoMap, GrowthPhaseRecordPhotoMap, PickedPhotoAsset } from '../types/media';
+import type {
+  ConditionRecordPhotoMap,
+  GrowthPhaseRecordPhotoMap,
+  HarvestRecordPhotoMap,
+  PickedPhotoAsset,
+} from '../types/media';
 import { colors, radius, spacing, typography } from '../constants/theme';
 import { formatPersonDisplayName } from '../utils/displayFormat';
 import {
@@ -87,6 +92,7 @@ export type TreeHistoryTimelineProps = {
   conditionPhotoMap?: ConditionRecordPhotoMap;
   currentUserId?: string | null;
   growthPhasePhotoMap?: GrowthPhaseRecordPhotoMap;
+  harvestPhotoMap?: HarvestRecordPhotoMap;
   history: TreeHistoryItem[];
   viewerMode?: TreeHistoryViewerMode;
 };
@@ -517,6 +523,7 @@ export function TreeHistoryTimeline({
   conditionPhotoMap = {},
   currentUserId,
   growthPhasePhotoMap = {},
+  harvestPhotoMap = {},
   history,
   viewerMode = 'owner',
 }: TreeHistoryTimelineProps) {
@@ -524,7 +531,7 @@ export function TreeHistoryTimeline({
     return (
       <EmptyState
         title="Belum ada riwayat"
-        subtitle="Catatan kondisi, fase, dan perawatan akan muncul di sini."
+        subtitle="Catatan kondisi, fase, hasil panen, dan perawatan akan muncul di sini."
       />
     );
   }
@@ -537,6 +544,7 @@ export function TreeHistoryTimeline({
           conditionPhotoMap={conditionPhotoMap}
           currentUserId={currentUserId}
           growthPhasePhotoMap={growthPhasePhotoMap}
+          harvestPhotoMap={harvestPhotoMap}
           item={item}
           viewerMode={viewerMode}
         />
@@ -582,12 +590,14 @@ function TreeHistoryTimelineItem({
   conditionPhotoMap,
   currentUserId,
   growthPhasePhotoMap,
+  harvestPhotoMap,
   item,
   viewerMode,
 }: {
   conditionPhotoMap: ConditionRecordPhotoMap;
   currentUserId?: string | null;
   growthPhasePhotoMap: GrowthPhaseRecordPhotoMap;
+  harvestPhotoMap: HarvestRecordPhotoMap;
   item: TreeHistoryItem;
   viewerMode: TreeHistoryViewerMode;
 }) {
@@ -598,6 +608,10 @@ function TreeHistoryTimelineItem({
   const growthPhasePhotoUrls =
     item.historyType === 'phase' && item.sourceId
       ? growthPhasePhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
+      : [];
+  const harvestPhotoUrls =
+    item.historyType === 'harvest' && item.sourceId
+      ? harvestPhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
       : [];
 
   return (
@@ -647,6 +661,7 @@ function TreeHistoryTimelineItem({
           ) : null}
           {conditionPhotoUrl ? <PhotoThumbnail photoUrl={conditionPhotoUrl} /> : null}
           {growthPhasePhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={growthPhasePhotoUrls} /> : null}
+          {harvestPhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={harvestPhotoUrls} /> : null}
           <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
             Dicatat oleh{' '}
             {formatActorDisplayName({
@@ -766,6 +781,10 @@ function getTimelineDotColor(type: TreeHistoryType): string {
     return '#E7F6EC';
   }
 
+  if (type === 'harvest') {
+    return '#FFF4D6';
+  }
+
   return '#E7EEF8';
 }
 
@@ -778,6 +797,10 @@ function getTimelineTextColor(type: TreeHistoryType): string {
     return '#065F2E';
   }
 
+  if (type === 'harvest') {
+    return '#8A5B00';
+  }
+
   return '#184E91';
 }
 
@@ -788,6 +811,10 @@ function getTimelineMarker(type: TreeHistoryType): string {
 
   if (type === 'phase') {
     return '+';
+  }
+
+  if (type === 'harvest') {
+    return '#';
   }
 
   return '*';
@@ -862,7 +889,7 @@ function getHistoryTone(type: TreeHistoryType): BadgeTone {
     return 'warning';
   }
 
-  if (type === 'phase') {
+  if (type === 'phase' || type === 'harvest') {
     return 'success';
   }
 
@@ -876,6 +903,14 @@ function formatHistoryType(type: TreeHistoryType): string {
 
   if (type === 'phase') {
     return 'Fase';
+  }
+
+  if (type === 'harvest') {
+    return 'Panen';
+  }
+
+  if (type === 'manual_care') {
+    return 'Perawatan manual';
   }
 
   return 'Perawatan';

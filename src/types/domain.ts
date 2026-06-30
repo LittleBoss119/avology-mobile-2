@@ -407,6 +407,30 @@ export type GetGrowthPhaseRecordsInput = {
   treeId: UUID;
 };
 
+export type CreateHarvestRecordInput = {
+  farmId: UUID;
+  treeId: UUID;
+  fruitCount: number;
+  fruitCondition?: string | null;
+  note?: string | null;
+  harvestedAt?: string | null;
+  photo?: {
+    uri: string;
+    base64?: string | null;
+    fileName?: string | null;
+    mimeType?: string | null;
+  } | null;
+};
+
+export type CreateHarvestRecordData = {
+  recordId: UUID;
+  warningMessage?: string | null;
+};
+
+export type GetHarvestRecordsByTreeInput = {
+  treeId: UUID;
+};
+
 export type GetFloweringAndFruitingTreesInput = {
   farmId: UUID;
 };

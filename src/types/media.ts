@@ -204,6 +204,8 @@ export type GetGrowthPhaseRecordPhotosInput = {
 
 export type HarvestRecordPhoto = PhotoAttachmentWithSignedUrl;
 
+export type HarvestRecordPhotoMap = Record<UUID, HarvestRecordPhoto[]>;
+
 export type UploadHarvestRecordPhotoInput = {
   farmId: UUID;
   harvestRecordId: UUID;
