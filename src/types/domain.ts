@@ -101,6 +101,9 @@ export type CurrentUserFarm = {
   joinedAt: string | null;
   createdAt?: string;
   updatedAt?: string | null;
+  removedAt?: string | null;
+  removedBy?: UUID | null;
+  removedReason?: string | null;
   farm?: Farm;
 };
 
@@ -114,6 +117,9 @@ export type WorkerMembership = {
   createdAt?: string;
   updatedAt?: string | null;
   joinedAt?: string | null;
+  removedAt?: string | null;
+  removedBy?: UUID | null;
+  removedReason?: string | null;
 };
 
 export type FarmMemberBasicProfile = {
@@ -166,7 +172,36 @@ export type GrowthPhaseRecord = {
   recordedAt: string;
 };
 
-export type TreeHistoryType = 'condition' | 'phase' | 'care';
+export type HarvestRecord = {
+  id: UUID;
+  farmId: UUID;
+  treeId: UUID;
+  harvestedBy: UUID;
+  fruitCount: number;
+  fruitCondition: string | null;
+  note: string | null;
+  harvestedAt: string;
+  createdAt: string;
+  updatedAt?: string | null;
+};
+
+export type ManualCareRecord = {
+  id: UUID;
+  farmId: UUID;
+  recordedBy: UUID;
+  category: CareCategory;
+  targetType: TargetType;
+  targetRow: string | null;
+  targetColumn: string | null;
+  targetTreeId: UUID | null;
+  customTargetNote: string | null;
+  note: string | null;
+  performedAt: string;
+  createdAt: string;
+  updatedAt?: string | null;
+};
+
+export type TreeHistoryType = 'condition' | 'phase' | 'care' | 'harvest' | 'manual_care';
 
 export type TreeHistoryItem = {
   sourceId?: UUID | null;
@@ -189,6 +224,9 @@ export type OperationalReport = {
   locationNote: string | null;
   description: string | null;
   status: OperationalReportStatus;
+  ownerResponseNote?: string | null;
+  respondedBy?: UUID | null;
+  respondedAt?: string | null;
   createdAt: string;
   updatedAt?: string | null;
 };
@@ -233,6 +271,10 @@ export type CareSchedule = {
   customTargetNote: string | null;
   instruction: string | null;
   requiresPhoto: boolean;
+  isCancelled?: boolean;
+  cancelledAt?: string | null;
+  cancelledBy?: UUID | null;
+  cancelReason?: string | null;
   createdBy?: UUID;
   createdAt?: string;
   updatedAt?: string | null;

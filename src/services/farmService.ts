@@ -29,6 +29,9 @@ type CurrentUserFarmRow = {
   joined_at: string | null;
   created_at?: string;
   updated_at?: string | null;
+  removed_at?: string | null;
+  removed_by?: string | null;
+  removed_reason?: string | null;
 };
 
 type CurrentUserAccessRow = {
@@ -40,6 +43,9 @@ type CurrentUserAccessRow = {
   joined_at: string | null;
   created_at?: string;
   updated_at?: string | null;
+  removed_at?: string | null;
+  removed_by?: string | null;
+  removed_reason?: string | null;
   farm_name?: string | null;
 };
 
@@ -94,7 +100,7 @@ export async function getCurrentUserFarm(): Promise<ServiceResult<CurrentUserFar
 
   const { data, error } = await supabase
     .from('farm_members')
-    .select('id, farm_id, user_id, role, status, joined_at, created_at, updated_at')
+    .select('id, farm_id, user_id, role, status, joined_at, created_at, updated_at, removed_at, removed_by, removed_reason')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .returns<CurrentUserFarmRow[]>();
@@ -150,6 +156,9 @@ async function mapCurrentUserAccessResult(
     joined_at: row.joined_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    removed_at: row.removed_at,
+    removed_by: row.removed_by,
+    removed_reason: row.removed_reason,
   });
 
   if (membership.status !== 'active') {
@@ -192,6 +201,9 @@ function mapCurrentUserFarm(row: CurrentUserFarmRow, farm?: Farm): CurrentUserFa
     joinedAt: row.joined_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    removedAt: row.removed_at,
+    removedBy: row.removed_by,
+    removedReason: row.removed_reason,
     farm,
   };
 }

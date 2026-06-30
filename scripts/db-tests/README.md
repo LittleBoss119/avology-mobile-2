@@ -52,12 +52,14 @@ Stages share generated test ids in `scripts/db-tests/.db-test-state.local.json`.
 - `04-sop-schedule-task-activity.test.mjs`: validates SOP constraints, schedule/task creation, task visibility, postpone/complete activity history.
 - `05-operational-report-rpc.test.mjs`: validates operational report insert/select, status update RPC, direct update denial, report follow-up task.
 - `06-dashboard-query.test.mjs`: runs manual dashboard-style aggregate queries without adding dashboard tables.
+- `07-feature-foundation.test.mjs`: validates feature-completion database foundations for harvest records, manual care records, new photo entity types, schedule cancellation, report reopen audit fields, worker leave audit fields, and tree history additions.
 
 ## Assumptions From Migrations
 
 - RPC: `create_farm_with_owner`, `request_join_farm`, `approve_worker`, `reject_worker`, `remove_worker`.
 - RPC: `get_member_basic_profiles`, `get_pending_workers`, `get_active_workers`, `get_active_workers_for_task_picker`.
 - RPC: `create_schedule_from_sop`, `create_manual_schedule`, `update_operational_report_status`, `create_task_from_operational_report`, `postpone_task`, `complete_task`.
+- RPC: `cancel_care_schedule`, `reopen_operational_report`, `update_farm_profile`, `leave_current_farm`.
 - Enums: `member_role`, `member_status`, `tree_condition_status`, `growth_phase`, `operational_report_category`, `operational_report_status`, `care_category`, `target_type`, `task_status`, `activity_status`.
 - Trees use `is_archived`; tests do not permanently delete trees.
 - Growth phase is treated as monitoring only. The tests do not validate harvest prediction or harvest estimation.

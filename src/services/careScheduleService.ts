@@ -22,7 +22,7 @@ import type {
 import { fail, ok } from '../utils/serviceResult';
 
 const CARE_SCHEDULE_SELECT =
-  'id, farm_id, care_sop_id, title, category, scheduled_date, target_type, target_row, target_column, target_tree_id, custom_target_note, instruction, requires_photo, created_by, created_at, updated_at';
+  'id, farm_id, care_sop_id, title, category, scheduled_date, target_type, target_row, target_column, target_tree_id, custom_target_note, instruction, requires_photo, is_cancelled, cancelled_at, cancelled_by, cancel_reason, created_by, created_at, updated_at';
 
 const CARE_TASK_SELECT =
   'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, requires_photo, created_at, updated_at';
@@ -77,6 +77,10 @@ type CareScheduleRow = {
   custom_target_note: string | null;
   instruction: string | null;
   requires_photo: boolean | null;
+  is_cancelled?: boolean | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancel_reason?: string | null;
   created_by?: string;
   created_at?: string;
   updated_at?: string | null;
@@ -704,8 +708,12 @@ function mapCareSchedule(row: CareScheduleRow): CareSchedule {
     farmId: row.farm_id,
     id: row.id,
     instruction: row.instruction,
+    isCancelled: row.is_cancelled ?? false,
     requiresPhoto: row.requires_photo ?? false,
     scheduledDate: row.scheduled_date,
+    cancelledAt: row.cancelled_at,
+    cancelledBy: row.cancelled_by,
+    cancelReason: row.cancel_reason,
     targetColumn: row.target_column,
     targetRow: row.target_row,
     targetTreeId: row.target_tree_id,

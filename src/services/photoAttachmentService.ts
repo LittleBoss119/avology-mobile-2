@@ -43,12 +43,18 @@ const PHOTO_ATTACHMENT_SELECT =
 const allowedEntityTypes: PhotoAttachmentEntityType[] = [
   'tree_main',
   'condition_record',
+  'growth_phase_record',
   'operational_report',
   'task_proof',
+  'harvest_record',
+  'manual_care_record',
 ];
 
 const entityPathFolders: Record<PhotoAttachmentEntityType, PhotoAttachmentPathFolder> = {
   condition_record: 'condition-reports',
+  growth_phase_record: 'growth-phase-records',
+  harvest_record: 'harvest-records',
+  manual_care_record: 'manual-care-records',
   operational_report: 'operational-reports',
   task_proof: 'task-proofs',
   tree_main: 'trees',

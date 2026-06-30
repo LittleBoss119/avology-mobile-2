@@ -55,6 +55,9 @@ type WorkerMembershipRow = {
   created_at: string;
   updated_at: string | null;
   joined_at: string | null;
+  removed_at?: string | null;
+  removed_by?: string | null;
+  removed_reason?: string | null;
 };
 
 export async function requestJoinFarm(
@@ -141,7 +144,7 @@ export async function getWorkerMemberships(
   const [membersResult, profilesResult] = await Promise.all([
     supabase
       .from('farm_members')
-      .select('id, user_id, role, status, created_at, updated_at, joined_at')
+      .select('id, user_id, role, status, created_at, updated_at, joined_at, removed_at, removed_by, removed_reason')
       .eq('farm_id', farmId)
       .eq('role', 'worker')
       .order('created_at', { ascending: false })
@@ -255,6 +258,9 @@ function mapWorkerMembership(
     joinedAt: row.joined_at,
     membershipId: row.id,
     phone: profile?.phone ?? null,
+    removedAt: row.removed_at,
+    removedBy: row.removed_by,
+    removedReason: row.removed_reason,
     role: 'worker',
     status: row.status,
     updatedAt: row.updated_at,

@@ -3,14 +3,20 @@ import type { UUID } from './domain';
 export type PhotoAttachmentEntityType =
   | 'tree_main'
   | 'condition_record'
+  | 'growth_phase_record'
   | 'operational_report'
-  | 'task_proof';
+  | 'task_proof'
+  | 'harvest_record'
+  | 'manual_care_record';
 
 export type PhotoAttachmentPathFolder =
   | 'trees'
   | 'condition-reports'
+  | 'growth-phase-records'
   | 'operational-reports'
-  | 'task-proofs';
+  | 'task-proofs'
+  | 'harvest-records'
+  | 'manual-care-records';
 
 export type PhotoAttachment = {
   id: UUID;

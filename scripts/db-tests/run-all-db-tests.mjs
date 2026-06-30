@@ -12,6 +12,7 @@ const stages = [
   '04-sop-schedule-task-activity.test.mjs',
   '05-operational-report-rpc.test.mjs',
   '06-dashboard-query.test.mjs',
+  '07-feature-foundation.test.mjs',
 ];
 
 const summary = {

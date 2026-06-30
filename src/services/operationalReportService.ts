@@ -17,7 +17,7 @@ import type {
 import { fail, ok } from '../utils/serviceResult';
 
 const OPERATIONAL_REPORT_SELECT =
-  'id, farm_id, reported_by, category, location_note, description, status, created_at, updated_at';
+  'id, farm_id, reported_by, category, location_note, description, status, owner_response_note, responded_by, responded_at, created_at, updated_at';
 
 const operationalReportCategories: OperationalReportCategory[] = [
   'land_damage',
@@ -44,6 +44,9 @@ type OperationalReportRow = {
   location_note: string | null;
   description: string | null;
   status: OperationalReportStatus;
+  owner_response_note?: string | null;
+  responded_by?: string | null;
+  responded_at?: string | null;
   created_at: string;
   updated_at?: string | null;
 };
@@ -378,7 +381,10 @@ function mapOperationalReport(row: OperationalReportRow): OperationalReport {
     farmId: row.farm_id,
     id: row.id,
     locationNote: row.location_note,
+    ownerResponseNote: row.owner_response_note,
     reportedBy: row.reported_by,
+    respondedAt: row.responded_at,
+    respondedBy: row.responded_by,
     status: row.status,
     updatedAt: row.updated_at,
   };
