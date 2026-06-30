@@ -86,6 +86,7 @@ export default function WorkerLayout() {
           <Stack.Screen name="worker/reports/index" options={{ headerShown: false, title: 'Laporan' }} />
           <Stack.Screen name="worker/reports/create" options={{ headerShown: false, title: 'Buat Laporan' }} />
           <Stack.Screen name="worker/reports/[reportId]" options={{ headerShown: false, title: 'Detail Laporan' }} />
+          <Stack.Screen name="worker/reports/[reportId]/edit" options={{ headerShown: false, title: 'Edit laporan' }} />
           <Stack.Screen name="worker/farm" options={{ headerShown: false, title: 'Kebun' }} />
           <Stack.Screen name="worker/profile" options={{ headerShown: false, title: 'Profil Akun' }} />
         </Stack>

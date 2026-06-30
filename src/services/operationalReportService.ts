@@ -305,18 +305,23 @@ export async function updateOwnOperationalReport(
     return fail(new Error('Isi lokasi atau deskripsi laporan operasional.'));
   }
 
-  const { error } = await supabase
-    .from('operational_reports')
-    .update({
-      category,
-      description,
-      location_note: locationNote,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', reportResult.data.id);
+  const { error } = await supabase.rpc('update_own_operational_report', {
+    p_category: category,
+    p_description: description,
+    p_location_note: locationNote,
+    p_report_id: reportResult.data.id,
+  });
 
   if (error) {
-    return fail(error, 'Gagal memperbarui laporan operasional.');
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn(
+        '[operational-report-edit-failed]',
+        `code=${error.code ?? 'unknown'}`,
+        `message=${error.message}`
+      );
+    }
+
+    return fail(new Error(mapUpdateOwnOperationalReportError(error)));
   }
 
   const warningMessage = await updateOperationalReportPhoto({
@@ -459,6 +464,48 @@ async function deleteOperationalReportPhotos(
   return failedDelete?.error
     ? 'Laporan berhasil diperbarui, tetapi foto laporan lama belum dapat dihapus.'
     : null;
+}
+
+function mapUpdateOwnOperationalReportError(error: { code?: string; message?: string }): string {
+  if (error.code === 'PGRST202') {
+    return 'Fitur edit laporan belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.';
+  }
+
+  const message = error.message?.toLowerCase() ?? '';
+
+  if (message.includes('could not find the function')) {
+    return 'Fitur edit laporan belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.';
+  }
+
+  if (message.includes('location or description')) {
+    return 'Isi lokasi atau deskripsi laporan operasional.';
+  }
+
+  if (message.includes('worker access is inactive')) {
+    return 'Akses worker tidak aktif.';
+  }
+
+  if (message.includes('only report creator')) {
+    return 'Hanya pembuat laporan yang bisa mengedit laporan ini.';
+  }
+
+  if (message.includes('already been responded')) {
+    return 'Laporan ini sudah ditindaklanjuti owner dan tidak bisa diedit.';
+  }
+
+  if (message.includes('follow up task')) {
+    return 'Laporan ini sudah memiliki tugas tindak lanjut dan tidak bisa diedit.';
+  }
+
+  if (message.includes('not found')) {
+    return 'Laporan tidak ditemukan atau akses tidak aktif.';
+  }
+
+  if (message.includes('invalid input value') || message.includes('operational_report_category')) {
+    return 'Kategori laporan tidak valid.';
+  }
+
+  return 'Perubahan laporan gagal disimpan. Coba lagi.';
 }
 
 async function ensureActiveFarmMember(farmId: UUID): Promise<ServiceResult<SuccessData>> {
