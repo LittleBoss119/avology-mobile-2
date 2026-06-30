@@ -8,22 +8,35 @@ import type {
   DeleteTreeMainPhotoInput,
   DeletePhotoAttachmentInput,
   GetConditionRecordPhotosInput,
+  GetGrowthPhaseRecordPhotosInput,
+  GetHarvestRecordPhotosInput,
+  GetManualCareRecordPhotosInput,
   GetTreeMainPhotoData,
   GetPhotoSignedUrlData,
   ListConditionRecordPhotosForTreeInput,
+  ListEntityPhotosInput,
   ListOperationalReportPhotosForReportsInput,
   ListPhotoAttachmentsInput,
   ListTaskProofPhotosForActivitiesInput,
+  GrowthPhaseRecordPhoto,
+  HarvestRecordPhoto,
+  ManualCareRecordPhoto,
   OperationalReportPhoto,
   OperationalReportPhotoMap,
   PhotoAttachment,
   PhotoAttachmentEntityType,
   PhotoAttachmentPathFolder,
+  PhotoAttachmentWithSignedUrl,
+  ReplaceSinglePhotoAttachmentInput,
   TaskProofPhoto,
   TaskProofPhotoMap,
   TreeMainPhoto,
   TreeMainPhotoMap,
   UploadConditionRecordPhotoInput,
+  UploadEntityPhotoInput,
+  UploadGrowthPhaseRecordPhotoInput,
+  UploadHarvestRecordPhotoInput,
+  UploadManualCareRecordPhotoInput,
   UploadOperationalReportPhotoInput,
   UploadTaskProofPhotoInput,
   UploadTreeMainPhotoInput,
@@ -241,6 +254,78 @@ export async function uploadPhotoAttachment(
   return ok({
     attachment: mapPhotoAttachment(insertResult.data),
   });
+}
+
+export async function uploadEntityPhoto(
+  input: UploadEntityPhotoInput
+): Promise<ServiceResult<PhotoAttachmentWithSignedUrl>> {
+  const uploadResult = await uploadPhotoAttachment(input);
+
+  if (uploadResult.error) {
+    return fail(uploadResult.error, 'Foto gagal diunggah.');
+  }
+
+  const signedUrlResult = await getPhotoSignedUrl(uploadResult.data.attachment.storagePath);
+
+  if (signedUrlResult.error) {
+    return fail(signedUrlResult.error, 'Foto berhasil diunggah, tetapi pratinjau gagal dimuat.');
+  }
+
+  return ok({
+    attachment: uploadResult.data.attachment,
+    signedUrl: signedUrlResult.data.signedUrl,
+  });
+}
+
+export async function listEntityPhotos(
+  input: ListEntityPhotosInput
+): Promise<ServiceResult<PhotoAttachmentWithSignedUrl[]>> {
+  const photoResult = await listPhotoAttachments(input);
+
+  if (photoResult.error) {
+    return fail(photoResult.error, 'Gagal memuat daftar foto.');
+  }
+
+  return photosWithSignedUrls(photoResult.data);
+}
+
+export async function replaceSinglePhotoAttachment(
+  input: ReplaceSinglePhotoAttachmentInput
+): Promise<ServiceResult<PhotoAttachmentWithSignedUrl>> {
+  const previousPhotosResult = await listPhotoAttachments({
+    entityId: input.entityId,
+    entityType: input.entityType,
+    farmId: input.farmId,
+  });
+
+  if (previousPhotosResult.error) {
+    return fail(previousPhotosResult.error, 'Gagal memeriksa foto sebelumnya.');
+  }
+
+  const uploadResult = await uploadEntityPhoto({
+    ...input,
+    isPrimary: input.isPrimary ?? true,
+  });
+
+  if (uploadResult.error) {
+    return fail(uploadResult.error);
+  }
+
+  const deleteResults = await Promise.all(
+    previousPhotosResult.data
+      .filter((photo) => photo.id !== uploadResult.data.attachment.id)
+      .map((photo) => deletePhotoAttachment({ photoId: photo.id }))
+  );
+  const failedDelete = deleteResults.find((result) => result.error);
+
+  if (failedDelete?.error) {
+    return fail(
+      failedDelete.error,
+      'Foto pengganti berhasil diunggah, tetapi foto lama belum dapat dihapus.'
+    );
+  }
+
+  return ok(uploadResult.data);
 }
 
 export async function getTreeMainPhoto(
@@ -835,6 +920,159 @@ export async function getTaskProofPhotos(
   return ok(
     photos.filter((photo): photo is TaskProofPhoto => photo !== null)
   );
+}
+
+export async function uploadGrowthPhaseRecordPhoto(
+  input: UploadGrowthPhaseRecordPhotoInput
+): Promise<ServiceResult<GrowthPhaseRecordPhoto>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const growthPhaseRecordId = normalizeRequiredText(
+    input.growthPhaseRecordId,
+    'Catatan fase tumbuh tidak valid.'
+  );
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (growthPhaseRecordId instanceof Error) {
+    return fail(growthPhaseRecordId);
+  }
+
+  const result = await uploadEntityPhoto({
+    base64: input.base64,
+    caption: input.caption,
+    entityId: growthPhaseRecordId,
+    entityType: 'growth_phase_record',
+    farmId,
+    fileName: input.fileName,
+    isPrimary: false,
+    localUri: input.localUri,
+    mimeType: input.mimeType,
+  });
+
+  if (result.error) {
+    return fail(result.error, 'Foto fase tumbuh gagal diunggah.');
+  }
+
+  return ok(result.data);
+}
+
+export async function getGrowthPhaseRecordPhotos(
+  input: GetGrowthPhaseRecordPhotosInput
+): Promise<ServiceResult<GrowthPhaseRecordPhoto[]>> {
+  const result = await listEntityPhotos({
+    entityId: input.growthPhaseRecordId,
+    entityType: 'growth_phase_record',
+    farmId: input.farmId,
+  });
+
+  if (result.error) {
+    return fail(result.error, 'Gagal memuat foto fase tumbuh.');
+  }
+
+  return ok(result.data);
+}
+
+export async function uploadHarvestRecordPhoto(
+  input: UploadHarvestRecordPhotoInput
+): Promise<ServiceResult<HarvestRecordPhoto>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const harvestRecordId = normalizeRequiredText(input.harvestRecordId, 'Catatan panen tidak valid.');
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (harvestRecordId instanceof Error) {
+    return fail(harvestRecordId);
+  }
+
+  const result = await uploadEntityPhoto({
+    base64: input.base64,
+    caption: input.caption,
+    entityId: harvestRecordId,
+    entityType: 'harvest_record',
+    farmId,
+    fileName: input.fileName,
+    isPrimary: false,
+    localUri: input.localUri,
+    mimeType: input.mimeType,
+  });
+
+  if (result.error) {
+    return fail(result.error, 'Foto panen gagal diunggah.');
+  }
+
+  return ok(result.data);
+}
+
+export async function getHarvestRecordPhotos(
+  input: GetHarvestRecordPhotosInput
+): Promise<ServiceResult<HarvestRecordPhoto[]>> {
+  const result = await listEntityPhotos({
+    entityId: input.harvestRecordId,
+    entityType: 'harvest_record',
+    farmId: input.farmId,
+  });
+
+  if (result.error) {
+    return fail(result.error, 'Gagal memuat foto panen.');
+  }
+
+  return ok(result.data);
+}
+
+export async function uploadManualCareRecordPhoto(
+  input: UploadManualCareRecordPhotoInput
+): Promise<ServiceResult<ManualCareRecordPhoto>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const manualCareRecordId = normalizeRequiredText(
+    input.manualCareRecordId,
+    'Catatan perawatan manual tidak valid.'
+  );
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (manualCareRecordId instanceof Error) {
+    return fail(manualCareRecordId);
+  }
+
+  const result = await uploadEntityPhoto({
+    base64: input.base64,
+    caption: input.caption,
+    entityId: manualCareRecordId,
+    entityType: 'manual_care_record',
+    farmId,
+    fileName: input.fileName,
+    isPrimary: false,
+    localUri: input.localUri,
+    mimeType: input.mimeType,
+  });
+
+  if (result.error) {
+    return fail(result.error, 'Foto perawatan manual gagal diunggah.');
+  }
+
+  return ok(result.data);
+}
+
+export async function getManualCareRecordPhotos(
+  input: GetManualCareRecordPhotosInput
+): Promise<ServiceResult<ManualCareRecordPhoto[]>> {
+  const result = await listEntityPhotos({
+    entityId: input.manualCareRecordId,
+    entityType: 'manual_care_record',
+    farmId: input.farmId,
+  });
+
+  if (result.error) {
+    return fail(result.error, 'Gagal memuat foto perawatan manual.');
+  }
+
+  return ok(result.data);
 }
 
 export async function listTaskProofPhotosForActivities(
@@ -1480,6 +1718,29 @@ function getErrorMessage(error: unknown): string {
 
 function isImageMimeType(value: string): boolean {
   return value.startsWith('image/');
+}
+
+async function photosWithSignedUrls(
+  attachments: PhotoAttachment[]
+): Promise<ServiceResult<PhotoAttachmentWithSignedUrl[]>> {
+  const photos = await Promise.all(
+    attachments.map(async (attachment) => {
+      const signedUrlResult = await getPhotoSignedUrl(attachment.storagePath);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return {
+        attachment,
+        signedUrl: signedUrlResult.data.signedUrl,
+      };
+    })
+  );
+
+  return ok(
+    photos.filter((photo): photo is PhotoAttachmentWithSignedUrl => photo !== null)
+  );
 }
 
 function mapPhotoAttachment(row: PhotoAttachmentRow): PhotoAttachment {

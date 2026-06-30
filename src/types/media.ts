@@ -51,6 +51,17 @@ export type UploadPhotoAttachmentData = {
   attachment: PhotoAttachment;
 };
 
+export type PhotoAttachmentWithSignedUrl = {
+  attachment: PhotoAttachment;
+  signedUrl: string;
+};
+
+export type UploadEntityPhotoInput = UploadPhotoAttachmentInput;
+
+export type ListEntityPhotosInput = ListPhotoAttachmentsInput;
+
+export type ReplaceSinglePhotoAttachmentInput = UploadPhotoAttachmentInput;
+
 export type ListPhotoAttachmentsInput = {
   farmId: UUID;
   entityType: PhotoAttachmentEntityType;
@@ -170,6 +181,63 @@ export type GetTaskProofPhotosInput = {
 export type ListTaskProofPhotosForActivitiesInput = {
   farmId: UUID;
   activityIds: UUID[];
+};
+
+export type GrowthPhaseRecordPhoto = PhotoAttachmentWithSignedUrl;
+
+export type UploadGrowthPhaseRecordPhotoInput = {
+  farmId: UUID;
+  growthPhaseRecordId: UUID;
+  localUri: string;
+  base64?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+  caption?: string | null;
+};
+
+export type GetGrowthPhaseRecordPhotosInput = {
+  farmId: UUID;
+  growthPhaseRecordId: UUID;
+};
+
+export type HarvestRecordPhoto = PhotoAttachmentWithSignedUrl;
+
+export type UploadHarvestRecordPhotoInput = {
+  farmId: UUID;
+  harvestRecordId: UUID;
+  localUri: string;
+  base64?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+  caption?: string | null;
+};
+
+export type GetHarvestRecordPhotosInput = {
+  farmId: UUID;
+  harvestRecordId: UUID;
+};
+
+export type ManualCareRecordPhoto = PhotoAttachmentWithSignedUrl;
+
+export type UploadManualCareRecordPhotoInput = {
+  farmId: UUID;
+  manualCareRecordId: UUID;
+  localUri: string;
+  base64?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+  caption?: string | null;
+};
+
+export type GetManualCareRecordPhotosInput = {
+  farmId: UUID;
+  manualCareRecordId: UUID;
+};
+
+export type PhotoAttachmentPreviewItem = {
+  id?: UUID | null;
+  url: string;
+  caption?: string | null;
 };
 
 export type PickedPhotoAsset = {
