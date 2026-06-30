@@ -3,6 +3,7 @@ import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-co
 import { Image, Modal, Platform, Pressable, Text, View } from 'react-native';
 
 import type {
+  CareCategory,
   GrowthPhase,
   MemberRole,
   Tree,
@@ -15,10 +16,11 @@ import type {
   ConditionRecordPhotoMap,
   GrowthPhaseRecordPhotoMap,
   HarvestRecordPhotoMap,
+  ManualCareRecordPhotoMap,
   PickedPhotoAsset,
 } from '../types/media';
 import { colors, radius, spacing, typography } from '../constants/theme';
-import { formatPersonDisplayName } from '../utils/displayFormat';
+import { formatCareCategory, formatPersonDisplayName } from '../utils/displayFormat';
 import {
   buildTreeDisplayCode,
   formatGrowthPhase,
@@ -94,6 +96,7 @@ export type TreeHistoryTimelineProps = {
   growthPhasePhotoMap?: GrowthPhaseRecordPhotoMap;
   harvestPhotoMap?: HarvestRecordPhotoMap;
   history: TreeHistoryItem[];
+  manualCarePhotoMap?: ManualCareRecordPhotoMap;
   viewerMode?: TreeHistoryViewerMode;
 };
 
@@ -525,6 +528,7 @@ export function TreeHistoryTimeline({
   growthPhasePhotoMap = {},
   harvestPhotoMap = {},
   history,
+  manualCarePhotoMap = {},
   viewerMode = 'owner',
 }: TreeHistoryTimelineProps) {
   if (history.length === 0) {
@@ -546,6 +550,7 @@ export function TreeHistoryTimeline({
           growthPhasePhotoMap={growthPhasePhotoMap}
           harvestPhotoMap={harvestPhotoMap}
           item={item}
+          manualCarePhotoMap={manualCarePhotoMap}
           viewerMode={viewerMode}
         />
       ))}
@@ -592,6 +597,7 @@ function TreeHistoryTimelineItem({
   growthPhasePhotoMap,
   harvestPhotoMap,
   item,
+  manualCarePhotoMap,
   viewerMode,
 }: {
   conditionPhotoMap: ConditionRecordPhotoMap;
@@ -599,6 +605,7 @@ function TreeHistoryTimelineItem({
   growthPhasePhotoMap: GrowthPhaseRecordPhotoMap;
   harvestPhotoMap: HarvestRecordPhotoMap;
   item: TreeHistoryItem;
+  manualCarePhotoMap: ManualCareRecordPhotoMap;
   viewerMode: TreeHistoryViewerMode;
 }) {
   const conditionPhotoUrl =
@@ -612,6 +619,10 @@ function TreeHistoryTimelineItem({
   const harvestPhotoUrls =
     item.historyType === 'harvest' && item.sourceId
       ? harvestPhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
+      : [];
+  const manualCarePhotoUrls =
+    item.historyType === 'manual_care' && item.sourceId
+      ? manualCarePhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
       : [];
 
   return (
@@ -654,14 +665,15 @@ function TreeHistoryTimelineItem({
           <Text selectable style={{ color: colors.text, fontSize: typography.bodyStrong.fontSize, fontWeight: '800', lineHeight: typography.bodyStrong.lineHeight }}>
             {formatHistoryTitle(item)}
           </Text>
-          {item.description ? (
+          {formatHistoryDescription(item) ? (
             <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-              {item.description}
+              {formatHistoryDescription(item)}
             </Text>
           ) : null}
           {conditionPhotoUrl ? <PhotoThumbnail photoUrl={conditionPhotoUrl} /> : null}
           {growthPhasePhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={growthPhasePhotoUrls} /> : null}
           {harvestPhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={harvestPhotoUrls} /> : null}
+          {manualCarePhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={manualCarePhotoUrls} /> : null}
           <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
             Dicatat oleh{' '}
             {formatActorDisplayName({
@@ -926,6 +938,24 @@ function formatHistoryTitle(item: TreeHistoryItem): string {
   }
 
   return item.title;
+}
+
+function formatHistoryDescription(item: TreeHistoryItem): string | null {
+  if (item.historyType === 'manual_care' && isCareCategory(item.description)) {
+    return formatCareCategory(item.description);
+  }
+
+  return item.description;
+}
+
+function isCareCategory(value?: string | null): value is CareCategory {
+  return (
+    value === 'watering' ||
+    value === 'fertilizing' ||
+    value === 'spraying' ||
+    value === 'weeding' ||
+    value === 'other'
+  );
 }
 
 function formatCompactConditionStatus(status: TreeConditionStatus): string {

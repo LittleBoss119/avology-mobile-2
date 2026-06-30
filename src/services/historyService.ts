@@ -46,6 +46,12 @@ type HarvestHistorySourceRow = {
   harvested_at: string;
 };
 
+type ManualCareHistorySourceRow = {
+  id: string;
+  recorded_by: string;
+  performed_at: string;
+};
+
 type TreeFarmRow = {
   id: string;
   farm_id: string;
@@ -93,13 +99,14 @@ export async function getTreeHistory(
     return fail(error, 'Gagal memuat riwayat pohon.');
   }
 
-  const [conditionSourceMap, growthPhaseSourceMap, harvestSourceMap] = await Promise.all([
+  const [conditionSourceMap, growthPhaseSourceMap, harvestSourceMap, manualCareSourceMap] = await Promise.all([
     getConditionHistorySourceMap(input.treeId),
     getGrowthPhaseHistorySourceMap(input.treeId),
     getHarvestHistorySourceMap(input.treeId),
+    getManualCareHistorySourceMap(input.treeId),
   ]);
   const history = (data ?? []).map((row) =>
-    mapTreeHistoryItem(row, conditionSourceMap, growthPhaseSourceMap, harvestSourceMap)
+    mapTreeHistoryItem(row, conditionSourceMap, growthPhaseSourceMap, harvestSourceMap, manualCareSourceMap)
   );
   const actorDisplays = await getHistoryActorDisplays(
     treeFarmIdResult.data,
@@ -261,11 +268,34 @@ async function getHarvestHistorySourceMap(
   );
 }
 
+async function getManualCareHistorySourceMap(
+  treeId: UUID
+): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from('manual_care_records')
+    .select('id, recorded_by, performed_at')
+    .eq('target_type', 'tree')
+    .eq('target_tree_id', treeId)
+    .returns<ManualCareHistorySourceRow[]>();
+
+  if (error) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    (data ?? []).map((row) => [
+      buildManualCareHistoryKey(row.recorded_by, row.performed_at),
+      row.id,
+    ])
+  );
+}
+
 function mapTreeHistoryItem(
   row: TreeHistoryRow,
   conditionSourceMap: Record<string, string>,
   growthPhaseSourceMap: Record<string, string>,
-  harvestSourceMap: Record<string, string>
+  harvestSourceMap: Record<string, string>,
+  manualCareSourceMap: Record<string, string>
 ): TreeHistoryItem {
   const conditionSourceId =
     row.history_type === 'condition'
@@ -279,11 +309,15 @@ function mapTreeHistoryItem(
     row.history_type === 'harvest'
       ? harvestSourceMap[buildHarvestHistoryKey(row.actor_id, row.happened_at)] ?? null
       : null;
+  const manualCareSourceId =
+    row.history_type === 'manual_care'
+      ? manualCareSourceMap[buildManualCareHistoryKey(row.actor_id, row.happened_at)] ?? null
+      : null;
 
   return {
     actorName: null,
     actorRole: null,
-    sourceId: conditionSourceId ?? growthPhaseSourceId ?? harvestSourceId,
+    sourceId: conditionSourceId ?? growthPhaseSourceId ?? harvestSourceId ?? manualCareSourceId,
     treeId: row.tree_id,
     farmId: row.farm_id,
     historyType: row.history_type,
@@ -303,6 +337,10 @@ function buildGrowthPhaseHistoryKey(title: string, actorId: string, happenedAt: 
 }
 
 function buildHarvestHistoryKey(actorId: string, happenedAt: string): string {
+  return `${actorId}|${happenedAt}`;
+}
+
+function buildManualCareHistoryKey(actorId: string, happenedAt: string): string {
   return `${actorId}|${happenedAt}`;
 }
 

@@ -9,6 +9,7 @@ import {
   deleteTreeMainPhoto,
   getGrowthPhaseRecordPhotos,
   getHarvestRecordPhotos,
+  getManualCareRecordPhotos,
   getTreeMainPhoto,
   listConditionRecordPhotosForTree,
   uploadTreeMainPhoto,
@@ -21,6 +22,7 @@ import type {
   ConditionRecordPhotoMap,
   GrowthPhaseRecordPhotoMap,
   HarvestRecordPhotoMap,
+  ManualCareRecordPhotoMap,
   PickedPhotoAsset,
   TreeMainPhoto,
 } from '../types/media';
@@ -67,6 +69,7 @@ export function TreeDetailScreen({
   const [conditionPhotoMap, setConditionPhotoMap] = React.useState<ConditionRecordPhotoMap>({});
   const [growthPhasePhotoMap, setGrowthPhasePhotoMap] = React.useState<GrowthPhaseRecordPhotoMap>({});
   const [harvestPhotoMap, setHarvestPhotoMap] = React.useState<HarvestRecordPhotoMap>({});
+  const [manualCarePhotoMap, setManualCarePhotoMap] = React.useState<ManualCareRecordPhotoMap>({});
   const [photoActionLoading, setPhotoActionLoading] = React.useState(false);
   const [photoSourceOpen, setPhotoSourceOpen] = React.useState(false);
   const [reports, setReports] = React.useState<TreeConditionReport[]>([]);
@@ -81,6 +84,7 @@ export function TreeDetailScreen({
       setConditionPhotoMap({});
       setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
+      setManualCarePhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -97,6 +101,7 @@ export function TreeDetailScreen({
       setConditionPhotoMap({});
       setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
+      setManualCarePhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -109,6 +114,7 @@ export function TreeDetailScreen({
       setConditionPhotoMap({});
       setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
+      setManualCarePhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -134,11 +140,13 @@ export function TreeDetailScreen({
       setHistory([]);
       setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
+      setManualCarePhotoMap({});
     } else {
       setHistory(historyResult.data);
       await Promise.all([
         loadGrowthPhasePhotos(treeResult.data.farmId, historyResult.data),
         loadHarvestPhotos(treeResult.data.farmId, historyResult.data),
+        loadManualCarePhotos(treeResult.data.farmId, historyResult.data),
       ]);
     }
 
@@ -304,6 +312,42 @@ export function TreeDetailScreen({
     );
   }
 
+  async function loadManualCarePhotos(farmId: string, historyItems: TreeHistoryItem[]) {
+    const manualCareRecordIds = Array.from(
+      new Set(
+        historyItems
+          .filter((item) => item.historyType === 'manual_care' && Boolean(item.sourceId))
+          .map((item) => item.sourceId as string)
+      )
+    );
+
+    if (manualCareRecordIds.length === 0) {
+      setManualCarePhotoMap({});
+      return;
+    }
+
+    const entries = await Promise.all(
+      manualCareRecordIds.map(async (manualCareRecordId) => {
+        const result = await getManualCareRecordPhotos({
+          farmId,
+          manualCareRecordId,
+        });
+
+        if (result.error || result.data.length === 0) {
+          return null;
+        }
+
+        return [manualCareRecordId, result.data] as const;
+      })
+    );
+
+    setManualCarePhotoMap(
+      Object.fromEntries(
+        entries.filter((entry): entry is [string, ManualCareRecordPhotoMap[string]] => entry !== null)
+      )
+    );
+  }
+
   function handleOpenPhotoSource() {
     setMenuOpen(false);
     setPhotoSourceOpen(true);
@@ -462,13 +506,14 @@ export function TreeDetailScreen({
 
       <ActionSection basePath={basePath} tree={tree} />
 
-      <SectionTitle subtitle="Riwayat kondisi, fase tumbuh, hasil panen, dan aktivitas yang tercatat." title="Timeline Riwayat" />
+      <SectionTitle subtitle="Riwayat kondisi, fase tumbuh, hasil panen, perawatan, dan aktivitas yang tercatat." title="Timeline Riwayat" />
       <TreeHistoryTimeline
         conditionPhotoMap={conditionPhotoMap}
         currentUserId={profile?.id}
         growthPhasePhotoMap={growthPhasePhotoMap}
         harvestPhotoMap={harvestPhotoMap}
         history={history}
+        manualCarePhotoMap={manualCarePhotoMap}
         viewerMode={mode}
       />
 
@@ -598,7 +643,7 @@ function ActionSection({
 }) {
   return (
     <Card>
-      <SectionHeader title="Aksi Pohon" description="Catat kondisi, fase, atau hasil panen pohon ini." />
+      <SectionHeader title="Aksi Pohon" description="Catat kondisi, fase, hasil panen, atau perawatan pohon ini." />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
         <TreeActionButton
           label="Catat Kondisi"
@@ -607,6 +652,7 @@ function ActionSection({
         />
         <TreeActionButton label="Catat Fase" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
         <TreeActionButton label="Catat panen" onPress={() => router.push(`${basePath}/${tree.id}/harvest`)} />
+        <TreeActionButton label="Catat perawatan" onPress={() => router.push(`${basePath}/${tree.id}/care`)} />
       </View>
     </Card>
   );

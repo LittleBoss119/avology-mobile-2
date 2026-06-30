@@ -431,6 +431,33 @@ export type GetHarvestRecordsByTreeInput = {
   treeId: UUID;
 };
 
+export type CreateManualCareRecordInput = {
+  farmId: UUID;
+  targetType: TargetType;
+  category: CareCategory;
+  targetRow?: string | null;
+  targetColumn?: string | null;
+  targetTreeId?: UUID | null;
+  customTargetNote?: string | null;
+  note?: string | null;
+  performedAt?: string | null;
+  photo?: {
+    uri: string;
+    base64?: string | null;
+    fileName?: string | null;
+    mimeType?: string | null;
+  } | null;
+};
+
+export type CreateManualCareRecordData = {
+  recordId: UUID;
+  warningMessage?: string | null;
+};
+
+export type GetManualCareRecordsByTreeInput = {
+  treeId: UUID;
+};
+
 export type GetFloweringAndFruitingTreesInput = {
   farmId: UUID;
 };

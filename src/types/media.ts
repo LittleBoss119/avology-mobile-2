@@ -223,6 +223,8 @@ export type GetHarvestRecordPhotosInput = {
 
 export type ManualCareRecordPhoto = PhotoAttachmentWithSignedUrl;
 
+export type ManualCareRecordPhotoMap = Record<UUID, ManualCareRecordPhoto[]>;
+
 export type UploadManualCareRecordPhotoInput = {
   farmId: UUID;
   manualCareRecordId: UUID;
