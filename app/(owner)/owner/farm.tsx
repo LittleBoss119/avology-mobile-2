@@ -113,9 +113,9 @@ export default function OwnerFarmHubScreen() {
         ) : null}
         <MetaRow label="Nama kebun" value={farm?.name} />
         <MetaRow label="Lokasi" value={farm?.location} />
-        <MetaRow label="Luas" value={formatArea(farm?.areaSize)} />
+        <MetaRow label="Luas kebun" value={formatArea(farm?.areaSize)} />
         <MetaRow label="Total pohon aktif" value={formatCount(hubData.summary?.totalTrees, 'pohon')} />
-        <MetaRow label="Kode gabung" value={farm?.joinCode} />
+        <MetaRow label="Kode bergabung" value={farm?.joinCode} />
         <NavRow label="Buka Profil Kebun" onPress={() => router.push('/owner/farm-profile')} />
       </Card>
 

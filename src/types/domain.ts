@@ -778,6 +778,17 @@ export type CreateFarmData = {
   farmId: UUID;
 };
 
+export type UpdateFarmProfileInput = {
+  farmId: UUID;
+  name: string;
+  location?: string | null;
+  areaSize?: number | null;
+};
+
+export type UpdateFarmProfileData = {
+  success: true;
+};
+
 export type RequestJoinFarmInput = {
   joinCode: string;
 };

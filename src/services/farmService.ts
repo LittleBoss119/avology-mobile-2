@@ -5,6 +5,8 @@ import type {
   CurrentUserFarm,
   Farm,
   ServiceResult,
+  UpdateFarmProfileData,
+  UpdateFarmProfileInput,
   UUID,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
@@ -191,6 +193,35 @@ export async function getFarmDetail(farmId: UUID): Promise<ServiceResult<Farm>> 
   return ok(mapFarm(data));
 }
 
+export async function updateFarmProfile(
+  input: UpdateFarmProfileInput
+): Promise<ServiceResult<UpdateFarmProfileData>> {
+  const name = input.name.trim();
+
+  if (!name) {
+    return fail(new Error('Nama kebun wajib diisi.'));
+  }
+
+  if (input.areaSize !== null && input.areaSize !== undefined && input.areaSize <= 0) {
+    return fail(new Error('Luas kebun harus lebih dari 0.'));
+  }
+
+  const { error } = await supabase.rpc('update_farm_profile', {
+    p_area_size: input.areaSize ?? null,
+    p_farm_id: input.farmId,
+    p_location: normalizeOptionalText(input.location),
+    p_name: name,
+  });
+
+  if (error) {
+    return fail(new Error(mapUpdateFarmProfileError(error)));
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
 function mapCurrentUserFarm(row: CurrentUserFarmRow, farm?: Farm): CurrentUserFarm {
   return {
     membershipId: row.id,
@@ -253,4 +284,30 @@ function isMissingRpcError(error: { code?: string; message?: string; rawMessage?
         message.includes('schema cache') ||
         message.includes('does not exist'))
   );
+}
+
+function mapUpdateFarmProfileError(error: { code?: string; message?: string }): string {
+  if (error.code === 'PGRST202') {
+    return 'Fitur edit kebun belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.';
+  }
+
+  const message = error.message?.toLowerCase() ?? '';
+
+  if (message.includes('farm name is required')) {
+    return 'Nama kebun wajib diisi.';
+  }
+
+  if (message.includes('area_size') || message.includes('farms_area_size_check')) {
+    return 'Luas kebun harus lebih dari 0.';
+  }
+
+  if (message.includes('only active owners')) {
+    return 'Hanya owner aktif yang dapat mengubah data kebun.';
+  }
+
+  if (message.includes('not found') || message.includes('schema cache')) {
+    return 'Data kebun tidak ditemukan atau akses tidak aktif.';
+  }
+
+  return 'Data kebun gagal diperbarui. Coba lagi.';
 }
