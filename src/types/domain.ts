@@ -504,7 +504,13 @@ export type GetOperationalReportFollowUpTasksInput = {
 
 export type UpdateOperationalReportStatusInput = {
   operationalReportId: UUID;
+  ownerResponseNote?: string | null;
   status: OperationalReportStatus;
+};
+
+export type ReopenOperationalReportInput = {
+  operationalReportId: UUID;
+  note?: string | null;
 };
 
 export type OperationalReportEditEligibility = {

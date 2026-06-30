@@ -21,6 +21,7 @@ import {
   getOperationalReportEditEligibility,
   getOperationalReportDetail,
   getOperationalReports,
+  reopenOperationalReport,
   updateOwnOperationalReport,
   updateOperationalReportStatus,
 } from '../services/operationalReportService';
@@ -1090,6 +1091,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
   const [report, setReport] = React.useState<OperationalReport | null>(null);
   const [reportPhoto, setReportPhoto] = React.useState<OperationalReportPhoto | null>(null);
   const [reportPhotoPreviewOpen, setReportPhotoPreviewOpen] = React.useState(false);
+  const [ownerResponseNote, setOwnerResponseNote] = React.useState('');
   const [updatingStatus, setUpdatingStatus] = React.useState<OperationalReportStatus | null>(null);
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
 
@@ -1104,6 +1106,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
       setProofPhotoMap({});
       setReport(null);
       setReportPhoto(null);
+      setOwnerResponseNote('');
       setWorkerNames({});
       return;
     }
@@ -1114,6 +1117,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
       setProofPhotoMap({});
       setReport(null);
       setReportPhoto(null);
+      setOwnerResponseNote('');
       setWorkerNames({});
       return;
     }
@@ -1132,8 +1136,10 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
       setProofPhotoMap({});
       setReport(null);
       setReportPhoto(null);
+      setOwnerResponseNote('');
     } else {
       setReport(reportResult.data);
+      setOwnerResponseNote(reportResult.data.ownerResponseNote ?? '');
 
       const photoResult = await getOperationalReportPhotos({
         farmId: reportResult.data.farmId,
@@ -1194,7 +1200,31 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
 
     const result = await updateOperationalReportStatus({
       operationalReportId: report.id,
+      ownerResponseNote,
       status,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setUpdatingStatus(null);
+      return;
+    }
+
+    await loadDetail();
+    setUpdatingStatus(null);
+  }
+
+  async function handleReopenReport() {
+    if (!report || updatingStatus) {
+      return;
+    }
+
+    setUpdatingStatus('in_progress');
+    setError(null);
+
+    const result = await reopenOperationalReport({
+      note: ownerResponseNote,
+      operationalReportId: report.id,
     });
 
     if (result.error) {
@@ -1259,7 +1289,10 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
         allFollowUpTasksCompleted={allFollowUpTasksCompleted}
         hasActiveFollowUpTask={hasActiveFollowUpTask}
         hasFollowUpTasks={hasFollowUpTasks}
+        ownerResponseNote={ownerResponseNote}
         onCreateTask={() => router.push(`/owner/reports/${report.id}/task`)}
+        onChangeOwnerResponseNote={setOwnerResponseNote}
+        onReopenReport={handleReopenReport}
         onUpdateStatus={handleStatusUpdate}
         reportStatus={report.status}
         updatingStatus={updatingStatus}
@@ -1590,6 +1623,7 @@ function ReportDetailSummaryCard({
         {reporterName ? <MetaRow label="Pelapor" value={reporterName} /> : null}
         <MetaRow label="Tanggal laporan" value={formatDateTime(report.createdAt)} />
         <MetaRow label="Status" value={formatReportStatusDisplay(report.status)} />
+        {report.ownerResponseNote ? <MetaRow label="Catatan owner" value={report.ownerResponseNote} /> : null}
       </View>
     </Card>
   );
@@ -1659,7 +1693,10 @@ function OwnerReportDecisionSection({
   allFollowUpTasksCompleted,
   hasActiveFollowUpTask,
   hasFollowUpTasks,
+  ownerResponseNote,
   onCreateTask,
+  onChangeOwnerResponseNote,
+  onReopenReport,
   onUpdateStatus,
   reportStatus,
   updatingStatus,
@@ -1667,11 +1704,54 @@ function OwnerReportDecisionSection({
   allFollowUpTasksCompleted: boolean;
   hasActiveFollowUpTask: boolean;
   hasFollowUpTasks: boolean;
+  ownerResponseNote: string;
   onCreateTask: () => void;
+  onChangeOwnerResponseNote: (value: string) => void;
+  onReopenReport: () => void;
   onUpdateStatus: (status: OperationalReportStatus) => void;
   reportStatus: OperationalReportStatus;
   updatingStatus: OperationalReportStatus | null;
 }) {
+  const followUpWarning = hasFollowUpTasks
+    ? '\n\nLaporan ini sudah memiliki tugas tindak lanjut. Tugas yang sudah dibuat tidak akan dihapus.'
+    : '';
+
+  function confirmStatusUpdate(
+    status: OperationalReportStatus,
+    title: string,
+    message: string,
+    confirmTitle: string
+  ) {
+    Alert.alert(title, `${message}${followUpWarning}`, [
+      { style: 'cancel', text: 'Kembali' },
+      {
+        onPress: () => onUpdateStatus(status),
+        style: status === 'rejected' ? 'destructive' : 'default',
+        text: confirmTitle,
+      },
+    ]);
+  }
+
+  function confirmReopen() {
+    Alert.alert(
+      'Buka ulang laporan?',
+      `Laporan akan dikembalikan ke status diproses agar bisa ditindaklanjuti kembali.${followUpWarning}`,
+      [
+        { style: 'cancel', text: 'Kembali' },
+        { onPress: onReopenReport, text: 'Buka ulang' },
+      ]
+    );
+  }
+
+  const noteField = (
+    <TextArea
+      label="Catatan owner"
+      placeholder="Opsional, tulis catatan keputusan untuk laporan ini."
+      value={ownerResponseNote}
+      onChangeText={onChangeOwnerResponseNote}
+    />
+  );
+
   if (reportStatus === 'new') {
     return (
       <Card>
@@ -1682,6 +1762,7 @@ function OwnerReportDecisionSection({
         <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
           Laporan belum direspons. Pilih tindak lanjut yang paling sesuai dengan kondisi lapangan.
         </Text>
+        {noteField}
         <View style={{ gap: 10 }}>
           {!hasFollowUpTasks ? (
             <Button title="Buat Tugas Tindak Lanjut" onPress={onCreateTask} />
@@ -1691,16 +1772,36 @@ function OwnerReportDecisionSection({
             </Text>
           )}
           <Button
+            title="Tandai Diproses"
+            loading={updatingStatus === 'in_progress'}
+            variant="secondary"
+            onPress={() => onUpdateStatus('in_progress')}
+          />
+          <Button
             title="Tandai Selesai"
             loading={updatingStatus === 'resolved'}
             variant="secondary"
-            onPress={() => onUpdateStatus('resolved')}
+            onPress={() =>
+              confirmStatusUpdate(
+                'resolved',
+                'Tandai selesai?',
+                'Laporan akan ditandai selesai sebagai keputusan owner.',
+                'Tandai selesai'
+              )
+            }
           />
           <Button
             title="Tolak Laporan"
             loading={updatingStatus === 'rejected'}
             variant="danger"
-            onPress={() => onUpdateStatus('rejected')}
+            onPress={() =>
+              confirmStatusUpdate(
+                'rejected',
+                'Tolak laporan?',
+                'Laporan akan ditandai ditolak. Worker tidak bisa mengedit laporan ini setelah owner merespons.',
+                'Tolak laporan'
+              )
+            }
           />
         </View>
       </Card>
@@ -1719,20 +1820,99 @@ function OwnerReportDecisionSection({
             <Text selectable style={{ color: appTheme.primary, fontWeight: '800', lineHeight: 21 }}>
               Tugas tindak lanjut sudah selesai. Tinjau hasilnya lalu tandai laporan selesai.
             </Text>
+            {noteField}
             <Button
               title="Tandai Laporan Selesai"
               loading={updatingStatus === 'resolved'}
-              onPress={() => onUpdateStatus('resolved')}
+              onPress={() =>
+                confirmStatusUpdate(
+                  'resolved',
+                  'Tandai selesai?',
+                  'Laporan akan ditandai selesai sebagai keputusan owner.',
+                  'Tandai selesai'
+                )
+              }
+            />
+            <Button
+              title="Tolak Laporan"
+              loading={updatingStatus === 'rejected'}
+              variant="danger"
+              onPress={() =>
+                confirmStatusUpdate(
+                  'rejected',
+                  'Tolak laporan?',
+                  'Laporan akan ditandai ditolak. Worker tidak bisa mengedit laporan ini setelah owner merespons.',
+                  'Tolak laporan'
+                )
+              }
             />
           </>
         ) : hasActiveFollowUpTask ? (
-          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Menunggu pekerja menyelesaikan tugas tindak lanjut.
-          </Text>
+          <>
+            <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+              Menunggu pekerja menyelesaikan tugas tindak lanjut.
+            </Text>
+            {noteField}
+            <Button
+              title="Tandai Laporan Selesai"
+              loading={updatingStatus === 'resolved'}
+              variant="secondary"
+              onPress={() =>
+                confirmStatusUpdate(
+                  'resolved',
+                  'Tandai selesai?',
+                  'Laporan akan ditandai selesai sebagai keputusan owner.',
+                  'Tandai selesai'
+                )
+              }
+            />
+            <Button
+              title="Tolak Laporan"
+              loading={updatingStatus === 'rejected'}
+              variant="danger"
+              onPress={() =>
+                confirmStatusUpdate(
+                  'rejected',
+                  'Tolak laporan?',
+                  'Laporan akan ditandai ditolak. Worker tidak bisa mengedit laporan ini setelah owner merespons.',
+                  'Tolak laporan'
+                )
+              }
+            />
+          </>
         ) : (
-          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Laporan sedang dalam tindak lanjut. Status final tetap diputuskan oleh pemilik.
-          </Text>
+          <>
+            <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+              Laporan sedang dalam tindak lanjut. Status final tetap diputuskan oleh pemilik.
+            </Text>
+            {noteField}
+            <Button
+              title="Tandai Laporan Selesai"
+              loading={updatingStatus === 'resolved'}
+              variant="secondary"
+              onPress={() =>
+                confirmStatusUpdate(
+                  'resolved',
+                  'Tandai selesai?',
+                  'Laporan akan ditandai selesai sebagai keputusan owner.',
+                  'Tandai selesai'
+                )
+              }
+            />
+            <Button
+              title="Tolak Laporan"
+              loading={updatingStatus === 'rejected'}
+              variant="danger"
+              onPress={() =>
+                confirmStatusUpdate(
+                  'rejected',
+                  'Tolak laporan?',
+                  'Laporan akan ditandai ditolak. Worker tidak bisa mengedit laporan ini setelah owner merespons.',
+                  'Tolak laporan'
+                )
+              }
+            />
+          </>
         )}
       </Card>
     );
@@ -1748,6 +1928,13 @@ function OwnerReportDecisionSection({
       <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
         {reportStatus === 'resolved' ? 'Laporan selesai.' : 'Laporan ditolak.'}
       </Text>
+      {noteField}
+      <Button
+        title="Buka Ulang Laporan"
+        loading={updatingStatus === 'in_progress'}
+        variant="secondary"
+        onPress={confirmReopen}
+      />
     </Card>
   );
 }
@@ -2325,7 +2512,7 @@ function countReportsByStatus(reports: OperationalReport[], status: OperationalR
 
 function formatReportStatusDisplay(status: OperationalReportStatus, compact = false): string {
   const labels: Record<OperationalReportStatus, string> = {
-    in_progress: compact ? 'Tindak Lanjut' : 'Tindak Lanjut',
+    in_progress: 'Diproses',
     new: 'Belum Respons',
     rejected: 'Ditolak',
     resolved: 'Selesai',
