@@ -185,6 +185,8 @@ export type ListTaskProofPhotosForActivitiesInput = {
 
 export type GrowthPhaseRecordPhoto = PhotoAttachmentWithSignedUrl;
 
+export type GrowthPhaseRecordPhotoMap = Record<UUID, GrowthPhaseRecordPhoto[]>;
+
 export type UploadGrowthPhaseRecordPhotoInput = {
   farmId: UUID;
   growthPhaseRecordId: UUID;

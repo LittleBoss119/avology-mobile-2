@@ -11,7 +11,7 @@ import type {
   TreeHistoryItem,
   TreeHistoryType,
 } from '../types/domain';
-import type { ConditionRecordPhotoMap, PickedPhotoAsset } from '../types/media';
+import type { ConditionRecordPhotoMap, GrowthPhaseRecordPhotoMap, PickedPhotoAsset } from '../types/media';
 import { colors, radius, spacing, typography } from '../constants/theme';
 import { formatPersonDisplayName } from '../utils/displayFormat';
 import {
@@ -86,6 +86,7 @@ export type ConditionReportListProps = {
 export type TreeHistoryTimelineProps = {
   conditionPhotoMap?: ConditionRecordPhotoMap;
   currentUserId?: string | null;
+  growthPhasePhotoMap?: GrowthPhaseRecordPhotoMap;
   history: TreeHistoryItem[];
   viewerMode?: TreeHistoryViewerMode;
 };
@@ -515,6 +516,7 @@ export function ConditionReportList({
 export function TreeHistoryTimeline({
   conditionPhotoMap = {},
   currentUserId,
+  growthPhasePhotoMap = {},
   history,
   viewerMode = 'owner',
 }: TreeHistoryTimelineProps) {
@@ -534,6 +536,7 @@ export function TreeHistoryTimeline({
           key={`${item.historyType}-${item.happenedAt}-${item.title}`}
           conditionPhotoMap={conditionPhotoMap}
           currentUserId={currentUserId}
+          growthPhasePhotoMap={growthPhasePhotoMap}
           item={item}
           viewerMode={viewerMode}
         />
@@ -569,7 +572,7 @@ export function ConditionReportItem({
         </Text>
       </View>
       <MetaRow label="Catatan" value={report.note || '-'} />
-      {photoUrl ? <ConditionPhotoThumbnail photoUrl={photoUrl} /> : null}
+      {photoUrl ? <PhotoThumbnail photoUrl={photoUrl} /> : null}
       <MetaRow label="Dilaporkan oleh" value={reporterName} />
     </Card>
   );
@@ -578,18 +581,24 @@ export function ConditionReportItem({
 function TreeHistoryTimelineItem({
   conditionPhotoMap,
   currentUserId,
+  growthPhasePhotoMap,
   item,
   viewerMode,
 }: {
   conditionPhotoMap: ConditionRecordPhotoMap;
   currentUserId?: string | null;
+  growthPhasePhotoMap: GrowthPhaseRecordPhotoMap;
   item: TreeHistoryItem;
   viewerMode: TreeHistoryViewerMode;
 }) {
-  const photoUrl =
+  const conditionPhotoUrl =
     item.historyType === 'condition' && item.sourceId
       ? conditionPhotoMap[item.sourceId]?.signedUrl
       : null;
+  const growthPhasePhotoUrls =
+    item.historyType === 'phase' && item.sourceId
+      ? growthPhasePhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
+      : [];
 
   return (
     <View style={{ flexDirection: 'row', gap: spacing.md }}>
@@ -636,7 +645,8 @@ function TreeHistoryTimelineItem({
               {item.description}
             </Text>
           ) : null}
-          {photoUrl ? <ConditionPhotoThumbnail photoUrl={photoUrl} /> : null}
+          {conditionPhotoUrl ? <PhotoThumbnail photoUrl={conditionPhotoUrl} /> : null}
+          {growthPhasePhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={growthPhasePhotoUrls} /> : null}
           <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
             Dicatat oleh{' '}
             {formatActorDisplayName({
@@ -653,7 +663,17 @@ function TreeHistoryTimelineItem({
   );
 }
 
-function ConditionPhotoThumbnail({ photoUrl }: { photoUrl: string }) {
+function PhotoThumbnailRow({ photoUrls }: { photoUrls: string[] }) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+      {photoUrls.map((photoUrl) => (
+        <PhotoThumbnail key={photoUrl} photoUrl={photoUrl} />
+      ))}
+    </View>
+  );
+}
+
+function PhotoThumbnail({ photoUrl }: { photoUrl: string }) {
   const [imageFailed, setImageFailed] = React.useState(false);
   const [previewOpen, setPreviewOpen] = React.useState(false);
 

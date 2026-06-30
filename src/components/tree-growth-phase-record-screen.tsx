@@ -4,9 +4,12 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '../constants/theme';
 import { createGrowthPhaseRecord } from '../services/growthPhaseService';
+import { uploadGrowthPhaseRecordPhoto } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
 import type { GrowthPhase, Tree } from '../types/domain';
+import type { PickedPhotoAsset } from '../types/media';
 import { formatGrowthPhase, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
+import { PhotoAttachmentPicker } from './media';
 import { GrowthPhaseBadge } from './tree-components';
 import { Button, Card, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
 
@@ -28,7 +31,9 @@ export function TreeGrowthPhaseRecordScreen({
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
+  const [pendingGrowthPhaseRecordId, setPendingGrowthPhaseRecordId] = React.useState<string | null>(null);
   const [phase, setPhase] = React.useState<GrowthPhase | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [tree, setTree] = React.useState<Tree | null>(null);
 
@@ -78,6 +83,11 @@ export function TreeGrowthPhaseRecordScreen({
       return;
     }
 
+    if (pendingGrowthPhaseRecordId) {
+      await retryPendingPhotoUpload(pendingGrowthPhaseRecordId);
+      return;
+    }
+
     if (!phase) {
       setError('Fase pertumbuhan wajib dipilih.');
       return;
@@ -99,6 +109,74 @@ export function TreeGrowthPhaseRecordScreen({
       return;
     }
 
+    if (selectedPhoto) {
+      const photoUploaded = await uploadSelectedPhoto(result.data.recordId);
+
+      if (!photoUploaded) {
+        setPendingGrowthPhaseRecordId(result.data.recordId);
+        setSubmitting(false);
+        setError(
+          'Fase berhasil disimpan, tetapi foto gagal diunggah. Periksa koneksi atau pilih ulang foto, lalu coba lagi.'
+        );
+        return;
+      }
+    }
+
+    finishGrowthPhaseRecord();
+  }
+
+  async function retryPendingPhotoUpload(growthPhaseRecordId: string) {
+    if (!tree) {
+      setError('Data pohon tidak ditemukan.');
+      return;
+    }
+
+    if (!selectedPhoto) {
+      finishGrowthPhaseRecord();
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    const photoUploaded = await uploadSelectedPhoto(growthPhaseRecordId);
+
+    if (!photoUploaded) {
+      setSubmitting(false);
+      setError(
+        'Foto masih gagal diunggah. Periksa koneksi atau pilih ulang foto, lalu coba lagi.'
+      );
+      return;
+    }
+
+    finishGrowthPhaseRecord();
+  }
+
+  async function uploadSelectedPhoto(growthPhaseRecordId: string): Promise<boolean> {
+    if (!tree || !selectedPhoto) {
+      return true;
+    }
+
+    const photoResult = await uploadGrowthPhaseRecordPhoto({
+      base64: selectedPhoto.base64,
+      farmId: tree.farmId,
+      fileName: selectedPhoto.fileName,
+      growthPhaseRecordId,
+      localUri: selectedPhoto.uri,
+      mimeType: selectedPhoto.mimeType,
+    });
+
+    return !photoResult.error;
+  }
+
+  function finishGrowthPhaseRecord() {
+    if (!tree) {
+      setSubmitting(false);
+      return;
+    }
+
+    setPendingGrowthPhaseRecordId(null);
+    setSelectedPhoto(null);
     setSubmitting(false);
     router.replace(`${basePath}/${tree.id}`);
   }
@@ -107,11 +185,18 @@ export function TreeGrowthPhaseRecordScreen({
     return <LoadingState message="Memuat pohon..." />;
   }
 
+  const formLocked = Boolean(pendingGrowthPhaseRecordId);
+  const submitTitle = pendingGrowthPhaseRecordId
+    ? selectedPhoto
+      ? 'Coba Unggah Foto'
+      : 'Lanjut ke Detail'
+    : 'Simpan Fase';
+
   return (
     <Screen
       footer={
         <>
-          <Button title="Simpan Fase" loading={submitting} onPress={handleSubmit} />
+          <Button title={submitTitle} loading={submitting} onPress={handleSubmit} />
           <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
         </>
       }
@@ -147,6 +232,7 @@ export function TreeGrowthPhaseRecordScreen({
             <SelectableOption
               key={option}
               active={phase === option}
+              disabled={submitting || formLocked}
               label={formatPhaseOption(option)}
               onPress={() => setPhase(option)}
             />
@@ -155,23 +241,39 @@ export function TreeGrowthPhaseRecordScreen({
       </FormSection>
 
       <FormSection title="Catatan" description="Catat tanda pertumbuhan yang terlihat di pohon.">
-        <TextArea onChangeText={setNote} placeholder="Opsional" value={note} />
+        <TextArea disabled={submitting || formLocked} onChangeText={setNote} placeholder="Opsional" value={note} />
       </FormSection>
+
+      <PhotoAttachmentPicker
+        disabled={submitting}
+        helperText="Opsional, gunakan jika ingin menyimpan bukti kondisi fase."
+        label="Foto fase pohon"
+        selectedPhoto={selectedPhoto}
+        onError={setError}
+        onRemove={() => setSelectedPhoto(null)}
+        onSelect={(asset) => {
+          setError(null);
+          setSelectedPhoto(asset);
+        }}
+      />
     </Screen>
   );
 }
 
 function SelectableOption({
   active,
+  disabled,
   label,
   onPress,
 }: {
   active: boolean;
+  disabled?: boolean;
   label: string;
   onPress: () => void;
 }) {
   return (
     <Pressable
+      disabled={disabled}
       onPress={onPress}
       style={{
         backgroundColor: active ? colors.primarySoft : colors.surface,
@@ -179,6 +281,7 @@ function SelectableOption({
         borderCurve: 'continuous',
         borderRadius: radius.lg,
         borderWidth: 1,
+        opacity: disabled ? 0.6 : 1,
         padding: spacing.md,
       }}
     >
@@ -190,10 +293,12 @@ function SelectableOption({
 }
 
 function TextArea({
+  disabled,
   onChangeText,
   placeholder,
   value,
 }: {
+  disabled?: boolean;
   onChangeText: (value: string) => void;
   placeholder?: string;
   value: string;
@@ -201,6 +306,7 @@ function TextArea({
   return (
     <View style={{ gap: spacing.sm }}>
       <TextInput
+        editable={!disabled}
         multiline
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -214,6 +320,7 @@ function TextArea({
           color: colors.text,
           fontSize: 16,
           minHeight: 96,
+          opacity: disabled ? 0.6 : 1,
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.md,
           textAlignVertical: 'top',

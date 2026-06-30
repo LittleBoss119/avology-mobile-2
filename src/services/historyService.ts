@@ -33,6 +33,13 @@ type ConditionHistorySourceRow = {
   reported_at: string;
 };
 
+type GrowthPhaseHistorySourceRow = {
+  id: string;
+  phase: string;
+  recorded_by: string;
+  recorded_at: string;
+};
+
 type TreeFarmRow = {
   id: string;
   farm_id: string;
@@ -80,8 +87,13 @@ export async function getTreeHistory(
     return fail(error, 'Gagal memuat riwayat pohon.');
   }
 
-  const conditionSourceMap = await getConditionHistorySourceMap(input.treeId);
-  const history = (data ?? []).map((row) => mapTreeHistoryItem(row, conditionSourceMap));
+  const [conditionSourceMap, growthPhaseSourceMap] = await Promise.all([
+    getConditionHistorySourceMap(input.treeId),
+    getGrowthPhaseHistorySourceMap(input.treeId),
+  ]);
+  const history = (data ?? []).map((row) =>
+    mapTreeHistoryItem(row, conditionSourceMap, growthPhaseSourceMap)
+  );
   const actorDisplays = await getHistoryActorDisplays(
     treeFarmIdResult.data,
     history.map((item) => item.actorId)
@@ -200,19 +212,45 @@ async function getConditionHistorySourceMap(
   );
 }
 
+async function getGrowthPhaseHistorySourceMap(
+  treeId: UUID
+): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from('growth_phase_records')
+    .select('id, phase, recorded_by, recorded_at')
+    .eq('tree_id', treeId)
+    .returns<GrowthPhaseHistorySourceRow[]>();
+
+  if (error) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    (data ?? []).map((row) => [
+      buildGrowthPhaseHistoryKey(row.phase, row.recorded_by, row.recorded_at),
+      row.id,
+    ])
+  );
+}
+
 function mapTreeHistoryItem(
   row: TreeHistoryRow,
-  conditionSourceMap: Record<string, string>
+  conditionSourceMap: Record<string, string>,
+  growthPhaseSourceMap: Record<string, string>
 ): TreeHistoryItem {
   const conditionSourceId =
     row.history_type === 'condition'
       ? conditionSourceMap[buildConditionHistoryKey(row.title, row.actor_id, row.happened_at)] ?? null
       : null;
+  const growthPhaseSourceId =
+    row.history_type === 'phase'
+      ? growthPhaseSourceMap[buildGrowthPhaseHistoryKey(row.title, row.actor_id, row.happened_at)] ?? null
+      : null;
 
   return {
     actorName: null,
     actorRole: null,
-    sourceId: conditionSourceId,
+    sourceId: conditionSourceId ?? growthPhaseSourceId,
     treeId: row.tree_id,
     farmId: row.farm_id,
     historyType: row.history_type,
@@ -224,6 +262,10 @@ function mapTreeHistoryItem(
 }
 
 function buildConditionHistoryKey(title: string, actorId: string, happenedAt: string): string {
+  return `${title}|${actorId}|${happenedAt}`;
+}
+
+function buildGrowthPhaseHistoryKey(title: string, actorId: string, happenedAt: string): string {
   return `${title}|${actorId}|${happenedAt}`;
 }
 
