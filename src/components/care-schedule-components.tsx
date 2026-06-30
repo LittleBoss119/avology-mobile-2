@@ -65,7 +65,11 @@ export function CareScheduleCard({
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
             <Badge label={formatCareCategory(schedule.category)} tone="success" />
             <Badge label={schedule.careSopId ? 'Dari SOP' : 'Manual'} tone={schedule.careSopId ? 'warning' : 'muted'} />
-            {statusLabel ? <Badge label={statusLabel} tone={statusTone} /> : null}
+            {schedule.isCancelled ? (
+              <Badge label="Dibatalkan" tone="danger" />
+            ) : statusLabel ? (
+              <Badge label={statusLabel} tone={statusTone} />
+            ) : null}
           </View>
         </View>
       </View>

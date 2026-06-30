@@ -17,6 +17,16 @@ type CountResult = {
   error: { message?: string } | null;
 };
 
+type WorkerTaskCountRow = {
+  care_schedule_id: string | null;
+  id: string;
+};
+
+type ScheduleCancellationRow = {
+  id: string;
+  is_cancelled: boolean | null;
+};
+
 export async function getOwnerDashboardSummary(
   input: GetOwnerDashboardSummaryInput
 ): Promise<ServiceResult<OwnerDashboardSummary>> {
@@ -192,36 +202,95 @@ async function countWorkerTasksDueToday(
   userId: string,
   today: string
 ): Promise<CountResult> {
-  return supabase
+  return countActiveWorkerTaskRows(
+    supabase
     .from('care_tasks')
-    .select('id', { count: 'exact', head: true })
+    .select('id, care_schedule_id')
     .eq('farm_id', farmId)
     .eq('assigned_to', userId)
-    .eq('due_date', today);
+    .eq('due_date', today)
+  );
 }
 
 async function countWorkerUnfinishedTasks(
   farmId: string,
   userId: string
 ): Promise<CountResult> {
-  return supabase
+  return countActiveWorkerTaskRows(
+    supabase
     .from('care_tasks')
-    .select('id', { count: 'exact', head: true })
+    .select('id, care_schedule_id')
     .eq('farm_id', farmId)
     .eq('assigned_to', userId)
-    .in('status', ['pending', 'postponed']);
+    .in('status', ['pending', 'postponed'])
+  );
 }
 
 async function countWorkerCompletedTasks(
   farmId: string,
   userId: string
 ): Promise<CountResult> {
-  return supabase
+  return countActiveWorkerTaskRows(
+    supabase
     .from('care_tasks')
-    .select('id', { count: 'exact', head: true })
+    .select('id, care_schedule_id')
     .eq('farm_id', farmId)
     .eq('assigned_to', userId)
-    .eq('status', 'completed');
+    .eq('status', 'completed')
+  );
+}
+
+async function countActiveWorkerTaskRows(
+  query: PromiseLike<{ data: WorkerTaskCountRow[] | null; error: { message?: string } | null }>
+): Promise<CountResult> {
+  const { data, error } = await query;
+
+  if (error) {
+    return {
+      count: null,
+      error,
+    };
+  }
+
+  const tasks = data ?? [];
+  const scheduleIds = Array.from(
+    new Set(
+      tasks
+        .map((task) => task.care_schedule_id)
+        .filter((scheduleId): scheduleId is string => Boolean(scheduleId))
+    )
+  );
+
+  if (scheduleIds.length === 0) {
+    return {
+      count: tasks.length,
+      error: null,
+    };
+  }
+
+  const schedulesResult = await supabase
+    .from('care_schedules')
+    .select('id, is_cancelled')
+    .in('id', scheduleIds)
+    .returns<ScheduleCancellationRow[]>();
+
+  if (schedulesResult.error) {
+    return {
+      count: null,
+      error: schedulesResult.error,
+    };
+  }
+
+  const cancelledScheduleIds = new Set(
+    (schedulesResult.data ?? [])
+      .filter((schedule) => schedule.is_cancelled)
+      .map((schedule) => schedule.id)
+  );
+
+  return {
+    count: tasks.filter((task) => !task.care_schedule_id || !cancelledScheduleIds.has(task.care_schedule_id)).length,
+    error: null,
+  };
 }
 
 async function countDueOrOverdueSops(farmId: string): Promise<CountResult> {

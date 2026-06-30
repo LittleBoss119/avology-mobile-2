@@ -352,6 +352,7 @@ export default function WorkerTaskDetailScreen() {
   }
 
   const isCompleted = task.status === 'completed';
+  const isCancelledByOwner = task.scheduleIsCancelled === true;
   const isEditingRealization = Boolean(editingActivityId);
   const latestActivity = task.activities[0] ?? null;
   const latestActivityProof = latestActivity ? proofPhotoMap[latestActivity.id] : undefined;
@@ -410,7 +411,7 @@ export default function WorkerTaskDetailScreen() {
   return (
     <Screen
       footer={
-        isEditingRealization ? (
+        isCancelledByOwner ? null : isEditingRealization ? (
           <View style={{ gap: spacing.sm }}>
             <Button
               title="Simpan Edit Realisasi"
@@ -451,6 +452,7 @@ export default function WorkerTaskDetailScreen() {
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <Badge label={formatTaskStatusLabel(task.status)} tone={getTaskTone(task.status)} />
+          {isCancelledByOwner ? <Badge label="Dibatalkan owner" maxWidth={148} tone="danger" /> : null}
           {task.requiresPhoto ? <Badge label="Butuh bukti" tone="warning" /> : null}
           <Badge label={formatTaskSource(task)} tone="muted" />
         </View>
@@ -462,6 +464,17 @@ export default function WorkerTaskDetailScreen() {
         </View>
       </Card>
 
+      {isCancelledByOwner ? (
+        <Card variant="danger">
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+            Tugas ini sudah dibatalkan oleh owner.
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Tugas ini tidak lagi tersedia sebagai pekerjaan aktif.
+          </Text>
+        </Card>
+      ) : null}
+
       <Card>
         <Text selectable style={{ color: colors.text, fontSize: 18, fontWeight: '900' }}>
           Instruksi
@@ -471,7 +484,7 @@ export default function WorkerTaskDetailScreen() {
         </Text>
       </Card>
 
-      {!isCompleted ? (
+      {!isCompleted && !isCancelledByOwner ? (
         <FormSection title="Realisasi" description="Tambahkan keterangan hasil pekerjaan atau alasan penundaan.">
           <View style={{ gap: spacing.sm }}>
             <RealizationOption
@@ -508,7 +521,7 @@ export default function WorkerTaskDetailScreen() {
         </FormSection>
       ) : null}
 
-      {task.requiresPhoto || showCompleteInput ? (
+      {!isCancelledByOwner && (task.requiresPhoto || showCompleteInput) ? (
         <TaskProofPhotoPicker
           disabled={actionLoading !== null || isCompleted}
           photo={proofPhoto}
@@ -519,7 +532,7 @@ export default function WorkerTaskDetailScreen() {
         />
       ) : null}
 
-      {isEditingRealization ? (
+      {!isCancelledByOwner && isEditingRealization ? (
         <FormSection title="Edit realisasi" description="Perbarui status, catatan, atau bukti realisasi terbaru.">
           <View style={{ gap: spacing.sm }}>
             <RealizationOption
@@ -612,7 +625,7 @@ export default function WorkerTaskDetailScreen() {
               {activity.status === 'completed' ? (
                 <TaskProofPhotoPreview photo={proofPhotoMap[activity.id]} />
               ) : null}
-              {index === 0 && !isEditingRealization ? (
+              {index === 0 && !isEditingRealization && !isCancelledByOwner ? (
                 <Button
                   title="Edit realisasi"
                   variant="secondary"

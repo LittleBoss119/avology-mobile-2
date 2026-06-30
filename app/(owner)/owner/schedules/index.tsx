@@ -24,9 +24,9 @@ import { getCareScheduleDetail, getCareSchedules } from '../../../../src/service
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import type { CareSchedule, CareScheduleDetail, FarmMemberBasicProfile } from '../../../../src/types/domain';
 
-type ScheduleStatusFilter = 'all' | 'today' | 'unfinished' | 'completed' | 'postponed';
+type ScheduleStatusFilter = 'all' | 'today' | 'unfinished' | 'completed' | 'postponed' | 'cancelled';
 type ScheduleSourceFilter = 'all' | 'manual' | 'sop';
-type ScheduleVisualStatus = 'completed' | 'postponed' | 'unfinished';
+type ScheduleVisualStatus = 'cancelled' | 'completed' | 'postponed' | 'unfinished';
 
 const statusFilters: Array<{ label: string; value: ScheduleStatusFilter }> = [
   { label: 'Semua', value: 'all' },
@@ -34,6 +34,7 @@ const statusFilters: Array<{ label: string; value: ScheduleStatusFilter }> = [
   { label: 'Belum', value: 'unfinished' },
   { label: 'Selesai', value: 'completed' },
   { label: 'Tertunda', value: 'postponed' },
+  { label: 'Dibatalkan', value: 'cancelled' },
 ];
 
 const sourceFilters: Array<{ label: string; value: ScheduleSourceFilter }> = [
@@ -320,7 +321,7 @@ function CompactScheduleCard({
   schedule: CareSchedule;
   workerNames: Record<string, string>;
 }) {
-  const status = getScheduleStatus(detail);
+  const status = getScheduleStatus(schedule, detail);
   const workers = getScheduleWorkerNames(detail, workerNames);
 
   return (
@@ -533,12 +534,13 @@ function buildScheduleSummary(
   details: Record<string, CareScheduleDetail>
 ): { completed: number; postponed: number; today: number; unfinished: number } {
   const today = getTodayIsoDate();
-  const statuses = schedules.map((schedule) => getScheduleStatus(details[schedule.id]));
+  const activeSchedules = schedules.filter((schedule) => !schedule.isCancelled);
+  const statuses = activeSchedules.map((schedule) => getScheduleStatus(schedule, details[schedule.id]));
 
   return {
     completed: statuses.filter((status) => status === 'completed').length,
     postponed: statuses.filter((status) => status === 'postponed').length,
-    today: schedules.filter((schedule) => schedule.scheduledDate === today).length,
+    today: activeSchedules.filter((schedule) => schedule.scheduledDate === today).length,
     unfinished: statuses.filter((status) => status === 'unfinished').length,
   };
 }
@@ -562,9 +564,9 @@ function matchesScheduleFilters(
   }
 
   const today = getTodayIsoDate();
-  const status = getScheduleStatus(input.detail);
+  const status = getScheduleStatus(schedule, input.detail);
 
-  if (input.statusFilter === 'today' && schedule.scheduledDate !== today) {
+  if (input.statusFilter === 'today' && (schedule.scheduledDate !== today || schedule.isCancelled)) {
     return false;
   }
 
@@ -589,7 +591,11 @@ function matchesScheduleFilters(
   return searchable.includes(input.search);
 }
 
-function getScheduleStatus(detail?: CareScheduleDetail): ScheduleVisualStatus {
+function getScheduleStatus(schedule?: CareSchedule, detail?: CareScheduleDetail): ScheduleVisualStatus {
+  if (schedule?.isCancelled || detail?.isCancelled) {
+    return 'cancelled';
+  }
+
   if (!detail || detail.tasks.length === 0) {
     return 'unfinished';
   }
@@ -606,6 +612,10 @@ function getScheduleStatus(detail?: CareScheduleDetail): ScheduleVisualStatus {
 }
 
 function formatScheduleStatusLabel(status: ScheduleVisualStatus): string {
+  if (status === 'cancelled') {
+    return 'Dibatalkan';
+  }
+
   if (status === 'completed') {
     return 'Selesai';
   }
@@ -617,7 +627,11 @@ function formatScheduleStatusLabel(status: ScheduleVisualStatus): string {
   return 'Belum';
 }
 
-function getScheduleStatusTone(status: ScheduleVisualStatus): 'muted' | 'success' | 'warning' {
+function getScheduleStatusTone(status: ScheduleVisualStatus): 'danger' | 'muted' | 'success' | 'warning' {
+  if (status === 'cancelled') {
+    return 'danger';
+  }
+
   if (status === 'completed') {
     return 'success';
   }

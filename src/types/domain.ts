@@ -298,6 +298,7 @@ export type CareTask = {
   dueDate: string;
   status: TaskStatus;
   requiresPhoto: boolean;
+  scheduleIsCancelled?: boolean;
   createdAt?: string;
   updatedAt?: string | null;
 };
@@ -576,6 +577,15 @@ export type GetCareSchedulesInput = {
 
 export type GetCareScheduleDetailInput = {
   scheduleId: UUID;
+};
+
+export type CancelCareScheduleInput = {
+  scheduleId: UUID;
+  reason?: string | null;
+};
+
+export type CancelCareScheduleData = {
+  success: boolean;
 };
 
 export type CreateManualScheduleInput = {

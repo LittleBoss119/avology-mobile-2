@@ -5,6 +5,8 @@ import type {
   CareScheduleDetail,
   CareSOPDefaultTargetType,
   CareTask,
+  CancelCareScheduleData,
+  CancelCareScheduleInput,
   CreateManualScheduleData,
   CreateManualScheduleInput,
   CreateScheduleFromSOPData,
@@ -338,6 +340,29 @@ export async function getCareScheduleDetail(
   return ok({
     ...mapCareSchedule(scheduleResult.data),
     tasks: (tasksResult.data ?? []).map(mapCareTask),
+  });
+}
+
+export async function cancelCareSchedule(
+  input: CancelCareScheduleInput
+): Promise<ServiceResult<CancelCareScheduleData>> {
+  const scheduleId = normalizeOptionalText(input.scheduleId);
+
+  if (!scheduleId) {
+    return fail(new Error('Jadwal perawatan tidak ditemukan.'));
+  }
+
+  const { error } = await supabase.rpc('cancel_care_schedule', {
+    p_reason: normalizeOptionalText(input.reason),
+    p_schedule_id: scheduleId,
+  });
+
+  if (error) {
+    return fail(new Error(mapCancelScheduleError(error)));
+  }
+
+  return ok({
+    success: true,
   });
 }
 
@@ -750,6 +775,28 @@ function mapCareTask(row: CareTaskRow): CareTask {
 function normalizeOptionalText(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function mapCancelScheduleError(error: { message?: string }): string {
+  const message = error.message?.toLowerCase() ?? '';
+
+  if (message.includes('already cancelled')) {
+    return 'Jadwal ini sudah dibatalkan.';
+  }
+
+  if (message.includes('task realization exists')) {
+    return 'Jadwal tidak dapat dibatalkan karena sudah ada realisasi tugas.';
+  }
+
+  if (message.includes('only active owners')) {
+    return 'Hanya pemilik aktif yang dapat membatalkan jadwal.';
+  }
+
+  if (message.includes('not found')) {
+    return 'Jadwal perawatan tidak ditemukan atau tidak dapat diakses.';
+  }
+
+  return 'Gagal membatalkan jadwal perawatan.';
 }
 
 function toLocalIsoDate(date: Date): string {

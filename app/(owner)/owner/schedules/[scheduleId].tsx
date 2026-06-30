@@ -1,11 +1,12 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import {
   Badge,
+  Button,
   Card,
   CompactMetaItem,
   EmptyState,
@@ -18,7 +19,7 @@ import {
 } from '../../../../src/components/ui';
 import { colors, spacing, typography } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
-import { getCareScheduleDetail } from '../../../../src/services/careScheduleService';
+import { cancelCareSchedule, getCareScheduleDetail } from '../../../../src/services/careScheduleService';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { listTaskProofPhotosForActivities } from '../../../../src/services/photoAttachmentService';
@@ -37,6 +38,7 @@ export default function CareScheduleDetailScreen() {
   const { currentFarm } = useAuth();
   const { scheduleId } = useLocalSearchParams<{ scheduleId: string }>();
   const [error, setError] = React.useState<string | null>(null);
+  const [cancelLoading, setCancelLoading] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [schedule, setSchedule] = React.useState<CareScheduleDetail | null>(null);
@@ -147,6 +149,50 @@ export default function CareScheduleDetailScreen() {
     );
   }
 
+  const hasRealization = scheduleHasRealization(schedule, taskDetailMap);
+
+  function handleCancelSchedule() {
+    Alert.alert(
+      'Batalkan jadwal?',
+      'Tugas dari jadwal ini tidak akan ditampilkan sebagai pekerjaan aktif.',
+      [
+        {
+          text: 'Kembali',
+          style: 'cancel',
+        },
+        {
+          text: 'Batalkan jadwal',
+          style: 'destructive',
+          onPress: () => {
+            runCancelSchedule();
+          },
+        },
+      ]
+    );
+  }
+
+  async function runCancelSchedule() {
+    if (!schedule) {
+      return;
+    }
+
+    setCancelLoading(true);
+    setError(null);
+
+    const result = await cancelCareSchedule({
+      scheduleId: schedule.id,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setCancelLoading(false);
+      return;
+    }
+
+    await loadDetail();
+    setCancelLoading(false);
+  }
+
   return (
     <Screen>
       <TopAppBar title="Detail Jadwal" onBack={() => router.back()} />
@@ -182,6 +228,42 @@ export default function CareScheduleDetailScreen() {
         </View>
       </Card>
 
+      {schedule.isCancelled ? (
+        <Card variant="danger">
+          <Badge label="Jadwal dibatalkan" maxWidth={160} tone="danger" />
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Tugas dari jadwal ini tidak ditampilkan sebagai pekerjaan aktif untuk pekerja.
+          </Text>
+          {schedule.cancelledAt ? <MetaRow label="Waktu batal" value={formatDateTime(schedule.cancelledAt)} /> : null}
+          {schedule.cancelReason ? <MetaRow label="Alasan" value={schedule.cancelReason} /> : null}
+        </Card>
+      ) : hasRealization ? (
+        <Card variant="warning">
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+            Jadwal tidak dapat dibatalkan
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Jadwal sudah memiliki realisasi tugas dari pekerja.
+          </Text>
+        </Card>
+      ) : (
+        <Card>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+            Pembatalan Jadwal
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Batalkan jadwal jika pekerjaan ini tidak perlu ditampilkan sebagai pekerjaan aktif.
+          </Text>
+          <Button
+            title="Batalkan jadwal"
+            variant="danger"
+            loading={cancelLoading}
+            disabled={cancelLoading}
+            onPress={handleCancelSchedule}
+          />
+        </Card>
+      )}
+
       <Card>
         <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
           Instruksi
@@ -214,6 +296,10 @@ export default function CareScheduleDetailScreen() {
 }
 
 function formatScheduleStatus(schedule: CareScheduleDetail): string {
+  if (schedule.isCancelled) {
+    return 'Jadwal dibatalkan';
+  }
+
   if (schedule.tasks.length === 0) {
     return 'Belum ada tugas';
   }
@@ -230,6 +316,10 @@ function formatScheduleStatus(schedule: CareScheduleDetail): string {
 }
 
 function getScheduleTone(schedule: CareScheduleDetail): 'danger' | 'muted' | 'success' | 'warning' {
+  if (schedule.isCancelled) {
+    return 'danger';
+  }
+
   if (schedule.tasks.length === 0) {
     return 'muted';
   }
@@ -243,6 +333,13 @@ function getScheduleTone(schedule: CareScheduleDetail): 'danger' | 'muted' | 'su
   }
 
   return 'muted';
+}
+
+function scheduleHasRealization(
+  schedule: CareScheduleDetail,
+  taskDetailMap: Record<string, CareTaskDetail>
+): boolean {
+  return schedule.tasks.some((task) => (taskDetailMap[task.id]?.activities.length ?? 0) > 0);
 }
 
 function formatScheduleWorkers(

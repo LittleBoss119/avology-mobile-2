@@ -90,6 +90,11 @@ type ExistingFollowUpTaskRow = {
   title: string;
 };
 
+type ScheduleCancellationRow = {
+  id: string;
+  is_cancelled: boolean | null;
+};
+
 export async function getWorkerTasks(
   input: GetWorkerTasksInput
 ): Promise<ServiceResult<CareTask[]>> {
@@ -118,7 +123,13 @@ export async function getWorkerTasks(
     return fail(error, 'Gagal memuat daftar tugas pekerja.');
   }
 
-  return ok((data ?? []).map(mapCareTask));
+  const activeTasksResult = await filterCancelledScheduleTasks(data ?? []);
+
+  if (activeTasksResult.error) {
+    return fail(activeTasksResult.error);
+  }
+
+  return ok(activeTasksResult.data.map((task) => mapCareTask(task)));
 }
 
 export async function getFarmTasks(
@@ -142,7 +153,7 @@ export async function getFarmTasks(
     return fail(error, 'Gagal memuat daftar tugas kebun.');
   }
 
-  return ok((data ?? []).map(mapCareTask));
+  return ok((data ?? []).map((task) => mapCareTask(task)));
 }
 
 export async function getTaskDetail(
@@ -168,6 +179,12 @@ export async function getTaskDetail(
     return fail(accessResult.error);
   }
 
+  const scheduleCancellationResult = await getTaskScheduleCancellationStatus(taskResult.data);
+
+  if (scheduleCancellationResult.error) {
+    return fail(scheduleCancellationResult.error);
+  }
+
   const activitiesResult = await supabase
     .from('care_activities')
     .select(CARE_ACTIVITY_SELECT)
@@ -180,7 +197,9 @@ export async function getTaskDetail(
   }
 
   return ok({
-    ...mapCareTask(taskResult.data),
+    ...mapCareTask(taskResult.data, {
+      scheduleIsCancelled: scheduleCancellationResult.data,
+    }),
     activities: (activitiesResult.data ?? []).map(mapCareActivity),
   });
 }
@@ -356,6 +375,12 @@ export async function createTaskFromOperationalReport(
 export async function completeTask(
   input: CompleteTaskInput
 ): Promise<ServiceResult<CompleteTaskData>> {
+  const cancellationResult = await ensureTaskScheduleIsNotCancelled(input.taskId);
+
+  if (cancellationResult.error) {
+    return fail(cancellationResult.error);
+  }
+
   const { data, error } = await supabase.rpc('complete_task', {
     p_note: normalizeOptionalText(input.note),
     p_task_id: input.taskId,
@@ -377,6 +402,12 @@ export async function completeTask(
 export async function postponeTask(
   input: PostponeTaskInput
 ): Promise<ServiceResult<PostponeTaskData>> {
+  const cancellationResult = await ensureTaskScheduleIsNotCancelled(input.taskId);
+
+  if (cancellationResult.error) {
+    return fail(cancellationResult.error);
+  }
+
   const note = normalizeOptionalText(input.note);
 
   if (!note) {
@@ -451,6 +482,16 @@ export async function updateLatestTaskRealization(
 
   if (accessResult.error) {
     return fail(accessResult.error);
+  }
+
+  const cancellationResult = await getTaskScheduleCancellationStatus(taskResult.data);
+
+  if (cancellationResult.error) {
+    return fail(cancellationResult.error);
+  }
+
+  if (cancellationResult.data) {
+    return fail(new Error('Tugas ini sudah dibatalkan oleh owner.'));
   }
 
   const latestActivityResult = await getLatestActivityForTask(input.taskId);
@@ -553,6 +594,88 @@ async function ensureActiveOwner(
   return ok({
     success: true,
   });
+}
+
+async function filterCancelledScheduleTasks(
+  tasks: CareTaskRow[]
+): Promise<ServiceResult<CareTaskRow[]>> {
+  const scheduleIds = Array.from(
+    new Set(
+      tasks
+        .map((task) => task.care_schedule_id)
+        .filter((scheduleId): scheduleId is string => Boolean(scheduleId))
+    )
+  );
+
+  if (scheduleIds.length === 0) {
+    return ok(tasks);
+  }
+
+  const { data, error } = await supabase
+    .from('care_schedules')
+    .select('id, is_cancelled')
+    .in('id', scheduleIds)
+    .returns<ScheduleCancellationRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memeriksa status jadwal tugas.');
+  }
+
+  const cancelledScheduleIds = new Set(
+    (data ?? [])
+      .filter((schedule) => schedule.is_cancelled)
+      .map((schedule) => schedule.id)
+  );
+
+  return ok(tasks.filter((task) => !task.care_schedule_id || !cancelledScheduleIds.has(task.care_schedule_id)));
+}
+
+async function ensureTaskScheduleIsNotCancelled(taskId: UUID): Promise<ServiceResult<SuccessData>> {
+  const taskResult = await supabase
+    .from('care_tasks')
+    .select(CARE_TASK_SELECT)
+    .eq('id', taskId)
+    .maybeSingle<CareTaskRow>();
+
+  if (taskResult.error) {
+    return fail(taskResult.error, 'Gagal memeriksa status jadwal tugas.');
+  }
+
+  if (!taskResult.data) {
+    return fail(new Error('Tugas tidak ditemukan atau tidak dapat diakses.'));
+  }
+
+  const cancellationResult = await getTaskScheduleCancellationStatus(taskResult.data);
+
+  if (cancellationResult.error) {
+    return fail(cancellationResult.error);
+  }
+
+  if (cancellationResult.data) {
+    return fail(new Error('Tugas ini sudah dibatalkan oleh owner.'));
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
+async function getTaskScheduleCancellationStatus(task: CareTaskRow): Promise<ServiceResult<boolean>> {
+  if (!task.care_schedule_id) {
+    return ok(false);
+  }
+
+  const { data, error } = await supabase
+    .from('care_schedules')
+    .select('id, is_cancelled')
+    .eq('id', task.care_schedule_id)
+    .maybeSingle<ScheduleCancellationRow>();
+
+  if (error) {
+    return fail(error, 'Gagal memeriksa status jadwal tugas.');
+  }
+
+  return ok(data?.is_cancelled === true);
 }
 
 async function getAccessibleOperationalReportSource(
@@ -790,7 +913,10 @@ async function getCurrentUserId(): Promise<ServiceResult<UUID>> {
   return ok(userId);
 }
 
-function mapCareTask(row: CareTaskRow): CareTask {
+function mapCareTask(
+  row: CareTaskRow,
+  options: { scheduleIsCancelled?: boolean } = {}
+): CareTask {
   return {
     assignedBy: row.assigned_by,
     assignedTo: row.assigned_to,
@@ -804,6 +930,7 @@ function mapCareTask(row: CareTaskRow): CareTask {
     instruction: row.instruction,
     operationalReportId: row.operational_report_id,
     requiresPhoto: row.requires_photo ?? false,
+    scheduleIsCancelled: options.scheduleIsCancelled,
     status: row.status,
     targetColumn: row.target_column,
     targetRow: row.target_row,
