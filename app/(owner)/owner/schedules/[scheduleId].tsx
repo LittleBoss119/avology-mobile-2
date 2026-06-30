@@ -240,20 +240,25 @@ export default function CareScheduleDetailScreen() {
       ) : hasRealization ? (
         <Card variant="warning">
           <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
-            Jadwal tidak dapat dibatalkan
+            Jadwal tidak dapat diubah
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Jadwal sudah memiliki realisasi tugas dari pekerja.
+            Jadwal sudah memiliki realisasi tugas dari pekerja, jadi tidak bisa diedit atau dibatalkan.
           </Text>
         </Card>
       ) : (
         <Card>
           <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
-            Pembatalan Jadwal
+            Pengaturan Jadwal
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Batalkan jadwal jika pekerjaan ini tidak perlu ditampilkan sebagai pekerjaan aktif.
+            Ubah jadwal sebelum ada realisasi, atau batalkan jika pekerjaan ini tidak perlu ditampilkan sebagai pekerjaan aktif.
           </Text>
+          <Button
+            title="Edit jadwal"
+            disabled={cancelLoading}
+            onPress={() => router.push(`/owner/schedules/${schedule.id}/edit`)}
+          />
           <Button
             title="Batalkan jadwal"
             variant="danger"

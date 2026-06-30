@@ -588,6 +588,30 @@ export type CancelCareScheduleData = {
   success: boolean;
 };
 
+export type ScheduleEditEligibility = {
+  canEdit: boolean;
+  reason?: string | null;
+};
+
+export type GetScheduleEditEligibilityInput = {
+  scheduleId: UUID;
+};
+
+export type UpdateCareScheduleInput = {
+  scheduleId: UUID;
+  title: string;
+  category: CareCategory;
+  scheduledDate: string;
+  assignedWorkerId: UUID;
+  targetType: TargetType;
+  targetRow?: string | null;
+  targetColumn?: string | null;
+  targetTreeId?: UUID | null;
+  customTargetNote?: string | null;
+  instruction?: string | null;
+  requiresPhoto?: boolean;
+};
+
 export type CreateManualScheduleInput = {
   farmId: UUID;
   title: string;

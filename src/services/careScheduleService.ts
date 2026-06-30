@@ -13,12 +13,15 @@ import type {
   CreateScheduleFromSOPInput,
   GetCareScheduleDetailInput,
   GetCareSchedulesInput,
+  GetScheduleEditEligibilityInput,
   MemberRole,
   MemberStatus,
+  ScheduleEditEligibility,
   ServiceResult,
   SuccessData,
   TargetType,
   TaskStatus,
+  UpdateCareScheduleInput,
   UUID,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
@@ -110,6 +113,10 @@ type CareTaskRow = {
   updated_at?: string | null;
 };
 
+type CareActivityIdRow = {
+  id: string;
+};
+
 type NormalizedTarget = {
   targetType: CareSOPDefaultTargetType;
   targetRow: string | null;
@@ -123,6 +130,20 @@ type NormalizedManualTarget = {
   targetColumn: string | null;
   targetTreeId: string | null;
   customTargetNote: string | null;
+};
+
+type EditableScheduleUpdate = {
+  assignedWorkerId: UUID;
+  category: CareCategory;
+  customTargetNote: string | null;
+  instruction: string | null;
+  requiresPhoto: boolean;
+  scheduledDate: string;
+  targetColumn: string | null;
+  targetRow: string | null;
+  targetTreeId: string | null;
+  targetType: TargetType;
+  title: string;
 };
 
 export async function createScheduleFromSOP(
@@ -366,6 +387,108 @@ export async function cancelCareSchedule(
   });
 }
 
+export async function getScheduleEditEligibility(
+  input: GetScheduleEditEligibilityInput
+): Promise<ServiceResult<ScheduleEditEligibility>> {
+  const scheduleResult = await getCareScheduleDetail({
+    scheduleId: input.scheduleId,
+  });
+
+  if (scheduleResult.error) {
+    return fail(scheduleResult.error);
+  }
+
+  return getScheduleEditEligibilityFromDetail(scheduleResult.data);
+}
+
+export async function updateCareSchedule(
+  input: UpdateCareScheduleInput
+): Promise<ServiceResult<SuccessData>> {
+  const scheduleResult = await getCareScheduleDetail({
+    scheduleId: input.scheduleId,
+  });
+
+  if (scheduleResult.error) {
+    return fail(scheduleResult.error);
+  }
+
+  const schedule = scheduleResult.data;
+  const eligibilityResult = await getScheduleEditEligibilityFromDetail(schedule);
+
+  if (eligibilityResult.error) {
+    return fail(eligibilityResult.error);
+  }
+
+  if (!eligibilityResult.data.canEdit) {
+    return fail(new Error(eligibilityResult.data.reason ?? 'Jadwal ini tidak bisa diedit.'));
+  }
+
+  const normalized = normalizeScheduleUpdateInput(input);
+
+  if (normalized instanceof Error) {
+    return fail(normalized);
+  }
+
+  const workersResult = await ensureActiveWorkers(schedule.farmId, [normalized.assignedWorkerId]);
+
+  if (workersResult.error) {
+    return fail(workersResult.error);
+  }
+
+  const now = new Date().toISOString();
+  const scheduleUpdate = {
+    category: normalized.category,
+    custom_target_note: normalized.customTargetNote,
+    instruction: normalized.instruction,
+    requires_photo: normalized.requiresPhoto,
+    scheduled_date: normalized.scheduledDate,
+    target_column: normalized.targetColumn,
+    target_row: normalized.targetRow,
+    target_tree_id: normalized.targetTreeId,
+    target_type: normalized.targetType,
+    title: normalized.title,
+    updated_at: now,
+  };
+
+  const scheduleUpdateResult = await supabase
+    .from('care_schedules')
+    .update(scheduleUpdate)
+    .eq('id', schedule.id);
+
+  if (scheduleUpdateResult.error) {
+    return fail(scheduleUpdateResult.error, 'Gagal memperbarui jadwal perawatan.');
+  }
+
+  if (schedule.tasks.length > 0) {
+    const taskIds = schedule.tasks.map((task) => task.id);
+    const taskUpdateResult = await supabase
+      .from('care_tasks')
+      .update({
+        assigned_to: normalized.assignedWorkerId,
+        category: normalized.category,
+        custom_target_note: normalized.customTargetNote,
+        due_date: normalized.scheduledDate,
+        instruction: normalized.instruction,
+        requires_photo: normalized.requiresPhoto,
+        target_column: normalized.targetColumn,
+        target_row: normalized.targetRow,
+        target_tree_id: normalized.targetTreeId,
+        target_type: normalized.targetType,
+        title: normalized.title,
+        updated_at: now,
+      })
+      .in('id', taskIds);
+
+    if (taskUpdateResult.error) {
+      return fail(taskUpdateResult.error, 'Jadwal diperbarui, tetapi tugas pekerja belum dapat disinkronkan.');
+    }
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
 async function createSingleWorkerScheduleWithRpc(input: {
   farmId: UUID;
   instruction: string | null;
@@ -401,6 +524,61 @@ async function createSingleWorkerScheduleWithRpc(input: {
   return ok({
     scheduleId: row.schedule_id,
     taskIds: [row.task_id],
+  });
+}
+
+async function getScheduleEditEligibilityFromDetail(
+  schedule: CareScheduleDetail
+): Promise<ServiceResult<ScheduleEditEligibility>> {
+  const accessResult = await ensureActiveOwner(
+    schedule.farmId,
+    'Hanya owner aktif yang dapat mengubah jadwal.'
+  );
+
+  if (accessResult.error) {
+    return ok({
+      canEdit: false,
+      reason: accessResult.error.message,
+    });
+  }
+
+  if (schedule.isCancelled) {
+    return ok({
+      canEdit: false,
+      reason: 'Jadwal yang sudah dibatalkan tidak bisa diedit.',
+    });
+  }
+
+  const taskIds = schedule.tasks.map((task) => task.id);
+
+  if (taskIds.length === 0) {
+    return ok({
+      canEdit: true,
+      reason: null,
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('care_activities')
+    .select('id')
+    .in('care_task_id', taskIds)
+    .limit(1)
+    .returns<CareActivityIdRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memeriksa realisasi tugas jadwal.');
+  }
+
+  if ((data ?? []).length > 0) {
+    return ok({
+      canEdit: false,
+      reason: 'Jadwal ini sudah memiliki realisasi tugas, jadi tidak bisa diedit.',
+    });
+  }
+
+  return ok({
+    canEdit: true,
+    reason: null,
   });
 }
 
@@ -720,6 +898,58 @@ function normalizeManualTarget(input: {
     targetRow: null,
     targetTreeId: null,
     targetType: 'custom',
+  };
+}
+
+function normalizeScheduleUpdateInput(input: UpdateCareScheduleInput): EditableScheduleUpdate | Error {
+  const title = normalizeOptionalText(input.title);
+
+  if (!title) {
+    return new Error('Judul jadwal wajib diisi.');
+  }
+
+  const category = validateCareCategory(input.category);
+
+  if (category instanceof Error) {
+    return category;
+  }
+
+  const scheduledDate = normalizeScheduleDate(input.scheduledDate);
+
+  if (scheduledDate instanceof Error) {
+    return scheduledDate;
+  }
+
+  const workerIds = normalizeWorkerIds([input.assignedWorkerId]);
+
+  if (workerIds instanceof Error) {
+    return workerIds;
+  }
+
+  const target = normalizeManualTarget({
+    customTargetNote: input.customTargetNote,
+    targetColumn: input.targetColumn,
+    targetRow: input.targetRow,
+    targetTreeId: input.targetTreeId,
+    targetType: input.targetType,
+  });
+
+  if (target instanceof Error) {
+    return target;
+  }
+
+  return {
+    assignedWorkerId: workerIds[0],
+    category,
+    customTargetNote: target.customTargetNote,
+    instruction: normalizeOptionalText(input.instruction),
+    requiresPhoto: input.requiresPhoto ?? false,
+    scheduledDate,
+    targetColumn: target.targetColumn,
+    targetRow: target.targetRow,
+    targetTreeId: target.targetTreeId,
+    targetType: target.targetType,
+    title,
   };
 }
 
