@@ -37,6 +37,7 @@ import {
   ConditionReportList,
   ConditionStatusBadge,
   TreeHistoryTimeline,
+  type TreeHistoryRouteRecordType,
   TreeVisualPlaceholder,
 } from './tree-components';
 import {
@@ -462,6 +463,14 @@ export function TreeDetailScreen({
     setPhotoActionLoading(false);
   }
 
+  function handleOpenHistoryRecord(item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) {
+    if (!item.sourceId || !tree) {
+      return;
+    }
+
+    router.push(`${basePath}/${tree.id}/records/${recordType}/${item.sourceId}`);
+  }
+
   const displayCode = formatTreeDisplayCode(tree);
 
   return (
@@ -514,6 +523,7 @@ export function TreeDetailScreen({
         harvestPhotoMap={harvestPhotoMap}
         history={history}
         manualCarePhotoMap={manualCarePhotoMap}
+        onRecordPress={handleOpenHistoryRecord}
         viewerMode={mode}
       />
 

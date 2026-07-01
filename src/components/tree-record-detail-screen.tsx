@@ -1,0 +1,425 @@
+import { router } from 'expo-router';
+import React from 'react';
+import { Alert, Text, View } from 'react-native';
+
+import { colors, spacing, typography } from '../constants/theme';
+import {
+  getConditionReportDetail,
+  softDeleteOwnConditionReport,
+} from '../services/conditionReportService';
+import {
+  getGrowthPhaseRecordDetail,
+  softDeleteOwnGrowthPhaseRecord,
+} from '../services/growthPhaseService';
+import {
+  getHarvestRecordDetail,
+  softDeleteOwnHarvestRecord,
+} from '../services/harvestService';
+import {
+  getManualCareRecordDetail,
+  softDeleteOwnManualCareRecord,
+} from '../services/manualCareService';
+import {
+  getConditionRecordPhotos,
+  getGrowthPhaseRecordPhotos,
+  getHarvestRecordPhotos,
+  getManualCareRecordPhotos,
+} from '../services/photoAttachmentService';
+import { getTreeDetail } from '../services/treeService';
+import type {
+  CareCategory,
+  GrowthPhase,
+  ServiceResult,
+  SuccessData,
+  Tree,
+  TreeConditionStatus,
+  UUID,
+} from '../types/domain';
+import type { PhotoAttachmentPreviewItem } from '../types/media';
+import { formatCareCategory, formatTargetType } from '../utils/displayFormat';
+import { formatGrowthPhase, formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
+import { PhotoAttachmentPreviewList } from './media';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorBanner,
+  LoadingState,
+  MetaRow,
+  Screen,
+  TopAppBar,
+} from './ui';
+
+export type TreeRecordRouteType = 'condition' | 'phase' | 'harvest' | 'manual-care';
+
+type TreeRecordDetailScreenProps = {
+  basePath: '/owner/trees' | '/worker/trees';
+  recordId?: string;
+  recordType?: string;
+  treeId?: string;
+};
+
+type DetailState = {
+  canEdit: boolean;
+  eventAt: string;
+  eventLabel: string;
+  farmId: UUID;
+  note: string | null;
+  recordLabel: string;
+  rows: Array<{ label: string; value: string | null }>;
+  title: string;
+};
+
+export function TreeRecordDetailScreen({
+  basePath,
+  recordId,
+  recordType,
+  treeId,
+}: TreeRecordDetailScreenProps) {
+  const [detail, setDetail] = React.useState<DetailState | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [photos, setPhotos] = React.useState<PhotoAttachmentPreviewItem[]>([]);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [tree, setTree] = React.useState<Tree | null>(null);
+  const normalizedType = normalizeRecordType(recordType);
+
+  const loadDetail = React.useCallback(async () => {
+    if (!treeId || !recordId || !normalizedType) {
+      setError('Catatan tidak ditemukan.');
+      setDetail(null);
+      setTree(null);
+      setPhotos([]);
+      return;
+    }
+
+    setError(null);
+
+    const [treeResult, detailResult] = await Promise.all([
+      getTreeDetail({ treeId }),
+      loadRecordDetail(normalizedType, recordId),
+    ]);
+
+    if (treeResult.error) {
+      setError(treeResult.error.message);
+      setTree(null);
+    } else {
+      setTree(treeResult.data);
+    }
+
+    if (detailResult.error) {
+      setError(detailResult.error.message);
+      setDetail(null);
+      setPhotos([]);
+      return;
+    }
+
+    setDetail(detailResult.data);
+    const photoResult = await loadRecordPhotos(normalizedType, detailResult.data.farmId, recordId);
+    setPhotos(photoResult.data ?? []);
+  }, [normalizedType, recordId, treeId]);
+
+  React.useEffect(() => {
+    setLoading(true);
+    loadDetail().finally(() => setLoading(false));
+  }, [loadDetail]);
+
+  function handleDeletePress() {
+    Alert.alert(
+      'Hapus catatan?',
+      'Catatan akan disembunyikan dari riwayat pohon. Data tidak dihapus permanen.',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus catatan',
+          style: 'destructive',
+          onPress: () => {
+            runDelete();
+          },
+        },
+      ]
+    );
+  }
+
+  async function runDelete() {
+    if (!recordId || !normalizedType || !treeId) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    const result = await softDeleteRecord(normalizedType, recordId);
+
+    if (result.error) {
+      setError(result.error.message);
+      setSubmitting(false);
+      return;
+    }
+
+    setSubmitting(false);
+    Alert.alert('Catatan berhasil dihapus dari riwayat.', '', [
+      {
+        text: 'OK',
+        onPress: () => router.replace(`${basePath}/${treeId}`),
+      },
+    ]);
+  }
+
+  if (loading) {
+    return <LoadingState message="Memuat detail catatan..." />;
+  }
+
+  if (!detail || !normalizedType) {
+    return (
+      <Screen>
+        <TopAppBar title="Detail catatan" onBack={() => router.back()} />
+        <ErrorBanner message={error} />
+        <EmptyState title="Catatan tidak ditemukan" subtitle="Catatan mungkin sudah dihapus atau akses tidak aktif." />
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen
+      footer={
+        detail.canEdit ? (
+          <>
+            <Button title="Edit catatan" disabled={submitting} onPress={() => router.push(`${basePath}/${treeId}/records/${normalizedType}/${recordId}/edit`)} />
+            <Button title="Hapus catatan" variant="danger" loading={submitting} onPress={handleDeletePress} />
+          </>
+        ) : undefined
+      }
+    >
+      <TopAppBar title={detail.title} onBack={() => router.back()} />
+      <ErrorBanner message={error} />
+
+      {tree ? (
+        <Card variant="highlight">
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+            Konteks Pohon
+          </Text>
+          <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
+          <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
+          <MetaRow label="Varietas" value={tree.variety ?? 'Belum diisi'} />
+        </Card>
+      ) : null}
+
+      <Card>
+        <View style={{ gap: spacing.md }}>
+          <Badge label={detail.recordLabel} tone="info" />
+          <MetaRow label={detail.eventLabel} value={formatDateTime(detail.eventAt)} />
+          {detail.rows.map((row) => (
+            <MetaRow key={row.label} label={row.label} value={row.value} />
+          ))}
+          <MetaRow label="Catatan" value={detail.note || '-'} />
+          {!detail.canEdit ? (
+            <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+              Catatan ini hanya bisa diubah oleh pelapor.
+            </Text>
+          ) : null}
+        </View>
+      </Card>
+
+      <Card>
+        <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+          Foto catatan
+        </Text>
+        <PhotoAttachmentPreviewList emptyText="Tidak ada foto pada catatan ini." photos={photos} />
+      </Card>
+    </Screen>
+  );
+}
+
+function normalizeRecordType(value?: string): TreeRecordRouteType | null {
+  if (value === 'condition' || value === 'phase' || value === 'harvest' || value === 'manual-care') {
+    return value;
+  }
+
+  return null;
+}
+
+async function loadRecordDetail(
+  recordType: TreeRecordRouteType,
+  recordId: UUID
+): Promise<ServiceResult<DetailState>> {
+  if (recordType === 'condition') {
+    const result = await getConditionReportDetail({ reportId: recordId });
+
+    if (result.error) {
+      return result;
+    }
+
+    return {
+      data: {
+        canEdit: result.data.canEdit === true,
+        eventAt: result.data.reportedAt,
+        eventLabel: 'Tanggal catatan',
+        farmId: result.data.farmId,
+        note: result.data.note,
+        recordLabel: 'Kondisi',
+        rows: [{ label: 'Status kondisi', value: formatTreeConditionStatus(result.data.conditionStatus) }],
+        title: 'Detail catatan kondisi',
+      },
+      error: null,
+    };
+  }
+
+  if (recordType === 'phase') {
+    const result = await getGrowthPhaseRecordDetail({ recordId });
+
+    if (result.error) {
+      return result;
+    }
+
+    return {
+      data: {
+        canEdit: result.data.canEdit === true,
+        eventAt: result.data.recordedAt,
+        eventLabel: 'Tanggal catatan',
+        farmId: result.data.farmId,
+        note: result.data.note,
+        recordLabel: 'Fase',
+        rows: [{ label: 'Fase pertumbuhan', value: formatGrowthPhase(result.data.phase) }],
+        title: 'Detail catatan fase',
+      },
+      error: null,
+    };
+  }
+
+  if (recordType === 'harvest') {
+    const result = await getHarvestRecordDetail({ recordId });
+
+    if (result.error) {
+      return result;
+    }
+
+    return {
+      data: {
+        canEdit: result.data.canEdit === true,
+        eventAt: result.data.harvestedAt,
+        eventLabel: 'Tanggal panen',
+        farmId: result.data.farmId,
+        note: result.data.note,
+        recordLabel: 'Panen',
+        rows: [
+          { label: 'Jumlah buah', value: String(result.data.fruitCount) },
+          { label: 'Kondisi buah', value: result.data.fruitCondition },
+        ],
+        title: 'Detail catatan panen',
+      },
+      error: null,
+    };
+  }
+
+  const result = await getManualCareRecordDetail({ recordId });
+
+  if (result.error) {
+    return result;
+  }
+
+  return {
+    data: {
+      canEdit: result.data.canEdit === true,
+      eventAt: result.data.performedAt,
+      eventLabel: 'Tanggal perawatan',
+      farmId: result.data.farmId,
+      note: result.data.note,
+      recordLabel: 'Perawatan manual',
+      rows: [
+        { label: 'Jenis perawatan', value: formatCareCategory(result.data.category as CareCategory) },
+        { label: 'Target perawatan', value: formatManualCareTarget(result.data.targetType, result.data.targetRow, result.data.targetColumn, result.data.customTargetNote) },
+      ],
+      title: 'Detail catatan perawatan',
+    },
+    error: null,
+  };
+}
+
+async function loadRecordPhotos(
+  recordType: TreeRecordRouteType,
+  farmId: UUID,
+  recordId: UUID
+): Promise<ServiceResult<PhotoAttachmentPreviewItem[]>> {
+  if (recordType === 'condition') {
+    const result = await getConditionRecordPhotos({ conditionRecordId: recordId, farmId });
+    return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl)), error: null };
+  }
+
+  if (recordType === 'phase') {
+    const result = await getGrowthPhaseRecordPhotos({ growthPhaseRecordId: recordId, farmId });
+    return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl, photo.attachment.caption)), error: null };
+  }
+
+  if (recordType === 'harvest') {
+    const result = await getHarvestRecordPhotos({ harvestRecordId: recordId, farmId });
+    return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl, photo.attachment.caption)), error: null };
+  }
+
+  const result = await getManualCareRecordPhotos({ manualCareRecordId: recordId, farmId });
+  return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl, photo.attachment.caption)), error: null };
+}
+
+function toPreviewPhoto(id: UUID, url: string, caption?: string | null): PhotoAttachmentPreviewItem {
+  return { caption, id, url };
+}
+
+function softDeleteRecord(
+  recordType: TreeRecordRouteType,
+  recordId: UUID
+): Promise<ServiceResult<SuccessData>> {
+  if (recordType === 'condition') {
+    return softDeleteOwnConditionReport({ reportId: recordId });
+  }
+
+  if (recordType === 'phase') {
+    return softDeleteOwnGrowthPhaseRecord({ recordId });
+  }
+
+  if (recordType === 'harvest') {
+    return softDeleteOwnHarvestRecord({ recordId });
+  }
+
+  return softDeleteOwnManualCareRecord({ recordId });
+}
+
+function formatManualCareTarget(
+  targetType: string,
+  targetRow?: string | null,
+  targetColumn?: string | null,
+  customTargetNote?: string | null
+): string {
+  if (targetType === 'row') {
+    return targetRow ? `Baris ${targetRow}` : 'Baris';
+  }
+
+  if (targetType === 'column') {
+    return targetColumn ? `Kolom ${targetColumn}` : 'Kolom';
+  }
+
+  if (targetType === 'custom') {
+    return customTargetNote || 'Target khusus';
+  }
+
+  if (targetType === 'tree') {
+    return 'Pohon ini';
+  }
+
+  return formatTargetType('farm');
+}
+
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString('id-ID', {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}

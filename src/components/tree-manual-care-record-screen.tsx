@@ -11,7 +11,7 @@ import { formatCareCategory } from '../utils/displayFormat';
 import { formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { careCategoryOptions } from './care-sop-components';
 import { PhotoAttachmentPicker } from './media';
-import { Button, Card, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
+import { Button, Card, DateField, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
 
 export function TreeManualCareRecordScreen({
   basePath,
@@ -22,6 +22,7 @@ export function TreeManualCareRecordScreen({
 }) {
   const [category, setCategory] = React.useState<CareCategory | ''>('');
   const [error, setError] = React.useState<string | null>(null);
+  const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
@@ -86,6 +87,7 @@ export function TreeManualCareRecordScreen({
       category,
       farmId: tree.farmId,
       note,
+      performedAt: eventDate,
       photo: selectedPhoto
         ? {
             base64: selectedPhoto.base64,
@@ -148,6 +150,7 @@ export function TreeManualCareRecordScreen({
 
       <FormSection title="Jenis perawatan" description="Catat aktivitas perawatan yang dilakukan tanpa jadwal tugas.">
         <View style={{ gap: spacing.sm }}>
+          <DateField label="Tanggal perawatan *" onChangeDate={setEventDate} value={eventDate} />
           <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
             Jenis perawatan *
           </Text>
@@ -254,4 +257,11 @@ function TextArea({
       />
     </View>
   );
+}
+
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

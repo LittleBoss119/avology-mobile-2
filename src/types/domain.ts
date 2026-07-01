@@ -408,6 +408,7 @@ export type CreateTreeConditionReportInput = {
   treeId: UUID;
   conditionStatus: TreeConditionStatus;
   note?: string | null;
+  reportedAt?: string | null;
 };
 
 export type CreateTreeConditionReportData = {
@@ -439,6 +440,7 @@ export type CreateGrowthPhaseRecordInput = {
   treeId: UUID;
   phase: GrowthPhase;
   note?: string | null;
+  recordedAt?: string | null;
 };
 
 export type CreateGrowthPhaseRecordData = {

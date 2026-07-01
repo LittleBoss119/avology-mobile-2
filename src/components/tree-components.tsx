@@ -97,10 +97,12 @@ export type TreeHistoryTimelineProps = {
   harvestPhotoMap?: HarvestRecordPhotoMap;
   history: TreeHistoryItem[];
   manualCarePhotoMap?: ManualCareRecordPhotoMap;
+  onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
   viewerMode?: TreeHistoryViewerMode;
 };
 
 type TreeHistoryViewerMode = 'owner' | 'worker';
+export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest' | 'manual-care';
 
 export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
@@ -529,6 +531,7 @@ export function TreeHistoryTimeline({
   harvestPhotoMap = {},
   history,
   manualCarePhotoMap = {},
+  onRecordPress,
   viewerMode = 'owner',
 }: TreeHistoryTimelineProps) {
   if (history.length === 0) {
@@ -551,6 +554,7 @@ export function TreeHistoryTimeline({
           harvestPhotoMap={harvestPhotoMap}
           item={item}
           manualCarePhotoMap={manualCarePhotoMap}
+          onRecordPress={onRecordPress}
           viewerMode={viewerMode}
         />
       ))}
@@ -598,6 +602,7 @@ function TreeHistoryTimelineItem({
   harvestPhotoMap,
   item,
   manualCarePhotoMap,
+  onRecordPress,
   viewerMode,
 }: {
   conditionPhotoMap: ConditionRecordPhotoMap;
@@ -606,6 +611,7 @@ function TreeHistoryTimelineItem({
   harvestPhotoMap: HarvestRecordPhotoMap;
   item: TreeHistoryItem;
   manualCarePhotoMap: ManualCareRecordPhotoMap;
+  onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
   viewerMode: TreeHistoryViewerMode;
 }) {
   const conditionPhotoUrl =
@@ -624,8 +630,9 @@ function TreeHistoryTimelineItem({
     item.historyType === 'manual_care' && item.sourceId
       ? manualCarePhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
       : [];
-
-  return (
+  const routeRecordType = getRouteRecordType(item);
+  const canOpenRecord = Boolean(item.sourceId && routeRecordType && onRecordPress);
+  const content = (
     <View style={{ flexDirection: 'row', gap: spacing.md }}>
       <View style={{ alignItems: 'center', paddingTop: spacing.sm }}>
         <View
@@ -648,7 +655,7 @@ function TreeHistoryTimelineItem({
         <View
           style={{
             backgroundColor: colors.surface,
-            borderColor: colors.border,
+            borderColor: canOpenRecord ? colors.primaryBorder : colors.border,
             borderCurve: 'continuous',
             borderRadius: radius.xl,
             borderWidth: 1,
@@ -684,10 +691,25 @@ function TreeHistoryTimelineItem({
               viewerMode,
             })}
           </Text>
+          {canOpenRecord ? (
+            <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
+              Lihat detail
+            </Text>
+          ) : null}
         </View>
       </View>
     </View>
   );
+
+  if (canOpenRecord && routeRecordType) {
+    return (
+      <Pressable accessibilityRole="button" onPress={() => onRecordPress?.(item, routeRecordType)}>
+        {content}
+      </Pressable>
+    );
+  }
+
+  return content;
 }
 
 function PhotoThumbnailRow({ photoUrls }: { photoUrls: string[] }) {
@@ -906,6 +928,26 @@ function getHistoryTone(type: TreeHistoryType): BadgeTone {
   }
 
   return 'muted';
+}
+
+function getRouteRecordType(item: TreeHistoryItem): TreeHistoryRouteRecordType | null {
+  if (item.historyType === 'condition') {
+    return 'condition';
+  }
+
+  if (item.historyType === 'phase') {
+    return 'phase';
+  }
+
+  if (item.historyType === 'harvest') {
+    return 'harvest';
+  }
+
+  if (item.historyType === 'manual_care') {
+    return 'manual-care';
+  }
+
+  return null;
 }
 
 function formatHistoryType(type: TreeHistoryType): string {

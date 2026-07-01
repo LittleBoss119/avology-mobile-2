@@ -9,7 +9,7 @@ import type { Tree } from '../types/domain';
 import type { PickedPhotoAsset } from '../types/media';
 import { formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { PhotoAttachmentPicker } from './media';
-import { Button, Card, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
+import { Button, Card, DateField, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
 
 export function TreeHarvestRecordScreen({
   basePath,
@@ -19,6 +19,7 @@ export function TreeHarvestRecordScreen({
   treeId?: string;
 }) {
   const [error, setError] = React.useState<string | null>(null);
+  const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
   const [fruitCondition, setFruitCondition] = React.useState('');
   const [fruitCount, setFruitCount] = React.useState('');
   const [loading, setLoading] = React.useState(true);
@@ -92,6 +93,7 @@ export function TreeHarvestRecordScreen({
       farmId: tree.farmId,
       fruitCondition,
       fruitCount: parsedFruitCount,
+      harvestedAt: eventDate,
       note,
       photo: selectedPhoto
         ? {
@@ -153,6 +155,7 @@ export function TreeHarvestRecordScreen({
       ) : null}
 
       <FormSection title="Hasil panen" description="Catat jumlah buah yang dipanen dari pohon ini.">
+        <DateField label="Tanggal panen *" onChangeDate={setEventDate} value={eventDate} />
         <Field
           keyboardType="number-pad"
           label="Jumlah buah dipanen *"
@@ -261,4 +264,11 @@ function TextArea({
       />
     </View>
   );
+}
+
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

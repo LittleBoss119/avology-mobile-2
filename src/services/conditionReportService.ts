@@ -86,6 +86,7 @@ export async function createTreeConditionReport(
       farm_id: input.farmId,
       tree_id: input.treeId,
       reported_by: userIdResult.data,
+      reported_at: normalizeOptionalText(input.reportedAt) ?? new Date().toISOString(),
       condition_status: input.conditionStatus,
       note: normalizeOptionalText(input.note),
     })

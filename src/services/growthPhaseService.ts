@@ -109,6 +109,7 @@ export async function createGrowthPhaseRecord(
       farm_id: input.farmId,
       tree_id: input.treeId,
       recorded_by: userIdResult.data,
+      recorded_at: normalizeOptionalText(input.recordedAt) ?? new Date().toISOString(),
       phase: input.phase,
       note: normalizeOptionalText(input.note),
     })

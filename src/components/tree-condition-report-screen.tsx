@@ -11,7 +11,7 @@ import type { Tree, TreeConditionStatus } from '../types/domain';
 import type { PickedPhotoAsset } from '../types/media';
 import { formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { ConditionStatusBadge } from './tree-components';
-import { Button, Card, ErrorBanner, FormSection, LoadingState, MetaRow, PhotoPickerCard, Screen, TopAppBar } from './ui';
+import { Button, Card, DateField, ErrorBanner, FormSection, LoadingState, MetaRow, PhotoPickerCard, Screen, TopAppBar } from './ui';
 
 const conditionOptions: TreeConditionStatus[] = [
   'healthy',
@@ -31,6 +31,7 @@ export function TreeConditionReportScreen({
 }) {
   const [conditionStatus, setConditionStatus] = React.useState<TreeConditionStatus | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
   const [pendingConditionRecordId, setPendingConditionRecordId] = React.useState<string | null>(null);
@@ -101,6 +102,7 @@ export function TreeConditionReportScreen({
       conditionStatus,
       farmId: tree.farmId,
       note,
+      reportedAt: eventDate,
       treeId: tree.id,
     });
 
@@ -265,6 +267,7 @@ export function TreeConditionReportScreen({
 
       <FormSection title="Kondisi Baru" description="Pilih kondisi terbaru yang terlihat pada pohon.">
         <View style={{ gap: spacing.sm }}>
+          <DateField label="Tanggal catatan *" onChangeDate={setEventDate} value={eventDate} />
           {conditionOptions.map((status) => (
             <SelectableOption
               key={status}
@@ -381,4 +384,11 @@ function TextArea({
       />
     </View>
   );
+}
+
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

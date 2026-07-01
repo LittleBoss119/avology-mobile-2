@@ -11,7 +11,7 @@ import type { PickedPhotoAsset } from '../types/media';
 import { formatGrowthPhase, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { PhotoAttachmentPicker } from './media';
 import { GrowthPhaseBadge } from './tree-components';
-import { Button, Card, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
+import { Button, Card, DateField, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
 
 const phaseOptions: GrowthPhase[] = [
   'initial_planting',
@@ -29,6 +29,7 @@ export function TreeGrowthPhaseRecordScreen({
   treeId?: string;
 }) {
   const [error, setError] = React.useState<string | null>(null);
+  const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
   const [pendingGrowthPhaseRecordId, setPendingGrowthPhaseRecordId] = React.useState<string | null>(null);
@@ -100,6 +101,7 @@ export function TreeGrowthPhaseRecordScreen({
       farmId: tree.farmId,
       note,
       phase,
+      recordedAt: eventDate,
       treeId: tree.id,
     });
 
@@ -228,6 +230,7 @@ export function TreeGrowthPhaseRecordScreen({
 
       <FormSection title="Fase Baru" description="Pilih fase pertumbuhan terbaru yang terlihat di pohon.">
         <View style={{ gap: spacing.sm }}>
+          <DateField label="Tanggal catatan *" onChangeDate={setEventDate} value={eventDate} />
           {phaseOptions.map((option) => (
             <SelectableOption
               key={option}
@@ -333,4 +336,11 @@ function TextArea({
 
 function formatPhaseOption(phase: GrowthPhase): string {
   return phase === 'harvesting' ? 'Siap Panen / Panen' : formatGrowthPhase(phase);
+}
+
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
