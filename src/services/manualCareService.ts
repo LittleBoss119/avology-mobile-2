@@ -4,19 +4,22 @@ import type {
   CareCategory,
   CreateManualCareRecordData,
   CreateManualCareRecordInput,
+  GetManualCareRecordDetailInput,
   GetManualCareRecordsByTreeInput,
   ManualCareRecord,
   MemberRole,
   MemberStatus,
   ServiceResult,
+  SoftDeleteManualCareRecordInput,
   SuccessData,
   TargetType,
+  UpdateManualCareRecordInput,
   UUID,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
 
 const MANUAL_CARE_RECORD_SELECT =
-  'id, farm_id, recorded_by, category, target_type, target_row, target_column, target_tree_id, custom_target_note, note, performed_at, created_at, updated_at';
+  'id, farm_id, recorded_by, category, target_type, target_row, target_column, target_tree_id, custom_target_note, note, performed_at, created_at, updated_at, is_deleted, deleted_at, deleted_by, delete_reason';
 
 const careCategories: CareCategory[] = [
   'watering',
@@ -40,6 +43,10 @@ type ManualCareRecordRow = {
   performed_at: string;
   created_at: string;
   updated_at?: string | null;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  delete_reason?: string | null;
 };
 
 type TreeFarmRow = {
@@ -163,6 +170,7 @@ export async function getManualCareRecordsByTree(
     .select(MANUAL_CARE_RECORD_SELECT)
     .eq('target_type', 'tree')
     .eq('target_tree_id', treeId)
+    .eq('is_deleted', false)
     .order('performed_at', { ascending: false })
     .returns<ManualCareRecordRow[]>();
 
@@ -171,6 +179,89 @@ export async function getManualCareRecordsByTree(
   }
 
   return ok((data ?? []).map(mapManualCareRecord));
+}
+
+export async function getManualCareRecordDetail(
+  input: GetManualCareRecordDetailInput | UUID
+): Promise<ServiceResult<ManualCareRecord>> {
+  const recordId = typeof input === 'string' ? input : input.recordId;
+  const currentUserIdResult = await getCurrentUserId();
+
+  if (currentUserIdResult.error) {
+    return fail(currentUserIdResult.error);
+  }
+
+  const { data, error } = await supabase
+    .from('manual_care_records')
+    .select(MANUAL_CARE_RECORD_SELECT)
+    .eq('id', recordId)
+    .maybeSingle<ManualCareRecordRow>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat detail catatan perawatan.');
+  }
+
+  if (!data) {
+    return fail(new Error('Catatan perawatan tidak ditemukan atau tidak dapat diakses.'));
+  }
+
+  const accessResult = await ensureActiveOwnerOrWorker(data.farm_id);
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  return ok({
+    ...mapManualCareRecord(data),
+    canEdit: data.recorded_by === currentUserIdResult.data && data.is_deleted !== true,
+  });
+}
+
+export async function updateOwnManualCareRecord(
+  input: UpdateManualCareRecordInput
+): Promise<ServiceResult<SuccessData>> {
+  if (!isCareCategory(input.category)) {
+    return fail(new Error('Jenis perawatan wajib dipilih.'));
+  }
+
+  const targetResult = normalizeManualCareTarget(input);
+
+  if (targetResult instanceof Error) {
+    return fail(targetResult);
+  }
+
+  const { error } = await supabase.rpc('update_own_manual_care_record', {
+    p_category: input.category,
+    p_custom_target_note: targetResult.customTargetNote,
+    p_note: normalizeOptionalText(input.note),
+    p_performed_at: normalizeOptionalText(input.performedAt),
+    p_record_id: input.recordId,
+    p_target_column: targetResult.targetColumn,
+    p_target_row: targetResult.targetRow,
+    p_target_tree_id: targetResult.targetTreeId,
+    p_target_type: input.targetType,
+  });
+
+  if (error) {
+    return fail(error, 'Catatan perawatan gagal diperbarui.');
+  }
+
+  return ok({ success: true });
+}
+
+export async function softDeleteOwnManualCareRecord(
+  input: SoftDeleteManualCareRecordInput
+): Promise<ServiceResult<SuccessData>> {
+  const { error } = await supabase.rpc('soft_delete_own_manual_care_record', {
+    p_reason: normalizeOptionalText(input.reason),
+    p_record_id: input.recordId,
+  });
+
+  if (error) {
+    return fail(error, 'Catatan perawatan gagal dihapus.');
+  }
+
+  return ok({ success: true });
 }
 
 async function getAccessibleTreeFarmId(treeId: UUID): Promise<ServiceResult<UUID>> {
@@ -257,7 +348,7 @@ async function getCurrentUserId(): Promise<ServiceResult<UUID>> {
 }
 
 function normalizeManualCareTarget(
-  input: CreateManualCareRecordInput
+  input: CreateManualCareRecordInput | UpdateManualCareRecordInput
 ): NormalizedManualCareTarget | Error {
   const targetRow = normalizeOptionalText(input.targetRow);
   const targetColumn = normalizeOptionalText(input.targetColumn);
@@ -333,8 +424,12 @@ function mapManualCareRecord(row: ManualCareRecordRow): ManualCareRecord {
     category: row.category,
     createdAt: row.created_at,
     customTargetNote: row.custom_target_note,
+    deletedAt: row.deleted_at,
+    deletedBy: row.deleted_by,
+    deleteReason: row.delete_reason,
     farmId: row.farm_id,
     id: row.id,
+    isDeleted: row.is_deleted ?? false,
     note: row.note,
     performedAt: row.performed_at,
     recordedBy: row.recorded_by,

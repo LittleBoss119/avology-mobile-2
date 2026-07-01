@@ -4,19 +4,22 @@ import { getFarmActorDisplayProfiles, getFarmMemberBasicProfiles } from './membe
 import type {
   CreateTreeConditionReportData,
   CreateTreeConditionReportInput,
+  GetTreeConditionReportDetailInput,
   GetTreeConditionReportsInput,
   MemberRole,
   MemberStatus,
   ServiceResult,
+  SoftDeleteConditionReportInput,
   SuccessData,
   TreeConditionReport,
   TreeConditionStatus,
+  UpdateConditionReportInput,
   UUID,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
 
 const REPORT_SELECT =
-  'id, farm_id, tree_id, reported_by, condition_status, note, reported_at';
+  'id, farm_id, tree_id, reported_by, condition_status, note, reported_at, created_at, updated_at, is_deleted, deleted_at, deleted_by, delete_reason';
 
 type TreeConditionReportRow = {
   id: string;
@@ -26,6 +29,12 @@ type TreeConditionReportRow = {
   condition_status: TreeConditionStatus;
   note: string | null;
   reported_at: string;
+  created_at?: string;
+  updated_at?: string | null;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  delete_reason?: string | null;
 };
 
 type TreeFarmRow = {
@@ -111,6 +120,7 @@ export async function getTreeConditionReports(
     .from('tree_condition_reports')
     .select(REPORT_SELECT)
     .eq('tree_id', input.treeId)
+    .eq('is_deleted', false)
     .order('reported_at', { ascending: false })
     .returns<TreeConditionReportRow[]>();
 
@@ -131,6 +141,78 @@ export async function getTreeConditionReports(
       reportedByRole: reporterDisplays[report.reportedBy]?.role ?? null,
     }))
   );
+}
+
+export async function getConditionReportDetail(
+  input: GetTreeConditionReportDetailInput | UUID
+): Promise<ServiceResult<TreeConditionReport>> {
+  const reportId = typeof input === 'string' ? input : input.reportId;
+  const currentUserIdResult = await getCurrentUserId();
+
+  if (currentUserIdResult.error) {
+    return fail(currentUserIdResult.error);
+  }
+
+  const { data, error } = await supabase
+    .from('tree_condition_reports')
+    .select(REPORT_SELECT)
+    .eq('id', reportId)
+    .maybeSingle<TreeConditionReportRow>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat detail laporan kondisi pohon.');
+  }
+
+  if (!data) {
+    return fail(new Error('Laporan kondisi pohon tidak ditemukan atau tidak dapat diakses.'));
+  }
+
+  const accessResult = await ensureActiveFarmMember(data.farm_id);
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  return ok({
+    ...mapTreeConditionReport(data),
+    canEdit: data.reported_by === currentUserIdResult.data && data.is_deleted !== true,
+  });
+}
+
+export async function updateOwnConditionReport(
+  input: UpdateConditionReportInput
+): Promise<ServiceResult<SuccessData>> {
+  if (!input.conditionStatus) {
+    return fail(new Error('Kondisi pohon wajib dipilih.'));
+  }
+
+  const { error } = await supabase.rpc('update_own_tree_condition_report', {
+    p_condition_status: input.conditionStatus,
+    p_note: normalizeOptionalText(input.note),
+    p_report_id: input.reportId,
+    p_reported_at: normalizeOptionalText(input.reportedAt),
+  });
+
+  if (error) {
+    return fail(error, 'Laporan kondisi pohon gagal diperbarui.');
+  }
+
+  return ok({ success: true });
+}
+
+export async function softDeleteOwnConditionReport(
+  input: SoftDeleteConditionReportInput
+): Promise<ServiceResult<SuccessData>> {
+  const { error } = await supabase.rpc('soft_delete_own_tree_condition_report', {
+    p_reason: normalizeOptionalText(input.reason),
+    p_report_id: input.reportId,
+  });
+
+  if (error) {
+    return fail(error, 'Laporan kondisi pohon gagal dihapus.');
+  }
+
+  return ok({ success: true });
 }
 
 async function getAccessibleTreeFarmId(treeId: UUID): Promise<ServiceResult<UUID>> {
@@ -219,8 +301,14 @@ function mapTreeConditionReport(row: TreeConditionReportRow): TreeConditionRepor
     reportedByName: null,
     reportedByRole: null,
     conditionStatus: row.condition_status,
+    createdAt: row.created_at,
+    deletedAt: row.deleted_at,
+    deletedBy: row.deleted_by,
+    deleteReason: row.delete_reason,
     note: row.note,
     reportedAt: row.reported_at,
+    updatedAt: row.updated_at,
+    isDeleted: row.is_deleted ?? false,
   };
 }
 

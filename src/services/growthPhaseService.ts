@@ -3,21 +3,24 @@ import type {
   CreateGrowthPhaseRecordData,
   CreateGrowthPhaseRecordInput,
   GetFloweringAndFruitingTreesInput,
+  GetGrowthPhaseRecordDetailInput,
   GetGrowthPhaseRecordsInput,
   GrowthPhase,
   GrowthPhaseRecord,
   MemberRole,
   MemberStatus,
   ServiceResult,
+  SoftDeleteGrowthPhaseRecordInput,
   SuccessData,
   Tree,
   TreeConditionStatus,
+  UpdateGrowthPhaseRecordInput,
   UUID,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
 
 const GROWTH_PHASE_RECORD_SELECT =
-  'id, farm_id, tree_id, recorded_by, phase, note, recorded_at';
+  'id, farm_id, tree_id, recorded_by, phase, note, recorded_at, created_at, updated_at, is_deleted, deleted_at, deleted_by, delete_reason';
 
 const TREE_SELECT =
   'id, farm_id, tree_code, row_position, column_position, variety, planted_at, current_condition, current_growth_phase, is_archived, created_at, updated_at';
@@ -38,6 +41,12 @@ type GrowthPhaseRecordRow = {
   phase: GrowthPhase;
   note: string | null;
   recorded_at: string;
+  created_at?: string;
+  updated_at?: string | null;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  delete_reason?: string | null;
 };
 
 type TreeRow = {
@@ -134,6 +143,7 @@ export async function getGrowthPhaseRecords(
     .from('growth_phase_records')
     .select(GROWTH_PHASE_RECORD_SELECT)
     .eq('tree_id', input.treeId)
+    .eq('is_deleted', false)
     .order('recorded_at', { ascending: false })
     .returns<GrowthPhaseRecordRow[]>();
 
@@ -142,6 +152,78 @@ export async function getGrowthPhaseRecords(
   }
 
   return ok((data ?? []).map(mapGrowthPhaseRecord));
+}
+
+export async function getGrowthPhaseRecordDetail(
+  input: GetGrowthPhaseRecordDetailInput | UUID
+): Promise<ServiceResult<GrowthPhaseRecord>> {
+  const recordId = typeof input === 'string' ? input : input.recordId;
+  const currentUserIdResult = await getCurrentUserId();
+
+  if (currentUserIdResult.error) {
+    return fail(currentUserIdResult.error);
+  }
+
+  const { data, error } = await supabase
+    .from('growth_phase_records')
+    .select(GROWTH_PHASE_RECORD_SELECT)
+    .eq('id', recordId)
+    .maybeSingle<GrowthPhaseRecordRow>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat detail fase pertumbuhan.');
+  }
+
+  if (!data) {
+    return fail(new Error('Catatan fase pertumbuhan tidak ditemukan atau tidak dapat diakses.'));
+  }
+
+  const accessResult = await ensureActiveOwnerOrWorker(data.farm_id);
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  return ok({
+    ...mapGrowthPhaseRecord(data),
+    canEdit: data.recorded_by === currentUserIdResult.data && data.is_deleted !== true,
+  });
+}
+
+export async function updateOwnGrowthPhaseRecord(
+  input: UpdateGrowthPhaseRecordInput
+): Promise<ServiceResult<SuccessData>> {
+  if (!isGrowthPhase(input.phase)) {
+    return fail(new Error('Fase pertumbuhan wajib dipilih dengan nilai yang valid.'));
+  }
+
+  const { error } = await supabase.rpc('update_own_growth_phase_record', {
+    p_note: normalizeOptionalText(input.note),
+    p_phase: input.phase,
+    p_record_id: input.recordId,
+    p_recorded_at: normalizeOptionalText(input.recordedAt),
+  });
+
+  if (error) {
+    return fail(error, 'Catatan fase pertumbuhan gagal diperbarui.');
+  }
+
+  return ok({ success: true });
+}
+
+export async function softDeleteOwnGrowthPhaseRecord(
+  input: SoftDeleteGrowthPhaseRecordInput
+): Promise<ServiceResult<SuccessData>> {
+  const { error } = await supabase.rpc('soft_delete_own_growth_phase_record', {
+    p_reason: normalizeOptionalText(input.reason),
+    p_record_id: input.recordId,
+  });
+
+  if (error) {
+    return fail(error, 'Catatan fase pertumbuhan gagal dihapus.');
+  }
+
+  return ok({ success: true });
 }
 
 export async function getFloweringAndFruitingTrees(
@@ -278,6 +360,12 @@ function mapGrowthPhaseRecord(row: GrowthPhaseRecordRow): GrowthPhaseRecord {
     phase: row.phase,
     note: row.note,
     recordedAt: row.recorded_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    isDeleted: row.is_deleted ?? false,
+    deletedAt: row.deleted_at,
+    deletedBy: row.deleted_by,
+    deleteReason: row.delete_reason,
   };
 }
 

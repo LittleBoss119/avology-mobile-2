@@ -13,6 +13,7 @@ const stages = [
   '05-operational-report-rpc.test.mjs',
   '06-dashboard-query.test.mjs',
   '07-feature-foundation.test.mjs',
+  '08-tree-record-edit-delete-foundation.test.mjs',
 ];
 
 const summary = {

@@ -14,9 +14,10 @@ import type {
 import { fail, ok } from '../utils/serviceResult';
 
 const TREE_HISTORY_SELECT =
-  'tree_id, farm_id, history_type, title, description, actor_id, happened_at';
+  'source_id, tree_id, farm_id, history_type, title, description, actor_id, happened_at';
 
 type TreeHistoryRow = {
+  source_id: string | null;
   tree_id: string;
   farm_id: string;
   history_type: TreeHistoryType;
@@ -24,32 +25,6 @@ type TreeHistoryRow = {
   description: string | null;
   actor_id: string;
   happened_at: string;
-};
-
-type ConditionHistorySourceRow = {
-  id: string;
-  condition_status: string;
-  reported_by: string;
-  reported_at: string;
-};
-
-type GrowthPhaseHistorySourceRow = {
-  id: string;
-  phase: string;
-  recorded_by: string;
-  recorded_at: string;
-};
-
-type HarvestHistorySourceRow = {
-  id: string;
-  harvested_by: string;
-  harvested_at: string;
-};
-
-type ManualCareHistorySourceRow = {
-  id: string;
-  recorded_by: string;
-  performed_at: string;
 };
 
 type TreeFarmRow = {
@@ -99,15 +74,7 @@ export async function getTreeHistory(
     return fail(error, 'Gagal memuat riwayat pohon.');
   }
 
-  const [conditionSourceMap, growthPhaseSourceMap, harvestSourceMap, manualCareSourceMap] = await Promise.all([
-    getConditionHistorySourceMap(input.treeId),
-    getGrowthPhaseHistorySourceMap(input.treeId),
-    getHarvestHistorySourceMap(input.treeId),
-    getManualCareHistorySourceMap(input.treeId),
-  ]);
-  const history = (data ?? []).map((row) =>
-    mapTreeHistoryItem(row, conditionSourceMap, growthPhaseSourceMap, harvestSourceMap, manualCareSourceMap)
-  );
+  const history = (data ?? []).map(mapTreeHistoryItem);
   const actorDisplays = await getHistoryActorDisplays(
     treeFarmIdResult.data,
     history.map((item) => item.actorId)
@@ -205,119 +172,11 @@ async function getCurrentUserId(): Promise<ServiceResult<UUID>> {
   return ok(userId);
 }
 
-async function getConditionHistorySourceMap(
-  treeId: UUID
-): Promise<Record<string, string>> {
-  const { data, error } = await supabase
-    .from('tree_condition_reports')
-    .select('id, condition_status, reported_by, reported_at')
-    .eq('tree_id', treeId)
-    .returns<ConditionHistorySourceRow[]>();
-
-  if (error) {
-    return {};
-  }
-
-  return Object.fromEntries(
-    (data ?? []).map((row) => [
-      buildConditionHistoryKey(row.condition_status, row.reported_by, row.reported_at),
-      row.id,
-    ])
-  );
-}
-
-async function getGrowthPhaseHistorySourceMap(
-  treeId: UUID
-): Promise<Record<string, string>> {
-  const { data, error } = await supabase
-    .from('growth_phase_records')
-    .select('id, phase, recorded_by, recorded_at')
-    .eq('tree_id', treeId)
-    .returns<GrowthPhaseHistorySourceRow[]>();
-
-  if (error) {
-    return {};
-  }
-
-  return Object.fromEntries(
-    (data ?? []).map((row) => [
-      buildGrowthPhaseHistoryKey(row.phase, row.recorded_by, row.recorded_at),
-      row.id,
-    ])
-  );
-}
-
-async function getHarvestHistorySourceMap(
-  treeId: UUID
-): Promise<Record<string, string>> {
-  const { data, error } = await supabase
-    .from('harvest_records')
-    .select('id, harvested_by, harvested_at')
-    .eq('tree_id', treeId)
-    .returns<HarvestHistorySourceRow[]>();
-
-  if (error) {
-    return {};
-  }
-
-  return Object.fromEntries(
-    (data ?? []).map((row) => [
-      buildHarvestHistoryKey(row.harvested_by, row.harvested_at),
-      row.id,
-    ])
-  );
-}
-
-async function getManualCareHistorySourceMap(
-  treeId: UUID
-): Promise<Record<string, string>> {
-  const { data, error } = await supabase
-    .from('manual_care_records')
-    .select('id, recorded_by, performed_at')
-    .eq('target_type', 'tree')
-    .eq('target_tree_id', treeId)
-    .returns<ManualCareHistorySourceRow[]>();
-
-  if (error) {
-    return {};
-  }
-
-  return Object.fromEntries(
-    (data ?? []).map((row) => [
-      buildManualCareHistoryKey(row.recorded_by, row.performed_at),
-      row.id,
-    ])
-  );
-}
-
-function mapTreeHistoryItem(
-  row: TreeHistoryRow,
-  conditionSourceMap: Record<string, string>,
-  growthPhaseSourceMap: Record<string, string>,
-  harvestSourceMap: Record<string, string>,
-  manualCareSourceMap: Record<string, string>
-): TreeHistoryItem {
-  const conditionSourceId =
-    row.history_type === 'condition'
-      ? conditionSourceMap[buildConditionHistoryKey(row.title, row.actor_id, row.happened_at)] ?? null
-      : null;
-  const growthPhaseSourceId =
-    row.history_type === 'phase'
-      ? growthPhaseSourceMap[buildGrowthPhaseHistoryKey(row.title, row.actor_id, row.happened_at)] ?? null
-      : null;
-  const harvestSourceId =
-    row.history_type === 'harvest'
-      ? harvestSourceMap[buildHarvestHistoryKey(row.actor_id, row.happened_at)] ?? null
-      : null;
-  const manualCareSourceId =
-    row.history_type === 'manual_care'
-      ? manualCareSourceMap[buildManualCareHistoryKey(row.actor_id, row.happened_at)] ?? null
-      : null;
-
+function mapTreeHistoryItem(row: TreeHistoryRow): TreeHistoryItem {
   return {
     actorName: null,
     actorRole: null,
-    sourceId: conditionSourceId ?? growthPhaseSourceId ?? harvestSourceId ?? manualCareSourceId,
+    sourceId: row.source_id,
     treeId: row.tree_id,
     farmId: row.farm_id,
     historyType: row.history_type,
@@ -326,22 +185,6 @@ function mapTreeHistoryItem(
     actorId: row.actor_id,
     happenedAt: row.happened_at,
   };
-}
-
-function buildConditionHistoryKey(title: string, actorId: string, happenedAt: string): string {
-  return `${title}|${actorId}|${happenedAt}`;
-}
-
-function buildGrowthPhaseHistoryKey(title: string, actorId: string, happenedAt: string): string {
-  return `${title}|${actorId}|${happenedAt}`;
-}
-
-function buildHarvestHistoryKey(actorId: string, happenedAt: string): string {
-  return `${actorId}|${happenedAt}`;
-}
-
-function buildManualCareHistoryKey(actorId: string, happenedAt: string): string {
-  return `${actorId}|${happenedAt}`;
 }
 
 async function getHistoryActorDisplays(

@@ -160,6 +160,13 @@ export type TreeConditionReport = {
   conditionStatus: TreeConditionStatus;
   note: string | null;
   reportedAt: string;
+  createdAt?: string;
+  updatedAt?: string | null;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedBy?: UUID | null;
+  deleteReason?: string | null;
+  canEdit?: boolean;
 };
 
 export type GrowthPhaseRecord = {
@@ -170,6 +177,13 @@ export type GrowthPhaseRecord = {
   phase: GrowthPhase;
   note: string | null;
   recordedAt: string;
+  createdAt?: string;
+  updatedAt?: string | null;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedBy?: UUID | null;
+  deleteReason?: string | null;
+  canEdit?: boolean;
 };
 
 export type HarvestRecord = {
@@ -183,6 +197,11 @@ export type HarvestRecord = {
   harvestedAt: string;
   createdAt: string;
   updatedAt?: string | null;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedBy?: UUID | null;
+  deleteReason?: string | null;
+  canEdit?: boolean;
 };
 
 export type ManualCareRecord = {
@@ -199,6 +218,11 @@ export type ManualCareRecord = {
   performedAt: string;
   createdAt: string;
   updatedAt?: string | null;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedBy?: UUID | null;
+  deleteReason?: string | null;
+  canEdit?: boolean;
 };
 
 export type TreeHistoryType = 'condition' | 'phase' | 'care' | 'harvest' | 'manual_care';
@@ -394,6 +418,22 @@ export type GetTreeConditionReportsInput = {
   treeId: UUID;
 };
 
+export type GetTreeConditionReportDetailInput = {
+  reportId: UUID;
+};
+
+export type UpdateConditionReportInput = {
+  reportId: UUID;
+  conditionStatus: TreeConditionStatus;
+  note?: string | null;
+  reportedAt?: string | null;
+};
+
+export type SoftDeleteConditionReportInput = {
+  reportId: UUID;
+  reason?: string | null;
+};
+
 export type CreateGrowthPhaseRecordInput = {
   farmId: UUID;
   treeId: UUID;
@@ -407,6 +447,22 @@ export type CreateGrowthPhaseRecordData = {
 
 export type GetGrowthPhaseRecordsInput = {
   treeId: UUID;
+};
+
+export type GetGrowthPhaseRecordDetailInput = {
+  recordId: UUID;
+};
+
+export type UpdateGrowthPhaseRecordInput = {
+  recordId: UUID;
+  phase: GrowthPhase;
+  note?: string | null;
+  recordedAt?: string | null;
+};
+
+export type SoftDeleteGrowthPhaseRecordInput = {
+  recordId: UUID;
+  reason?: string | null;
 };
 
 export type CreateHarvestRecordInput = {
@@ -431,6 +487,23 @@ export type CreateHarvestRecordData = {
 
 export type GetHarvestRecordsByTreeInput = {
   treeId: UUID;
+};
+
+export type GetHarvestRecordDetailInput = {
+  recordId: UUID;
+};
+
+export type UpdateHarvestRecordInput = {
+  recordId: UUID;
+  fruitCount: number;
+  fruitCondition?: string | null;
+  note?: string | null;
+  harvestedAt?: string | null;
+};
+
+export type SoftDeleteHarvestRecordInput = {
+  recordId: UUID;
+  reason?: string | null;
 };
 
 export type CreateManualCareRecordInput = {
@@ -458,6 +531,27 @@ export type CreateManualCareRecordData = {
 
 export type GetManualCareRecordsByTreeInput = {
   treeId: UUID;
+};
+
+export type GetManualCareRecordDetailInput = {
+  recordId: UUID;
+};
+
+export type UpdateManualCareRecordInput = {
+  recordId: UUID;
+  targetType: TargetType;
+  category: CareCategory;
+  targetRow?: string | null;
+  targetColumn?: string | null;
+  targetTreeId?: UUID | null;
+  customTargetNote?: string | null;
+  note?: string | null;
+  performedAt?: string | null;
+};
+
+export type SoftDeleteManualCareRecordInput = {
+  recordId: UUID;
+  reason?: string | null;
 };
 
 export type GetFloweringAndFruitingTreesInput = {

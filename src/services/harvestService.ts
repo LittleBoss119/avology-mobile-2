@@ -3,18 +3,21 @@ import { uploadHarvestRecordPhoto } from './photoAttachmentService';
 import type {
   CreateHarvestRecordData,
   CreateHarvestRecordInput,
+  GetHarvestRecordDetailInput,
   GetHarvestRecordsByTreeInput,
   HarvestRecord,
   MemberRole,
   MemberStatus,
   ServiceResult,
+  SoftDeleteHarvestRecordInput,
   SuccessData,
+  UpdateHarvestRecordInput,
   UUID,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
 
 const HARVEST_RECORD_SELECT =
-  'id, farm_id, tree_id, harvested_by, fruit_count, fruit_condition, note, harvested_at, created_at, updated_at';
+  'id, farm_id, tree_id, harvested_by, fruit_count, fruit_condition, note, harvested_at, created_at, updated_at, is_deleted, deleted_at, deleted_by, delete_reason';
 
 type HarvestRecordRow = {
   id: string;
@@ -27,6 +30,10 @@ type HarvestRecordRow = {
   harvested_at: string;
   created_at: string;
   updated_at?: string | null;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  delete_reason?: string | null;
 };
 
 type TreeFarmRow = {
@@ -133,6 +140,7 @@ export async function getHarvestRecordsByTree(
     .from('harvest_records')
     .select(HARVEST_RECORD_SELECT)
     .eq('tree_id', treeId)
+    .eq('is_deleted', false)
     .order('harvested_at', { ascending: false })
     .returns<HarvestRecordRow[]>();
 
@@ -141,6 +149,81 @@ export async function getHarvestRecordsByTree(
   }
 
   return ok((data ?? []).map(mapHarvestRecord));
+}
+
+export async function getHarvestRecordDetail(
+  input: GetHarvestRecordDetailInput | UUID
+): Promise<ServiceResult<HarvestRecord>> {
+  const recordId = typeof input === 'string' ? input : input.recordId;
+  const currentUserIdResult = await getCurrentUserId();
+
+  if (currentUserIdResult.error) {
+    return fail(currentUserIdResult.error);
+  }
+
+  const { data, error } = await supabase
+    .from('harvest_records')
+    .select(HARVEST_RECORD_SELECT)
+    .eq('id', recordId)
+    .maybeSingle<HarvestRecordRow>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat detail panen.');
+  }
+
+  if (!data) {
+    return fail(new Error('Catatan panen tidak ditemukan atau tidak dapat diakses.'));
+  }
+
+  const accessResult = await ensureActiveOwnerOrWorker(data.farm_id);
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  return ok({
+    ...mapHarvestRecord(data),
+    canEdit: data.harvested_by === currentUserIdResult.data && data.is_deleted !== true,
+  });
+}
+
+export async function updateOwnHarvestRecord(
+  input: UpdateHarvestRecordInput
+): Promise<ServiceResult<SuccessData>> {
+  const fruitCount = normalizePositiveInteger(input.fruitCount);
+
+  if (fruitCount instanceof Error) {
+    return fail(fruitCount);
+  }
+
+  const { error } = await supabase.rpc('update_own_harvest_record', {
+    p_fruit_condition: normalizeOptionalText(input.fruitCondition),
+    p_fruit_count: fruitCount,
+    p_harvested_at: normalizeOptionalText(input.harvestedAt),
+    p_note: normalizeOptionalText(input.note),
+    p_record_id: input.recordId,
+  });
+
+  if (error) {
+    return fail(error, 'Catatan panen gagal diperbarui.');
+  }
+
+  return ok({ success: true });
+}
+
+export async function softDeleteOwnHarvestRecord(
+  input: SoftDeleteHarvestRecordInput
+): Promise<ServiceResult<SuccessData>> {
+  const { error } = await supabase.rpc('soft_delete_own_harvest_record', {
+    p_reason: normalizeOptionalText(input.reason),
+    p_record_id: input.recordId,
+  });
+
+  if (error) {
+    return fail(error, 'Catatan panen gagal dihapus.');
+  }
+
+  return ok({ success: true });
 }
 
 async function getAccessibleTreeFarmId(treeId: UUID): Promise<ServiceResult<UUID>> {
@@ -235,9 +318,13 @@ function mapHarvestRecord(row: HarvestRecordRow): HarvestRecord {
     harvestedAt: row.harvested_at,
     harvestedBy: row.harvested_by,
     id: row.id,
+    isDeleted: row.is_deleted ?? false,
     note: row.note,
     treeId: row.tree_id,
     updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    deletedBy: row.deleted_by,
+    deleteReason: row.delete_reason,
   };
 }
 

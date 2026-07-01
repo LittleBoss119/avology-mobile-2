@@ -63,9 +63,10 @@ await runStage(STAGE, async () => {
     'owner updates operational_report status through RPC',
     ownerClient.rpc('update_operational_report_status', {
       p_operational_report_id: report.id,
+      p_owner_response_note: null,
       p_status: 'resolved',
     }),
-    'Check update_operational_report_status(p_operational_report_id uuid, p_status operational_report_status).'
+    'Check update_operational_report_status(p_operational_report_id uuid, p_status operational_report_status, p_owner_response_note text).'
   );
 
   const updatedReport = await getSingle(
@@ -119,6 +120,7 @@ await runStage(STAGE, async () => {
     'worker cannot update report status through owner RPC',
     workerClient.rpc('update_operational_report_status', {
       p_operational_report_id: report.id,
+      p_owner_response_note: null,
       p_status: 'in_progress',
     }),
     'update_operational_report_status should validate auth.uid() is active owner for the report farm.'
