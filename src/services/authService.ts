@@ -8,6 +8,7 @@ import type {
   RegisterUserInput,
   ServiceResult,
   SuccessData,
+  UpdatePasswordInput,
   UpdateProfileInput,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
@@ -196,6 +197,36 @@ export async function updateCurrentProfile(
   return ok(mapProfile(data, userResult.data.user.email ?? null));
 }
 
+export async function updatePassword(
+  input: UpdatePasswordInput
+): Promise<ServiceResult<SuccessData>> {
+  if (!input.newPassword) {
+    return fail(new Error('Password baru wajib diisi.'));
+  }
+
+  if (input.newPassword.length < 6) {
+    return fail(new Error('Password minimal 6 karakter.'));
+  }
+
+  const userResult = await supabase.auth.getUser();
+
+  if (userResult.error || !userResult.data.user) {
+    return fail(new Error('Sesi login tidak ditemukan. Silakan login ulang.'));
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: input.newPassword,
+  });
+
+  if (error) {
+    return fail(new Error(mapUpdatePasswordError(error)));
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
 function mapProfile(row: ProfileRow, email?: string | null): Profile {
   return {
     id: row.id,
@@ -217,4 +248,18 @@ function isMissingSessionError(error: { message?: string; name?: string }): bool
     error.name === 'AuthSessionMissingError' ||
     error.message?.toLowerCase().includes('auth session missing') === true
   );
+}
+
+function mapUpdatePasswordError(error: { message?: string; name?: string }): string {
+  if (isMissingSessionError(error)) {
+    return 'Sesi login tidak ditemukan. Silakan login ulang.';
+  }
+
+  const message = error.message?.toLowerCase() ?? '';
+
+  if (message.includes('password') && message.includes('6')) {
+    return 'Password minimal 6 karakter.';
+  }
+
+  return 'Password gagal diperbarui. Coba lagi.';
 }

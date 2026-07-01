@@ -265,16 +265,6 @@ export async function getCareSOPNextScheduleReference(
   const lastPerformedAt = lastPerformedAtResult.data;
   const intervalDays = sopResult.data.intervalDays;
 
-  if (!lastPerformedAt) {
-    return ok({
-      sopId: input.sopId,
-      intervalDays,
-      lastPerformedAt: null,
-      nextDueDate: null,
-      status: 'no_history',
-    });
-  }
-
   if (!intervalDays || intervalDays <= 0) {
     return ok({
       sopId: input.sopId,
@@ -285,9 +275,20 @@ export async function getCareSOPNextScheduleReference(
     });
   }
 
+  if (!lastPerformedAt) {
+    return ok({
+      sopId: input.sopId,
+      intervalDays,
+      lastPerformedAt: null,
+      nextDueDate: null,
+      status: 'no_history',
+    });
+  }
+
   const nextDueDate = addDaysAsIsoDate(lastPerformedAt, intervalDays);
   const today = toLocalIsoDate(new Date());
   const overdueDays = daysBetween(nextDueDate, today);
+  const daysUntilDue = daysBetween(today, nextDueDate);
   const status =
     nextDueDate > today ? 'upcoming' : nextDueDate === today ? 'due_today' : 'overdue';
 
@@ -298,6 +299,7 @@ export async function getCareSOPNextScheduleReference(
     nextDueDate,
     status,
     ...(status === 'overdue' ? { overdueDays } : {}),
+    ...(status === 'upcoming' ? { daysUntilDue } : {}),
   });
 }
 

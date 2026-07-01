@@ -92,6 +92,7 @@ export function ProfileScreen() {
   }
 
   const farmHubRoute = getFarmHubRoute(currentFarm);
+  const passwordRoute = getPasswordRoute(currentFarm);
   const roleLabel = getRoleLabel(currentFarm);
   const activeFarmName = currentFarm?.farm?.name ?? null;
   const displayName = formatPersonDisplayName(profile?.fullName, 'Pengguna Avology');
@@ -186,6 +187,12 @@ export function ProfileScreen() {
               disabled={loggingOut}
               onPress={() => setIsEditing(true)}
             />
+            <Button
+              title="Ubah password"
+              variant="secondary"
+              disabled={loggingOut}
+              onPress={() => router.push(passwordRoute)}
+            />
             {farmHubRoute ? (
               <Button
                 title="Buka Tab Kebun"
@@ -221,6 +228,18 @@ function getFarmHubRoute(currentFarm: CurrentUserFarm | null): '/owner/farm' | '
   }
 
   return null;
+}
+
+function getPasswordRoute(currentFarm: CurrentUserFarm | null): '/owner/profile-password' | '/password' | '/worker/profile-password' {
+  if (isOwnerActive(currentFarm)) {
+    return '/owner/profile-password';
+  }
+
+  if (isWorkerActive(currentFarm)) {
+    return '/worker/profile-password';
+  }
+
+  return '/password';
 }
 
 function getRoleLabel(currentFarm: CurrentUserFarm | null): string {

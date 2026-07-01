@@ -148,7 +148,7 @@ export default function CareSOPDetailScreen() {
       footer={
         <View style={{ gap: spacing.sm }}>
           <Button
-            title="Buat Jadwal dari SOP"
+            title="Buat jadwal dari SOP ini"
             disabled={!sop.isActive}
             onPress={() => router.push(`/owner/sops/${sop.id}/schedule`)}
           />
@@ -174,6 +174,14 @@ export default function CareSOPDetailScreen() {
       />
       <ErrorBanner message={error} />
 
+      {!sop.isActive ? (
+        <Card variant="warning">
+          <Text selectable style={{ color: colors.warning, fontSize: 16, fontWeight: '800', lineHeight: 22 }}>
+            SOP ini nonaktif. Aktifkan kembali sebelum digunakan untuk jadwal baru.
+          </Text>
+        </Card>
+      ) : null}
+
       <Card variant="softGreen">
         <Text
           selectable
@@ -191,6 +199,7 @@ export default function CareSOPDetailScreen() {
           <Badge label={sop.isActive ? 'Aktif' : 'Nonaktif'} tone={sop.isActive ? 'success' : 'muted'} />
         </View>
         <View style={{ gap: 10 }}>
+          <MetaRow label="Kategori" value={formatCareCategory(sop.category)} />
           <MetaRow label="Periode" value={formatIntervalDays(sop.intervalDays)} />
           <MetaRow label="Target bawaan" value={formatCareSOPTarget(sop)} />
         </View>
@@ -210,7 +219,7 @@ export default function CareSOPDetailScreen() {
           Penggunaan
         </Text>
         <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-          SOP ini dapat digunakan sebagai dasar pembuatan jadwal perawatan.
+          SOP ini menjadi template saat owner membuat jadwal perawatan. Jadwal tetap dibuat manual oleh owner.
         </Text>
       </Card>
 

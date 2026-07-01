@@ -1,8 +1,8 @@
 import type { CurrentUserFarm, Profile } from '../types/domain';
 
-const accountProfileRoutes = new Set(['/profile']);
-const onboardingFlowRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile']);
-const inactiveAccessRecoveryRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile']);
+const accountProfileRoutes = new Set(['/profile', '/password']);
+const onboardingFlowRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile', '/password']);
+const inactiveAccessRecoveryRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile', '/password']);
 const authFlowRoutes = new Set(['/get-started', '/login', '/register']);
 
 type ResolveAccessRouteInput = {

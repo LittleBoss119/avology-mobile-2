@@ -254,6 +254,7 @@ export type CareSOPNextScheduleReference = {
   lastPerformedAt: string | null;
   nextDueDate: string | null;
   status: CareSOPNextScheduleStatus;
+  daysUntilDue?: number;
   overdueDays?: number;
 };
 
@@ -751,6 +752,10 @@ export type RegisterUserInput = {
 export type UpdateProfileInput = {
   fullName: string;
   phone?: string | null;
+};
+
+export type UpdatePasswordInput = {
+  newPassword: string;
 };
 
 export type RegisterUserData = {

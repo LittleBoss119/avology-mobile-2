@@ -2,7 +2,13 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { CareSOPCard, formatCareCategory } from '../../../../src/components/care-sop-components';
+import {
+  CareSOPCard,
+  careCategoryOptions,
+  careSopTargetOptions,
+  formatCareCategory,
+  formatCareSOPTarget,
+} from '../../../../src/components/care-sop-components';
 import {
   appTheme,
   Card,
@@ -20,15 +26,29 @@ import {
   getCareSOPNextScheduleReference,
   getCareSOPs,
 } from '../../../../src/services/careSopService';
-import type { CareSOP, CareSOPNextScheduleReference } from '../../../../src/types/domain';
+import type {
+  CareCategory,
+  CareSOP,
+  CareSOPDefaultTargetType,
+  CareSOPNextScheduleReference,
+  CareSOPNextScheduleStatus,
+} from '../../../../src/types/domain';
+import { formatTargetType } from '../../../../src/utils/displayFormat';
+
+type ActiveStatusFilter = 'active' | 'all' | 'inactive';
+type DueStatusFilter = CareSOPNextScheduleStatus | 'all';
 
 export default function CareSOPListScreen() {
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [activeStatusFilter, setActiveStatusFilter] = React.useState<ActiveStatusFilter>('all');
+  const [categoryFilter, setCategoryFilter] = React.useState<CareCategory | 'all'>('all');
+  const [dueStatusFilter, setDueStatusFilter] = React.useState<DueStatusFilter>('all');
   const [references, setReferences] = React.useState<Record<string, CareSOPNextScheduleReference>>({});
   const [search, setSearch] = React.useState('');
   const [sops, setSops] = React.useState<CareSOP[]>([]);
+  const [targetTypeFilter, setTargetTypeFilter] = React.useState<CareSOPDefaultTargetType | 'all'>('all');
 
   const farmId = currentFarm?.farmId;
 
@@ -81,15 +101,30 @@ export default function CareSOPListScreen() {
   }
 
   const normalizedSearch = search.trim().toLowerCase();
-  const displayedSops = normalizedSearch
-    ? sops.filter((sop) =>
-        [sop.name, sop.category, formatCareCategory(sop.category)]
+  const displayedSops = sops.filter((sop) => {
+    const reference = references[sop.id];
+    const matchesSearch = normalizedSearch
+      ? [
+          sop.name,
+          sop.category,
+          formatCareCategory(sop.category),
+          formatCareSOPTarget(sop),
+          sop.defaultInstruction,
+        ]
           .filter(Boolean)
           .join(' ')
           .toLowerCase()
           .includes(normalizedSearch)
-      )
-    : sops;
+      : true;
+    const matchesCategory = categoryFilter === 'all' || sop.category === categoryFilter;
+    const matchesTarget = targetTypeFilter === 'all' || sop.defaultTargetType === targetTypeFilter;
+    const matchesActiveStatus =
+      activeStatusFilter === 'all' ||
+      (activeStatusFilter === 'active' ? sop.isActive : !sop.isActive);
+    const matchesDueStatus = dueStatusFilter === 'all' || reference?.status === dueStatusFilter;
+
+    return matchesSearch && matchesCategory && matchesTarget && matchesActiveStatus && matchesDueStatus;
+  });
 
   return (
     <Screen
@@ -111,9 +146,60 @@ export default function CareSOPListScreen() {
 
       <SearchFilterRow
         onChangeText={setSearch}
-        placeholder="Cari nama SOP atau kategori"
+        placeholder="Cari nama SOP, kategori, atau target"
         value={search}
       />
+
+      <Card>
+        <SectionHeader title="Filter SOP" description="Saring template berdasarkan kategori, target, status, dan acuan jadwal." />
+        <FilterChips
+          label="Kategori"
+          options={[
+            { label: 'Semua kategori', value: 'all' },
+            ...careCategoryOptions.map((category) => ({
+              label: formatCareCategory(category),
+              value: category,
+            })),
+          ]}
+          selectedValue={categoryFilter}
+          onSelect={(value) => setCategoryFilter(value as CareCategory | 'all')}
+        />
+        <FilterChips
+          label="Target"
+          options={[
+            { label: 'Semua target', value: 'all' },
+            ...careSopTargetOptions.map((targetType) => ({
+              label: formatTargetType(targetType),
+              value: targetType,
+            })),
+          ]}
+          selectedValue={targetTypeFilter}
+          onSelect={(value) => setTargetTypeFilter(value as CareSOPDefaultTargetType | 'all')}
+        />
+        <FilterChips
+          label="Status"
+          options={[
+            { label: 'Semua status', value: 'all' },
+            { label: 'Aktif', value: 'active' },
+            { label: 'Nonaktif', value: 'inactive' },
+          ]}
+          selectedValue={activeStatusFilter}
+          onSelect={(value) => setActiveStatusFilter(value as ActiveStatusFilter)}
+        />
+        <FilterChips
+          label="Acuan jadwal"
+          options={[
+            { label: 'Semua', value: 'all' },
+            { label: 'Terlambat', value: 'overdue' },
+            { label: 'Hari ini', value: 'due_today' },
+            { label: 'Belum jatuh tempo', value: 'upcoming' },
+            { label: 'Belum ada realisasi', value: 'no_history' },
+            { label: 'Tidak ada interval', value: 'no_interval' },
+          ]}
+          selectedValue={dueStatusFilter}
+          onSelect={(value) => setDueStatusFilter(value as DueStatusFilter)}
+        />
+      </Card>
 
       <SectionHeader title="Daftar SOP">
         <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -132,7 +218,7 @@ export default function CareSOPListScreen() {
           subtitle={
             sops.length === 0
               ? 'Buat template SOP agar jadwal perawatan bisa dibuat lebih cepat dan konsisten.'
-              : 'Coba gunakan kata kunci lain.'
+              : 'Coba ubah kata kunci atau filter SOP.'
           }
         />
       ) : (
@@ -195,6 +281,50 @@ function SummaryPill({ label, value }: { label: string; value: number }) {
       <Text selectable style={{ color: '#A6D96A', fontSize: 23, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
         {value}
       </Text>
+    </View>
+  );
+}
+
+function FilterChips<TValue extends string>({
+  label,
+  onSelect,
+  options,
+  selectedValue,
+}: {
+  label: string;
+  onSelect: (value: TValue) => void;
+  options: Array<{ label: string; value: TValue }>;
+  selectedValue: TValue;
+}) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text selectable style={{ color: colors.text, fontSize: 13, fontWeight: '800' }}>
+        {label}
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {options.map((option) => {
+          const active = selectedValue === option.value;
+
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => onSelect(option.value)}
+              style={{
+                backgroundColor: active ? colors.primary : colors.surface,
+                borderColor: active ? colors.primary : colors.border,
+                borderRadius: radius.round,
+                borderWidth: 1,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+              }}
+            >
+              <Text selectable style={{ color: active ? '#FFFFFF' : colors.text, fontSize: 13, fontWeight: '800' }}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }

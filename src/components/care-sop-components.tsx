@@ -68,6 +68,14 @@ export function CareSOPCard({
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <Badge label={formatCareCategoryShort(sop.category)} maxWidth={116} tone="success" />
+          <Badge label={formatTargetType(sop.defaultTargetType)} maxWidth={116} tone="info" />
+          {reference ? (
+            <Badge
+              label={formatScheduleReferenceStatus(reference)}
+              maxWidth={160}
+              tone={getReferenceTone(reference)}
+            />
+          ) : null}
         </View>
         {sop.defaultInstruction ? (
           <Text selectable ellipsizeMode="tail" numberOfLines={2} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
@@ -76,10 +84,10 @@ export function CareSOPCard({
         ) : null}
         <View style={{ gap: 3 }}>
           <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-            {formatIntervalDays(sop.intervalDays)} - {formatCareSOPTarget(sop)}
+            {formatIntervalDays(sop.intervalDays)} - Target: {formatCareSOPTarget(sop)}
           </Text>
           <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-            Acuan: {reference ? formatScheduleReferenceShortStatus(reference) : 'Belum ada'}
+            Acuan: {reference ? formatScheduleReferenceShortStatus(reference) : 'Belum tersedia'}
           </Text>
           <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textSoft, fontSize: 12, lineHeight: 16 }}>
             Diperbarui: {formatDateOnly(sop.updatedAt ?? sop.createdAt ?? '')}
@@ -220,9 +228,12 @@ export function ScheduleReferenceSummary({
       {!compact ? (
         <>
           <MetaRow label="Realisasi terakhir" value={formatDateTime(reference.lastPerformedAt)} />
-          <MetaRow label="Tanggal acuan" value={reference.nextDueDate} />
+          <MetaRow label="Tanggal acuan berikutnya" value={formatDateOnly(reference.nextDueDate ?? '')} />
           {reference.status === 'overdue' ? (
             <MetaRow label="Terlambat" value={`${reference.overdueDays ?? 0} hari`} />
+          ) : null}
+          {reference.status === 'upcoming' ? (
+            <MetaRow label="Jatuh tempo dalam" value={`${reference.daysUntilDue ?? 0} hari`} />
           ) : null}
         </>
       ) : reference.nextDueDate ? (
@@ -265,7 +276,7 @@ export function formatCareSOPTarget(sop: CareSOP): string {
 }
 
 export function formatIntervalDays(intervalDays: number | null): string {
-  return intervalDays ? `Setiap ${intervalDays} hari` : 'Belum ada';
+  return intervalDays ? `Setiap ${intervalDays} hari` : 'Tidak ada interval';
 }
 
 export function formatScheduleReferenceStatus(
@@ -276,7 +287,7 @@ export function formatScheduleReferenceStatus(
   }
 
   if (reference.status === 'no_interval') {
-    return 'Interval belum diisi';
+    return 'Tidak ada interval';
   }
 
   if (reference.status === 'upcoming') {
@@ -292,22 +303,28 @@ export function formatScheduleReferenceStatus(
 
 function formatScheduleReferenceShortStatus(reference: CareSOPNextScheduleReference): string {
   if (reference.status === 'no_history') {
-    return 'Belum ada';
+    return 'Belum ada realisasi';
   }
 
   if (reference.status === 'no_interval') {
-    return 'Belum ada';
+    return 'Tidak ada interval';
   }
 
   if (reference.status === 'upcoming') {
-    return 'Belum jatuh';
+    if (reference.daysUntilDue !== undefined) {
+      return `Belum jatuh tempo (${reference.daysUntilDue} hari)`;
+    }
+
+    return 'Belum jatuh tempo';
   }
 
   if (reference.status === 'due_today') {
     return 'Hari ini';
   }
 
-  return 'Terlambat';
+  return reference.overdueDays !== undefined
+    ? `Terlambat ${reference.overdueDays} hari`
+    : 'Terlambat';
 }
 
 function OptionGroup<TValue extends string>({
@@ -466,4 +483,4 @@ function getReferenceTone(reference: CareSOPNextScheduleReference): BadgeTone {
   return 'muted';
 }
 
-type BadgeTone = 'danger' | 'muted' | 'success' | 'warning';
+type BadgeTone = 'danger' | 'info' | 'muted' | 'success' | 'warning';
