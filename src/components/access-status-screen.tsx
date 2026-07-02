@@ -14,9 +14,8 @@ export function AccessStatusScreen({
   title: string;
   subtitle: string;
 }) {
-  const { currentFarm, error, profile, refresh, signOut } = useAuth();
+  const { currentFarm, error, profile, refresh } = useAuth();
   const [refreshing, setRefreshing] = React.useState(false);
-  const [loggingOut, setLoggingOut] = React.useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -46,16 +45,6 @@ export function AccessStatusScreen({
     router.replace('/');
   }
 
-  async function handleLogout() {
-    setLoggingOut(true);
-    const signOutError = await signOut();
-    setLoggingOut(false);
-
-    if (!signOutError) {
-      router.replace('/get-started');
-    }
-  }
-
   const canReturnToAccessFlow = currentFarm.status === 'rejected' || currentFarm.status === 'removed';
   const canManuallyCheckStatus = currentFarm.status === 'pending';
   const inactiveRecoveryParams = { inactiveRecovery: '1' };
@@ -70,7 +59,7 @@ export function AccessStatusScreen({
       footer={
         <>
           {canManuallyCheckStatus ? (
-            <Button title="Perbarui Status" loading={refreshing} onPress={handleRefresh} />
+            <Button title="Cek Status" loading={refreshing} onPress={handleRefresh} />
           ) : null}
           {canReturnToAccessFlow ? (
             <>
@@ -97,7 +86,6 @@ export function AccessStatusScreen({
             </>
           ) : null}
           <Button title="Profil Akun" variant="secondary" size="small" onPress={() => router.push('/profile')} />
-          <Button title="Keluar" variant="secondary" loading={loggingOut} onPress={handleLogout} />
         </>
       }
     >

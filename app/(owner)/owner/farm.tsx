@@ -2,8 +2,8 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { Badge, Card, ErrorBanner, MetaRow, PageIntro, Screen, SectionHeader } from '../../../src/components/ui';
-import { colors, radius, spacing, typography } from '../../../src/constants/theme';
+import { Badge, Card, ErrorBanner, MainTabHeader, MetaRow, Screen, SectionHeader } from '../../../src/components/ui';
+import { colors, radius, spacing } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
 import { getOwnerDashboardSummary } from '../../../src/services/dashboardService';
 import { getActiveWorkers, getFarmActorDisplayProfiles, getPendingWorkers } from '../../../src/services/memberService';
@@ -97,10 +97,11 @@ export default function OwnerFarmHubScreen() {
 
   return (
     <Screen>
-      <RootHeader
-        roleLabel="Pemilik"
-        subtitle="Kelola data kebun, anggota, dan operasional."
+      <MainTabHeader
         title="Kebun"
+        roleLabel="Pemilik"
+        subtitle="Data kebun, anggota, dan operasional."
+        onProfilePress={() => router.push('/owner/profile')}
       />
       <ErrorBanner message={logoutError} />
 
@@ -145,28 +146,6 @@ export default function OwnerFarmHubScreen() {
         <DangerRow disabled={loggingOut} label={loggingOut ? 'Keluar...' : 'Keluar Akun'} onPress={handleLogout} />
       </Card>
     </Screen>
-  );
-}
-
-function RootHeader({
-  roleLabel,
-  subtitle,
-  title,
-}: {
-  roleLabel: string;
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
-      <Badge label={roleLabel} tone="info" />
-      <Text selectable style={{ color: colors.text, fontSize: typography.h1.fontSize, fontWeight: '800', lineHeight: typography.h1.lineHeight }}>
-        {title}
-      </Text>
-      <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
-        {subtitle}
-      </Text>
-    </View>
   );
 }
 

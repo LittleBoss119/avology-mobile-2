@@ -1,7 +1,9 @@
 import { router } from 'expo-router';
 import React from 'react';
+import { Text, View } from 'react-native';
 
-import { Button, ErrorBanner, Field, FormSection, Screen, TopAppBar } from '../../src/components/ui';
+import { Button, ErrorBanner, Field, Screen, TopAppBar } from '../../src/components/ui';
+import { colors, spacing } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/auth-context';
 import { createFarm } from '../../src/services/farmService';
 
@@ -53,22 +55,20 @@ export default function CreateFarmScreen() {
     >
       <TopAppBar title="Buat Kebun" onBack={() => router.back()} />
       <ErrorBanner message={error} />
-      <FormSection
-        title="Data Kebun"
-        description="Akses pemilik aktif akan dibuat otomatis setelah kebun berhasil tersimpan."
-      >
+      <View style={{ gap: spacing.lg }}>
         <Field label="Nama Kebun *" value={name} onChangeText={setName} placeholder="MS Farm" />
         <Field label="Lokasi *" value={location} onChangeText={setLocation} placeholder="Lokasi kebun" />
-      </FormSection>
-      <FormSection title="Informasi Tambahan" description="Isi luas lahan jika data sudah tersedia.">
         <Field
           label="Luas Lahan (m²)"
           value={areaSize}
           onChangeText={setAreaSize}
-          placeholder="Contoh: 6500"
+          placeholder="Contoh: 6500 m²"
           keyboardType="decimal-pad"
         />
-      </FormSection>
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+          Luas lahan boleh dikosongkan jika belum pasti.
+        </Text>
+      </View>
     </Screen>
   );
 }

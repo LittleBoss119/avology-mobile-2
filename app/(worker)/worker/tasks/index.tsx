@@ -12,10 +12,11 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MainTabHeader,
   Screen,
   SectionHeader,
 } from '../../../../src/components/ui';
-import { colors, radius, spacing, typography } from '../../../../src/constants/theme';
+import { colors, radius, spacing } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getWorkerTasks } from '../../../../src/services/careTaskService';
 import type { CareTask, TaskStatus } from '../../../../src/types/domain';
@@ -78,7 +79,12 @@ export default function WorkerTaskListScreen() {
 
   return (
     <Screen>
-      <RootHeader />
+      <MainTabHeader
+        title="Tugas"
+        roleLabel="Pekerja"
+        subtitle="Selesaikan pekerjaan dari pemilik kebun."
+        onProfilePress={() => router.push('/worker/profile')}
+      />
       <ErrorBanner message={error} />
 
       <TaskSummary tasks={tasks} />
@@ -106,31 +112,6 @@ export default function WorkerTaskListScreen() {
         </View>
       )}
     </Screen>
-  );
-}
-
-function RootHeader() {
-  return (
-    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
-      <Badge label="Pekerja" maxWidth={96} tone="info" />
-      <View style={{ gap: spacing.xs }}>
-        <Text
-          selectable
-          style={{
-            color: colors.text,
-            fontSize: typography.h1.fontSize,
-            fontWeight: typography.h1.fontWeight,
-            letterSpacing: 0,
-            lineHeight: typography.h1.lineHeight,
-          }}
-        >
-          Tugas
-        </Text>
-        <Text selectable style={{ color: colors.textMuted, fontSize: typography.body.fontSize, lineHeight: 24 }}>
-          Selesaikan pekerjaan yang diberikan pemilik kebun.
-        </Text>
-      </View>
-    </View>
   );
 }
 

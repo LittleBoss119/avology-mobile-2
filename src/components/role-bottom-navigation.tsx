@@ -1,6 +1,9 @@
 import { router, usePathname } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { colors, radius, spacing, typography } from '../constants/theme';
 
 type NavigationItem = {
   icon: NavigationIconName;
@@ -12,6 +15,7 @@ type NavigationItem = {
 type NavigationIconName = 'calendar' | 'document' | 'farm' | 'home' | 'leaf' | 'user' | 'checklist';
 
 export function RoleBottomNavigation({ role }: { role: 'owner' | 'worker' }) {
+  const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const items = role === 'owner' ? ownerNavigationItems : workerNavigationItems;
 
@@ -20,17 +24,25 @@ export function RoleBottomNavigation({ role }: { role: 'owner' | 'worker' }) {
   }
 
   return (
-    <View style={{ backgroundColor: '#F7FAF3', paddingHorizontal: 12, paddingBottom: 10, paddingTop: 4 }}>
+    <View
+      style={{
+        backgroundColor: colors.bg,
+        paddingBottom: Math.max(insets.bottom, spacing.sm),
+        paddingHorizontal: spacing.md,
+        paddingTop: spacing.xs,
+      }}
+    >
       <View
         style={{
-          backgroundColor: '#FFFFFF',
-          borderColor: '#DCE7D5',
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
           borderCurve: 'continuous',
-          borderRadius: 22,
+          borderRadius: radius.screenCard,
           borderWidth: 1,
           flexDirection: 'row',
           gap: 4,
-          padding: 6,
+          minHeight: 64,
+          padding: 5,
         }}
       >
         {items.map((item) => {
@@ -42,36 +54,37 @@ export function RoleBottomNavigation({ role }: { role: 'owner' | 'worker' }) {
               onPress={() => router.replace(item.href)}
               style={({ pressed }) => ({
                 alignItems: 'center',
-                backgroundColor: isActive ? '#E7F3EA' : pressed ? '#F7FAF3' : '#FFFFFF',
+                backgroundColor: isActive ? colors.primarySoft : pressed ? colors.surfaceMuted : colors.surface,
                 borderCurve: 'continuous',
-                borderRadius: 17,
+                borderRadius: radius.lg,
                 flex: 1,
-                gap: 3,
-                minHeight: 56,
+                gap: 4,
                 justifyContent: 'center',
+                minHeight: 52,
                 paddingHorizontal: 4,
-                paddingVertical: 6,
+                paddingVertical: 5,
               })}
             >
               <View
                 style={{
                   alignItems: 'center',
-                  backgroundColor: isActive ? '#065F2E' : '#EEF4EA',
-                  borderRadius: 999,
-                  height: 24,
+                  backgroundColor: isActive ? colors.primary : colors.surfaceMuted,
+                  borderRadius: radius.round,
+                  height: 25,
                   justifyContent: 'center',
-                  width: 24,
+                  width: 25,
                 }}
               >
                 <NavigationIcon active={isActive} name={item.icon} />
               </View>
               <Text
-                selectable
+                selectable={false}
                 numberOfLines={1}
                 style={{
-                  color: isActive ? '#065F2E' : '#68746D',
-                  fontSize: 11,
+                  color: isActive ? colors.primary : colors.textMuted,
+                  fontSize: typography.navLabel.fontSize,
                   fontWeight: isActive ? '900' : '700',
+                  lineHeight: typography.navLabel.lineHeight,
                   textAlign: 'center',
                 }}
               >
@@ -93,16 +106,16 @@ const ownerNavigationItems: NavigationItem[] = [
     match: ['/owner'],
   },
   {
+    href: '/owner/schedules',
+    icon: 'checklist',
+    label: 'Tugas',
+    match: ['/owner/schedules', '/owner/tasks'],
+  },
+  {
     href: '/owner/trees',
     icon: 'leaf',
     label: 'Pohon',
     match: ['/owner/trees'],
-  },
-  {
-    href: '/owner/schedules',
-    icon: 'calendar',
-    label: 'Jadwal',
-    match: ['/owner/schedules', '/owner/tasks'],
   },
   {
     href: '/owner/reports',
@@ -187,7 +200,7 @@ const workerTopLevelPaths = [
 ];
 
 function NavigationIcon({ active, name }: { active: boolean; name: NavigationIconName }) {
-  const color = active ? '#FFFFFF' : '#68746D';
+  const color = active ? colors.surface : colors.textMuted;
 
   if (name === 'home') {
     return (

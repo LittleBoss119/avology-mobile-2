@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Text } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
-import { BrandMark, Button, Card, ErrorBanner, Field, PageIntro, Screen } from '../../src/components/ui';
-import { colors } from '../../src/constants/theme';
+import { Button, ErrorBanner, Field, Screen, TopAppBar } from '../../src/components/ui';
+import { colors, radius, spacing } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/auth-context';
 import { loginUser } from '../../src/services/authService';
 
@@ -11,6 +11,7 @@ export default function LoginScreen() {
   const { refresh } = useAuth();
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [passwordVisible, setPasswordVisible] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -36,14 +37,17 @@ export default function LoginScreen() {
       footer={
         <>
           <Button title="Masuk" loading={submitting} onPress={handleSubmit} />
-          <Button title="Belum punya akun? Daftar" variant="secondary" onPress={() => router.replace('/register')} />
+          <InlineAuthLink
+            prefix="Belum punya akun?"
+            actionLabel="Daftar"
+            onPress={() => router.replace('/register')}
+          />
         </>
       }
     >
-      <BrandMark compact />
-      <PageIntro title="Masuk" subtitle="Masuk untuk melanjutkan ke area pemilik atau pekerja." />
+      <TopAppBar title="Masuk" onBack={() => router.back()} />
       <ErrorBanner message={error} />
-      <Card>
+      <View style={{ gap: spacing.lg }}>
         <Field
           label="Email"
           value={email}
@@ -51,17 +55,91 @@ export default function LoginScreen() {
           placeholder="nama@email.com"
           keyboardType="email-address"
         />
-        <Field
+        <PasswordField
           label="Password"
           value={password}
           onChangeText={setPassword}
           placeholder="Password"
-          secureTextEntry
+          visible={passwordVisible}
+          onToggleVisible={() => setPasswordVisible((value) => !value)}
         />
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-          Gunakan email dan password yang sudah terdaftar untuk membuka kebun aktif.
-        </Text>
-      </Card>
+      </View>
     </Screen>
+  );
+}
+
+function PasswordField({
+  label,
+  onChangeText,
+  onToggleVisible,
+  placeholder,
+  value,
+  visible,
+}: {
+  label: string;
+  onChangeText: (value: string) => void;
+  onToggleVisible: () => void;
+  placeholder: string;
+  value: string;
+  visible: boolean;
+}) {
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
+        {label}
+      </Text>
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderCurve: 'continuous',
+          borderRadius: radius.input,
+          borderWidth: 1,
+          flexDirection: 'row',
+          minHeight: 54,
+          paddingHorizontal: spacing.lg,
+        }}
+      >
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textSoft}
+          secureTextEntry={!visible}
+          style={{ color: colors.text, flex: 1, fontSize: 16, minHeight: 52, paddingRight: spacing.md }}
+          value={value}
+        />
+        <Pressable accessibilityRole="button" onPress={onToggleVisible} style={{ padding: spacing.sm }}>
+          <Text selectable={false} style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
+            {visible ? 'Sembunyikan' : 'Lihat'}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function InlineAuthLink({
+  actionLabel,
+  onPress,
+  prefix,
+}: {
+  actionLabel: string;
+  onPress: () => void;
+  prefix: string;
+}) {
+  return (
+    <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.xs, justifyContent: 'center' }}>
+      <Text selectable style={{ color: colors.textMuted }}>
+        {prefix}
+      </Text>
+      <Pressable accessibilityRole="button" onPress={onPress} style={{ paddingVertical: spacing.sm }}>
+        <Text selectable={false} style={{ color: colors.primary, fontWeight: '800' }}>
+          {actionLabel}
+        </Text>
+      </Pressable>
+    </View>
   );
 }

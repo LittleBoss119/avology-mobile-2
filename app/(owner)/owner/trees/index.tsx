@@ -9,10 +9,11 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MainTabHeader,
   SearchFilterRow,
   Screen,
 } from '../../../../src/components/ui';
-import { colors, spacing, typography } from '../../../../src/constants/theme';
+import { colors, spacing } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { listTreeMainPhotosForFarm } from '../../../../src/services/photoAttachmentService';
 import { getTrees } from '../../../../src/services/treeService';
@@ -146,10 +147,11 @@ export default function OwnerTreeListScreen() {
 
   return (
     <Screen floatingAction={<FloatingAddButton onPress={() => router.push('/owner/trees/create')} />}>
-      <RootHeader
+      <MainTabHeader
+        title="Pohon"
         roleLabel="Pemilik"
-        title="Data Pohon"
         subtitle={`${trees.length} pohon ${archived ? 'diarsipkan' : 'aktif'} di ${farmName}.`}
+        onProfilePress={() => router.push('/owner/profile')}
       />
       <ErrorBanner message={error} />
       <SearchFilterBar
@@ -205,28 +207,6 @@ export default function OwnerTreeListScreen() {
         </View>
       )}
     </Screen>
-  );
-}
-
-function RootHeader({
-  roleLabel,
-  subtitle,
-  title,
-}: {
-  roleLabel: string;
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
-      <Badge label={roleLabel} tone="info" />
-      <Text selectable style={{ color: colors.text, fontSize: typography.h1.fontSize, fontWeight: '800', lineHeight: typography.h1.lineHeight }}>
-        {title}
-      </Text>
-      <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
-        {subtitle}
-      </Text>
-    </View>
   );
 }
 

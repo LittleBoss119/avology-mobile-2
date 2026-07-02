@@ -2,13 +2,14 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { colors, radius, spacing, typography } from '../../../src/constants/theme';
+import { colors, radius, spacing } from '../../../src/constants/theme';
 import {
   Badge,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MainTabHeader,
   MetricCard,
   Screen,
   SectionHeader,
@@ -81,7 +82,12 @@ export default function OwnerDashboardScreen() {
 
   return (
     <Screen>
-      <DashboardIntro farmName={farmName} name={ownerName} roleLabel="Pemilik" />
+      <MainTabHeader
+        title="Beranda"
+        roleLabel="Pemilik"
+        subtitle={farmName ? `Halo, ${ownerName}. Pantau ${farmName} hari ini.` : `Halo, ${ownerName}. Pantau kebun hari ini.`}
+        onProfilePress={() => router.push('/owner/profile')}
+      />
       <ErrorBanner message={error} />
 
       <OwnerHero summary={summary} healthyPercent={healthyPercent} farmName={farmName} />
@@ -141,38 +147,6 @@ export default function OwnerDashboardScreen() {
         <DashboardActionButton label="Kelola Kebun" meta="Kebun" onPress={() => router.push('/owner/farm')} />
       </View>
     </Screen>
-  );
-}
-
-function DashboardIntro({
-  farmName,
-  name,
-  roleLabel,
-}: {
-  farmName?: string;
-  name: string;
-  roleLabel: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
-      <Badge label={roleLabel} tone="info" />
-      <View style={{ gap: spacing.xs }}>
-        <Text
-          selectable
-          style={{
-            color: colors.text,
-            fontSize: typography.h1.fontSize,
-            fontWeight: typography.h1.fontWeight,
-            lineHeight: typography.h1.lineHeight,
-          }}
-        >
-          Halo, {name}
-        </Text>
-        <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
-          {farmName ? `Pantau kondisi ${farmName} hari ini.` : 'Pantau kondisi kebun aktif hari ini.'}
-        </Text>
-      </View>
-    </View>
   );
 }
 

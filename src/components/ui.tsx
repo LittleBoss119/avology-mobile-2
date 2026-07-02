@@ -243,6 +243,69 @@ export function TopAppBar({
   );
 }
 
+export function ProfileIconButton({
+  label = 'Profil Akun',
+  onPress,
+}: {
+  label?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: 'center',
+        backgroundColor: pressed ? colors.primarySoft : colors.surface,
+        borderColor: colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.round,
+        borderWidth: 1,
+        height: 42,
+        justifyContent: 'center',
+        width: 42,
+      })}
+    >
+      <UserGlyph color={colors.primary} />
+    </Pressable>
+  );
+}
+
+export function MainTabHeader({
+  onProfilePress,
+  roleLabel,
+  roleTone = 'info',
+  subtitle,
+  title,
+}: {
+  onProfilePress: () => void;
+  roleLabel?: string;
+  roleTone?: BadgeTone;
+  subtitle?: string;
+  title: string;
+}) {
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <TopAppBar
+        title={title}
+        variant="main"
+        right={<ProfileIconButton onPress={onProfilePress} />}
+      />
+      {roleLabel || subtitle ? (
+        <View style={{ gap: spacing.xs }}>
+          {roleLabel ? <Badge label={roleLabel} tone={roleTone} /> : null}
+          {subtitle ? (
+            <Text selectable style={{ color: colors.muted, fontSize: 15, lineHeight: 22 }}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <View style={{ alignItems: compact ? 'flex-start' : 'center', gap: spacing.md }}>
@@ -1419,6 +1482,32 @@ export function CameraGlyph({ color = colors.primary }: { color?: string }) {
           position: 'absolute',
           top: 1,
           width: 9,
+        }}
+      />
+    </View>
+  );
+}
+
+function UserGlyph({ color }: { color: string }) {
+  return (
+    <View style={{ alignItems: 'center', width: 18 }}>
+      <View
+        style={{
+          borderColor: color,
+          borderRadius: radius.round,
+          borderWidth: 2,
+          height: 8,
+          width: 8,
+        }}
+      />
+      <View
+        style={{
+          borderColor: color,
+          borderRadius: radius.round,
+          borderWidth: 2,
+          height: 9,
+          marginTop: -1,
+          width: 16,
         }}
       />
     </View>

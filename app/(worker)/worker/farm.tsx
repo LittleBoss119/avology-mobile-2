@@ -2,8 +2,8 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 
-import { Badge, Button, Card, ErrorBanner, MetaRow, PageIntro, Screen, SectionHeader } from '../../../src/components/ui';
-import { colors, radius, spacing, typography } from '../../../src/constants/theme';
+import { Badge, Button, Card, ErrorBanner, MainTabHeader, MetaRow, Screen, SectionHeader } from '../../../src/components/ui';
+import { colors, radius, spacing } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
 import { getFarmActorDisplayProfiles, leaveCurrentFarm } from '../../../src/services/memberService';
 import { getTrees } from '../../../src/services/treeService';
@@ -103,7 +103,12 @@ export default function WorkerFarmHubScreen() {
 
   return (
     <Screen>
-      <RootHeader roleLabel="Pekerja" subtitle="Informasi kebun tempat kamu bekerja." title="Kebun" />
+      <MainTabHeader
+        title="Kebun"
+        roleLabel="Pekerja"
+        subtitle="Informasi kebun tempat kamu bekerja."
+        onProfilePress={() => router.push('/worker/profile')}
+      />
       <ErrorBanner message={error} />
 
       <Card variant="highlight">
@@ -164,28 +169,6 @@ export default function WorkerFarmHubScreen() {
         </Card>
       ) : null}
     </Screen>
-  );
-}
-
-function RootHeader({
-  roleLabel,
-  subtitle,
-  title,
-}: {
-  roleLabel: string;
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
-      <Badge label={roleLabel} tone="info" />
-      <Text selectable style={{ color: colors.text, fontSize: typography.h1.fontSize, fontWeight: '800', lineHeight: typography.h1.lineHeight }}>
-        {title}
-      </Text>
-      <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
-        {subtitle}
-      </Text>
-    </View>
   );
 }
 

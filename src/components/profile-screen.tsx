@@ -6,10 +6,10 @@ import { colors, radius, spacing, typography } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
 import { updateCurrentProfile } from '../services/authService';
 import type { CurrentUserFarm } from '../types/domain';
+import { showConfirmDialog } from './feedback';
 import { formatPersonDisplayName } from '../utils/displayFormat';
 import { isOwnerActive, isWorkerActive } from '../utils/routeGuard';
 import {
-  Badge,
   Button,
   Card,
   EmptyState,
@@ -93,8 +93,6 @@ export function ProfileScreen() {
 
   const farmHubRoute = getFarmHubRoute(currentFarm);
   const passwordRoute = getPasswordRoute(currentFarm);
-  const roleLabel = getRoleLabel(currentFarm);
-  const activeFarmName = currentFarm?.farm?.name ?? null;
   const displayName = formatPersonDisplayName(profile?.fullName, 'Pengguna Avology');
   const initial = getProfileInitial(displayName);
 
@@ -110,7 +108,7 @@ export function ProfileScreen() {
       {!profile ? (
         <EmptyState title="Profil tidak tersedia" subtitle="Masuk ulang jika data akun belum muncul." />
       ) : isEditing ? (
-        <FormSection title="Data Pribadi" description="Perbarui nama dan nomor HP yang digunakan pada akun Avology.">
+        <FormSection title="Data Pribadi">
           <Field label="Nama lengkap" value={fullName} onChangeText={setFullName} placeholder="Nama lengkap" />
           <Field
             label="Nomor HP"
@@ -120,7 +118,7 @@ export function ProfileScreen() {
             keyboardType="phone-pad"
           />
           {profile.email ? <MetaRow label="Email login" value={profile.email} /> : null}
-          <Button title="Simpan Perubahan" loading={saving} disabled={loggingOut} onPress={handleSave} />
+          <Button title="Simpan Profil" loading={saving} disabled={loggingOut} onPress={handleSave} />
           <Button
             title="Batal"
             variant="secondary"
@@ -152,37 +150,30 @@ export function ProfileScreen() {
                 <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800', lineHeight: typography.h3.lineHeight }}>
                   {displayName}
                 </Text>
-                <View style={{ alignItems: 'flex-start' }}>
-                  <Badge label={roleLabel} tone={currentFarm?.status === 'active' ? 'info' : 'neutral'} />
-                </View>
-                {activeFarmName ? (
-                  <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
-                    {activeFarmName}
-                  </Text>
-                ) : null}
+                <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
+                  Profil Akun
+                </Text>
               </View>
             </View>
           </Card>
 
           <Card>
             <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
-              Informasi Akun
+              Data Pribadi
             </Text>
             <View style={{ gap: spacing.md }}>
               <MetaRow label="Nama lengkap" value={profile.fullName} />
               <MetaRow label="Nomor HP" value={profile.phone} />
               {profile.email ? <MetaRow label="Email login" value={profile.email} /> : null}
-              <MetaRow label="Role aktif" value={roleLabel} />
-              <MetaRow label="Kebun aktif" value={activeFarmName ?? 'Belum terhubung'} />
             </View>
           </Card>
 
           <Card>
             <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
-              Aksi Akun
+              Pengaturan Akun
             </Text>
             <Button
-              title="Edit Profil Akun"
+              title="Edit Profil"
               variant="secondary"
               disabled={loggingOut}
               onPress={() => setIsEditing(true)}
@@ -193,29 +184,34 @@ export function ProfileScreen() {
               disabled={loggingOut}
               onPress={() => router.push(passwordRoute)}
             />
-            {farmHubRoute ? (
-              <Button
-                title="Buka Tab Kebun"
-                variant="secondary"
-                disabled={loggingOut}
-                onPress={() => router.replace(farmHubRoute)}
-              />
-            ) : null}
           </Card>
 
           <Card>
             <Text selectable style={{ color: colors.danger, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
               Keluar Akun
             </Text>
-            <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-              Gunakan aksi ini untuk keluar dari akun Avology di perangkat ini.
-            </Text>
-            <Button title="Keluar Akun" variant="danger" loading={loggingOut} disabled={saving} onPress={handleLogout} />
+            <Button
+              title="Keluar"
+              variant="danger"
+              loading={loggingOut}
+              disabled={saving}
+              onPress={confirmLogout}
+            />
           </Card>
         </>
       )}
     </Screen>
   );
+
+  function confirmLogout() {
+    showConfirmDialog({
+      title: 'Keluar akun?',
+      message: 'Kamu perlu masuk lagi untuk membuka Avology.',
+      confirmLabel: 'Keluar',
+      danger: true,
+      onConfirm: handleLogout,
+    });
+  }
 }
 
 function getFarmHubRoute(currentFarm: CurrentUserFarm | null): '/owner/farm' | '/worker/farm' | null {
@@ -240,18 +236,6 @@ function getPasswordRoute(currentFarm: CurrentUserFarm | null): '/owner/profile-
   }
 
   return '/password';
-}
-
-function getRoleLabel(currentFarm: CurrentUserFarm | null): string {
-  if (isOwnerActive(currentFarm)) {
-    return 'Pemilik';
-  }
-
-  if (isWorkerActive(currentFarm)) {
-    return 'Pekerja';
-  }
-
-  return 'Belum terhubung';
 }
 
 function getProfileInitial(name: string): string {

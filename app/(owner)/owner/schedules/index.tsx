@@ -14,6 +14,7 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MainTabHeader,
   SearchFilterRow,
   SectionHeader,
   Screen,
@@ -141,7 +142,12 @@ export default function CareScheduleListScreen() {
       floatingAction={<FloatingAddButton onPress={() => setCreateMenuOpen(true)} />}
       floatingActionBottom={86}
     >
-      <RootHeader />
+      <MainTabHeader
+        title="Tugas"
+        roleLabel="Pemilik"
+        subtitle="Pantau jadwal kerja dan perawatan."
+        onProfilePress={() => router.push('/owner/profile')}
+      />
       <ErrorBanner message={error} />
 
       <ScheduleHero summary={summary} />
@@ -208,31 +214,6 @@ export default function CareScheduleListScreen() {
         </View>
       )}
     </Screen>
-  );
-}
-
-function RootHeader() {
-  return (
-    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
-      <Badge label="Pemilik" maxWidth={96} tone="info" />
-      <View style={{ gap: spacing.xs }}>
-        <Text
-          selectable
-          style={{
-            color: colors.text,
-            fontSize: typography.h1.fontSize,
-            fontWeight: typography.h1.fontWeight,
-            letterSpacing: 0,
-            lineHeight: typography.h1.lineHeight,
-          }}
-        >
-          Jadwal Perawatan
-        </Text>
-        <Text selectable style={{ color: colors.textMuted, fontSize: typography.body.fontSize, lineHeight: 24 }}>
-          Pantau jadwal kerja dan perawatan yang perlu diselesaikan.
-        </Text>
-      </View>
-    </View>
   );
 }
 

@@ -2,13 +2,14 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { colors, radius, spacing, typography } from '../../../src/constants/theme';
+import { colors, radius, spacing } from '../../../src/constants/theme';
 import {
   Badge,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MainTabHeader,
   MetricCard,
   Screen,
   SectionHeader,
@@ -76,7 +77,13 @@ export default function WorkerDashboardScreen() {
 
   return (
     <Screen>
-      <DashboardIntro farmName={farmName} name={workerName} roleLabel="Pekerja" />
+      <MainTabHeader
+        title="Beranda"
+        roleLabel="Pekerja"
+        roleTone="neutral"
+        subtitle={farmName ? `Halo, ${workerName}. Tugas kamu di ${farmName} hari ini.` : `Halo, ${workerName}. Tugas kamu hari ini.`}
+        onProfilePress={() => router.push('/worker/profile')}
+      />
       <ErrorBanner message={error} />
 
       <WorkerHero farmName={farmName} status={formatMemberStatus(currentFarm?.status)} summary={summary} />
@@ -125,38 +132,6 @@ export default function WorkerDashboardScreen() {
         <DashboardActionButton label="Lihat Pohon" meta="Pohon" onPress={() => router.push('/worker/trees')} />
       </View>
     </Screen>
-  );
-}
-
-function DashboardIntro({
-  farmName,
-  name,
-  roleLabel,
-}: {
-  farmName?: string;
-  name: string;
-  roleLabel: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
-      <Badge label={roleLabel} tone="neutral" />
-      <View style={{ gap: spacing.xs }}>
-        <Text
-          selectable
-          style={{
-            color: colors.text,
-            fontSize: typography.h1.fontSize,
-            fontWeight: typography.h1.fontWeight,
-            lineHeight: typography.h1.lineHeight,
-          }}
-        >
-          Halo, {name}
-        </Text>
-        <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
-          {farmName ? `Tugas kamu di ${farmName} hari ini.` : 'Tugas kamu hari ini.'}
-        </Text>
-      </View>
-    </View>
   );
 }
 
