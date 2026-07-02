@@ -357,7 +357,15 @@ export function WorkerCreateOperationalReportScreen() {
   );
 }
 
-export function WorkerOperationalReportListScreen() {
+type OperationalReportListScreenProps = {
+  header?: React.ReactNode;
+  showHeader?: boolean;
+};
+
+export function WorkerOperationalReportListScreen({
+  header,
+  showHeader = true,
+}: OperationalReportListScreenProps = {}) {
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -426,11 +434,14 @@ export function WorkerOperationalReportListScreen() {
         <Button title="Buat Laporan" onPress={() => router.push('/worker/reports/create')} />
       }
     >
-      <ReportRootHeader
-        roleLabel="Pekerja"
-        title="Laporan"
-        subtitle="Buat dan pantau laporan operasional kamu."
-      />
+      {header ??
+        (showHeader ? (
+          <ReportRootHeader
+            roleLabel="Pekerja"
+            title="Laporan"
+            subtitle="Buat dan pantau laporan operasional kamu."
+          />
+        ) : null)}
       <ErrorBanner message={error} />
 
       <ReportSummary title="Laporan Saya" reports={reports} />
@@ -929,7 +940,10 @@ export function WorkerEditOperationalReportScreen({ reportId }: { reportId?: str
   );
 }
 
-export function OwnerOperationalReportListScreen() {
+export function OwnerOperationalReportListScreen({
+  header,
+  showHeader = true,
+}: OperationalReportListScreenProps = {}) {
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [filterSheetVisible, setFilterSheetVisible] = React.useState(false);
@@ -1024,11 +1038,14 @@ export function OwnerOperationalReportListScreen() {
 
   return (
     <Screen>
-      <ReportRootHeader
-        roleLabel="Pemilik"
-        title="Laporan Operasional"
-        subtitle="Tinjau laporan lapangan dari pekerja."
-      />
+      {header ??
+        (showHeader ? (
+          <ReportRootHeader
+            roleLabel="Pemilik"
+            title="Laporan Operasional"
+            subtitle="Tinjau laporan lapangan dari pekerja."
+          />
+        ) : null)}
       <ErrorBanner message={error} />
 
       <ReportSummary title="Laporan Masuk" reports={reports} />
