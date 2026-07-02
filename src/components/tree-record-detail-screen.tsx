@@ -19,6 +19,7 @@ import {
   getManualCareRecordDetail,
   softDeleteOwnManualCareRecord,
 } from '../services/manualCareService';
+import { getFarmActorDisplayProfiles } from '../services/memberService';
 import {
   getConditionRecordPhotos,
   getGrowthPhaseRecordPhotos,
@@ -26,17 +27,17 @@ import {
   getManualCareRecordPhotos,
 } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
+import { useAuth } from '../context/auth-context';
 import type {
   CareCategory,
-  GrowthPhase,
+  MemberRole,
   ServiceResult,
   SuccessData,
   Tree,
-  TreeConditionStatus,
   UUID,
 } from '../types/domain';
 import type { PhotoAttachmentPreviewItem } from '../types/media';
-import { formatCareCategory, formatTargetType } from '../utils/displayFormat';
+import { formatCareCategory, formatPersonDisplayName, formatTargetType } from '../utils/displayFormat';
 import { formatGrowthPhase, formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { PhotoAttachmentPreviewList } from './media';
 import {
@@ -61,7 +62,12 @@ type TreeRecordDetailScreenProps = {
 };
 
 type DetailState = {
+  authorId: UUID;
+  authorName?: string | null;
+  authorRole?: MemberRole | null;
+  authorVerb: 'harvested' | 'recorded';
   canEdit: boolean;
+  createdAt?: string | null;
   eventAt: string;
   eventLabel: string;
   farmId: UUID;
@@ -69,6 +75,7 @@ type DetailState = {
   recordLabel: string;
   rows: Array<{ label: string; value: string | null }>;
   title: string;
+  updatedAt?: string | null;
 };
 
 export function TreeRecordDetailScreen({
@@ -77,6 +84,7 @@ export function TreeRecordDetailScreen({
   recordType,
   treeId,
 }: TreeRecordDetailScreenProps) {
+  const { profile } = useAuth();
   const [detail, setDetail] = React.useState<DetailState | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -208,7 +216,20 @@ export function TreeRecordDetailScreen({
       <Card>
         <View style={{ gap: spacing.md }}>
           <Badge label={detail.recordLabel} tone="info" />
-          <MetaRow label={detail.eventLabel} value={formatDateTime(detail.eventAt)} />
+          <MetaRow label={detail.eventLabel} value={formatEventDate(detail.eventAt)} />
+          <MetaRow
+            label={detail.authorVerb === 'harvested' ? 'Dipanen oleh' : 'Dicatat oleh'}
+            value={formatActorDisplayName({
+              actorId: detail.authorId,
+              actorName: detail.authorName,
+              actorRole: detail.authorRole,
+              currentUserId: profile?.id,
+            })}
+          />
+          {detail.createdAt ? <MetaRow label="Dibuat pada" value={formatDateTime(detail.createdAt)} /> : null}
+          {shouldShowUpdatedAt(detail.createdAt, detail.updatedAt) ? (
+            <MetaRow label="Terakhir diubah" value={formatDateTime(detail.updatedAt as string)} />
+          ) : null}
           {detail.rows.map((row) => (
             <MetaRow key={row.label} label={row.label} value={row.value} />
           ))}
@@ -250,9 +271,16 @@ async function loadRecordDetail(
       return result;
     }
 
+    const authorDisplay = await resolveRecordAuthor(result.data.farmId, result.data.reportedBy);
+
     return {
       data: {
+        authorId: result.data.reportedBy,
+        authorName: authorDisplay.fullName,
+        authorRole: authorDisplay.role,
+        authorVerb: 'recorded',
         canEdit: result.data.canEdit === true,
+        createdAt: result.data.createdAt,
         eventAt: result.data.reportedAt,
         eventLabel: 'Tanggal catatan',
         farmId: result.data.farmId,
@@ -260,6 +288,7 @@ async function loadRecordDetail(
         recordLabel: 'Kondisi',
         rows: [{ label: 'Status kondisi', value: formatTreeConditionStatus(result.data.conditionStatus) }],
         title: 'Detail catatan kondisi',
+        updatedAt: result.data.updatedAt,
       },
       error: null,
     };
@@ -272,9 +301,16 @@ async function loadRecordDetail(
       return result;
     }
 
+    const authorDisplay = await resolveRecordAuthor(result.data.farmId, result.data.recordedBy);
+
     return {
       data: {
+        authorId: result.data.recordedBy,
+        authorName: authorDisplay.fullName,
+        authorRole: authorDisplay.role,
+        authorVerb: 'recorded',
         canEdit: result.data.canEdit === true,
+        createdAt: result.data.createdAt,
         eventAt: result.data.recordedAt,
         eventLabel: 'Tanggal catatan',
         farmId: result.data.farmId,
@@ -282,6 +318,7 @@ async function loadRecordDetail(
         recordLabel: 'Fase',
         rows: [{ label: 'Fase pertumbuhan', value: formatGrowthPhase(result.data.phase) }],
         title: 'Detail catatan fase',
+        updatedAt: result.data.updatedAt,
       },
       error: null,
     };
@@ -294,9 +331,16 @@ async function loadRecordDetail(
       return result;
     }
 
+    const authorDisplay = await resolveRecordAuthor(result.data.farmId, result.data.harvestedBy);
+
     return {
       data: {
+        authorId: result.data.harvestedBy,
+        authorName: authorDisplay.fullName,
+        authorRole: authorDisplay.role,
+        authorVerb: 'harvested',
         canEdit: result.data.canEdit === true,
+        createdAt: result.data.createdAt,
         eventAt: result.data.harvestedAt,
         eventLabel: 'Tanggal panen',
         farmId: result.data.farmId,
@@ -307,6 +351,7 @@ async function loadRecordDetail(
           { label: 'Kondisi buah', value: result.data.fruitCondition },
         ],
         title: 'Detail catatan panen',
+        updatedAt: result.data.updatedAt,
       },
       error: null,
     };
@@ -318,9 +363,16 @@ async function loadRecordDetail(
     return result;
   }
 
+  const authorDisplay = await resolveRecordAuthor(result.data.farmId, result.data.recordedBy);
+
   return {
     data: {
+      authorId: result.data.recordedBy,
+      authorName: authorDisplay.fullName,
+      authorRole: authorDisplay.role,
+      authorVerb: 'recorded',
       canEdit: result.data.canEdit === true,
+      createdAt: result.data.createdAt,
       eventAt: result.data.performedAt,
       eventLabel: 'Tanggal perawatan',
       farmId: result.data.farmId,
@@ -331,8 +383,32 @@ async function loadRecordDetail(
         { label: 'Target perawatan', value: formatManualCareTarget(result.data.targetType, result.data.targetRow, result.data.targetColumn, result.data.customTargetNote) },
       ],
       title: 'Detail catatan perawatan',
+      updatedAt: result.data.updatedAt,
     },
     error: null,
+  };
+}
+
+async function resolveRecordAuthor(
+  farmId: UUID,
+  authorId: UUID
+): Promise<{ fullName: string | null; role: MemberRole | null }> {
+  const actorProfilesResult = await getFarmActorDisplayProfiles(farmId);
+
+  if (actorProfilesResult.data) {
+    const actor = actorProfilesResult.data.find((profile) => profile.userId === authorId);
+
+    if (actor) {
+      return {
+        fullName: actor.fullName,
+        role: actor.role,
+      };
+    }
+  }
+
+  return {
+    fullName: null,
+    role: null,
   };
 }
 
@@ -422,4 +498,69 @@ function formatDateTime(value: string): string {
     month: 'short',
     year: 'numeric',
   });
+}
+
+function formatEventDate(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatActorDisplayName({
+  actorId,
+  actorName,
+  actorRole,
+  currentUserId,
+}: {
+  actorId?: string | null;
+  actorName?: string | null;
+  actorRole?: MemberRole | null;
+  currentUserId?: string | null;
+}): string {
+  if (actorId && currentUserId && actorId === currentUserId) {
+    return 'Anda';
+  }
+
+  const displayName = formatPersonDisplayName(actorName, '');
+
+  if (displayName) {
+    return displayName;
+  }
+
+  if (actorRole === 'owner') {
+    return 'Pemilik kebun';
+  }
+
+  if (actorRole === 'worker') {
+    return 'Anggota kebun';
+  }
+
+  return 'Anggota kebun';
+}
+
+function shouldShowUpdatedAt(createdAt?: string | null, updatedAt?: string | null): boolean {
+  if (!updatedAt) {
+    return false;
+  }
+
+  if (!createdAt) {
+    return true;
+  }
+
+  const createdTime = new Date(createdAt).getTime();
+  const updatedTime = new Date(updatedAt).getTime();
+
+  if (Number.isNaN(createdTime) || Number.isNaN(updatedTime)) {
+    return updatedAt !== createdAt;
+  }
+
+  return Math.abs(updatedTime - createdTime) > 1000;
 }

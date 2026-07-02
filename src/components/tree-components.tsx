@@ -545,9 +545,9 @@ export function TreeHistoryTimeline({
 
   return (
     <View style={{ gap: spacing.md }}>
-      {history.map((item) => (
+      {history.map((item, index) => (
         <TreeHistoryTimelineItem
-          key={`${item.historyType}-${item.happenedAt}-${item.title}`}
+          key={buildHistoryItemKey(item, index)}
           conditionPhotoMap={conditionPhotoMap}
           currentUserId={currentUserId}
           growthPhasePhotoMap={growthPhasePhotoMap}
@@ -585,7 +585,7 @@ export function ConditionReportItem({
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md }}>
         <ConditionStatusBadge status={report.conditionStatus} />
         <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
-          {formatDateTime(report.reportedAt)}
+          {formatEventDate(report.reportedAt)}
         </Text>
       </View>
       <MetaRow label="Catatan" value={report.note || '-'} />
@@ -666,7 +666,7 @@ function TreeHistoryTimelineItem({
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
             <Badge label={formatHistoryType(item.historyType)} tone={getHistoryTone(item.historyType)} />
             <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
-              {formatDateTime(item.happenedAt)}
+              {formatEventDate(item.happenedAt)}
             </Text>
           </View>
           <Text selectable style={{ color: colors.text, fontSize: typography.bodyStrong.fontSize, fontWeight: '800', lineHeight: typography.bodyStrong.lineHeight }}>
@@ -682,7 +682,7 @@ function TreeHistoryTimelineItem({
           {harvestPhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={harvestPhotoUrls} /> : null}
           {manualCarePhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={manualCarePhotoUrls} /> : null}
           <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
-            Dicatat oleh{' '}
+            {getHistoryActorPrefix(item.historyType)}{' '}
             {formatActorDisplayName({
               actorId: item.actorId,
               actorName: item.actorName,
@@ -884,10 +884,11 @@ function formatActorDisplayName({
   }
 
   if (actorRole === 'worker') {
-    return 'Pekerja kebun';
+    return 'Anggota kebun';
   }
 
-  return viewerMode === 'worker' ? 'Anggota kebun' : 'Pengguna tidak tersedia';
+  void viewerMode;
+  return 'Anggota kebun';
 }
 
 function getConditionTone(status: TreeConditionStatus): BadgeTone {
@@ -948,6 +949,19 @@ function getRouteRecordType(item: TreeHistoryItem): TreeHistoryRouteRecordType |
   }
 
   return null;
+}
+
+function buildHistoryItemKey(item: TreeHistoryItem, index: number): string {
+  const stableId = item.sourceId ?? item.happenedAt ?? item.title;
+  return `${item.historyType}-${stableId}-${index}`;
+}
+
+function getHistoryActorPrefix(type: TreeHistoryType): string {
+  if (type === 'harvest') {
+    return 'Dipanen oleh';
+  }
+
+  return 'Dicatat oleh';
 }
 
 function formatHistoryType(type: TreeHistoryType): string {
@@ -1057,6 +1071,20 @@ function formatDateTime(value: string): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatEventDate(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
     month: 'short',
     year: 'numeric',
   });
