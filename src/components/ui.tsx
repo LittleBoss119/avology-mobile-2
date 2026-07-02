@@ -4,6 +4,7 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -55,15 +56,21 @@ export function Screen({
   floatingAction,
   floatingActionBottom = 24,
   footer,
+  contentStyle,
+  variant = 'default',
   stickyFooter,
 }: {
   children: React.ReactNode;
   floatingAction?: React.ReactNode;
   floatingActionBottom?: number;
   footer?: React.ReactNode;
+  contentStyle?: StyleProp<ViewStyle>;
+  variant?: 'default' | 'soft' | 'surface';
   stickyFooter?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const backgroundColor =
+    variant === 'surface' ? colors.surface : variant === 'soft' ? colors.backgroundDeep : colors.background;
   const overlayBottomPadding = stickyFooter
     ? 128 + insets.bottom
     : floatingAction
@@ -71,32 +78,35 @@ export function Screen({
       : spacing['2xl'];
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor }}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
-        style={{ flex: 1, backgroundColor: colors.background }}
-        contentContainerStyle={{
-          flexGrow: 1,
-          paddingHorizontal: spacing.xl,
-          paddingTop: spacing.xl,
-          gap: spacing.xl,
-          paddingBottom: overlayBottomPadding,
-        }}
+        style={{ flex: 1, backgroundColor }}
+        contentContainerStyle={[
+          {
+            flexGrow: 1,
+            paddingHorizontal: spacing.screenHorizontal,
+            paddingTop: spacing.xl,
+            gap: spacing.sectionGap,
+            paddingBottom: overlayBottomPadding,
+          },
+          contentStyle,
+        ]}
       >
-        <View style={{ flex: 1, gap: spacing.xl }}>{children}</View>
+        <View style={{ flex: 1, gap: spacing.sectionGap }}>{children}</View>
         {footer ? <View style={{ gap: spacing.md, paddingBottom: spacing.lg }}>{footer}</View> : null}
       </ScrollView>
       {stickyFooter ? (
         <View
           style={{
-            backgroundColor: colors.background,
+            backgroundColor,
             borderTopColor: colors.border,
             borderTopWidth: 1,
             bottom: 0,
             left: 0,
             paddingBottom: Math.max(insets.bottom, spacing.md),
-            paddingHorizontal: spacing.xl,
+            paddingHorizontal: spacing.screenHorizontal,
             paddingTop: spacing.md,
             position: 'absolute',
             right: 0,
@@ -106,7 +116,7 @@ export function Screen({
         </View>
       ) : null}
       {floatingAction ? (
-        <View style={{ bottom: floatingActionBottom, position: 'absolute', right: spacing.xl }}>
+        <View style={{ bottom: floatingActionBottom, position: 'absolute', right: spacing.screenHorizontal }}>
           {floatingAction}
         </View>
       ) : null}
@@ -149,13 +159,17 @@ export function TopAppBar({
   subtitle,
   title,
   onBack,
+  variant,
 }: {
   right?: React.ReactNode;
   subtitle?: string;
   title: string;
   onBack?: () => void;
+  variant?: 'main' | 'detail' | 'plain';
 }) {
   const insets = useSafeAreaInsets();
+  const resolvedVariant = variant ?? (onBack ? 'detail' : 'plain');
+  const titleAlign = resolvedVariant === 'main' ? 'left' : 'center';
 
   return (
     <View style={{ gap: subtitle ? spacing.sm : 0, paddingTop: Math.max(insets.top, spacing.sm) }}>
@@ -163,7 +177,8 @@ export function TopAppBar({
         style={{
           alignItems: 'center',
           flexDirection: 'row',
-          justifyContent: 'space-between',
+          gap: spacing.sm,
+          justifyContent: titleAlign === 'left' ? 'flex-start' : 'space-between',
           minHeight: 56,
         }}
       >
@@ -181,20 +196,46 @@ export function TopAppBar({
               width: 44,
             }}
           >
-            <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '900', lineHeight: 26 }}>
+            <Text selectable={false} style={{ color: colors.primary, fontSize: 24, fontWeight: '900', lineHeight: 26 }}>
               {'<'}
             </Text>
           </Pressable>
-        ) : (
+        ) : titleAlign === 'center' ? (
           <View style={{ height: 44, width: 44 }} />
-        )}
-        <Text selectable numberOfLines={1} style={{ color: colors.text, fontSize: 20, fontWeight: '800' }}>
-          {title}
-        </Text>
-        {right ?? <View style={{ height: 44, width: 44 }} />}
+        ) : null}
+        <View
+          style={{
+            alignItems: titleAlign === 'left' ? 'flex-start' : 'center',
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          <Text
+            selectable
+            numberOfLines={1}
+            style={{
+              color: colors.text,
+              fontSize: resolvedVariant === 'main' ? typography.screenTitle.fontSize : 20,
+              fontWeight: resolvedVariant === 'main' ? typography.screenTitle.fontWeight : '800',
+              lineHeight: typography.screenTitle.lineHeight,
+              textAlign: titleAlign,
+            }}
+          >
+            {title}
+          </Text>
+        </View>
+        {right ?? (titleAlign === 'center' ? <View style={{ height: 44, width: 44 }} /> : null)}
       </View>
       {subtitle ? (
-        <Text selectable style={{ color: colors.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' }}>
+        <Text
+          selectable
+          style={{
+            color: colors.muted,
+            fontSize: 15,
+            lineHeight: 22,
+            textAlign: titleAlign,
+          }}
+        >
           {subtitle}
         </Text>
       ) : null}
@@ -286,23 +327,30 @@ export function SectionHeader({
 
 export function Card({
   children,
+  padding = spacing.cardPadding,
+  style,
   variant = 'default',
 }: {
   children: React.ReactNode;
+  padding?: number;
+  style?: StyleProp<ViewStyle>;
   variant?: 'default' | 'highlight' | 'softGreen' | 'heroGreen' | 'warning' | 'danger' | 'info';
 }) {
   const cardStyle = getCardVariantStyle(variant);
 
   return (
     <View
-      style={{
-        ...cardStyle,
-        borderCurve: 'continuous',
-        borderRadius: radius.xl,
-        borderWidth: 1,
-        gap: spacing.md,
-        padding: spacing.lg,
-      }}
+      style={[
+        {
+          ...cardStyle,
+          borderCurve: 'continuous',
+          borderRadius: radius.screenCard,
+          borderWidth: 1,
+          gap: spacing.md,
+          padding,
+        },
+        style,
+      ]}
     >
       {children}
     </View>
@@ -352,13 +400,21 @@ const badgeColors: Record<BadgeTone, { background: string; border: string; text:
 export function Badge({
   label,
   maxWidth = 128,
+  status,
   tone = 'muted',
 }: {
-  label: string;
+  label?: string;
   maxWidth?: number;
+  status?: string;
   tone?: BadgeTone;
 }) {
-  const badge = badgeColors[tone];
+  const displayLabel = label ?? status;
+
+  if (!displayLabel) {
+    return null;
+  }
+
+  const badge = badgeColors[status ? getStatusTone(status) : tone];
 
   return (
     <View
@@ -374,7 +430,7 @@ export function Badge({
       }}
     >
       <Text
-        selectable
+        selectable={false}
         numberOfLines={1}
         style={{
           color: badge.text,
@@ -383,7 +439,7 @@ export function Badge({
           lineHeight: typography.caption.lineHeight,
         }}
       >
-        {label}
+        {displayLabel}
       </Text>
     </View>
   );
@@ -454,6 +510,119 @@ export function ChipButton({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+export type FilterChipOption = {
+  active?: boolean;
+  disabled?: boolean;
+  key: string;
+  label: string;
+  onPress: () => void;
+  valueLabel?: string;
+};
+
+export function FilterChip({
+  active = false,
+  disabled = false,
+  label,
+  onPress,
+  valueLabel,
+}: Omit<FilterChipOption, 'key'>) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: 'center',
+        backgroundColor: active ? colors.primarySoft : colors.surface,
+        borderColor: active ? colors.primary : colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.chip,
+        borderWidth: 1,
+        flexDirection: 'row',
+        gap: spacing.xs,
+        minHeight: 38,
+        opacity: disabled ? 0.5 : pressed ? 0.82 : 1,
+        paddingHorizontal: spacing.md,
+      })}
+    >
+      <Text
+        selectable={false}
+        numberOfLines={1}
+        style={{
+          color: active ? colors.primary : colors.text,
+          fontSize: 13,
+          fontWeight: '800',
+          lineHeight: 18,
+        }}
+      >
+        {valueLabel ? `${label}: ${valueLabel}` : label}
+      </Text>
+      <Text selectable={false} style={{ color: active ? colors.primary : colors.textSoft, fontSize: 12, fontWeight: '900' }}>
+        v
+      </Text>
+    </Pressable>
+  );
+}
+
+export function FilterChipsRow({
+  chips,
+  children,
+  clearLabel = 'Reset',
+  hasActiveFilters,
+  onClear,
+  style,
+}: {
+  chips?: FilterChipOption[];
+  children?: React.ReactNode;
+  clearLabel?: string;
+  hasActiveFilters?: boolean;
+  onClear?: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const shouldShowClear = Boolean(onClear && hasActiveFilters);
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={style}
+      contentContainerStyle={{
+        alignItems: 'center',
+        gap: spacing.sm,
+        paddingRight: spacing.screenHorizontal,
+      }}
+    >
+      {chips?.map((chip) => (
+        <FilterChip
+          key={chip.key}
+          active={chip.active}
+          disabled={chip.disabled}
+          label={chip.label}
+          valueLabel={chip.valueLabel}
+          onPress={chip.onPress}
+        />
+      ))}
+      {children}
+      {shouldShowClear ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onClear}
+          style={({ pressed }) => ({
+            borderRadius: radius.chip,
+            opacity: pressed ? 0.72 : 1,
+            paddingHorizontal: spacing.sm,
+            paddingVertical: spacing.sm,
+          })}
+        >
+          <Text selectable={false} style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
+            {clearLabel}
+          </Text>
+        </Pressable>
+      ) : null}
+    </ScrollView>
   );
 }
 
@@ -641,61 +810,76 @@ function DateFieldCalendarIcon() {
   );
 }
 
+export type ButtonVariant = 'danger' | 'ghost' | 'icon' | 'primary' | 'quiet' | 'secondary';
+
 export function Button({
-  title,
-  onPress,
-  variant = 'primary',
-  loading,
+  accessibilityLabel,
   disabled,
+  icon,
+  loading,
+  onPress,
   size = 'regular',
+  title = '',
+  variant = 'primary',
 }: {
-  title: string;
-  onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'danger';
-  loading?: boolean;
+  accessibilityLabel?: string;
   disabled?: boolean;
+  icon?: React.ReactNode;
+  loading?: boolean;
+  onPress: () => void;
   size?: 'regular' | 'small';
+  title?: string;
+  variant?: ButtonVariant;
 }) {
   const isPrimary = variant === 'primary';
   const isDanger = variant === 'danger';
+  const isGhost = variant === 'ghost' || variant === 'quiet';
+  const isIcon = variant === 'icon';
+  const contentColor = isPrimary ? '#FFFFFF' : isDanger ? colors.danger : colors.primary;
 
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityRole="button"
       disabled={disabled || loading}
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: 'center',
-        alignSelf: size === 'small' ? 'flex-start' : 'stretch',
-        backgroundColor: isPrimary
-          ? pressed
-            ? colors.primaryPressed
-            : colors.primary
-          : isDanger
-            ? colors.dangerSurface
-            : colors.surface,
-        borderColor: isDanger ? colors.dangerBorder : isPrimary ? colors.primary : colors.border,
+        alignSelf: size === 'small' || isIcon ? 'flex-start' : 'stretch',
+        backgroundColor: getButtonBackground(variant, pressed),
+        borderColor: getButtonBorderColor(variant),
         borderCurve: 'continuous',
-        borderRadius: size === 'small' ? radius.md : radius.lg,
-        borderWidth: 1,
-        minHeight: size === 'small' ? 40 : isPrimary ? 56 : 52,
+        borderRadius: isIcon ? radius.round : size === 'small' ? radius.button : radius.button,
+        borderWidth: isGhost ? 0 : 1,
+        flexDirection: 'row',
+        gap: spacing.sm,
+        height: isIcon ? (size === 'small' ? 40 : 48) : undefined,
         justifyContent: 'center',
+        minHeight: isIcon ? undefined : size === 'small' ? 40 : isPrimary ? 56 : spacing.buttonHeight,
+        minWidth: isIcon ? (size === 'small' ? 40 : 48) : undefined,
         opacity: disabled ? 0.6 : 1,
-        paddingHorizontal: size === 'small' ? spacing.md : spacing.lg,
+        paddingHorizontal: isIcon ? 0 : size === 'small' ? spacing.md : spacing.lg,
       })}
     >
       {loading ? (
-        <ActivityIndicator color={isPrimary ? '#FFFFFF' : colors.primary} />
+        <ActivityIndicator color={contentColor} />
       ) : (
-        <Text
-          selectable
-          style={{
-            color: isPrimary ? '#FFFFFF' : isDanger ? colors.danger : colors.text,
-            fontSize: size === 'small' ? 14 : 16,
-            fontWeight: '700',
-          }}
-        >
-          {title}
-        </Text>
+        <>
+          {icon}
+          {isIcon && !title ? null : (
+            <Text
+              selectable={false}
+              numberOfLines={1}
+              style={{
+                color: isPrimary ? '#FFFFFF' : isDanger ? colors.danger : isGhost ? colors.primary : colors.text,
+                fontSize: size === 'small' ? 14 : 16,
+                fontWeight: '700',
+              }}
+            >
+              {title}
+            </Text>
+          )}
+        </>
       )}
     </Pressable>
   );
@@ -902,6 +1086,29 @@ export function PhotoPickerCard({
   title?: string;
 }) {
   const hasImage = Boolean(imageUri);
+  const sourceActions = [
+    onTakePhoto ? { label: takePhotoLabel, onPress: onTakePhoto } : null,
+    onChoosePhoto ? { label: choosePhotoLabel, onPress: onChoosePhoto } : null,
+  ].filter((action): action is { label: string; onPress: () => void } => Boolean(action));
+
+  function handleCardPress() {
+    if (loading || sourceActions.length === 0) {
+      return;
+    }
+
+    if (sourceActions.length === 1) {
+      sourceActions[0].onPress();
+      return;
+    }
+
+    Alert.alert('Tambah foto', 'Pilih sumber foto.', [
+      ...sourceActions.map((action) => ({
+        text: action.label,
+        onPress: action.onPress,
+      })),
+      { style: 'cancel' as const, text: 'Batal' },
+    ]);
+  }
 
   return (
     <Card>
@@ -919,7 +1126,10 @@ export function PhotoPickerCard({
         ) : null}
       </View>
 
-      <View
+      <Pressable
+        accessibilityRole="button"
+        disabled={loading || sourceActions.length === 0}
+        onPress={handleCardPress}
         style={{
           alignItems: 'center',
           backgroundColor: colors.photoPlaceholder,
@@ -952,15 +1162,42 @@ export function PhotoPickerCard({
                 width: 52,
               }}
             >
-              <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '900' }}>
-                +
-              </Text>
+              <CameraGlyph color={colors.primary} />
             </View>
-            <Text selectable style={{ color: colors.muted, fontWeight: '700', textAlign: 'center' }}>
-              Foto belum dipilih
+            <Text selectable={false} style={{ color: colors.text, fontWeight: '800', textAlign: 'center' }}>
+              Tambah foto
+            </Text>
+            <Text selectable={false} style={{ color: colors.muted, fontSize: 13, textAlign: 'center' }}>
+              Ketuk area ini untuk memilih sumber foto.
             </Text>
           </View>
         )}
+        {onRemovePhoto && hasImage ? (
+          <Pressable
+            accessibilityLabel={removeLabel}
+            accessibilityRole="button"
+            disabled={loading}
+            onPress={onRemovePhoto}
+            style={({ pressed }) => ({
+              alignItems: 'center',
+              backgroundColor: colors.danger,
+              borderColor: colors.surface,
+              borderRadius: radius.round,
+              borderWidth: 1,
+              height: 34,
+              justifyContent: 'center',
+              opacity: pressed ? 0.78 : 1,
+              position: 'absolute',
+              right: spacing.sm,
+              top: spacing.sm,
+              width: 34,
+            })}
+          >
+            <Text selectable={false} style={{ color: colors.surface, fontSize: 18, fontWeight: '900', lineHeight: 20 }}>
+              x
+            </Text>
+          </Pressable>
+        ) : null}
         {loading ? (
           <View
             style={{
@@ -977,27 +1214,20 @@ export function PhotoPickerCard({
             <ActivityIndicator color={colors.surface} />
           </View>
         ) : null}
-      </View>
+      </Pressable>
 
       {error ? <ErrorBanner message={error} /> : null}
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-        {onTakePhoto ? (
-          <View style={{ flexBasis: 132, flexGrow: 1 }}>
-            <Button disabled={loading} title={takePhotoLabel} variant="secondary" onPress={onTakePhoto} />
-          </View>
-        ) : null}
-        {onChoosePhoto ? (
-          <View style={{ flexBasis: 132, flexGrow: 1 }}>
-            <Button disabled={loading} title={choosePhotoLabel} variant="secondary" onPress={onChoosePhoto} />
-          </View>
-        ) : null}
-        {onRemovePhoto && hasImage ? (
-          <View style={{ flexBasis: 132, flexGrow: 1 }}>
-            <Button disabled={loading} title={removeLabel} variant="danger" onPress={onRemovePhoto} />
-          </View>
-        ) : null}
-      </View>
+      {!hasImage && sourceActions.length > 1 ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+          {onTakePhoto ? (
+            <Button disabled={loading} size="small" title={takePhotoLabel} variant="quiet" onPress={onTakePhoto} />
+          ) : null}
+          {onChoosePhoto ? (
+            <Button disabled={loading} size="small" title={choosePhotoLabel} variant="quiet" onPress={onChoosePhoto} />
+          ) : null}
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -1065,6 +1295,42 @@ export function getStatusTone(status: string): StatusTone {
   return 'neutral';
 }
 
+function getButtonBackground(variant: ButtonVariant, pressed: boolean): string {
+  if (variant === 'primary') {
+    return pressed ? colors.primaryPressed : colors.primary;
+  }
+
+  if (variant === 'danger') {
+    return pressed ? colors.dangerBorder : colors.dangerSurface;
+  }
+
+  if (variant === 'ghost' || variant === 'quiet') {
+    return pressed ? colors.primarySoft : 'transparent';
+  }
+
+  if (variant === 'icon') {
+    return pressed ? colors.primarySoft : colors.surface;
+  }
+
+  return pressed ? colors.surfaceMuted : colors.surface;
+}
+
+function getButtonBorderColor(variant: ButtonVariant): string {
+  if (variant === 'primary') {
+    return colors.primary;
+  }
+
+  if (variant === 'danger') {
+    return colors.dangerBorder;
+  }
+
+  if (variant === 'icon') {
+    return colors.border;
+  }
+
+  return colors.border;
+}
+
 function getCardVariantStyle(
   variant: 'default' | 'highlight' | 'softGreen' | 'heroGreen' | 'warning' | 'danger' | 'info'
 ): { backgroundColor: string; borderColor: string } {
@@ -1117,6 +1383,44 @@ function FilterGlyph({ active }: { active: boolean }) {
       <View style={{ backgroundColor: color, borderRadius: radius.round, height: 2, width: 22 }} />
       <View style={{ backgroundColor: color, borderRadius: radius.round, height: 2, marginLeft: 4, width: 14 }} />
       <View style={{ backgroundColor: color, borderRadius: radius.round, height: 2, width: 18 }} />
+    </View>
+  );
+}
+
+export function CameraGlyph({ color = colors.primary }: { color?: string }) {
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          borderColor: color,
+          borderRadius: 5,
+          borderWidth: 2,
+          height: 19,
+          justifyContent: 'center',
+          width: 25,
+        }}
+      >
+        <View
+          style={{
+            alignSelf: 'center',
+            borderColor: color,
+            borderRadius: radius.round,
+            borderWidth: 2,
+            height: 8,
+            width: 8,
+          }}
+        />
+      </View>
+      <View
+        style={{
+          backgroundColor: color,
+          borderRadius: 2,
+          height: 4,
+          position: 'absolute',
+          top: 1,
+          width: 9,
+        }}
+      />
     </View>
   );
 }

@@ -1,10 +1,10 @@
 import React from 'react';
-import { ActivityIndicator, Image, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
 
 import { pickImageFromGallery, takePhotoFromCamera } from '../../lib/media';
 import type { PickedPhotoAsset } from '../../types/media';
 import { colors, radius, spacing, typography } from '../../constants/theme';
-import { Badge, Button, ErrorBanner } from '../ui';
+import { Badge, Button, CameraGlyph, ErrorBanner } from '../ui';
 
 export type PhotoAttachmentPickerProps = {
   allowCamera?: boolean;
@@ -49,6 +49,10 @@ export function PhotoAttachmentPicker({
   const busy = disabled || loading;
   const imageUri = selectedUri ?? selectedPhoto?.uri ?? existingPhotoUrl ?? null;
   const visibleError = error ?? localError;
+  const sourceActions = [
+    allowCamera ? { label: takePhotoLabel, source: 'camera' as const } : null,
+    allowGallery ? { label: choosePhotoLabel, source: 'gallery' as const } : null,
+  ].filter((action): action is { label: string; source: 'camera' | 'gallery' } => Boolean(action));
 
   async function runPick(source: 'camera' | 'gallery') {
     setLocalError(null);
@@ -66,6 +70,27 @@ export function PhotoAttachmentPicker({
     if (result.data) {
       onSelect(result.data);
     }
+  }
+
+  function handleCardPress() {
+    if (busy || sourceActions.length === 0) {
+      return;
+    }
+
+    if (sourceActions.length === 1) {
+      void runPick(sourceActions[0].source);
+      return;
+    }
+
+    Alert.alert('Tambah foto', 'Pilih sumber foto.', [
+      ...sourceActions.map((action) => ({
+        text: action.label,
+        onPress: () => {
+          void runPick(action.source);
+        },
+      })),
+      { style: 'cancel' as const, text: 'Batal' },
+    ]);
   }
 
   return (
@@ -94,7 +119,10 @@ export function PhotoAttachmentPicker({
         ) : null}
       </View>
 
-      <View
+      <Pressable
+        accessibilityRole="button"
+        disabled={busy || sourceActions.length === 0}
+        onPress={handleCardPress}
         style={{
           alignItems: 'center',
           backgroundColor: colors.photoPlaceholder,
@@ -123,15 +151,42 @@ export function PhotoAttachmentPicker({
                 width: 52,
               }}
             >
-              <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '900' }}>
-                +
-              </Text>
+              <CameraGlyph color={colors.primary} />
             </View>
-            <Text selectable style={{ color: colors.textMuted, fontWeight: '700', textAlign: 'center' }}>
-              Foto belum dipilih
+            <Text selectable={false} style={{ color: colors.text, fontWeight: '800', textAlign: 'center' }}>
+              Tambah foto
+            </Text>
+            <Text selectable={false} style={{ color: colors.textMuted, fontSize: 13, textAlign: 'center' }}>
+              Ketuk area ini untuk memilih sumber foto.
             </Text>
           </View>
         )}
+        {onRemove && imageUri ? (
+          <Pressable
+            accessibilityLabel={removeLabel}
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={onRemove}
+            style={({ pressed }) => ({
+              alignItems: 'center',
+              backgroundColor: colors.danger,
+              borderColor: colors.surface,
+              borderRadius: radius.round,
+              borderWidth: 1,
+              height: 34,
+              justifyContent: 'center',
+              opacity: pressed ? 0.78 : 1,
+              position: 'absolute',
+              right: spacing.sm,
+              top: spacing.sm,
+              width: 34,
+            })}
+          >
+            <Text selectable={false} style={{ color: colors.surface, fontSize: 18, fontWeight: '900', lineHeight: 20 }}>
+              x
+            </Text>
+          </Pressable>
+        ) : null}
         {loading ? (
           <View
             style={{
@@ -148,27 +203,20 @@ export function PhotoAttachmentPicker({
             <ActivityIndicator color={colors.surface} />
           </View>
         ) : null}
-      </View>
+      </Pressable>
 
       <ErrorBanner message={visibleError} />
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+      {!imageUri && sourceActions.length > 1 ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
         {allowCamera ? (
-          <View style={{ flexBasis: 132, flexGrow: 1 }}>
-            <Button disabled={busy} title={takePhotoLabel} variant="secondary" onPress={() => runPick('camera')} />
-          </View>
+          <Button disabled={busy} size="small" title={takePhotoLabel} variant="quiet" onPress={() => runPick('camera')} />
         ) : null}
         {allowGallery ? (
-          <View style={{ flexBasis: 132, flexGrow: 1 }}>
-            <Button disabled={busy} title={choosePhotoLabel} variant="secondary" onPress={() => runPick('gallery')} />
-          </View>
+          <Button disabled={busy} size="small" title={choosePhotoLabel} variant="quiet" onPress={() => runPick('gallery')} />
         ) : null}
-        {onRemove && imageUri ? (
-          <View style={{ flexBasis: 132, flexGrow: 1 }}>
-            <Button disabled={busy} title={removeLabel} variant="danger" onPress={onRemove} />
-          </View>
-        ) : null}
-      </View>
+        </View>
+      ) : null}
     </View>
   );
 }

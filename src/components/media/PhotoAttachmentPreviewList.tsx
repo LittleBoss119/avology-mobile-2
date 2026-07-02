@@ -3,7 +3,6 @@ import { ActivityIndicator, Image, Modal, Pressable, Text, View } from 'react-na
 
 import { colors, radius, spacing, typography } from '../../constants/theme';
 import type { PhotoAttachmentPreviewItem } from '../../types/media';
-import { Button } from '../ui';
 
 export type PhotoAttachmentPreviewListProps = {
   disabled?: boolean;
@@ -62,26 +61,45 @@ export function PhotoAttachmentPreviewList({
               padding: spacing.md,
             }}
           >
-            <Pressable accessibilityRole="imagebutton" onPress={() => setPreviewUrl(photo.url)}>
-              <Image
-                resizeMode="cover"
-                source={{ uri: photo.url }}
-                style={{ borderRadius: radius.md, height: 156, width: '100%' }}
-              />
-            </Pressable>
+            <View>
+              <Pressable accessibilityRole="imagebutton" onPress={() => setPreviewUrl(photo.url)}>
+                <Image
+                  resizeMode="cover"
+                  source={{ uri: photo.url }}
+                  style={{ borderRadius: radius.md, height: 156, width: '100%' }}
+                />
+              </Pressable>
+              {onDeletePhoto ? (
+                <Pressable
+                  accessibilityLabel="Hapus Foto"
+                  accessibilityRole="button"
+                  disabled={disabled}
+                  onPress={() => onDeletePhoto(photo)}
+                  style={({ pressed }) => ({
+                    alignItems: 'center',
+                    backgroundColor: colors.danger,
+                    borderColor: colors.surface,
+                    borderRadius: radius.round,
+                    borderWidth: 1,
+                    height: 32,
+                    justifyContent: 'center',
+                    opacity: disabled ? 0.5 : pressed ? 0.78 : 1,
+                    position: 'absolute',
+                    right: spacing.sm,
+                    top: spacing.sm,
+                    width: 32,
+                  })}
+                >
+                  <Text selectable={false} style={{ color: colors.surface, fontSize: 17, fontWeight: '900', lineHeight: 19 }}>
+                    x
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
             {photo.caption ? (
               <Text selectable style={{ color: colors.textMuted, lineHeight: typography.small.lineHeight }}>
                 {photo.caption}
               </Text>
-            ) : null}
-            {onDeletePhoto ? (
-              <Button
-                disabled={disabled}
-                size="small"
-                title="Hapus Foto"
-                variant="danger"
-                onPress={() => onDeletePhoto(photo)}
-              />
             ) : null}
           </View>
         ))}
