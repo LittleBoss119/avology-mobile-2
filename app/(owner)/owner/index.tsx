@@ -6,11 +6,9 @@ import { colors, radius, spacing } from '../../../src/constants/theme';
 import {
   Badge,
   Card,
-  EmptyState,
   ErrorBanner,
   LoadingState,
   MainTabHeader,
-  MetricCard,
   Screen,
   SectionHeader,
 } from '../../../src/components/ui';
@@ -19,18 +17,17 @@ import { getOwnerDashboardSummary } from '../../../src/services/dashboardService
 import type { OwnerDashboardSummary } from '../../../src/types/domain';
 import { formatPersonDisplayName } from '../../../src/utils/displayFormat';
 
-type DashboardStat = {
-  label: string;
-  value: number;
-  tone?: 'danger' | 'muted' | 'primary';
-};
-
 type PriorityInsight = {
   title: string;
   description: string;
   value: number;
   route: string;
   tone?: 'danger' | 'warning';
+};
+
+type MonitoringItem = {
+  label: string;
+  value: number;
 };
 
 export default function OwnerDashboardScreen() {
@@ -72,9 +69,8 @@ export default function OwnerDashboardScreen() {
     return <LoadingState message="Memuat dashboard pemilik..." />;
   }
 
-  const stats = summary ? buildStats(summary) : [];
-  const isEmpty = summary ? stats.every((stat) => stat.value === 0) : false;
   const priorities = summary ? buildPriorities(summary) : [];
+  const positiveNotes = summary ? buildPositiveNotes(summary) : [];
   const farmName = currentFarm?.farm?.name;
   const healthyPercent =
     summary && summary.totalTrees > 0 ? Math.round((summary.healthyTrees / summary.totalTrees) * 100) : 0;
@@ -92,23 +88,7 @@ export default function OwnerDashboardScreen() {
 
       <OwnerHero summary={summary} healthyPercent={healthyPercent} farmName={farmName} />
 
-      {isEmpty ? (
-        <EmptyState
-          title="Belum ada data operasional"
-          subtitle="Ringkasan akan terisi setelah pohon, tugas, laporan, pekerja, atau SOP dibuat."
-        />
-      ) : null}
-
-      <SectionHeader title="Insight Kebun" description="Angka penting untuk keputusan cepat hari ini." />
-      {summary ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-          {stats.map((stat) => (
-            <DashboardStatCard key={stat.label} stat={stat} />
-          ))}
-        </View>
-      ) : null}
-
-      <SectionHeader title="Prioritas" />
+      <SectionHeader title="Perlu Ditindaklanjuti" />
       {priorities.length > 0 ? (
         <View style={{ gap: 10 }}>
           {priorities.map((priority) => (
@@ -116,35 +96,27 @@ export default function OwnerDashboardScreen() {
           ))}
         </View>
       ) : summary ? (
-        <Card variant="softGreen">
-          <Badge label="Stabil" tone="success" />
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
-            Tidak ada prioritas mendesak hari ini.
-          </Text>
-          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Pantau kembali setelah ada laporan, tugas, atau kondisi pohon baru.
-          </Text>
-        </Card>
-      ) : error ? (
-        <EmptyState
-          title="Data beranda belum bisa dimuat"
-          subtitle="Buka kembali halaman ini setelah koneksi atau akses kebun tersedia."
-        />
+        <PositiveStatusPanel notes={positiveNotes} />
       ) : null}
 
-      <SectionHeader title="Aktivitas Terbaru" />
-      <Card>
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-          Aktivitas terbaru belum tersedia di ringkasan beranda.
-        </Text>
-      </Card>
+      {summary ? (
+        <>
+          <SectionHeader title="Monitoring" />
+          <MonitoringPanel
+            items={[
+              { label: 'Pohon berbunga', value: summary.floweringTrees },
+              { label: 'Pohon berbuah', value: summary.fruitingTrees },
+              { label: 'Tugas hari ini', value: summary.todayTasks },
+            ]}
+          />
+        </>
+      ) : null}
 
       <SectionHeader title="Aksi Cepat" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         <DashboardActionButton label="Tambah Pohon" meta="Data kebun" onPress={() => router.push('/owner/trees/create')} primary />
         <DashboardActionButton label="Buat Jadwal" meta="Perawatan" onPress={() => router.push('/owner/schedules/create')} />
         <DashboardActionButton label="Lihat Laporan" meta="Lapangan" onPress={() => router.push('/owner/reports')} />
-        <DashboardActionButton label="Kelola Kebun" meta="Kebun" onPress={() => router.push('/owner/farm')} />
       </View>
     </Screen>
   );
@@ -244,10 +216,49 @@ function PriorityCard({ priority }: { priority: PriorityInsight }) {
   );
 }
 
-function DashboardStatCard({ stat }: { stat: DashboardStat }) {
-  const tone = stat.tone === 'danger' ? 'danger' : stat.tone === 'muted' ? 'muted' : 'primary';
+function PositiveStatusPanel({ notes }: { notes: string[] }) {
+  return (
+    <Card variant="softGreen">
+      <View style={{ gap: 4 }}>
+        <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '800' }}>
+          Tidak ada prioritas mendesak.
+        </Text>
+        {notes.map((note) => (
+          <Text key={note} selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
+            {note}
+          </Text>
+        ))}
+      </View>
+    </Card>
+  );
+}
 
-  return <MetricCard label={stat.label} tone={tone} value={stat.value} />;
+function MonitoringPanel({ items }: { items: MonitoringItem[] }) {
+  return (
+    <Card>
+      <View style={{ gap: 12 }}>
+        {items.map((item, index) => (
+          <View
+            key={item.label}
+            style={{
+              borderBottomColor: colors.border,
+              borderBottomWidth: index === items.length - 1 ? 0 : 1,
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              paddingBottom: index === items.length - 1 ? 0 : 12,
+            }}
+          >
+            <Text selectable style={{ color: colors.textMuted, fontSize: 14, fontWeight: '700' }}>
+              {item.label}
+            </Text>
+            <Text selectable style={{ color: colors.text, fontSize: 18, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+              {item.value}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </Card>
+  );
 }
 
 function DashboardActionButton({
@@ -288,30 +299,6 @@ function DashboardActionButton({
   );
 }
 
-function buildStats(summary: OwnerDashboardSummary): DashboardStat[] {
-  return [
-    { label: 'Total Pohon', value: summary.totalTrees },
-    { label: 'Pohon Sehat', value: summary.healthyTrees },
-    { label: 'Pohon Bermasalah', tone: summary.problemTrees > 0 ? 'danger' : 'muted', value: summary.problemTrees },
-    { label: 'Tugas Hari Ini', value: summary.todayTasks },
-    {
-      label: 'Tugas Belum Selesai',
-      tone: summary.unfinishedTasks > 0 ? 'danger' : 'muted',
-      value: summary.unfinishedTasks,
-    },
-    {
-      label: 'Laporan Operasional Baru',
-      tone: summary.newOperationalReports > 0 ? 'danger' : 'muted',
-      value: summary.newOperationalReports,
-    },
-    {
-      label: 'Pengajuan Pekerja Menunggu',
-      tone: summary.pendingWorkers > 0 ? 'danger' : 'muted',
-      value: summary.pendingWorkers,
-    },
-  ];
-}
-
 function buildPriorities(summary: OwnerDashboardSummary): PriorityInsight[] {
   const priorities: PriorityInsight[] = [
     {
@@ -327,13 +314,6 @@ function buildPriorities(summary: OwnerDashboardSummary): PriorityInsight[] {
       route: '/owner/schedules',
       tone: 'danger',
       value: summary.unfinishedTasks,
-    },
-    {
-      title: 'Tugas hari ini',
-      description: 'Pastikan pekerjaan yang jatuh tempo hari ini siap dikerjakan.',
-      route: '/owner/schedules',
-      tone: 'warning',
-      value: summary.todayTasks,
     },
     {
       title: 'Laporan operasional baru',
@@ -359,4 +339,30 @@ function buildPriorities(summary: OwnerDashboardSummary): PriorityInsight[] {
   ];
 
   return priorities.filter((priority) => priority.value > 0);
+}
+
+function buildPositiveNotes(summary: OwnerDashboardSummary): string[] {
+  const notes: string[] = [];
+
+  if (summary.problemTrees === 0) {
+    notes.push('Tidak ada pohon bermasalah.');
+  }
+
+  if (summary.unfinishedTasks === 0) {
+    notes.push('Tidak ada tugas tertunda.');
+  }
+
+  if (summary.newOperationalReports === 0) {
+    notes.push('Tidak ada laporan baru.');
+  }
+
+  if (summary.pendingWorkers === 0) {
+    notes.push('Tidak ada pengajuan pekerja.');
+  }
+
+  if (summary.dueOrOverdueSops === 0) {
+    notes.push('Tidak ada SOP jatuh tempo.');
+  }
+
+  return notes;
 }
