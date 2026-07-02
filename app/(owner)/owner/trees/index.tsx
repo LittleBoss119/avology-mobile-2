@@ -4,10 +4,10 @@ import { Modal, Pressable, Text, View } from 'react-native';
 
 import { TreeCard } from '../../../../src/components/tree-components';
 import {
-  Badge,
   Button,
   EmptyState,
   ErrorBanner,
+  FilterChipsRow,
   LoadingState,
   MainTabHeader,
   SearchFilterRow,
@@ -29,7 +29,7 @@ type AgeRangeFilter = 'all' | 'lt_1' | '1_3' | 'gt_3';
 
 const conditionFilterOptions: Array<{ label: string; value: TreeConditionStatus }> = [
   { label: 'Sehat', value: 'healthy' },
-  { label: 'Perlu dicek', value: 'needs_attention' },
+  { label: 'Perhatian', value: 'needs_attention' },
   { label: 'Hama', value: 'pest_attacked' },
   { label: 'Penyakit', value: 'disease_indicated' },
   { label: 'Rusak', value: 'damaged' },
@@ -37,7 +37,7 @@ const conditionFilterOptions: Array<{ label: string; value: TreeConditionStatus 
 ];
 
 const phaseFilterOptions: Array<{ label: string; value: GrowthPhase }> = [
-  { label: 'Awal Tanam', value: 'initial_planting' },
+  { label: 'Awal', value: 'initial_planting' },
   { label: 'Vegetatif', value: 'vegetative' },
   { label: 'Berbunga', value: 'flowering' },
   { label: 'Berbuah', value: 'fruiting' },
@@ -141,6 +141,13 @@ export default function OwnerTreeListScreen() {
     setPhaseFilters((current) => toggleArrayValue(current, phase));
   }
 
+  function clearFilters() {
+    setAgeRange('all');
+    setArchived(false);
+    setConditionFilters([]);
+    setPhaseFilters([]);
+  }
+
   if (loading) {
     return <LoadingState message="Memuat pohon..." />;
   }
@@ -155,18 +162,19 @@ export default function OwnerTreeListScreen() {
       />
       <ErrorBanner message={error} />
       <SearchFilterBar
-        filterActive={hasActiveSearchOrFilter}
-        onFilterPress={() => setFilterOpen(true)}
         onSearchChange={setSearch}
         search={search}
       />
-      <ResultCount active={hasActiveSearchOrFilter} count={displayedTrees.length} />
-      <ActiveFilterSummary
+      <OwnerFilterControls
         ageRange={ageRange}
         archived={archived}
         conditionFilters={conditionFilters}
+        hasActiveFilters={conditionFilters.length > 0 || phaseFilters.length > 0 || ageRange !== 'all' || archived}
+        onClear={clearFilters}
+        onOpenFilters={() => setFilterOpen(true)}
         phaseFilters={phaseFilters}
       />
+      <ResultCount active={hasActiveSearchOrFilter} count={displayedTrees.length} />
 
       <OwnerFilterPanel
         ageRange={ageRange}
@@ -196,7 +204,7 @@ export default function OwnerTreeListScreen() {
       ) : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
           {displayedTrees.map((tree) => (
-            <View key={tree.id} style={{ flexBasis: '47%', flexGrow: 1, minWidth: 156 }}>
+            <View key={tree.id} style={{ flexBasis: '47.8%', flexGrow: 0, maxWidth: '47.8%', minWidth: 0 }}>
               <TreeCard
                 photoUrl={photoMap[tree.id]?.signedUrl}
                 tree={tree}
@@ -211,21 +219,15 @@ export default function OwnerTreeListScreen() {
 }
 
 function SearchFilterBar({
-  filterActive,
-  onFilterPress,
   onSearchChange,
   search,
 }: {
-  filterActive: boolean;
-  onFilterPress: () => void;
   onSearchChange: (value: string) => void;
   search: string;
 }) {
   return (
     <SearchFilterRow
-      filterActive={filterActive}
       onChangeText={onSearchChange}
-      onFilterPress={onFilterPress}
       placeholder="Cari kode atau varietas"
       value={search}
     />
@@ -240,32 +242,58 @@ function ResultCount({ active, count }: { active: boolean; count: number }) {
   );
 }
 
-function ActiveFilterSummary({
+function OwnerFilterControls({
   ageRange,
   archived,
   conditionFilters,
+  hasActiveFilters,
+  onClear,
+  onOpenFilters,
   phaseFilters,
 }: {
   ageRange: AgeRangeFilter;
   archived: boolean;
   conditionFilters: TreeConditionStatus[];
+  hasActiveFilters: boolean;
+  onClear: () => void;
+  onOpenFilters: () => void;
   phaseFilters: GrowthPhase[];
 }) {
-  if (conditionFilters.length === 0 && phaseFilters.length === 0 && ageRange === 'all' && !archived) {
-    return null;
-  }
-
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-      {conditionFilters.length > 0 ? (
-        <Badge label={conditionFilters.length === 1 ? getConditionFilterLabel(conditionFilters[0]) : `${conditionFilters.length} kondisi`} tone="success" />
-      ) : null}
-      {phaseFilters.length > 0 ? (
-        <Badge label={phaseFilters.length === 1 ? getPhaseFilterLabel(phaseFilters[0]) : `${phaseFilters.length} fase`} tone="warning" />
-      ) : null}
-      {ageRange !== 'all' ? <Badge label={getAgeRangeLabel(ageRange)} tone="muted" /> : null}
-      {archived ? <Badge label="Diarsipkan" tone="muted" /> : null}
-    </View>
+    <FilterChipsRow
+      hasActiveFilters={hasActiveFilters}
+      onClear={onClear}
+      chips={[
+        {
+          active: conditionFilters.length > 0,
+          key: 'condition',
+          label: 'Kondisi',
+          onPress: onOpenFilters,
+          valueLabel: conditionFilters.length === 1 ? getConditionFilterLabel(conditionFilters[0]) : conditionFilters.length > 0 ? `${conditionFilters.length}` : undefined,
+        },
+        {
+          active: phaseFilters.length > 0,
+          key: 'phase',
+          label: 'Fase',
+          onPress: onOpenFilters,
+          valueLabel: phaseFilters.length === 1 ? getPhaseFilterLabel(phaseFilters[0]) : phaseFilters.length > 0 ? `${phaseFilters.length}` : undefined,
+        },
+        {
+          active: ageRange !== 'all',
+          key: 'age',
+          label: 'Umur',
+          onPress: onOpenFilters,
+          valueLabel: ageRange !== 'all' ? getAgeRangeLabel(ageRange) : undefined,
+        },
+        {
+          active: archived,
+          key: 'status',
+          label: 'Status',
+          onPress: onOpenFilters,
+          valueLabel: archived ? 'Arsip' : undefined,
+        },
+      ]}
+    />
   );
 }
 
@@ -388,34 +416,6 @@ function FloatingAddButton({ onPress }: { onPress: () => void }) {
         +
       </Text>
     </Pressable>
-  );
-}
-
-function FilterGlyph() {
-  return (
-    <View style={{ gap: 4 }}>
-      <SliderGlyphLine knobLeft={3} />
-      <SliderGlyphLine knobLeft={12} />
-      <SliderGlyphLine knobLeft={7} />
-    </View>
-  );
-}
-
-function SliderGlyphLine({ knobLeft }: { knobLeft: number }) {
-  return (
-    <View style={{ height: 4, justifyContent: 'center', width: 22 }}>
-      <View style={{ backgroundColor: '#DDEFE2', borderRadius: 999, height: 2, width: 22 }} />
-      <View
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 999,
-          height: 6,
-          left: knobLeft,
-          position: 'absolute',
-          width: 6,
-        }}
-      />
-    </View>
   );
 }
 

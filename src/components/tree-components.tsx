@@ -24,11 +24,9 @@ import { formatCareCategory, formatPersonDisplayName } from '../utils/displayFor
 import {
   buildTreeDisplayCode,
   formatGrowthPhase,
-  formatTreeAge,
   formatTreeDisplayCode,
-  formatTreeLocation,
 } from '../utils/treeFormat';
-import { appTheme, Badge, Button, Card, EmptyState, Field, FormSection, MetaRow, PhotoPickerCard } from './ui';
+import { appTheme, Badge, Button, Card, EmptyState, Field, MetaRow, PhotoPickerCard } from './ui';
 
 export type TreeFormValues = {
   rowPosition: string;
@@ -106,8 +104,6 @@ export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest' | 'ma
 
 export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
-  const location = formatTreeLocation(tree);
-  const age = formatTreeAge(tree.plantedAt);
 
   const content = (
     <View
@@ -117,8 +113,8 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
         borderCurve: 'continuous',
         borderRadius: radius.xl,
         borderWidth: 1,
-        gap: spacing.md,
-        minHeight: 238,
+        gap: spacing.sm,
+        minHeight: 206,
         overflow: 'hidden',
         padding: spacing.sm,
       }}
@@ -131,26 +127,14 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
         <Text selectable numberOfLines={1} style={{ color: colors.primary, fontSize: 22, fontWeight: '900' }}>
           {displayCode}
         </Text>
-        <Text
-          selectable
-          numberOfLines={1}
-          style={{ color: colors.text, fontSize: 14, fontWeight: '800', lineHeight: 19 }}
-        >
-          {tree.variety || 'Varietas belum diisi'}
-        </Text>
-        <View style={{ alignItems: 'flex-start', paddingTop: spacing.xs }}>
-          {tree.currentGrowthPhase ? (
-            <GrowthPhaseBadge phase={tree.currentGrowthPhase} />
-          ) : (
-            <Badge label="Fase belum dicatat" maxWidth={150} tone="neutral" />
-          )}
+        <View style={{ alignItems: 'flex-start', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+          {tree.currentGrowthPhase ? <GrowthPhaseBadge phase={tree.currentGrowthPhase} /> : <Badge label="Fase -" tone="neutral" />}
         </View>
-        <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 17 }}>
-          {location}
-        </Text>
-        <Text selectable numberOfLines={1} style={{ color: colors.textSoft, fontSize: 12, lineHeight: 17 }}>
-          {age}
-        </Text>
+        {tree.variety ? (
+          <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 17 }}>
+            {tree.variety}
+          </Text>
+        ) : null}
       </View>
 
       {children}
@@ -269,8 +253,8 @@ export function TreeVisualPlaceholder({
 }
 
 export function TreeForm({
-  dateSectionDescription = 'Lengkapi tanggal tanam jika sudah diketahui.',
-  dateSectionTitle = 'Kondisi Awal',
+  dateSectionDescription = 'Tanggal tanam boleh dikosongkan jika belum diketahui.',
+  dateSectionTitle = 'Tanggal Tanam',
   onChange,
   values,
 }: TreeFormProps) {
@@ -304,15 +288,15 @@ export function TreeForm({
   }
 
   return (
-    <View style={{ gap: spacing.xl }}>
-      <FormSection
+    <View style={{ gap: spacing['2xl'] }}>
+      <TreeFormSection
         title="Identitas Pohon"
-        description="Kode pohon dibuat otomatis dari posisi baris dan kolom."
+        description="Kode pohon otomatis dari baris dan kolom."
       >
         <View
           style={{
-            backgroundColor: colors.surfaceMuted,
-            borderColor: colors.border,
+            backgroundColor: colors.primarySoft,
+            borderColor: colors.primaryBorder,
             borderCurve: 'continuous',
             borderRadius: radius.lg,
             borderWidth: 1,
@@ -325,9 +309,6 @@ export function TreeForm({
           </Text>
           <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '900' }}>
             {previewCode ?? 'Lokasi belum lengkap'}
-          </Text>
-          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19 }}>
-            Isi baris dan kolom untuk membentuk kode pohon.
           </Text>
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
@@ -354,9 +335,9 @@ export function TreeForm({
           placeholder="Contoh: Alpukat mentega"
           value={values.variety}
         />
-      </FormSection>
+      </TreeFormSection>
 
-      <FormSection
+      <TreeFormSection
         title={dateSectionTitle}
         description={dateSectionDescription}
       >
@@ -400,7 +381,7 @@ export function TreeForm({
             {values.plantedAt ? <DateActionButton label="Kosongkan" muted onPress={() => updateDateValue(null)} /> : null}
           </View>
         </View>
-      </FormSection>
+      </TreeFormSection>
     </View>
   );
 }
@@ -434,6 +415,7 @@ export function TreeMainPhotoFormSection({
       <PhotoPickerCard
         choosePhotoLabel="Pilih Galeri"
         description="Opsional, digunakan sebagai identitas visual pohon."
+        emptyLabel="Tambah foto pohon"
         imageUri={previewUri}
         loading={disabled}
         removeLabel="Hapus Foto"
@@ -453,6 +435,32 @@ export function TreeMainPhotoFormSection({
       {deleteRequested && !photo && onRestoreExisting ? (
         <Button disabled={disabled} title="Batalkan Hapus Foto" variant="secondary" onPress={onRestoreExisting} />
       ) : null}
+    </View>
+  );
+}
+
+function TreeFormSection({
+  children,
+  description,
+  title,
+}: {
+  children: React.ReactNode;
+  description?: string;
+  title: string;
+}) {
+  return (
+    <View style={{ gap: spacing.md }}>
+      <View style={{ gap: spacing.xs }}>
+        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          {title}
+        </Text>
+        {description ? (
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19 }}>
+            {description}
+          </Text>
+        ) : null}
+      </View>
+      <View style={{ gap: spacing.md }}>{children}</View>
     </View>
   );
 }
@@ -1018,10 +1026,10 @@ function formatCompactConditionStatus(status: TreeConditionStatus): string {
   const labels: Record<TreeConditionStatus, string> = {
     damaged: 'Rusak',
     dead: 'Mati',
-    disease_indicated: 'Terindikasi Penyakit',
+    disease_indicated: 'Penyakit',
     healthy: 'Sehat',
-    needs_attention: 'Perlu Perhatian',
-    pest_attacked: 'Terserang Hama',
+    needs_attention: 'Perhatian',
+    pest_attacked: 'Hama',
   };
 
   return labels[status];
@@ -1031,8 +1039,8 @@ function formatCompactGrowthPhase(phase: GrowthPhase): string {
   const labels: Record<GrowthPhase, string> = {
     flowering: 'Berbunga',
     fruiting: 'Berbuah',
-    harvesting: 'Siap Panen / Panen',
-    initial_planting: 'Awal Tanam',
+    harvesting: 'Panen',
+    initial_planting: 'Awal',
     vegetative: 'Vegetatif',
   };
 

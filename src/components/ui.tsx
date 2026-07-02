@@ -1124,6 +1124,7 @@ export function SearchFilterRow({
 export function PhotoPickerCard({
   choosePhotoLabel = 'Pilih Galeri',
   description,
+  emptyLabel = 'Tambah foto',
   error,
   imageUri,
   loading = false,
@@ -1137,6 +1138,7 @@ export function PhotoPickerCard({
 }: {
   choosePhotoLabel?: string;
   description?: string;
+  emptyLabel?: string;
   error?: string | null;
   imageUri?: string | null;
   loading?: boolean;
@@ -1228,7 +1230,7 @@ export function PhotoPickerCard({
               <CameraGlyph color={colors.primary} />
             </View>
             <Text selectable={false} style={{ color: colors.text, fontWeight: '800', textAlign: 'center' }}>
-              Tambah foto
+              {emptyLabel}
             </Text>
             <Text selectable={false} style={{ color: colors.muted, fontSize: 13, textAlign: 'center' }}>
               Ketuk area ini untuk memilih sumber foto.
