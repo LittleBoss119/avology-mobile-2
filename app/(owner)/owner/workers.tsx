@@ -1,4 +1,4 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
@@ -9,18 +9,23 @@ import {
   removeWorker,
 } from '../../../src/services/memberService';
 import {
+  Badge,
   Button,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
   MetaRow,
-  PageIntro,
   Screen,
+  SectionHeader,
+  TopAppBar,
 } from '../../../src/components/ui';
+import { showConfirmDialog, showErrorToast, showSuccessToast } from '../../../src/components/feedback';
+import { colors, radius, spacing } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
 import type { WorkerMembership } from '../../../src/types/domain';
-import { formatMemberStatus } from '../../../src/utils/displayFormat';
+
+type WorkerAction = 'approve' | 'reject' | 'remove';
 
 export default function WorkerManagementScreen() {
   const { currentFarm } = useAuth();
@@ -28,13 +33,13 @@ export default function WorkerManagementScreen() {
   const [loading, setLoading] = React.useState(true);
   const [actionId, setActionId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [historyExpanded, setHistoryExpanded] = React.useState(false);
 
   const farmId = currentFarm?.farmId;
   const pendingWorkers = workers.filter((worker) => worker.status === 'pending');
   const activeWorkers = workers.filter((worker) => worker.status === 'active');
-  const historyWorkers = workers.filter((worker) =>
-    worker.status === 'rejected' || worker.status === 'removed'
-  );
+  const historyWorkers = workers.filter((worker) => worker.status === 'rejected' || worker.status === 'removed');
+  const visibleHistoryWorkers = historyExpanded ? historyWorkers : historyWorkers.slice(0, 3);
 
   const loadWorkers = React.useCallback(async () => {
     if (!farmId) {
@@ -62,10 +67,7 @@ export default function WorkerManagementScreen() {
     }, [loadWorkers])
   );
 
-  async function handleAction(
-    membershipId: string,
-    action: 'approve' | 'reject' | 'remove'
-  ) {
+  async function handleAction(membershipId: string, action: WorkerAction) {
     setActionId(`${action}:${membershipId}`);
     setError(null);
 
@@ -77,13 +79,43 @@ export default function WorkerManagementScreen() {
           : await removeWorker({ membershipId });
 
     if (result.error) {
-      setError(result.error.message);
+      console.debug('[worker-management] action failed', {
+        action,
+        message: result.error.message,
+      });
+      setError('Ups, aksi belum berhasil. Coba lagi.');
+      showErrorToast('Ups, aksi belum berhasil. Coba lagi.');
       setActionId(null);
       return;
     }
 
     await loadWorkers();
     setActionId(null);
+    showSuccessToast(getSuccessMessage(action));
+  }
+
+  function confirmReject(worker: WorkerMembership) {
+    showConfirmDialog({
+      confirmLabel: 'Tolak',
+      danger: true,
+      message: `${worker.fullName} tidak akan mendapat akses ke kebun ini.`,
+      onConfirm: () => {
+        void handleAction(worker.membershipId, 'reject');
+      },
+      title: 'Tolak pengajuan?',
+    });
+  }
+
+  function confirmRemove(worker: WorkerMembership) {
+    showConfirmDialog({
+      confirmLabel: 'Nonaktifkan',
+      danger: true,
+      message: `Akses ${worker.fullName} ke kebun ini akan dinonaktifkan. Akun pekerja tidak dihapus permanen.`,
+      onConfirm: () => {
+        void handleAction(worker.membershipId, 'remove');
+      },
+      title: 'Nonaktifkan akses pekerja?',
+    });
   }
 
   if (loading) {
@@ -92,99 +124,250 @@ export default function WorkerManagementScreen() {
 
   return (
     <Screen>
-      <PageIntro
-        title="Pekerja Kebun"
-        subtitle="Kelola pengajuan, pekerja aktif, dan akses pekerja yang tidak aktif."
-      />
+      <TopAppBar title="Pekerja" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
-      <SectionTitle title="Pengajuan Menunggu" />
+      <WorkerSummary
+        activeCount={activeWorkers.length}
+        historyCount={historyWorkers.length}
+        pendingCount={pendingWorkers.length}
+      />
+
+      <SectionHeader title="Menunggu Persetujuan" />
       {pendingWorkers.length === 0 ? (
-        <EmptyState title="Tidak ada pengajuan" subtitle="Pengajuan pekerja baru akan muncul di sini." />
+        <EmptyState title="Tidak ada pengajuan baru." />
       ) : (
-        pendingWorkers.map((worker) => (
-          <WorkerCard key={worker.membershipId} worker={worker}>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View style={{ flex: 1 }}>
-                <Button
-                  title="Setujui"
-                  loading={actionId === `approve:${worker.membershipId}`}
-                  onPress={() => handleAction(worker.membershipId, 'approve')}
-                />
+        <View style={{ gap: spacing.listGap }}>
+          {pendingWorkers.map((worker) => (
+            <WorkerAccessCard key={worker.membershipId} dateLabel="Tanggal pengajuan" dateValue={worker.createdAt} worker={worker}>
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    title="Terima"
+                    loading={actionId === `approve:${worker.membershipId}`}
+                    size="small"
+                    onPress={() => handleAction(worker.membershipId, 'approve')}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    title="Tolak"
+                    variant="danger"
+                    loading={actionId === `reject:${worker.membershipId}`}
+                    size="small"
+                    onPress={() => confirmReject(worker)}
+                  />
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Button
-                  title="Tolak"
-                  variant="danger"
-                  loading={actionId === `reject:${worker.membershipId}`}
-                  onPress={() => handleAction(worker.membershipId, 'reject')}
-                />
-              </View>
-            </View>
-          </WorkerCard>
-        ))
+            </WorkerAccessCard>
+          ))}
+        </View>
       )}
 
-      <SectionTitle title="Pekerja Aktif" />
+      <SectionHeader title="Pekerja Aktif" />
       {activeWorkers.length === 0 ? (
-        <EmptyState title="Belum ada pekerja aktif" subtitle="Pekerja yang disetujui akan muncul di sini." />
+        <EmptyState title="Belum ada pekerja aktif." />
       ) : (
-        activeWorkers.map((worker) => (
-          <WorkerCard key={worker.membershipId} worker={worker}>
-            <Button
-              title="Nonaktifkan"
-              variant="danger"
-              loading={actionId === `remove:${worker.membershipId}`}
-              onPress={() => handleAction(worker.membershipId, 'remove')}
-            />
-          </WorkerCard>
-        ))
+        <View style={{ gap: spacing.listGap }}>
+          {activeWorkers.map((worker) => (
+            <WorkerAccessCard key={worker.membershipId} dateLabel="Bergabung" dateValue={worker.joinedAt} worker={worker}>
+              <Button
+                title="Nonaktifkan akses"
+                variant="danger"
+                loading={actionId === `remove:${worker.membershipId}`}
+                size="small"
+                onPress={() => confirmRemove(worker)}
+              />
+            </WorkerAccessCard>
+          ))}
+        </View>
       )}
 
-      <SectionTitle title="Akses Tidak Aktif" />
+      <SectionHeader title="Riwayat Akses">
+        <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+          Ditolak atau dinonaktifkan.
+        </Text>
+      </SectionHeader>
       {historyWorkers.length === 0 ? (
-        <EmptyState
-          title="Belum ada akses tidak aktif"
-          subtitle="Pekerja yang ditolak atau dinonaktifkan akan muncul di sini."
-        />
+        <EmptyState title="Belum ada riwayat akses." />
       ) : (
-        historyWorkers.map((worker) => (
-          <WorkerCard key={worker.membershipId} worker={worker} />
-        ))
+        <View style={{ gap: spacing.listGap }}>
+          {visibleHistoryWorkers.map((worker) => (
+            <WorkerAccessCard
+              key={worker.membershipId}
+              compact
+              dateLabel={worker.status === 'rejected' ? 'Tanggal pengajuan' : 'Diperbarui'}
+              dateValue={worker.status === 'rejected' ? worker.createdAt : worker.updatedAt}
+              worker={worker}
+            />
+          ))}
+          {historyWorkers.length > 3 ? (
+            <Button
+              title={historyExpanded ? 'Tampilkan lebih sedikit' : `Lihat ${historyWorkers.length - 3} riwayat lagi`}
+              variant="quiet"
+              size="small"
+              onPress={() => setHistoryExpanded((current) => !current)}
+            />
+          ) : null}
+        </View>
       )}
     </Screen>
   );
 }
 
-function SectionTitle({ title }: { title: string }) {
+function WorkerSummary({
+  activeCount,
+  historyCount,
+  pendingCount,
+}: {
+  activeCount: number;
+  historyCount: number;
+  pendingCount: number;
+}) {
   return (
-    <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
-      {title}
-    </Text>
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+      <SummaryChip label="Menunggu" tone="warning" value={pendingCount} />
+      <SummaryChip label="Aktif" tone="success" value={activeCount} />
+      <SummaryChip label="Riwayat" tone="muted" value={historyCount} />
+    </View>
   );
 }
 
-function WorkerCard({
+function SummaryChip({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone: 'muted' | 'success' | 'warning';
+  value: number;
+}) {
+  const toneStyle = getSummaryToneStyle(tone);
+
+  return (
+    <View
+      style={{
+        backgroundColor: toneStyle.background,
+        borderColor: toneStyle.border,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        flexBasis: '30%',
+        flexGrow: 1,
+        gap: spacing.xs,
+        minWidth: 96,
+        padding: spacing.md,
+      }}
+    >
+      <Text selectable style={{ color: toneStyle.text, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+        {value}
+      </Text>
+      <Text selectable style={{ color: colors.textMuted, fontSize: 12, fontWeight: '800' }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function WorkerAccessCard({
   children,
+  compact = false,
+  dateLabel,
+  dateValue,
   worker,
 }: {
   children?: React.ReactNode;
+  compact?: boolean;
+  dateLabel: string;
+  dateValue?: string | null;
   worker: WorkerMembership;
 }) {
   return (
-    <Card>
-      <MetaRow label="Nama" value={worker.fullName} />
-      <MetaRow label="Nomor HP" value={worker.phone} />
-      <MetaRow label="Status" value={formatMembershipStatus(worker.status)} />
-      <MetaRow label="Tanggal pengajuan" value={formatDateTime(worker.createdAt)} />
-      <MetaRow label="Terakhir diperbarui" value={formatDateTime(worker.updatedAt)} />
+    <Card padding={compact ? spacing.md : spacing.cardPadding} variant={compact ? 'default' : 'softGreen'}>
+      <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' }}>
+        <View style={{ flex: 1, gap: spacing.xs }}>
+          <Text selectable numberOfLines={2} style={{ color: colors.text, fontSize: 17, fontWeight: '900', lineHeight: 23 }}>
+            {worker.fullName}
+          </Text>
+          {worker.phone ? (
+            <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+              {worker.phone}
+            </Text>
+          ) : null}
+        </View>
+        <Badge label={formatMembershipStatus(worker.status)} tone={getMembershipTone(worker.status)} />
+      </View>
+
+      <View style={{ gap: compact ? spacing.xs : spacing.sm }}>
+        <MetaRow label={dateLabel} value={formatDateTime(dateValue)} />
+        {!compact && worker.updatedAt ? <MetaRow label="Diperbarui" value={formatDateTime(worker.updatedAt)} /> : null}
+      </View>
+
       {children}
     </Card>
   );
 }
 
+function getSuccessMessage(action: WorkerAction): string {
+  if (action === 'approve') {
+    return 'Pekerja berhasil diterima.';
+  }
+
+  if (action === 'reject') {
+    return 'Pengajuan pekerja ditolak.';
+  }
+
+  return 'Akses pekerja dinonaktifkan.';
+}
+
 function formatMembershipStatus(status: WorkerMembership['status']): string {
-  return formatMemberStatus(status);
+  const labels: Record<WorkerMembership['status'], string> = {
+    active: 'Aktif',
+    pending: 'Menunggu',
+    rejected: 'Ditolak',
+    removed: 'Dinonaktifkan',
+  };
+
+  return labels[status];
+}
+
+function getMembershipTone(status: WorkerMembership['status']): 'danger' | 'muted' | 'success' | 'warning' {
+  if (status === 'active') {
+    return 'success';
+  }
+
+  if (status === 'pending') {
+    return 'warning';
+  }
+
+  if (status === 'rejected') {
+    return 'danger';
+  }
+
+  return 'muted';
+}
+
+function getSummaryToneStyle(tone: 'muted' | 'success' | 'warning') {
+  if (tone === 'success') {
+    return {
+      background: colors.successBg,
+      border: colors.successBorder,
+      text: colors.success,
+    };
+  }
+
+  if (tone === 'warning') {
+    return {
+      background: colors.warningBg,
+      border: colors.warningBorder,
+      text: colors.warning,
+    };
+  }
+
+  return {
+    background: colors.neutralBg,
+    border: colors.neutralBorder,
+    text: colors.neutral,
+  };
 }
 
 function formatDateTime(value?: string | null): string | null {
@@ -195,7 +378,7 @@ function formatDateTime(value?: string | null): string | null {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return null;
   }
 
   return date.toLocaleString('id-ID', {
