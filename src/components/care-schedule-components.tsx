@@ -15,9 +15,9 @@ import {
   formatTaskStatus,
   formatTreeTargetFallback,
 } from '../utils/displayFormat';
-import { formatTreeLocation } from '../utils/treeFormat';
+import { formatTreeDisplayCode } from '../utils/treeFormat';
 import { colors, radius, spacing } from '../constants/theme';
-import { appTheme, Badge, Button, Card, CompactMetaItem, DateField, EmptyState, Field, FormSection, MetaRow } from './ui';
+import { appTheme, Badge, Button, Card, ChipButton, CompactMetaItem, DateField, EmptyState, Field, FormSection, MetaRow } from './ui';
 import { careCategoryOptions } from './care-sop-components';
 
 export type ManualScheduleFormValues = {
@@ -182,10 +182,10 @@ export function ManualScheduleForm({
   }
 
   return (
-    <View style={{ gap: 14 }}>
-      <FormSection title="Rencana Perawatan" description="Isi pekerjaan utama yang akan menjadi tugas pekerja.">
+    <View style={{ gap: spacing['2xl'] }}>
+      <ScheduleFormSection title="Rencana Perawatan">
         <Field
-          label="Judul Jadwal *"
+          label="Judul *"
           onChangeText={(value) => updateValue('title', value)}
           placeholder="Contoh: Penyiraman area barat"
           value={values.title}
@@ -202,38 +202,38 @@ export function ManualScheduleForm({
         />
 
         <DateField
-          label="Tanggal Jadwal *"
+          label="Tanggal *"
           onChangeDate={(value) => updateValue('scheduledDate', value)}
           placeholder="Pilih tanggal jadwal"
           value={values.scheduledDate}
         />
-      </FormSection>
+      </ScheduleFormSection>
 
-      <FormSection title="Pekerja" description="Pilih pekerja aktif yang menerima tugas ini.">
+      <ScheduleFormSection title="Pekerja">
         <WorkerPicker
           selectedWorkerId={values.assignedWorkerId}
           workers={workers}
           onSelect={(workerId) => updateValue('assignedWorkerId', workerId)}
         />
-      </FormSection>
+      </ScheduleFormSection>
 
-      <FormSection title="Target" description="Tentukan cakupan pekerjaan di kebun.">
+      <ScheduleFormSection title="Target">
         <TargetPicker
           onTargetTypeChange={updateTargetType}
           onValueChange={updateValue}
           trees={trees}
           values={values}
         />
-      </FormSection>
+      </ScheduleFormSection>
 
-      <FormSection title="Instruksi">
+      <ScheduleFormSection title="Instruksi">
         <TextArea
           label="Instruksi"
           onChangeText={(value) => updateValue('instruction', value)}
           placeholder="Instruksi kerja untuk pekerja"
           value={values.instruction}
         />
-      </FormSection>
+      </ScheduleFormSection>
 
       <ProofRequirementToggle
         enabled={values.requiresPhoto}
@@ -251,10 +251,7 @@ export function ProofRequirementToggle({
   onToggle: () => void;
 }) {
   return (
-    <FormSection
-      title="Butuh Bukti Foto"
-      description="Jika wajib, pekerja harus mengunggah foto sebelum menyelesaikan tugas."
-    >
+    <ScheduleFormSection title="Bukti Foto">
       <View
         style={{
           backgroundColor: colors.surfaceMuted,
@@ -269,7 +266,24 @@ export function ProofRequirementToggle({
         <ProofOptionButton active={!enabled} label="Tidak Wajib" onPress={enabled ? onToggle : undefined} />
         <ProofOptionButton active={enabled} label="Wajib" onPress={!enabled ? onToggle : undefined} />
       </View>
-    </FormSection>
+    </ScheduleFormSection>
+  );
+}
+
+function ScheduleFormSection({
+  children,
+  title,
+}: {
+  children: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <View style={{ gap: spacing.md }}>
+      <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+        {title}
+      </Text>
+      <View style={{ gap: spacing.md }}>{children}</View>
+    </View>
   );
 }
 
@@ -349,12 +363,12 @@ function WorkerPicker({
       {workers.length === 0 ? (
         <EmptyState title="Belum ada pekerja aktif" subtitle="Setujui pekerja terlebih dahulu sebelum membuat tugas." />
       ) : (
-        <View style={{ gap: 8 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
           {workers.map((worker) => (
-            <Button
+            <ChipButton
               key={worker.userId}
-              title={worker.fullName}
-              variant={selectedWorkerId === worker.userId ? 'primary' : 'secondary'}
+              active={selectedWorkerId === worker.userId}
+              label={worker.fullName}
               onPress={() => onSelect(worker.userId)}
             />
           ))}
@@ -413,12 +427,12 @@ function TargetPicker({
           {trees.length === 0 ? (
             <EmptyState title="Belum ada pohon aktif" subtitle="Tambahkan pohon sebelum membuat jadwal per pohon." />
           ) : (
-            <View style={{ gap: 8 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
               {trees.map((tree) => (
-                <Button
+                <ChipButton
                   key={tree.id}
-                  title={formatTreeLocation(tree)}
-                  variant={values.targetTreeId === tree.id ? 'primary' : 'secondary'}
+                  active={values.targetTreeId === tree.id}
+                  label={formatTreeDisplayCode(tree)}
                   onPress={() => onValueChange('targetTreeId', tree.id)}
                 />
               ))}
@@ -455,12 +469,12 @@ function OptionGroup<TValue extends string>({
       <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
-      <View style={{ gap: 8 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
         {options.map((option) => (
-          <Button
+          <ChipButton
             key={option.value}
-            title={option.label}
-            variant={selectedValue === option.value ? 'primary' : 'secondary'}
+            active={selectedValue === option.value}
+            label={option.label}
             onPress={() => onSelect(option.value)}
           />
         ))}

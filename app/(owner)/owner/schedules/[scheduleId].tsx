@@ -4,9 +4,11 @@ import { Alert, Pressable, Text, View } from 'react-native';
 
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
+import { TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
 import {
   Badge,
   Button,
+  CameraGlyph,
   Card,
   CompactMetaItem,
   EmptyState,
@@ -211,20 +213,17 @@ export default function CareScheduleDetailScreen() {
           >
             {schedule.title}
           </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+          <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             <Badge label={formatScheduleStatus(schedule)} tone={getScheduleTone(schedule)} />
-            <Badge label={schedule.careSopId ? 'SOP' : 'Manual'} tone={schedule.careSopId ? 'warning' : 'muted'} />
+            {schedule.careSopId ? <Badge label="SOP" tone="warning" /> : null}
             <Badge label={formatCareCategory(schedule.category)} maxWidth={140} tone="success" />
-            {schedule.requiresPhoto ? <Badge label="Butuh bukti foto" maxWidth={144} tone="warning" /> : null}
+            {schedule.requiresPhoto ? <ProofPhotoIndicator /> : null}
           </View>
         </View>
-        <View style={{ gap: 10 }}>
-          <MetaRow label="Kategori" value={formatCareCategory(schedule.category)} />
-          <MetaRow label="Target" value={formatCareTarget(schedule)} />
-          <MetaRow label="Tanggal jadwal" value={formatDate(schedule.scheduledDate)} />
-          <MetaRow label="Pekerja" value={formatScheduleWorkers(schedule, workerNames)} />
-          <MetaRow label="Jumlah tugas" value={`${schedule.tasks.length} tugas`} />
-          <MetaRow label="Bukti foto" value={schedule.requiresPhoto ? 'Wajib' : 'Tidak wajib'} />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+          <CompactMetaItem icon="calendar" label={formatDate(schedule.scheduledDate)} />
+          <CompactMetaItem icon="target" label={formatCareTarget(schedule)} />
+          <CompactMetaItem icon="user" label={formatScheduleWorkers(schedule, workerNames)} />
         </View>
       </Card>
 
@@ -398,13 +397,13 @@ function OwnerScheduleTaskCard({
             <Badge label={formatTaskStatusForOwner(task.status)} maxWidth={100} tone={getTaskTone(task.status)} />
           </View>
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            <Badge
-              label={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'}
-              maxWidth={140}
-              tone="success"
-            />
-            {task.requiresPhoto ? <Badge label="Butuh bukti" maxWidth={116} tone="warning" /> : null}
+          <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {task.category ? (
+              <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '800' }}>
+                {formatCareCategory(task.category)}
+              </Text>
+            ) : null}
+            {task.requiresPhoto ? <ProofPhotoIndicator /> : null}
           </View>
 
           {task.instruction ? (
@@ -437,13 +436,14 @@ function OwnerScheduleTaskCard({
                 padding: spacing.md,
               }}
             >
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+              <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 <Badge label={`Realisasi: ${formatActivityStatus(latestActivity.status)}`} tone={getActivityTone(latestActivity.status)} />
-                {latestProof ? <Badge label="Ada bukti" tone="success" /> : <Badge label="Tanpa bukti" tone="muted" />}
+                {latestProof ? <ProofPhotoIndicator /> : null}
               </View>
-              <MetaRow label="Pelaksana" value={workerNames[latestActivity.performedBy] ?? assignedWorkerName ?? 'Pekerja tidak tersedia'} />
-              <MetaRow label="Waktu realisasi" value={formatDateTime(latestActivity.performedAt)} />
+              <CompactMetaItem icon="user" label={workerNames[latestActivity.performedBy] ?? assignedWorkerName ?? 'Pekerja tidak tersedia'} />
+              <CompactMetaItem icon="calendar" label={formatDateTime(latestActivity.performedAt)} />
               {latestActivity.note ? <MetaRow label="Catatan realisasi" value={latestActivity.note} /> : null}
+              {latestProof ? <TaskProofPhotoPreview photo={latestProof} /> : null}
             </View>
           ) : (
             <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
@@ -453,6 +453,27 @@ function OwnerScheduleTaskCard({
         </View>
       </Card>
     </Pressable>
+  );
+}
+
+function ProofPhotoIndicator() {
+  return (
+    <View
+      accessibilityLabel="Perlu bukti foto"
+      style={{
+        alignItems: 'center',
+        backgroundColor: colors.warningBg,
+        borderColor: colors.warningBorder,
+        borderCurve: 'continuous',
+        borderRadius: 999,
+        borderWidth: 1,
+        height: 26,
+        justifyContent: 'center',
+        width: 26,
+      }}
+    >
+      <CameraGlyph color={colors.warning} />
+    </View>
   );
 }
 

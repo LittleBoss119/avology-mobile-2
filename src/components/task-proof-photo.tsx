@@ -2,8 +2,8 @@ import React from 'react';
 import { Image, Modal, Pressable, Text, View } from 'react-native';
 
 import type { PickedPhotoAsset, TaskProofPhoto } from '../types/media';
-import { colors, radius, spacing, typography } from '../constants/theme';
-import { Badge, Button } from './ui';
+import { colors, radius, spacing } from '../constants/theme';
+import { PhotoPickerCard } from './ui';
 
 export function TaskProofPhotoPicker({
   disabled,
@@ -21,55 +21,19 @@ export function TaskProofPhotoPicker({
   required: boolean;
 }) {
   return (
-    <View
-      style={{
-        backgroundColor: colors.surface,
-        borderColor: required ? colors.warningBorder : colors.border,
-        borderCurve: 'continuous',
-        borderRadius: radius.xl,
-        borderWidth: 1,
-        gap: spacing.md,
-        padding: spacing.lg,
-      }}
-    >
-      <View style={{ gap: spacing.xs }}>
-        <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
-          <Text selectable style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '800' }}>
-            Bukti Foto
-          </Text>
-          {required ? <Badge label="Wajib" tone="warning" /> : null}
-        </View>
-        <Text selectable style={{ color: colors.textMuted, lineHeight: typography.small.lineHeight }}>
-          {required
-            ? 'Foto wajib diunggah sebelum tugas dapat diselesaikan.'
-            : 'Opsional, untuk menambahkan bukti realisasi tugas.'}
-        </Text>
-      </View>
-
-      {photo ? (
-        <View style={{ gap: 10 }}>
-          <Image
-            resizeMode="cover"
-            source={{ uri: photo.uri }}
-            style={{
-              borderRadius: radius.lg,
-              height: 150,
-              width: '100%',
-            }}
-          />
-          <Button disabled={disabled} title="Hapus Foto" variant="secondary" onPress={onRemove} />
-        </View>
-      ) : null}
-
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <View style={{ flex: 1 }}>
-          <Button disabled={disabled} title="Ambil Foto" variant="secondary" onPress={onCameraPress} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button disabled={disabled} title="Pilih Galeri" variant="secondary" onPress={onGalleryPress} />
-        </View>
-      </View>
-    </View>
+    <PhotoPickerCard
+      choosePhotoLabel="Galeri"
+      description={required ? 'Wajib untuk menyelesaikan tugas.' : 'Opsional untuk bukti realisasi.'}
+      emptyLabel="Tambah bukti foto"
+      imageUri={photo?.uri}
+      loading={disabled}
+      removeLabel="Hapus bukti foto"
+      required={required}
+      takePhotoLabel="Kamera"
+      onChoosePhoto={onGalleryPress}
+      onRemovePhoto={photo ? onRemove : undefined}
+      onTakePhoto={onCameraPress}
+    />
   );
 }
 

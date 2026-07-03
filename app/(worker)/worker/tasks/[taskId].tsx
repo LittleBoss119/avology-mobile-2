@@ -4,13 +4,13 @@ import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
 import {
   formatCareTarget,
-  formatTaskSource,
 } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import { TaskProofPhotoPicker, TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
 import {
   Badge,
   Button,
+  CameraGlyph,
   Card,
   EmptyState,
   ErrorBanner,
@@ -181,6 +181,7 @@ export default function WorkerTaskDetailScreen() {
     setProofPhoto(null);
     setShowCompleteInput(false);
     await loadDetail();
+    setSuccess('Tugas berhasil diselesaikan.');
     setActionLoading(null);
   }
 
@@ -219,6 +220,7 @@ export default function WorkerTaskDetailScreen() {
     setProofPhoto(null);
     setShowPostponeInput(false);
     await loadDetail();
+    setSuccess('Tugas berhasil ditunda.');
     setActionLoading(null);
   }
 
@@ -352,6 +354,7 @@ export default function WorkerTaskDetailScreen() {
   }
 
   const isCompleted = task.status === 'completed';
+  const isRealized = task.status === 'completed' || task.status === 'postponed';
   const isCancelledByOwner = task.scheduleIsCancelled === true;
   const isEditingRealization = Boolean(editingActivityId);
   const latestActivity = task.activities[0] ?? null;
@@ -421,10 +424,10 @@ export default function WorkerTaskDetailScreen() {
             />
             <Button title="Batal" variant="secondary" disabled={actionLoading !== null} onPress={resetEditForm} />
           </View>
-        ) : isCompleted ? null : (
+        ) : isRealized ? null : (
           <View style={{ gap: spacing.sm }}>
             <Button
-              title="Simpan Realisasi"
+              title={selectedAction === 'postpone' ? 'Tunda Tugas' : 'Selesaikan'}
               disabled={!selectedAction || actionLoading !== null}
               loading={actionLoading !== null}
               onPress={selectedAction === 'postpone' ? handlePostpone : handleComplete}
@@ -453,14 +456,12 @@ export default function WorkerTaskDetailScreen() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <Badge label={formatTaskStatusLabel(task.status)} tone={getTaskTone(task.status)} />
           {isCancelledByOwner ? <Badge label="Dibatalkan owner" maxWidth={148} tone="danger" /> : null}
-          {task.requiresPhoto ? <Badge label="Butuh bukti" tone="warning" /> : null}
-          <Badge label={formatTaskSource(task)} tone="muted" />
+          {task.requiresPhoto ? <ProofPhotoIndicator /> : null}
         </View>
         <View style={{ gap: 10 }}>
           <MetaRow label="Kategori" value={task.category ? formatCareCategory(task.category) : 'Tanpa kategori'} />
           <MetaRow label="Target" value={formatCareTarget(task)} />
           <MetaRow label="Tanggal" value={formatDate(task.dueDate)} />
-          <MetaRow label="Sumber" value={formatTaskSource(task)} />
         </View>
       </Card>
 
@@ -484,19 +485,19 @@ export default function WorkerTaskDetailScreen() {
         </Text>
       </Card>
 
-      {!isCompleted && !isCancelledByOwner ? (
-        <FormSection title="Realisasi" description="Tambahkan keterangan hasil pekerjaan atau alasan penundaan.">
+      {!isRealized && !isCancelledByOwner ? (
+        <FormSection title="Realisasi" description="Pilih hasil pekerjaan hari ini.">
           <View style={{ gap: spacing.sm }}>
             <RealizationOption
               active={selectedAction === 'complete'}
-              description="Tandai tugas selesai sesuai instruksi."
-              label="Selesai"
+              description="Pekerjaan sudah dilakukan."
+              label="Selesaikan"
               onPress={selectCompletion}
             />
             <RealizationOption
               active={selectedAction === 'postpone'}
-              description="Tunda tugas dan tulis alasan penundaan."
-              label="Tertunda"
+              description="Belum bisa dikerjakan hari ini."
+              label="Tunda"
               onPress={selectPostpone}
             />
           </View>
@@ -521,7 +522,7 @@ export default function WorkerTaskDetailScreen() {
         </FormSection>
       ) : null}
 
-      {!isCancelledByOwner && (task.requiresPhoto || showCompleteInput) ? (
+      {!isCancelledByOwner && !isRealized && (task.requiresPhoto || showCompleteInput) ? (
         <TaskProofPhotoPicker
           disabled={actionLoading !== null || isCompleted}
           photo={proofPhoto}
@@ -538,13 +539,13 @@ export default function WorkerTaskDetailScreen() {
             <RealizationOption
               active={editStatus === 'completed'}
               description="Tandai tugas selesai sesuai instruksi."
-              label="Selesai"
+              label="Selesaikan"
               onPress={() => setEditStatus('completed')}
             />
             <RealizationOption
               active={editStatus === 'postponed'}
               description="Tunda tugas dan tulis alasan penundaan."
-              label="Tertunda"
+              label="Tunda"
               onPress={() => setEditStatus('postponed')}
             />
           </View>
@@ -713,6 +714,27 @@ function RealizationOption({
         {description}
       </Text>
     </Pressable>
+  );
+}
+
+function ProofPhotoIndicator() {
+  return (
+    <View
+      accessibilityLabel="Perlu bukti foto"
+      style={{
+        alignItems: 'center',
+        backgroundColor: colors.warningBg,
+        borderColor: colors.warningBorder,
+        borderCurve: 'continuous',
+        borderRadius: 999,
+        borderWidth: 1,
+        height: 26,
+        justifyContent: 'center',
+        width: 26,
+      }}
+    >
+      <CameraGlyph color={colors.warning} />
+    </View>
   );
 }
 

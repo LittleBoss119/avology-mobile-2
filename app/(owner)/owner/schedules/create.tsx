@@ -140,7 +140,7 @@ export default function CreateManualScheduleScreen() {
         </View>
       }
     >
-      <TopAppBar title="Jadwal Manual" onBack={() => router.back()} />
+      <TopAppBar title="Buat Jadwal" onBack={() => router.back()} />
       <ErrorBanner message={error} />
       <ManualScheduleForm values={values} trees={trees} workers={workers} onChange={setValues} />
     </Screen>
@@ -155,15 +155,15 @@ function validateValues(
   }
 
   if (!values.category) {
-    return new Error('Kategori jadwal wajib dipilih.');
+    return new Error('Ups, pilih kategori dulu.');
   }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(values.scheduledDate.trim())) {
-    return new Error('Tanggal jadwal harus memakai format YYYY-MM-DD.');
+    return new Error('Ups, tanggal jadwal belum dipilih.');
   }
 
   if (!values.assignedWorkerId.trim()) {
-    return new Error('Pilih pekerja aktif.');
+    return new Error('Ups, pilih worker dulu.');
   }
 
   if (values.targetType === 'row' && !values.targetRow.trim()) {
