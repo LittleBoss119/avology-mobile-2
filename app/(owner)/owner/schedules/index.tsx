@@ -1,18 +1,18 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import {
-  appTheme,
   Badge,
-  Button,
+  CameraGlyph,
   Card,
   ChipButton,
   CompactMetaItem,
   EmptyState,
   ErrorBanner,
+  FilterChipsRow,
   LoadingState,
   MainTabHeader,
   SearchFilterRow,
@@ -39,7 +39,7 @@ const statusFilters: Array<{ label: string; value: ScheduleStatusFilter }> = [
 ];
 
 const sourceFilters: Array<{ label: string; value: ScheduleSourceFilter }> = [
-  { label: 'Semua', value: 'all' },
+  { label: 'Semua sumber', value: 'all' },
   { label: 'Manual', value: 'manual' },
   { label: 'SOP', value: 'sop' },
 ];
@@ -50,7 +50,6 @@ export default function CareScheduleListScreen() {
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [details, setDetails] = React.useState<Record<string, CareScheduleDetail>>({});
   const [error, setError] = React.useState<string | null>(null);
-  const [filterOpen, setFilterOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [schedules, setSchedules] = React.useState<CareSchedule[]>([]);
   const [search, setSearch] = React.useState('');
@@ -136,10 +135,22 @@ export default function CareScheduleListScreen() {
       workerNames,
     })
   );
+  const hasActiveFilters = statusFilter !== 'all' || sourceFilter !== 'all';
+
+  function clearFilters() {
+    setStatusFilter('all');
+    setSourceFilter('all');
+  }
 
   return (
     <Screen
-      floatingAction={<FloatingAddButton onPress={() => setCreateMenuOpen(true)} />}
+      floatingAction={
+        <CreateScheduleFab
+          open={createMenuOpen}
+          onClose={() => setCreateMenuOpen(false)}
+          onToggle={() => setCreateMenuOpen((current) => !current)}
+        />
+      }
       floatingActionBottom={86}
     >
       <MainTabHeader
@@ -153,31 +164,18 @@ export default function CareScheduleListScreen() {
       <ScheduleHero summary={summary} />
 
       <SearchFilterRow
-        filterActive={statusFilter !== 'all' || sourceFilter !== 'all'}
-        onFilterPress={() => setFilterOpen(true)}
         onChangeText={setSearch}
         placeholder="Cari judul, target, atau pekerja"
         value={search}
       />
 
-      <ActiveFilterSummary
-        sourceFilter={sourceFilter}
-        statusFilter={statusFilter}
-        total={displayedSchedules.length}
-      />
-
-      <ScheduleFilterSheet
-        onClose={() => setFilterOpen(false)}
+      <ScheduleFilterControls
+        hasActiveFilters={hasActiveFilters}
+        onClear={clearFilters}
         onSourceChange={setSourceFilter}
         onStatusChange={setStatusFilter}
         sourceFilter={sourceFilter}
         statusFilter={statusFilter}
-        visible={filterOpen}
-      />
-
-      <CreateScheduleMenu
-        onClose={() => setCreateMenuOpen(false)}
-        visible={createMenuOpen}
       />
 
       <SectionHeader title="Daftar Jadwal">
@@ -193,12 +191,7 @@ export default function CareScheduleListScreen() {
 
       {displayedSchedules.length === 0 ? (
         <EmptyState
-          title={schedules.length === 0 ? 'Belum ada jadwal' : 'Tidak ada jadwal pada pencarian ini'}
-          subtitle={
-            schedules.length === 0
-              ? 'Buat jadwal perawatan agar pekerja mendapatkan tugas yang jelas.'
-              : 'Coba ubah kata kunci atau filter jadwal.'
-          }
+          title={schedules.length === 0 ? 'Belum ada jadwal.' : 'Tidak ada jadwal pada filter ini.'}
         />
       ) : (
         <View style={{ gap: 10 }}>
@@ -273,20 +266,43 @@ function HeroMetric({
   );
 }
 
-function ActiveFilterSummary({
+function ScheduleFilterControls({
+  hasActiveFilters,
+  onClear,
+  onSourceChange,
+  onStatusChange,
   sourceFilter,
   statusFilter,
-  total,
 }: {
+  hasActiveFilters: boolean;
+  onClear: () => void;
+  onSourceChange: (filter: ScheduleSourceFilter) => void;
+  onStatusChange: (filter: ScheduleStatusFilter) => void;
   sourceFilter: ScheduleSourceFilter;
   statusFilter: ScheduleStatusFilter;
-  total: number;
 }) {
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: -6 }}>
-      <Badge label={`${total} jadwal`} tone="muted" />
-      {statusFilter !== 'all' ? <Badge label={getStatusFilterLabel(statusFilter)} tone="info" /> : null}
-      {sourceFilter !== 'all' ? <Badge label={getSourceFilterLabel(sourceFilter)} tone="warning" /> : null}
+    <View style={{ gap: spacing.sm }}>
+      <FilterChipsRow hasActiveFilters={hasActiveFilters} onClear={onClear}>
+        {statusFilters.map((filter) => (
+          <ChipButton
+            key={filter.value}
+            active={statusFilter === filter.value}
+            label={filter.label}
+            onPress={() => onStatusChange(filter.value)}
+          />
+        ))}
+      </FilterChipsRow>
+      <FilterChipsRow>
+        {sourceFilters.map((filter) => (
+          <ChipButton
+            key={filter.value}
+            active={sourceFilter === filter.value}
+            label={filter.label}
+            onPress={() => onSourceChange(filter.value)}
+          />
+        ))}
+      </FilterChipsRow>
     </View>
   );
 }
@@ -303,30 +319,36 @@ function CompactScheduleCard({
   workerNames: Record<string, string>;
 }) {
   const status = getScheduleStatus(schedule, detail);
+  const progress = getScheduleProgress(detail);
   const workers = getScheduleWorkerNames(detail, workerNames);
 
   return (
     <Pressable onPress={onPress}>
       <Card>
-        <View style={{ gap: 8 }}>
+        <View style={{ gap: spacing.sm }}>
           <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 8, justifyContent: 'space-between' }}>
             <Text
               selectable
               ellipsizeMode="tail"
               numberOfLines={1}
-              style={{ color: appTheme.primary, flex: 1, fontSize: 17, fontWeight: '900' }}
+              style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '900' }}
             >
-                {schedule.title}
+              {schedule.title}
             </Text>
             <Badge label={formatScheduleStatusLabel(status)} maxWidth={116} tone={getScheduleStatusTone(status)} />
           </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            <Badge label={formatCareCategory(schedule.category)} maxWidth={140} tone="success" />
-            <Badge label={schedule.careSopId ? 'SOP' : 'Manual'} maxWidth={96} tone={schedule.careSopId ? 'warning' : 'muted'} />
-            {schedule.requiresPhoto ? <Badge label="Butuh bukti" maxWidth={116} tone="warning" /> : null}
+
+          <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '800' }}>
+              {formatCareCategory(schedule.category)}
+            </Text>
+            {schedule.careSopId ? <Badge label="SOP" maxWidth={64} tone="warning" /> : null}
+            {schedule.requiresPhoto ? <ProofPhotoIndicator /> : null}
           </View>
+
           <ScheduleCardMeta
             date={formatDate(schedule.scheduledDate)}
+            progress={progress}
             target={formatCareTarget(schedule)}
             workers={workers}
           />
@@ -338,173 +360,135 @@ function CompactScheduleCard({
 
 function ScheduleCardMeta({
   date,
+  progress,
   target,
   workers,
 }: {
   date: string;
+  progress: string;
   target: string;
   workers: string[];
 }) {
   return (
-    <View style={{ gap: 4 }}>
-      <View style={{ alignItems: 'center', flexDirection: 'row', gap: 10 }}>
+    <View style={{ gap: 6 }}>
+      <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         <CompactMetaItem icon="calendar" label={date} />
         <CompactMetaItem icon="target" label={target} />
       </View>
-      {workers.length > 0 ? (
-        <CompactMetaItem icon="user" label={workers.join(', ')} />
-      ) : null}
+      <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <CompactMetaItem icon="user" label={formatWorkerSummary(workers)} />
+        <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
+          {progress}
+        </Text>
+      </View>
     </View>
   );
 }
 
-function ScheduleFilterSheet({
-  onClose,
-  onSourceChange,
-  onStatusChange,
-  sourceFilter,
-  statusFilter,
-  visible,
-}: {
-  onClose: () => void;
-  onSourceChange: (filter: ScheduleSourceFilter) => void;
-  onStatusChange: (filter: ScheduleStatusFilter) => void;
-  sourceFilter: ScheduleSourceFilter;
-  statusFilter: ScheduleStatusFilter;
-  visible: boolean;
-}) {
+function ProofPhotoIndicator() {
   return (
-    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.12)', flex: 1 }} onPress={onClose} />
-      <View
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          gap: 18,
-          paddingBottom: 28,
-          paddingHorizontal: 20,
-          paddingTop: 10,
-        }}
-      >
-        <View style={{ alignSelf: 'center', backgroundColor: '#DCE7D5', borderRadius: 999, height: 5, width: 48 }} />
-        <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text selectable style={{ color: appTheme.text, fontSize: 20, fontWeight: '900' }}>
-            Filter Jadwal
-          </Text>
-          <SheetDoneButton onPress={onClose} />
-        </View>
-
-        <FilterSection title="Status">
-          {statusFilters.map((filter) => (
-            <ChipButton
-              key={filter.value}
-              active={statusFilter === filter.value}
-              label={filter.label}
-              onPress={() => onStatusChange(filter.value)}
-            />
-          ))}
-        </FilterSection>
-
-        <FilterSection title="Sumber">
-          {sourceFilters.map((filter) => (
-            <ChipButton
-              key={filter.value}
-              active={sourceFilter === filter.value}
-              label={filter.label}
-              onPress={() => onSourceChange(filter.value)}
-            />
-          ))}
-        </FilterSection>
-      </View>
-    </Modal>
+    <View
+      accessibilityLabel="Perlu bukti foto"
+      style={{
+        alignItems: 'center',
+        backgroundColor: colors.warningBg,
+        borderColor: colors.warningBorder,
+        borderCurve: 'continuous',
+        borderRadius: radius.round,
+        borderWidth: 1,
+        height: 26,
+        justifyContent: 'center',
+        width: 26,
+      }}
+    >
+      <CameraGlyph color={colors.warning} />
+    </View>
   );
 }
 
-function CreateScheduleMenu({ onClose, visible }: { onClose: () => void; visible: boolean }) {
+function CreateScheduleFab({
+  onClose,
+  onToggle,
+  open,
+}: {
+  onClose: () => void;
+  onToggle: () => void;
+  open: boolean;
+}) {
   function goTo(path: '/owner/sops' | '/owner/schedules/create') {
     onClose();
     router.push(path);
   }
 
   return (
-    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.12)', flex: 1 }} onPress={onClose} />
-      <View
+    <View style={{ alignItems: 'flex-end', gap: spacing.sm }}>
+      {open ? (
+        <View
+          style={{
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            borderCurve: 'continuous',
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            gap: spacing.sm,
+            padding: spacing.sm,
+            width: 178,
+          }}
+        >
+          <CreateMenuButton label="Dari SOP" onPress={() => goTo('/owner/sops')} />
+          <CreateMenuButton label="Buat Jadwal" primary onPress={() => goTo('/owner/schedules/create')} />
+        </View>
+      ) : null}
+      <Pressable
+        accessibilityLabel="Buat jadwal"
+        accessibilityRole="button"
+        onPress={onToggle}
         style={{
-          backgroundColor: '#FFFFFF',
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          gap: 12,
-          paddingBottom: 28,
-          paddingHorizontal: 20,
-          paddingTop: 10,
+          alignItems: 'center',
+          backgroundColor: colors.primary,
+          borderColor: colors.primaryBorder,
+          borderRadius: 999,
+          borderWidth: 1,
+          height: 58,
+          justifyContent: 'center',
+          width: 58,
         }}
       >
-        <View style={{ alignSelf: 'center', backgroundColor: '#DCE7D5', borderRadius: 999, height: 5, width: 48 }} />
-        <Text selectable style={{ color: appTheme.text, fontSize: 20, fontWeight: '900' }}>
-          Buat Jadwal
+        <Text selectable={false} style={{ color: '#FFFFFF', fontSize: open ? 28 : 36, fontWeight: '400', lineHeight: 40 }}>
+          {open ? 'x' : '+'}
         </Text>
-        <Text selectable style={{ color: appTheme.muted, lineHeight: 20 }}>
-          Pilih sumber jadwal perawatan.
-        </Text>
-        <Button title="Buat dari SOP" onPress={() => goTo('/owner/sops')} />
-        <Button title="Buat Manual" variant="secondary" onPress={() => goTo('/owner/schedules/create')} />
-      </View>
-    </Modal>
-  );
-}
-
-function FilterSection({ children, title }: { children: React.ReactNode; title: string }) {
-  return (
-    <View style={{ gap: 9 }}>
-      <Text selectable style={{ color: appTheme.text, fontSize: 15, fontWeight: '800' }}>
-        {title}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{children}</View>
+      </Pressable>
     </View>
   );
 }
 
-function SheetDoneButton({ onPress }: { onPress: () => void }) {
+function CreateMenuButton({
+  label,
+  onPress,
+  primary,
+}: {
+  label: string;
+  onPress: () => void;
+  primary?: boolean;
+}) {
   return (
     <Pressable
-      onPress={onPress}
-      style={{
-        backgroundColor: appTheme.primarySoft,
-        borderColor: '#B8D8BF',
-        borderRadius: 999,
-        borderWidth: 1,
-        paddingHorizontal: 15,
-        paddingVertical: 9,
-      }}
-    >
-      <Text selectable style={{ color: appTheme.primary, fontSize: 14, fontWeight: '900' }}>
-        Selesai
-      </Text>
-    </Pressable>
-  );
-}
-
-function FloatingAddButton({ onPress }: { onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityLabel="Buat jadwal"
       accessibilityRole="button"
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: appTheme.primary,
-        borderColor: '#B8D8BF',
-        borderRadius: 999,
+        backgroundColor: primary ? colors.primary : colors.primarySoft,
+        borderColor: primary ? colors.primary : colors.primaryBorder,
+        borderCurve: 'continuous',
+        borderRadius: radius.button,
         borderWidth: 1,
-        height: 58,
+        minHeight: 42,
         justifyContent: 'center',
-        width: 58,
+        paddingHorizontal: spacing.md,
       }}
     >
-      <Text selectable style={{ color: '#FFFFFF', fontSize: 36, fontWeight: '400', lineHeight: 40 }}>
-        +
+      <Text selectable={false} style={{ color: primary ? colors.surface : colors.primary, fontSize: 14, fontWeight: '900' }}>
+        {label}
       </Text>
     </Pressable>
   );
@@ -637,12 +621,28 @@ function getScheduleWorkerNames(
   );
 }
 
-function getStatusFilterLabel(filter: ScheduleStatusFilter): string {
-  return statusFilters.find((item) => item.value === filter)?.label ?? 'Semua';
+function getScheduleProgress(detail?: CareScheduleDetail): string {
+  if (!detail || detail.tasks.length === 0) {
+    return 'Belum ada realisasi';
+  }
+
+  const completed = detail.tasks.filter((task) => task.status === 'completed').length;
+  const postponed = detail.tasks.filter((task) => task.status === 'postponed').length;
+  const suffix = postponed > 0 ? `, ${postponed} tertunda` : '';
+
+  return `${completed}/${detail.tasks.length} selesai${suffix}`;
 }
 
-function getSourceFilterLabel(filter: ScheduleSourceFilter): string {
-  return sourceFilters.find((item) => item.value === filter)?.label ?? 'Semua';
+function formatWorkerSummary(workers: string[]): string {
+  if (workers.length === 0) {
+    return 'Pekerja belum tersedia';
+  }
+
+  if (workers.length === 1) {
+    return workers[0];
+  }
+
+  return `${workers.length} pekerja`;
 }
 
 function formatDate(value: string): string {

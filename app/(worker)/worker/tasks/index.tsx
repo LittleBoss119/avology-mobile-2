@@ -2,19 +2,20 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { formatCareTarget, formatTaskSource } from '../../../../src/components/care-schedule-components';
+import { formatCareTarget } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import {
   Badge,
+  CameraGlyph,
   Card,
   ChipButton,
   CompactMetaItem,
   EmptyState,
   ErrorBanner,
+  FilterChipsRow,
   LoadingState,
   MainTabHeader,
   Screen,
-  SectionHeader,
 } from '../../../../src/components/ui';
 import { colors, radius, spacing } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
@@ -93,12 +94,7 @@ export default function WorkerTaskListScreen() {
 
       {filteredTasks.length === 0 ? (
         <EmptyState
-          title={tasks.length === 0 || rangeFilter === 'today' ? 'Tidak ada tugas hari ini' : 'Tidak ada tugas pada pilihan ini'}
-          subtitle={
-            tasks.length === 0
-              ? 'Tugas baru akan muncul jika pemilik membuat jadwal.'
-              : 'Coba pilih filter tugas yang lain.'
-          }
+          title={tasks.length === 0 ? 'Belum ada tugas.' : rangeFilter === 'today' ? 'Belum ada tugas hari ini.' : 'Tidak ada tugas pada filter ini.'}
         />
       ) : (
         <View style={{ gap: 12 }}>
@@ -123,19 +119,16 @@ function RangeFilter({
   selectedRange: TaskRangeFilter;
 }) {
   return (
-    <View style={{ gap: spacing.sm }}>
-      <SectionHeader title="Filter Tugas" />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {taskRangeFilters.map((filter) => (
-          <ChipButton
-            key={filter.value}
-            active={selectedRange === filter.value}
-            label={filter.label}
-            onPress={() => onSelect(filter.value)}
-          />
-        ))}
-      </View>
-    </View>
+    <FilterChipsRow>
+      {taskRangeFilters.map((filter) => (
+        <ChipButton
+          key={filter.value}
+          active={selectedRange === filter.value}
+          label={filter.label}
+          onPress={() => onSelect(filter.value)}
+        />
+      ))}
+    </FilterChipsRow>
   );
 }
 
@@ -199,14 +192,17 @@ function WorkerTaskCard({ onPress, task }: { onPress: () => void; task: CareTask
             <Badge label={formatTaskStatusLabel(task.status)} maxWidth={100} tone={getTaskTone(task.status)} />
           </View>
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            {task.category ? <Badge label={formatCareCategory(task.category)} maxWidth={140} tone="success" /> : null}
-            {task.requiresPhoto ? <Badge label="Butuh bukti" maxWidth={116} tone="warning" /> : null}
-            <Badge label={formatTaskSource(task)} maxWidth={116} tone="muted" />
+          <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {task.category ? (
+              <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '800' }}>
+                {formatCareCategory(task.category)}
+              </Text>
+            ) : null}
+            {task.requiresPhoto ? <ProofPhotoIndicator /> : null}
           </View>
 
           {task.instruction ? (
-            <Text selectable ellipsizeMode="tail" numberOfLines={2} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+            <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
               {task.instruction}
             </Text>
           ) : null}
@@ -220,6 +216,27 @@ function WorkerTaskCard({ onPress, task }: { onPress: () => void; task: CareTask
         </View>
       </Card>
     </Pressable>
+  );
+}
+
+function ProofPhotoIndicator() {
+  return (
+    <View
+      accessibilityLabel="Perlu bukti foto"
+      style={{
+        alignItems: 'center',
+        backgroundColor: colors.warningBg,
+        borderColor: colors.warningBorder,
+        borderCurve: 'continuous',
+        borderRadius: radius.round,
+        borderWidth: 1,
+        height: 26,
+        justifyContent: 'center',
+        width: 26,
+      }}
+    >
+      <CameraGlyph color={colors.warning} />
+    </View>
   );
 }
 
