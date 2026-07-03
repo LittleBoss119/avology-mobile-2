@@ -12,10 +12,10 @@ import {
   Badge,
   Button,
   Card,
+  CompactMetaItem,
   EmptyState,
   ErrorBanner,
   LoadingState,
-  MetaRow,
   Screen,
   TopAppBar,
 } from '../../../../src/components/ui';
@@ -152,7 +152,6 @@ export default function CareSOPDetailScreen() {
             disabled={!sop.isActive}
             onPress={() => router.push(`/owner/sops/${sop.id}/schedule`)}
           />
-          <Button title="Edit SOP" variant="secondary" onPress={() => router.push(`/owner/sops/${sop.id}/edit`)} />
         </View>
       }
     >
@@ -195,13 +194,12 @@ export default function CareSOPDetailScreen() {
           {sop.name}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-          <Badge label={formatCareCategory(sop.category)} tone="success" />
           <Badge label={sop.isActive ? 'Aktif' : 'Nonaktif'} tone={sop.isActive ? 'success' : 'muted'} />
+          <Badge label={formatCareCategory(sop.category)} tone="success" />
         </View>
-        <View style={{ gap: 10 }}>
-          <MetaRow label="Kategori" value={formatCareCategory(sop.category)} />
-          <MetaRow label="Periode" value={formatIntervalDays(sop.intervalDays)} />
-          <MetaRow label="Target bawaan" value={formatCareSOPTarget(sop)} />
+        <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+          <CompactMetaItem icon="calendar" label={formatIntervalDays(sop.intervalDays)} />
+          <CompactMetaItem icon="target" label={formatCareSOPTarget(sop)} />
         </View>
       </Card>
 
@@ -211,15 +209,6 @@ export default function CareSOPDetailScreen() {
         </Text>
         <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
           {sop.defaultInstruction || 'Belum ada instruksi default.'}
-        </Text>
-      </Card>
-
-      <Card>
-        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
-          Penggunaan
-        </Text>
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-          SOP ini menjadi template saat owner membuat jadwal perawatan. Jadwal tetap dibuat manual oleh owner.
         </Text>
       </Card>
 
@@ -256,10 +245,18 @@ function MenuButton({ onPress }: { onPress: () => void }) {
         width: 44,
       }}
     >
-      <Text selectable style={{ color: colors.primary, fontSize: 20, fontWeight: '900', lineHeight: 22 }}>
-        ...
-      </Text>
+      <KebabGlyph />
     </Pressable>
+  );
+}
+
+function KebabGlyph() {
+  return (
+    <View style={{ alignItems: 'center', gap: 3 }}>
+      <View style={{ backgroundColor: colors.primary, borderRadius: 999, height: 4, width: 4 }} />
+      <View style={{ backgroundColor: colors.primary, borderRadius: 999, height: 4, width: 4 }} />
+      <View style={{ backgroundColor: colors.primary, borderRadius: 999, height: 4, width: 4 }} />
+    </View>
   );
 }
 

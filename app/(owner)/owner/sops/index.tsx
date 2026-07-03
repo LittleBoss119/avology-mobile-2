@@ -12,8 +12,10 @@ import {
 import {
   appTheme,
   Card,
+  ChipButton,
   EmptyState,
   ErrorBanner,
+  FilterChipsRow,
   LoadingState,
   SearchFilterRow,
   SectionHeader,
@@ -125,6 +127,18 @@ export default function CareSOPListScreen() {
 
     return matchesSearch && matchesCategory && matchesTarget && matchesActiveStatus && matchesDueStatus;
   });
+  const hasActiveFilters =
+    categoryFilter !== 'all' ||
+    targetTypeFilter !== 'all' ||
+    activeStatusFilter !== 'all' ||
+    dueStatusFilter !== 'all';
+
+  function clearFilters() {
+    setCategoryFilter('all');
+    setTargetTypeFilter('all');
+    setActiveStatusFilter('all');
+    setDueStatusFilter('all');
+  }
 
   return (
     <Screen
@@ -150,56 +164,18 @@ export default function CareSOPListScreen() {
         value={search}
       />
 
-      <Card>
-        <SectionHeader title="Filter SOP" description="Saring template berdasarkan kategori, target, status, dan acuan jadwal." />
-        <FilterChips
-          label="Kategori"
-          options={[
-            { label: 'Semua kategori', value: 'all' },
-            ...careCategoryOptions.map((category) => ({
-              label: formatCareCategory(category),
-              value: category,
-            })),
-          ]}
-          selectedValue={categoryFilter}
-          onSelect={(value) => setCategoryFilter(value as CareCategory | 'all')}
-        />
-        <FilterChips
-          label="Target"
-          options={[
-            { label: 'Semua target', value: 'all' },
-            ...careSopTargetOptions.map((targetType) => ({
-              label: formatTargetType(targetType),
-              value: targetType,
-            })),
-          ]}
-          selectedValue={targetTypeFilter}
-          onSelect={(value) => setTargetTypeFilter(value as CareSOPDefaultTargetType | 'all')}
-        />
-        <FilterChips
-          label="Status"
-          options={[
-            { label: 'Semua status', value: 'all' },
-            { label: 'Aktif', value: 'active' },
-            { label: 'Nonaktif', value: 'inactive' },
-          ]}
-          selectedValue={activeStatusFilter}
-          onSelect={(value) => setActiveStatusFilter(value as ActiveStatusFilter)}
-        />
-        <FilterChips
-          label="Acuan jadwal"
-          options={[
-            { label: 'Semua', value: 'all' },
-            { label: 'Terlambat', value: 'overdue' },
-            { label: 'Hari ini', value: 'due_today' },
-            { label: 'Belum jatuh tempo', value: 'upcoming' },
-            { label: 'Belum ada realisasi', value: 'no_history' },
-            { label: 'Tidak ada interval', value: 'no_interval' },
-          ]}
-          selectedValue={dueStatusFilter}
-          onSelect={(value) => setDueStatusFilter(value as DueStatusFilter)}
-        />
-      </Card>
+      <SOPFilterControls
+        activeStatusFilter={activeStatusFilter}
+        categoryFilter={categoryFilter}
+        dueStatusFilter={dueStatusFilter}
+        hasActiveFilters={hasActiveFilters}
+        onActiveStatusChange={setActiveStatusFilter}
+        onCategoryChange={setCategoryFilter}
+        onClear={clearFilters}
+        onDueStatusChange={setDueStatusFilter}
+        onTargetTypeChange={setTargetTypeFilter}
+        targetTypeFilter={targetTypeFilter}
+      />
 
       <SectionHeader title="Daftar SOP">
         <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -214,12 +190,7 @@ export default function CareSOPListScreen() {
 
       {displayedSops.length === 0 ? (
         <EmptyState
-          title={sops.length === 0 ? 'Belum ada SOP' : 'SOP tidak ditemukan'}
-          subtitle={
-            sops.length === 0
-              ? 'Buat template SOP agar jadwal perawatan bisa dibuat lebih cepat dan konsisten.'
-              : 'Coba ubah kata kunci atau filter SOP.'
-          }
+          title={sops.length === 0 ? 'Belum ada SOP.' : 'Tidak ada SOP pada filter ini.'}
         />
       ) : (
         <View style={{ gap: 12 }}>
@@ -285,46 +256,66 @@ function SummaryPill({ label, value }: { label: string; value: number }) {
   );
 }
 
-function FilterChips<TValue extends string>({
-  label,
-  onSelect,
-  options,
-  selectedValue,
+function SOPFilterControls({
+  activeStatusFilter,
+  categoryFilter,
+  dueStatusFilter,
+  hasActiveFilters,
+  onActiveStatusChange,
+  onCategoryChange,
+  onClear,
+  onDueStatusChange,
+  onTargetTypeChange,
+  targetTypeFilter,
 }: {
-  label: string;
-  onSelect: (value: TValue) => void;
-  options: Array<{ label: string; value: TValue }>;
-  selectedValue: TValue;
+  activeStatusFilter: ActiveStatusFilter;
+  categoryFilter: CareCategory | 'all';
+  dueStatusFilter: DueStatusFilter;
+  hasActiveFilters: boolean;
+  onActiveStatusChange: (value: ActiveStatusFilter) => void;
+  onCategoryChange: (value: CareCategory | 'all') => void;
+  onClear: () => void;
+  onDueStatusChange: (value: DueStatusFilter) => void;
+  onTargetTypeChange: (value: CareSOPDefaultTargetType | 'all') => void;
+  targetTypeFilter: CareSOPDefaultTargetType | 'all';
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: colors.text, fontSize: 13, fontWeight: '800' }}>
-        {label}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {options.map((option) => {
-          const active = selectedValue === option.value;
-
-          return (
-            <Pressable
-              key={option.value}
-              onPress={() => onSelect(option.value)}
-              style={{
-                backgroundColor: active ? colors.primary : colors.surface,
-                borderColor: active ? colors.primary : colors.border,
-                borderRadius: radius.round,
-                borderWidth: 1,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-              }}
-            >
-              <Text selectable style={{ color: active ? '#FFFFFF' : colors.text, fontSize: 13, fontWeight: '800' }}>
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <FilterChipsRow hasActiveFilters={hasActiveFilters} onClear={onClear}>
+        <ChipButton active={categoryFilter === 'all'} label="Semua kategori" onPress={() => onCategoryChange('all')} />
+        {careCategoryOptions.map((category) => (
+          <ChipButton
+            key={category}
+            active={categoryFilter === category}
+            label={formatCareCategory(category)}
+            onPress={() => onCategoryChange(category)}
+          />
+        ))}
+      </FilterChipsRow>
+      <FilterChipsRow>
+        <ChipButton active={targetTypeFilter === 'all'} label="Semua target" onPress={() => onTargetTypeChange('all')} />
+        {careSopTargetOptions.map((targetType) => (
+          <ChipButton
+            key={targetType}
+            active={targetTypeFilter === targetType}
+            label={formatTargetType(targetType)}
+            onPress={() => onTargetTypeChange(targetType)}
+          />
+        ))}
+      </FilterChipsRow>
+      <FilterChipsRow>
+        <ChipButton active={activeStatusFilter === 'all'} label="Semua status" onPress={() => onActiveStatusChange('all')} />
+        <ChipButton active={activeStatusFilter === 'active'} label="Aktif" onPress={() => onActiveStatusChange('active')} />
+        <ChipButton active={activeStatusFilter === 'inactive'} label="Nonaktif" onPress={() => onActiveStatusChange('inactive')} />
+      </FilterChipsRow>
+      <FilterChipsRow>
+        <ChipButton active={dueStatusFilter === 'all'} label="Semua acuan" onPress={() => onDueStatusChange('all')} />
+        <ChipButton active={dueStatusFilter === 'overdue'} label="Terlambat" onPress={() => onDueStatusChange('overdue')} />
+        <ChipButton active={dueStatusFilter === 'due_today'} label="Hari ini" onPress={() => onDueStatusChange('due_today')} />
+        <ChipButton active={dueStatusFilter === 'upcoming'} label="Belum jatuh tempo" onPress={() => onDueStatusChange('upcoming')} />
+        <ChipButton active={dueStatusFilter === 'no_history'} label="Belum ada realisasi" onPress={() => onDueStatusChange('no_history')} />
+        <ChipButton active={dueStatusFilter === 'no_interval'} label="Tidak ada interval" onPress={() => onDueStatusChange('no_interval')} />
+      </FilterChipsRow>
     </View>
   );
 }

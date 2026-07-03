@@ -15,7 +15,7 @@ import {
 } from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
 import { colors, radius, spacing } from '../constants/theme';
-import { Badge, Button, Card, EmptyState, Field, FormSection, MetaRow } from './ui';
+import { Badge, Button, Card, CompactMetaItem, EmptyState, Field, FormSection, MetaRow } from './ui';
 
 export type CareSOPFormValues = {
   name: string;
@@ -54,7 +54,7 @@ export function CareSOPCard({
 }) {
   const content = (
     <Card>
-      <View style={{ gap: 8 }}>
+      <View style={{ gap: spacing.sm }}>
         <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 8, justifyContent: 'space-between' }}>
           <Text
             selectable
@@ -66,10 +66,12 @@ export function CareSOPCard({
           </Text>
           <Badge label={sop.isActive ? 'Aktif' : 'Nonaktif'} maxWidth={86} tone={sop.isActive ? 'success' : 'muted'} />
         </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-          <Badge label={formatCareCategoryShort(sop.category)} maxWidth={116} tone="success" />
-          <Badge label={formatTargetType(sop.defaultTargetType)} maxWidth={116} tone="info" />
-          {reference ? (
+
+        <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+          <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '800' }}>
+            {formatCareCategoryShort(sop.category)}
+          </Text>
+          {reference && isActionableReference(reference) ? (
             <Badge
               label={formatScheduleReferenceStatus(reference)}
               maxWidth={160}
@@ -77,20 +79,14 @@ export function CareSOPCard({
             />
           ) : null}
         </View>
-        {sop.defaultInstruction ? (
-          <Text selectable ellipsizeMode="tail" numberOfLines={2} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-            {sop.defaultInstruction}
-          </Text>
-        ) : null}
-        <View style={{ gap: 3 }}>
-          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-            {formatIntervalDays(sop.intervalDays)} - Target: {formatCareSOPTarget(sop)}
-          </Text>
+
+        <View style={{ gap: spacing.xs }}>
+          <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+            <CompactMetaItem icon="calendar" label={formatIntervalDays(sop.intervalDays)} />
+            <CompactMetaItem icon="target" label={formatCareSOPTarget(sop)} />
+          </View>
           <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
             Acuan: {reference ? formatScheduleReferenceShortStatus(reference) : 'Belum tersedia'}
-          </Text>
-          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textSoft, fontSize: 12, lineHeight: 16 }}>
-            Diperbarui: {formatDateOnly(sop.updatedAt ?? sop.createdAt ?? '')}
           </Text>
         </View>
       </View>
@@ -325,6 +321,10 @@ function formatScheduleReferenceShortStatus(reference: CareSOPNextScheduleRefere
   return reference.overdueDays !== undefined
     ? `Terlambat ${reference.overdueDays} hari`
     : 'Terlambat';
+}
+
+function isActionableReference(reference: CareSOPNextScheduleReference): boolean {
+  return reference.status === 'overdue' || reference.status === 'due_today';
 }
 
 function OptionGroup<TValue extends string>({
