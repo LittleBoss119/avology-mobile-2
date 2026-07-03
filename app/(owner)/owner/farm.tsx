@@ -2,37 +2,33 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { Badge, Card, ErrorBanner, MainTabHeader, MetaRow, Screen, SectionHeader } from '../../../src/components/ui';
+import { Card, MainTabHeader, MetaRow, Screen, SectionHeader } from '../../../src/components/ui';
 import { colors, radius, spacing } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
 import { getOwnerDashboardSummary } from '../../../src/services/dashboardService';
 import { getActiveWorkers, getFarmActorDisplayProfiles, getPendingWorkers } from '../../../src/services/memberService';
 import type { FarmActorDisplayProfile, OwnerDashboardSummary, WorkerMembership } from '../../../src/types/domain';
-import { formatMemberStatus, formatPersonDisplayName, formatRole } from '../../../src/utils/displayFormat';
 
 type OwnerFarmHubData = {
   activeWorkerCount: number | null;
   activeWorkers: WorkerMembership[];
   actors: FarmActorDisplayProfile[];
   pendingWorkerCount: number | null;
-  pendingWorkers: WorkerMembership[];
   summary: OwnerDashboardSummary | null;
 };
 
 export default function OwnerFarmHubScreen() {
-  const { currentFarm, profile, signOut } = useAuth();
+  const { currentFarm } = useAuth();
   const [hubData, setHubData] = React.useState<OwnerFarmHubData>({
     activeWorkerCount: null,
     activeWorkers: [],
     actors: [],
     pendingWorkerCount: null,
-    pendingWorkers: [],
     summary: null,
   });
-  const [loggingOut, setLoggingOut] = React.useState(false);
-  const [logoutError, setLogoutError] = React.useState<string | null>(null);
   const farm = currentFarm?.farm;
   const farmId = currentFarm?.farmId;
+  const ownerName = findOwnerName(hubData.actors) ?? 'Pemilik kebun';
 
   useFocusEffect(
     React.useCallback(() => {
@@ -59,7 +55,6 @@ export default function OwnerFarmHubScreen() {
           activeWorkers: activeWorkersResult.data ?? [],
           actors: actorsResult.data ?? [],
           pendingWorkerCount: pendingWorkersResult.error ? null : pendingWorkersResult.data?.length ?? 0,
-          pendingWorkers: pendingWorkersResult.data ?? [],
           summary: summaryResult.data,
         });
 
@@ -77,73 +72,78 @@ export default function OwnerFarmHubScreen() {
     }, [farmId])
   );
 
-  async function handleLogout() {
-    setLoggingOut(true);
-    setLogoutError(null);
-
-    const result = await signOut();
-
-    if (result) {
-      setLogoutError(result.message);
-      setLoggingOut(false);
-      return;
-    }
-
-    setLoggingOut(false);
-    router.replace('/get-started');
-  }
-
-  const ownerName = findOwnerName(hubData.actors) ?? formatPersonDisplayName(profile?.fullName, 'Pemilik kebun');
-
   return (
     <Screen>
-      <MainTabHeader
-        title="Kebun"
-        roleLabel="Pemilik"
-        subtitle="Data kebun, anggota, dan operasional."
-        onProfilePress={() => router.push('/owner/profile')}
-      />
-      <ErrorBanner message={logoutError} />
+      <MainTabHeader title="Kebun" onProfilePress={() => router.push('/owner/profile')} />
 
       <Card variant="highlight">
-        <SectionHeader description="Ringkasan identitas kebun aktif." title="Data Kebun" />
+        <SectionHeader title="Profil Kebun" />
         {!farm ? (
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Data utama kebun belum tersedia. Coba buka kembali halaman ini beberapa saat lagi.
+            Data kebun belum tersedia.
           </Text>
         ) : null}
         <MetaRow label="Nama kebun" value={farm?.name} />
         <MetaRow label="Lokasi" value={farm?.location} />
-        <MetaRow label="Luas kebun" value={formatArea(farm?.areaSize)} />
+        <MetaRow label="Luas" value={formatArea(farm?.areaSize)} />
         <MetaRow label="Total pohon aktif" value={formatCount(hubData.summary?.totalTrees, 'pohon')} />
-        <MetaRow label="Kode bergabung" value={farm?.joinCode} />
-        <NavRow label="Buka Profil Kebun" onPress={() => router.push('/owner/farm-profile')} />
+        <NavRow label="Edit kebun" onPress={() => router.push('/owner/farm-profile')} />
       </Card>
 
       <Card>
-        <SectionHeader description="Pantau anggota dan pengajuan akses pekerja." title="Anggota Kebun" />
+        <SectionHeader title="Kode Bergabung" />
+        <View
+          style={{
+            backgroundColor: colors.surfaceMuted,
+            borderColor: colors.border,
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            gap: spacing.xs,
+            padding: spacing.md,
+          }}
+        >
+          <Text selectable style={{ color: colors.text, fontSize: 24, fontWeight: '900', letterSpacing: 1 }}>
+            {farm?.joinCode ?? 'Belum tersedia'}
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+            Tekan lama kode untuk menyalin.
+          </Text>
+        </View>
+      </Card>
+
+      <Card>
+        <SectionHeader title="Anggota Kebun" />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
           <SummaryPill label="Pekerja aktif" value={formatSummaryCount(hubData.activeWorkerCount)} />
           <SummaryPill label="Menunggu" tone="warning" value={formatSummaryCount(hubData.pendingWorkerCount)} />
         </View>
-        <MetaRow label="Owner" value={ownerName} />
-        <NavRow label="Kelola Anggota" onPress={() => router.push('/owner/workers')} />
+        <MetaRow label="Pemilik" value={ownerName} />
+        {hubData.activeWorkers.length > 0 ? (
+          <View style={{ gap: spacing.sm }}>
+            {hubData.activeWorkers.slice(0, 3).map((worker) => (
+              <WorkerPreviewRow key={worker.membershipId} worker={worker} />
+            ))}
+          </View>
+        ) : (
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+            Belum ada pekerja aktif.
+          </Text>
+        )}
+        <NavRow label="Kelola Pekerja" onPress={() => router.push('/owner/workers')} />
       </Card>
 
       <Card>
-        <SectionHeader description="Akses cepat untuk pekerjaan operasional kebun." title="Manajemen Operasional" />
-        <NavRow label="Manajemen Pekerja" subtitle="Kelola pekerja aktif dan pengajuan." onPress={() => router.push('/owner/workers')} />
-        <NavRow label="SOP Perawatan" subtitle="Template instruksi dan jadwal berulang." onPress={() => router.push('/owner/sops')} />
-        <NavRow label="Jadwal Perawatan" subtitle="Buat dan pantau agenda perawatan." onPress={() => router.push('/owner/schedules')} />
-      </Card>
-
-      <Card>
-        <SectionHeader description="Data pribadi akun Avology." title="Akun Saya" />
-        <MetaRow label="Nama" value={formatPersonDisplayName(profile?.fullName, 'Pemilik kebun')} />
-        {profile?.email ? <MetaRow label="Email login" value={profile.email} /> : null}
-        <MetaRow label="Nomor HP" value={profile?.phone} />
-        <NavRow label="Profil Akun" onPress={() => router.push('/owner/profile')} />
-        <DangerRow disabled={loggingOut} label={loggingOut ? 'Keluar...' : 'Keluar Akun'} onPress={handleLogout} />
+        <SectionHeader title="Operasional" />
+        <NavRow
+          label="SOP Perawatan"
+          subtitle="Template instruksi perawatan kebun."
+          onPress={() => router.push('/owner/sops')}
+        />
+        <NavRow
+          label="Jadwal Perawatan"
+          subtitle="Buat dan pantau agenda kerja."
+          onPress={() => router.push('/owner/schedules')}
+        />
       </Card>
     </Screen>
   );
@@ -154,6 +154,7 @@ function NavRow({ label, onPress, subtitle }: { label: string; onPress: () => vo
     <Pressable
       onPress={onPress}
       style={({ pressed }) => ({
+        alignItems: 'center',
         backgroundColor: pressed ? colors.surfaceMuted : colors.surface,
         borderColor: colors.border,
         borderRadius: radius.lg,
@@ -181,27 +182,6 @@ function NavRow({ label, onPress, subtitle }: { label: string; onPress: () => vo
   );
 }
 
-function DangerRow({ disabled, label, onPress }: { disabled?: boolean; label: string; onPress: () => void }) {
-  return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        backgroundColor: pressed ? colors.dangerBorder : colors.dangerBg,
-        borderColor: colors.dangerBorder,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        opacity: disabled ? 0.6 : 1,
-        padding: spacing.md,
-      })}
-    >
-      <Text selectable style={{ color: colors.danger, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 function SummaryPill({ label, tone = 'success', value }: { label: string; tone?: 'success' | 'warning'; value: number | string }) {
   const isUnavailable = typeof value === 'string';
 
@@ -224,6 +204,28 @@ function SummaryPill({ label, tone = 'success', value }: { label: string; tone?:
       <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
         {label}
       </Text>
+    </View>
+  );
+}
+
+function WorkerPreviewRow({ worker }: { worker: WorkerMembership }) {
+  return (
+    <View
+      style={{
+        borderColor: colors.border,
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        padding: spacing.md,
+      }}
+    >
+      <Text selectable numberOfLines={1} style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
+        {worker.fullName}
+      </Text>
+      {worker.phone ? (
+        <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+          {worker.phone}
+        </Text>
+      ) : null}
     </View>
   );
 }
