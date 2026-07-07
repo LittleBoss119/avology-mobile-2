@@ -1,5 +1,7 @@
 # Avology V2 Final Design Specification
 
+> **Note — partially superseded (2026-07-07):** On **navigation labels, design tokens, the photo-picker pattern, and the tree-detail action button**, this spec is superseded by [`../ui-review/avology-v2-design-recommendation-for-codex.md`](../ui-review/avology-v2-design-recommendation-for-codex.md) (2026-07-02), which is authoritative on those specific points. Everything else in this document still applies.
+
 **Status:** Final UI/UX direction for Avology V2  
 **Purpose:** Menjadi panduan implementasi desain di project Avology Mobile V2.  
 **Design strategy:** V2 tetap menjadi project final dan sumber kebenaran fitur. V1 digunakan sebagai referensi visual polish, sectioning form, card hierarchy, dan rasa mobile app yang lebih matang.
