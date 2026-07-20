@@ -10,9 +10,7 @@ import {
 } from '../services/careTaskService';
 import { getActiveWorkers, getFarmMemberBasicProfiles } from '../services/memberService';
 import {
-  getOperationalReportPhotos,
   listTaskProofPhotosForActivities,
-  listOperationalReportPhotosForReports,
 } from '../services/photoAttachmentService';
 import {
   createOperationalReport,
@@ -37,8 +35,6 @@ import type {
   WorkerMembership,
 } from '../types/domain';
 import type {
-  OperationalReportPhoto,
-  OperationalReportPhotoMap,
   TaskProofPhotoMap,
 } from '../types/media';
 import {
@@ -233,7 +229,6 @@ export function WorkerOperationalReportListScreen({
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [photoMap, setPhotoMap] = React.useState<OperationalReportPhotoMap>({});
   const [reports, setReports] = React.useState<OperationalReport[]>([]);
   const [statusFilter, setStatusFilter] = React.useState<OperationalReportStatusFilter>('all');
 
@@ -249,7 +244,6 @@ export function WorkerOperationalReportListScreen({
   const loadReports = React.useCallback(async () => {
     if (!farmId || currentFarm?.role !== 'worker' || currentFarm.status !== 'active') {
       setError('Hanya pekerja aktif yang dapat melihat laporan operasional.');
-      setPhotoMap({});
       setReports([]);
       return;
     }
@@ -263,22 +257,11 @@ export function WorkerOperationalReportListScreen({
 
     if (result.error) {
       setError(result.error.message);
-      setPhotoMap({});
       setReports([]);
       return;
     }
 
     setReports(result.data);
-    const photoResult = await listOperationalReportPhotosForReports({
-      farmId,
-      reportIds: result.data.map((report) => report.id),
-    });
-
-    if (photoResult.error) {
-      setPhotoMap({});
-    } else {
-      setPhotoMap(photoResult.data);
-    }
   }, [currentFarm?.role, currentFarm?.status, currentFarm?.userId, farmId]);
 
   useFocusEffect(
@@ -323,7 +306,6 @@ export function WorkerOperationalReportListScreen({
             <OperationalReportCard
               key={report.id}
               compactStatus
-              hasPhoto={Boolean(photoMap[report.id])}
               report={report}
               onPress={() => router.push(`/worker/reports/${report.id}`)}
             />
@@ -340,8 +322,6 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
   const [followUpTasks, setFollowUpTasks] = React.useState<CareTaskDetail[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [report, setReport] = React.useState<OperationalReport | null>(null);
-  const [reportPhoto, setReportPhoto] = React.useState<OperationalReportPhoto | null>(null);
-  const [reportPhotoPreviewOpen, setReportPhotoPreviewOpen] = React.useState(false);
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
 
   const farmId = currentFarm?.farmId;
@@ -353,7 +333,6 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
       setError('Data laporan tidak ditemukan.');
       setFollowUpTasks([]);
       setReport(null);
-      setReportPhoto(null);
       setWorkerNames({});
       return;
     }
@@ -362,7 +341,6 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
       setError('Hanya pekerja aktif yang dapat melihat detail laporan operasional.');
       setFollowUpTasks([]);
       setReport(null);
-      setReportPhoto(null);
       setWorkerNames({});
       return;
     }
@@ -378,36 +356,22 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
       setError(reportResult.error.message);
       setFollowUpTasks([]);
       setReport(null);
-      setReportPhoto(null);
     } else if (reportResult.data.reportedBy !== currentFarm.userId) {
       setError('Laporan tidak ditemukan atau bukan laporan milik Anda.');
       setFollowUpTasks([]);
       setReport(null);
-      setReportPhoto(null);
     } else {
       setReport(reportResult.data);
 
-      const [tasksResult, photoResult] = await Promise.all([
-        getOperationalReportFollowUpTasks({
-          operationalReportId: normalizedReportId,
-        }),
-        getOperationalReportPhotos({
-          farmId: reportResult.data.farmId,
-          reportId: reportResult.data.id,
-        }),
-      ]);
+      const tasksResult = await getOperationalReportFollowUpTasks({
+        operationalReportId: normalizedReportId,
+      });
 
       if (tasksResult.error) {
         setError(tasksResult.error.message);
         setFollowUpTasks([]);
       } else {
         setFollowUpTasks(tasksResult.data);
-      }
-
-      if (photoResult.error) {
-        setReportPhoto(null);
-      } else {
-        setReportPhoto(photoResult.data[0] ?? null);
       }
     }
 
@@ -456,13 +420,6 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
       <ErrorBanner message={error} />
 
       <ReportDetailSummaryCard report={report} />
-
-      <OperationalReportPhotoSection
-        photo={reportPhoto}
-        previewOpen={reportPhotoPreviewOpen}
-        onClosePreview={() => setReportPhotoPreviewOpen(false)}
-        onOpenPreview={() => setReportPhotoPreviewOpen(true)}
-      />
 
       {canEditReport ? (
         <Card>
@@ -711,7 +668,6 @@ export function OwnerOperationalReportListScreen({
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [categoryFilter, setCategoryFilter] = React.useState<OperationalReportCategoryFilter>('all');
-  const [photoMap, setPhotoMap] = React.useState<OperationalReportPhotoMap>({});
   const [reports, setReports] = React.useState<OperationalReport[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<OperationalReportStatusFilter>('all');
@@ -744,7 +700,6 @@ export function OwnerOperationalReportListScreen({
   const loadReports = React.useCallback(async () => {
     if (!farmId || currentFarm?.role !== 'owner' || currentFarm.status !== 'active') {
       setError('Hanya pemilik aktif yang dapat melihat laporan operasional.');
-      setPhotoMap({});
       setReports([]);
       setWorkerNames({});
       return;
@@ -759,21 +714,9 @@ export function OwnerOperationalReportListScreen({
 
     if (reportsResult.error) {
       setError(reportsResult.error.message);
-      setPhotoMap({});
       setReports([]);
     } else {
       setReports(reportsResult.data);
-
-      const photoResult = await listOperationalReportPhotosForReports({
-        farmId,
-        reportIds: reportsResult.data.map((report) => report.id),
-      });
-
-      if (photoResult.error) {
-        setPhotoMap({});
-      } else {
-        setPhotoMap(photoResult.data);
-      }
     }
 
     if (workersResult.error) {
@@ -840,7 +783,6 @@ export function OwnerOperationalReportListScreen({
             <OperationalReportCard
               key={report.id}
               compactStatus
-              hasPhoto={Boolean(photoMap[report.id])}
               report={report}
               reporterName={workerNames[report.reportedBy]}
               onPress={() => router.push(`/owner/reports/${report.id}`)}
@@ -859,8 +801,6 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
   const [loading, setLoading] = React.useState(true);
   const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [report, setReport] = React.useState<OperationalReport | null>(null);
-  const [reportPhoto, setReportPhoto] = React.useState<OperationalReportPhoto | null>(null);
-  const [reportPhotoPreviewOpen, setReportPhotoPreviewOpen] = React.useState(false);
   const [ownerResponseNote, setOwnerResponseNote] = React.useState('');
   const [updatingStatus, setUpdatingStatus] = React.useState<OperationalReportStatus | null>(null);
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
@@ -875,7 +815,6 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
       setFollowUpTasks([]);
       setProofPhotoMap({});
       setReport(null);
-      setReportPhoto(null);
       setOwnerResponseNote('');
       setWorkerNames({});
       return;
@@ -886,7 +825,6 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
       setFollowUpTasks([]);
       setProofPhotoMap({});
       setReport(null);
-      setReportPhoto(null);
       setOwnerResponseNote('');
       setWorkerNames({});
       return;
@@ -905,22 +843,10 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
       setFollowUpTasks([]);
       setProofPhotoMap({});
       setReport(null);
-      setReportPhoto(null);
       setOwnerResponseNote('');
     } else {
       setReport(reportResult.data);
       setOwnerResponseNote(reportResult.data.ownerResponseNote ?? '');
-
-      const photoResult = await getOperationalReportPhotos({
-        farmId: reportResult.data.farmId,
-        reportId: reportResult.data.id,
-      });
-
-      if (photoResult.error) {
-        setReportPhoto(null);
-      } else {
-        setReportPhoto(photoResult.data[0] ?? null);
-      }
     }
 
     if (tasksResult.error) {
@@ -1008,14 +934,6 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
       <ErrorBanner message={error} />
 
       <ReportDetailSummaryCard report={report} reporterName={workerNames[report.reportedBy]} />
-
-      <OperationalReportPhotoSection
-        emptyText="Belum ada foto laporan."
-        photo={reportPhoto}
-        previewOpen={reportPhotoPreviewOpen}
-        onClosePreview={() => setReportPhotoPreviewOpen(false)}
-        onOpenPreview={() => setReportPhotoPreviewOpen(true)}
-      />
 
       <Card>
         <SectionHeader title="Catatan Laporan" />
@@ -1661,13 +1579,11 @@ function OwnerReportDecisionSection({
 
 function OperationalReportCard({
   compactStatus = false,
-  hasPhoto = false,
   onPress,
   report,
   reporterName,
 }: {
   compactStatus?: boolean;
-  hasPhoto?: boolean;
   onPress?: () => void;
   report: OperationalReport;
   reporterName?: string;
@@ -1692,7 +1608,6 @@ function OperationalReportCard({
         </View>
         <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
           <Badge label={formatOperationalReportCategory(report.category)} tone="info" />
-          {hasPhoto ? <PhotoIndicator /> : null}
         </View>
         <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
           {formatReportSummary(report)}
@@ -1729,96 +1644,6 @@ function PhotoIndicator() {
     >
       <CameraGlyph color={colors.success} />
     </View>
-  );
-}
-
-function OperationalReportPhotoSection({
-  emptyText,
-  onClosePreview,
-  onOpenPreview,
-  photo,
-  previewOpen,
-}: {
-  emptyText?: string;
-  onClosePreview: () => void;
-  onOpenPreview: () => void;
-  photo: OperationalReportPhoto | null;
-  previewOpen: boolean;
-}) {
-  const [imageFailed, setImageFailed] = React.useState(false);
-
-  React.useEffect(() => {
-    setImageFailed(false);
-  }, [photo?.signedUrl]);
-
-  if (!photo) {
-    if (!emptyText) {
-      return null;
-    }
-
-    return (
-      <Card>
-        <SectionHeader title="Foto Laporan" />
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-          {emptyText}
-        </Text>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <SectionHeader title="Foto Laporan" description="Ketuk foto untuk melihat ukuran lebih besar." />
-
-      {imageFailed ? (
-        <View
-          style={{
-            alignItems: 'center',
-            backgroundColor: colors.photoPlaceholder,
-            borderColor: colors.border,
-            borderCurve: 'continuous',
-            borderRadius: radius.lg,
-            borderWidth: 1,
-            minHeight: 118,
-            justifyContent: 'center',
-            padding: spacing.md,
-          }}
-        >
-          <Text selectable style={{ color: colors.textMuted, lineHeight: 20, textAlign: 'center' }}>
-            Foto laporan belum dapat dimuat.
-          </Text>
-        </View>
-      ) : (
-        <Pressable accessibilityRole="imagebutton" onPress={onOpenPreview}>
-          <Image
-            resizeMode="cover"
-            source={{ uri: photo.signedUrl }}
-            onError={() => setImageFailed(true)}
-            style={{
-              borderRadius: radius.lg,
-              height: 192,
-              width: '100%',
-            }}
-          />
-        </Pressable>
-      )}
-
-      <Modal animationType="fade" onRequestClose={onClosePreview} transparent visible={previewOpen && !imageFailed}>
-        <View style={{ backgroundColor: 'rgba(18, 28, 22, 0.78)', flex: 1, justifyContent: 'center', padding: 20 }}>
-          <Pressable accessibilityRole="button" onPress={onClosePreview} style={{ flex: 1, justifyContent: 'center' }}>
-            <Image
-              resizeMode="contain"
-              source={{ uri: photo.signedUrl }}
-              style={{
-                borderRadius: radius.lg,
-                height: '82%',
-                width: '100%',
-              }}
-            />
-          </Pressable>
-        </View>
-      </Modal>
-    </Card>
   );
 }
 
