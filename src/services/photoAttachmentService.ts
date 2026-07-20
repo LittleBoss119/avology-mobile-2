@@ -8,7 +8,6 @@ import type {
   DeleteTreeMainPhotoInput,
   DeletePhotoAttachmentInput,
   GetConditionRecordPhotosInput,
-  GetGrowthPhaseRecordPhotosInput,
   GetHarvestRecordPhotosInput,
   GetTreeMainPhotoData,
   GetPhotoSignedUrlData,
@@ -17,7 +16,6 @@ import type {
   ListOperationalReportPhotosForReportsInput,
   ListPhotoAttachmentsInput,
   ListTaskProofPhotosForActivitiesInput,
-  GrowthPhaseRecordPhoto,
   HarvestRecordPhoto,
   OperationalReportPhoto,
   OperationalReportPhotoMap,
@@ -32,7 +30,6 @@ import type {
   TreeMainPhotoMap,
   UploadConditionRecordPhotoInput,
   UploadEntityPhotoInput,
-  UploadGrowthPhaseRecordPhotoInput,
   UploadHarvestRecordPhotoInput,
   UploadOperationalReportPhotoInput,
   UploadTaskProofPhotoInput,
@@ -53,7 +50,6 @@ const PHOTO_ATTACHMENT_SELECT =
 const allowedEntityTypes: PhotoAttachmentEntityType[] = [
   'tree_main',
   'condition_record',
-  'growth_phase_record',
   'operational_report',
   'task_proof',
   'harvest_record',
@@ -61,7 +57,6 @@ const allowedEntityTypes: PhotoAttachmentEntityType[] = [
 
 const entityPathFolders: Record<PhotoAttachmentEntityType, PhotoAttachmentPathFolder> = {
   condition_record: 'condition-reports',
-  growth_phase_record: 'growth-phase-records',
   harvest_record: 'harvest-records',
   operational_report: 'operational-reports',
   task_proof: 'task-proofs',
@@ -915,58 +910,6 @@ export async function getTaskProofPhotos(
   return ok(
     photos.filter((photo): photo is TaskProofPhoto => photo !== null)
   );
-}
-
-export async function uploadGrowthPhaseRecordPhoto(
-  input: UploadGrowthPhaseRecordPhotoInput
-): Promise<ServiceResult<GrowthPhaseRecordPhoto>> {
-  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
-  const growthPhaseRecordId = normalizeRequiredText(
-    input.growthPhaseRecordId,
-    'Catatan fase tumbuh tidak valid.'
-  );
-
-  if (farmId instanceof Error) {
-    return fail(farmId);
-  }
-
-  if (growthPhaseRecordId instanceof Error) {
-    return fail(growthPhaseRecordId);
-  }
-
-  const result = await uploadEntityPhoto({
-    base64: input.base64,
-    caption: input.caption,
-    entityId: growthPhaseRecordId,
-    entityType: 'growth_phase_record',
-    farmId,
-    fileName: input.fileName,
-    isPrimary: false,
-    localUri: input.localUri,
-    mimeType: input.mimeType,
-  });
-
-  if (result.error) {
-    return fail(result.error, 'Foto fase tumbuh gagal diunggah.');
-  }
-
-  return ok(result.data);
-}
-
-export async function getGrowthPhaseRecordPhotos(
-  input: GetGrowthPhaseRecordPhotosInput
-): Promise<ServiceResult<GrowthPhaseRecordPhoto[]>> {
-  const result = await listEntityPhotos({
-    entityId: input.growthPhaseRecordId,
-    entityType: 'growth_phase_record',
-    farmId: input.farmId,
-  });
-
-  if (result.error) {
-    return fail(result.error, 'Gagal memuat foto fase tumbuh.');
-  }
-
-  return ok(result.data);
 }
 
 export async function uploadHarvestRecordPhoto(

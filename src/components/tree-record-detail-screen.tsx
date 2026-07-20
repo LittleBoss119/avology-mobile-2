@@ -15,7 +15,6 @@ import {
 import { getFarmActorDisplayProfiles } from '../services/memberService';
 import {
   getConditionRecordPhotos,
-  getGrowthPhaseRecordPhotos,
   getHarvestRecordPhotos,
 } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
@@ -341,8 +340,7 @@ async function loadRecordPhotos(
   }
 
   if (recordType === 'phase') {
-    const result = await getGrowthPhaseRecordPhotos({ growthPhaseRecordId: recordId, farmId });
-    return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl, photo.attachment.caption)), error: null };
+    return { data: [], error: null };
   }
 
   if (recordType === 'harvest') {

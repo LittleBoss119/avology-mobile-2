@@ -7,7 +7,6 @@ import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import {
   deleteTreeMainPhoto,
-  getGrowthPhaseRecordPhotos,
   getHarvestRecordPhotos,
   getTreeMainPhoto,
   listConditionRecordPhotosForTree,
@@ -19,7 +18,6 @@ import { pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type { Tree, TreeConditionReport, TreeHistoryItem } from '../types/domain';
 import type {
   ConditionRecordPhotoMap,
-  GrowthPhaseRecordPhotoMap,
   HarvestRecordPhotoMap,
   PickedPhotoAsset,
   TreeMainPhoto,
@@ -66,7 +64,6 @@ export function TreeDetailScreen({
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [history, setHistory] = React.useState<TreeHistoryItem[]>([]);
   const [conditionPhotoMap, setConditionPhotoMap] = React.useState<ConditionRecordPhotoMap>({});
-  const [growthPhasePhotoMap, setGrowthPhasePhotoMap] = React.useState<GrowthPhaseRecordPhotoMap>({});
   const [harvestPhotoMap, setHarvestPhotoMap] = React.useState<HarvestRecordPhotoMap>({});
   const [photoActionLoading, setPhotoActionLoading] = React.useState(false);
   const [photoSourceOpen, setPhotoSourceOpen] = React.useState(false);
@@ -80,7 +77,6 @@ export function TreeDetailScreen({
       setTree(null);
       setTreeMainPhoto(null);
       setConditionPhotoMap({});
-      setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
       setHistory([]);
       setReports([]);
@@ -96,7 +92,6 @@ export function TreeDetailScreen({
       setTree(null);
       setTreeMainPhoto(null);
       setConditionPhotoMap({});
-      setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
       setHistory([]);
       setReports([]);
@@ -108,7 +103,6 @@ export function TreeDetailScreen({
       setTree(null);
       setTreeMainPhoto(null);
       setConditionPhotoMap({});
-      setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
       setHistory([]);
       setReports([]);
@@ -133,14 +127,10 @@ export function TreeDetailScreen({
     if (historyResult.error) {
       setError(historyResult.error.message);
       setHistory([]);
-      setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
     } else {
       setHistory(historyResult.data);
-      await Promise.all([
-        loadGrowthPhasePhotos(treeResult.data.farmId, historyResult.data),
-        loadHarvestPhotos(treeResult.data.farmId, historyResult.data),
-      ]);
+      await loadHarvestPhotos(treeResult.data.farmId, historyResult.data);
     }
 
     if (photoResult.error) {
@@ -161,42 +151,6 @@ export function TreeDetailScreen({
       setConditionPhotoMap({});
     }
   }, [mode, treeId]);
-
-  async function loadGrowthPhasePhotos(farmId: string, historyItems: TreeHistoryItem[]) {
-    const growthPhaseRecordIds = Array.from(
-      new Set(
-        historyItems
-          .filter((item) => item.historyType === 'phase' && Boolean(item.sourceId))
-          .map((item) => item.sourceId as string)
-      )
-    );
-
-    if (growthPhaseRecordIds.length === 0) {
-      setGrowthPhasePhotoMap({});
-      return;
-    }
-
-    const entries = await Promise.all(
-      growthPhaseRecordIds.map(async (growthPhaseRecordId) => {
-        const result = await getGrowthPhaseRecordPhotos({
-          farmId,
-          growthPhaseRecordId,
-        });
-
-        if (result.error || result.data.length === 0) {
-          return null;
-        }
-
-        return [growthPhaseRecordId, result.data] as const;
-      })
-    );
-
-    setGrowthPhasePhotoMap(
-      Object.fromEntries(
-        entries.filter((entry): entry is [string, GrowthPhaseRecordPhotoMap[string]] => entry !== null)
-      )
-    );
-  }
 
   async function loadHarvestPhotos(farmId: string, historyItems: TreeHistoryItem[]) {
     const harvestRecordIds = Array.from(
@@ -475,7 +429,6 @@ export function TreeDetailScreen({
       <TreeHistoryTimeline
         conditionPhotoMap={conditionPhotoMap}
         currentUserId={profile?.id}
-        growthPhasePhotoMap={growthPhasePhotoMap}
         harvestPhotoMap={harvestPhotoMap}
         history={history}
         onRecordPress={handleOpenHistoryRecord}

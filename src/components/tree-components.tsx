@@ -15,7 +15,6 @@ import type {
 } from '../types/domain';
 import type {
   ConditionRecordPhotoMap,
-  GrowthPhaseRecordPhotoMap,
   HarvestRecordPhotoMap,
   PickedPhotoAsset,
 } from '../types/media';
@@ -91,7 +90,6 @@ export type ConditionReportListProps = {
 export type TreeHistoryTimelineProps = {
   conditionPhotoMap?: ConditionRecordPhotoMap;
   currentUserId?: string | null;
-  growthPhasePhotoMap?: GrowthPhaseRecordPhotoMap;
   harvestPhotoMap?: HarvestRecordPhotoMap;
   history: TreeHistoryItem[];
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
@@ -534,7 +532,6 @@ export function ConditionReportList({
 export function TreeHistoryTimeline({
   conditionPhotoMap = {},
   currentUserId,
-  growthPhasePhotoMap = {},
   harvestPhotoMap = {},
   history,
   onRecordPress,
@@ -556,7 +553,6 @@ export function TreeHistoryTimeline({
           key={buildHistoryItemKey(item, index)}
           conditionPhotoMap={conditionPhotoMap}
           currentUserId={currentUserId}
-          growthPhasePhotoMap={growthPhasePhotoMap}
           harvestPhotoMap={harvestPhotoMap}
           item={item}
           onRecordPress={onRecordPress}
@@ -603,7 +599,6 @@ export function ConditionReportItem({
 function TreeHistoryTimelineItem({
   conditionPhotoMap,
   currentUserId,
-  growthPhasePhotoMap,
   harvestPhotoMap,
   item,
   onRecordPress,
@@ -611,7 +606,6 @@ function TreeHistoryTimelineItem({
 }: {
   conditionPhotoMap: ConditionRecordPhotoMap;
   currentUserId?: string | null;
-  growthPhasePhotoMap: GrowthPhaseRecordPhotoMap;
   harvestPhotoMap: HarvestRecordPhotoMap;
   item: TreeHistoryItem;
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
@@ -621,10 +615,6 @@ function TreeHistoryTimelineItem({
     item.historyType === 'condition' && item.sourceId
       ? conditionPhotoMap[item.sourceId]?.signedUrl
       : null;
-  const growthPhasePhotoUrls =
-    item.historyType === 'phase' && item.sourceId
-      ? growthPhasePhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
-      : [];
   const harvestPhotoUrls =
     item.historyType === 'harvest' && item.sourceId
       ? harvestPhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
@@ -681,7 +671,6 @@ function TreeHistoryTimelineItem({
             </Text>
           ) : null}
           {conditionPhotoUrl ? <PhotoThumbnail photoUrl={conditionPhotoUrl} /> : null}
-          {growthPhasePhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={growthPhasePhotoUrls} /> : null}
           {harvestPhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={harvestPhotoUrls} /> : null}
           <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
             {getHistoryActorPrefix(item.historyType)}{' '}

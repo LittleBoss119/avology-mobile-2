@@ -3,7 +3,6 @@ import type { UUID } from './domain';
 export type PhotoAttachmentEntityType =
   | 'tree_main'
   | 'condition_record'
-  | 'growth_phase_record'
   | 'operational_report'
   | 'task_proof'
   | 'harvest_record';
@@ -11,7 +10,6 @@ export type PhotoAttachmentEntityType =
 export type PhotoAttachmentPathFolder =
   | 'trees'
   | 'condition-reports'
-  | 'growth-phase-records'
   | 'operational-reports'
   | 'task-proofs'
   | 'harvest-records';
@@ -179,25 +177,6 @@ export type GetTaskProofPhotosInput = {
 export type ListTaskProofPhotosForActivitiesInput = {
   farmId: UUID;
   activityIds: UUID[];
-};
-
-export type GrowthPhaseRecordPhoto = PhotoAttachmentWithSignedUrl;
-
-export type GrowthPhaseRecordPhotoMap = Record<UUID, GrowthPhaseRecordPhoto[]>;
-
-export type UploadGrowthPhaseRecordPhotoInput = {
-  farmId: UUID;
-  growthPhaseRecordId: UUID;
-  localUri: string;
-  base64?: string | null;
-  fileName?: string | null;
-  mimeType?: string | null;
-  caption?: string | null;
-};
-
-export type GetGrowthPhaseRecordPhotosInput = {
-  farmId: UUID;
-  growthPhaseRecordId: UUID;
 };
 
 export type HarvestRecordPhoto = PhotoAttachmentWithSignedUrl;
