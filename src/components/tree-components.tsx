@@ -9,6 +9,7 @@ import type {
   Tree,
   TreeConditionReport,
   TreeConditionStatus,
+  CareActivityOrigin,
   TreeHistoryItem,
   TreeHistoryType,
 } from '../types/domain';
@@ -16,7 +17,6 @@ import type {
   ConditionRecordPhotoMap,
   GrowthPhaseRecordPhotoMap,
   HarvestRecordPhotoMap,
-  ManualCareRecordPhotoMap,
   PickedPhotoAsset,
 } from '../types/media';
 import { colors, radius, spacing, typography } from '../constants/theme';
@@ -94,13 +94,12 @@ export type TreeHistoryTimelineProps = {
   growthPhasePhotoMap?: GrowthPhaseRecordPhotoMap;
   harvestPhotoMap?: HarvestRecordPhotoMap;
   history: TreeHistoryItem[];
-  manualCarePhotoMap?: ManualCareRecordPhotoMap;
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
   viewerMode?: TreeHistoryViewerMode;
 };
 
 type TreeHistoryViewerMode = 'owner' | 'worker';
-export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest' | 'manual-care';
+export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest';
 
 export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
@@ -538,7 +537,6 @@ export function TreeHistoryTimeline({
   growthPhasePhotoMap = {},
   harvestPhotoMap = {},
   history,
-  manualCarePhotoMap = {},
   onRecordPress,
   viewerMode = 'owner',
 }: TreeHistoryTimelineProps) {
@@ -561,7 +559,6 @@ export function TreeHistoryTimeline({
           growthPhasePhotoMap={growthPhasePhotoMap}
           harvestPhotoMap={harvestPhotoMap}
           item={item}
-          manualCarePhotoMap={manualCarePhotoMap}
           onRecordPress={onRecordPress}
           viewerMode={viewerMode}
         />
@@ -609,7 +606,6 @@ function TreeHistoryTimelineItem({
   growthPhasePhotoMap,
   harvestPhotoMap,
   item,
-  manualCarePhotoMap,
   onRecordPress,
   viewerMode,
 }: {
@@ -618,7 +614,6 @@ function TreeHistoryTimelineItem({
   growthPhasePhotoMap: GrowthPhaseRecordPhotoMap;
   harvestPhotoMap: HarvestRecordPhotoMap;
   item: TreeHistoryItem;
-  manualCarePhotoMap: ManualCareRecordPhotoMap;
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
   viewerMode: TreeHistoryViewerMode;
 }) {
@@ -634,10 +629,7 @@ function TreeHistoryTimelineItem({
     item.historyType === 'harvest' && item.sourceId
       ? harvestPhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
       : [];
-  const manualCarePhotoUrls =
-    item.historyType === 'manual_care' && item.sourceId
-      ? manualCarePhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
-      : [];
+  const careOriginLabel = item.historyType === 'care' ? formatCareOrigin(item.asal) : null;
   const routeRecordType = getRouteRecordType(item);
   const canOpenRecord = Boolean(item.sourceId && routeRecordType && onRecordPress);
   const content = (
@@ -672,7 +664,10 @@ function TreeHistoryTimelineItem({
           }}
         >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-            <Badge label={formatHistoryType(item.historyType)} tone={getHistoryTone(item.historyType)} />
+            <View style={{ flexDirection: 'row', flexShrink: 1, gap: spacing.sm }}>
+              <Badge label={formatHistoryType(item.historyType)} tone={getHistoryTone(item.historyType)} />
+              {careOriginLabel ? <Badge label={careOriginLabel} tone="muted" /> : null}
+            </View>
             <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
               {formatEventDate(item.happenedAt)}
             </Text>
@@ -688,7 +683,6 @@ function TreeHistoryTimelineItem({
           {conditionPhotoUrl ? <PhotoThumbnail photoUrl={conditionPhotoUrl} /> : null}
           {growthPhasePhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={growthPhasePhotoUrls} /> : null}
           {harvestPhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={harvestPhotoUrls} /> : null}
-          {manualCarePhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={manualCarePhotoUrls} /> : null}
           <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
             {getHistoryActorPrefix(item.historyType)}{' '}
             {formatActorDisplayName({
@@ -952,10 +946,8 @@ function getRouteRecordType(item: TreeHistoryItem): TreeHistoryRouteRecordType |
     return 'harvest';
   }
 
-  if (item.historyType === 'manual_care') {
-    return 'manual-care';
-  }
-
+  // 'care' tidak punya layar detail/edit: catatan perawatan sengaja tidak
+  // dapat diedit atau dihapus (lihat migrasi 027).
   return null;
 }
 
@@ -985,11 +977,19 @@ function formatHistoryType(type: TreeHistoryType): string {
     return 'Panen';
   }
 
-  if (type === 'manual_care') {
-    return 'Perawatan manual';
+  return 'Perawatan';
+}
+
+function formatCareOrigin(asal?: CareActivityOrigin | null): string | null {
+  if (asal === 'terjadwal') {
+    return 'Terjadwal';
   }
 
-  return 'Perawatan';
+  if (asal === 'inisiatif') {
+    return 'Inisiatif';
+  }
+
+  return null;
 }
 
 function formatHistoryTitle(item: TreeHistoryItem): string {
@@ -1005,7 +1005,9 @@ function formatHistoryTitle(item: TreeHistoryItem): string {
 }
 
 function formatHistoryDescription(item: TreeHistoryItem): string | null {
-  if (item.historyType === 'manual_care' && isCareCategory(item.description)) {
+  // Catatan inisiatif tanpa note jatuh ke kategori mentah dari view
+  // (mis. 'watering'), jadi diterjemahkan ke label Indonesia di sini.
+  if (item.historyType === 'care' && isCareCategory(item.description)) {
     return formatCareCategory(item.description);
   }
 

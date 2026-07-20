@@ -15,22 +15,14 @@ import {
   getHarvestRecordDetail,
   updateOwnHarvestRecord,
 } from '../services/harvestService';
-import {
-  getManualCareRecordDetail,
-  updateOwnManualCareRecord,
-} from '../services/manualCareService';
 import { getTreeDetail } from '../services/treeService';
 import type {
-  CareCategory,
   GrowthPhase,
-  TargetType,
   Tree,
   TreeConditionStatus,
   UUID,
 } from '../types/domain';
-import { formatCareCategory } from '../utils/displayFormat';
 import { formatGrowthPhase, formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
-import { careCategoryOptions } from './care-sop-components';
 import type { TreeRecordRouteType } from './tree-record-detail-screen';
 import {
   Button,
@@ -77,9 +69,7 @@ export function TreeRecordEditScreen({
 }: TreeRecordEditScreenProps) {
   const normalizedType = normalizeRecordType(recordType);
   const [canEdit, setCanEdit] = React.useState(false);
-  const [category, setCategory] = React.useState<CareCategory | ''>('');
   const [conditionStatus, setConditionStatus] = React.useState<TreeConditionStatus | ''>('');
-  const [customTargetNote, setCustomTargetNote] = React.useState('');
   const [eventDate, setEventDate] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [fruitCondition, setFruitCondition] = React.useState('');
@@ -88,10 +78,6 @@ export function TreeRecordEditScreen({
   const [note, setNote] = React.useState('');
   const [phase, setPhase] = React.useState<GrowthPhase | ''>('');
   const [submitting, setSubmitting] = React.useState(false);
-  const [targetColumn, setTargetColumn] = React.useState('');
-  const [targetRow, setTargetRow] = React.useState('');
-  const [targetTreeId, setTargetTreeId] = React.useState<string | null>(null);
-  const [targetType, setTargetType] = React.useState<TargetType>('tree');
   const [tree, setTree] = React.useState<Tree | null>(null);
 
   const loadRecord = React.useCallback(async () => {
@@ -161,23 +147,6 @@ export function TreeRecordEditScreen({
       return;
     }
 
-    const result = await getManualCareRecordDetail({ recordId });
-
-    if (result.error) {
-      setError(result.error.message);
-      setCanEdit(false);
-      return;
-    }
-
-    setCanEdit(result.data.canEdit === true);
-    setCategory(result.data.category);
-    setCustomTargetNote(result.data.customTargetNote ?? '');
-    setEventDate(toDateInput(result.data.performedAt));
-    setNote(result.data.note ?? '');
-    setTargetColumn(result.data.targetColumn ?? '');
-    setTargetRow(result.data.targetRow ?? '');
-    setTargetTreeId(result.data.targetTreeId ?? treeId);
-    setTargetType(result.data.targetType);
   }, [normalizedType, recordId, treeId]);
 
   React.useEffect(() => {
@@ -266,28 +235,7 @@ export function TreeRecordEditScreen({
       return result.error?.message ?? null;
     }
 
-    if (!category) {
-      return 'Jenis perawatan wajib dipilih.';
-    }
-
-    const normalizedTarget = normalizeManualCareTarget();
-
-    if (normalizedTarget instanceof Error) {
-      return normalizedTarget.message;
-    }
-
-    const result = await updateOwnManualCareRecord({
-      category,
-      customTargetNote: normalizedTarget.customTargetNote,
-      note,
-      performedAt: eventDate,
-      recordId: id,
-      targetColumn: normalizedTarget.targetColumn,
-      targetRow: normalizedTarget.targetRow,
-      targetTreeId: normalizedTarget.targetTreeId,
-      targetType,
-    });
-    return result.error?.message ?? null;
+    return 'Jenis catatan tidak dikenal.';
   }
 
   if (loading) {
@@ -376,35 +324,6 @@ export function TreeRecordEditScreen({
         </FormSection>
       ) : null}
 
-      {normalizedType === 'manual-care' ? (
-        <FormSection title="Catatan perawatan">
-          <DateField label="Tanggal perawatan *" onChangeDate={setEventDate} value={eventDate} />
-          <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-            Jenis perawatan *
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-            {careCategoryOptions.map((option) => (
-              <OptionChip
-                key={option}
-                active={category === option}
-                label={formatCareCategory(option)}
-                onPress={() => setCategory(option)}
-              />
-            ))}
-          </View>
-          <ManualCareTargetFields
-            customTargetNote={customTargetNote}
-            targetColumn={targetColumn}
-            targetRow={targetRow}
-            targetType={targetType}
-            onCustomTargetNoteChange={setCustomTargetNote}
-            onTargetColumnChange={setTargetColumn}
-            onTargetRowChange={setTargetRow}
-            onTargetTypeChange={setTargetType}
-          />
-          <TextArea label="Catatan" onChangeText={setNote} value={note} />
-        </FormSection>
-      ) : null}
 
       <Card variant="info">
         <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -414,44 +333,10 @@ export function TreeRecordEditScreen({
     </Screen>
   );
 
-  function normalizeManualCareTarget():
-    | {
-        customTargetNote: string | null;
-        targetColumn: string | null;
-        targetRow: string | null;
-        targetTreeId: string | null;
-      }
-    | Error {
-    if (targetType === 'farm') {
-      return { customTargetNote: null, targetColumn: null, targetRow: null, targetTreeId: null };
-    }
-
-    if (targetType === 'row') {
-      const value = targetRow.trim();
-      return value ? { customTargetNote: null, targetColumn: null, targetRow: value, targetTreeId: null } : new Error('Baris target wajib diisi.');
-    }
-
-    if (targetType === 'column') {
-      const value = targetColumn.trim();
-      return value ? { customTargetNote: null, targetColumn: value, targetRow: null, targetTreeId: null } : new Error('Kolom target wajib diisi.');
-    }
-
-    if (targetType === 'custom') {
-      const value = customTargetNote.trim();
-      return value ? { customTargetNote: value, targetColumn: null, targetRow: null, targetTreeId: null } : new Error('Catatan target khusus wajib diisi.');
-    }
-
-    return {
-      customTargetNote: null,
-      targetColumn: null,
-      targetRow: null,
-      targetTreeId: targetTreeId ?? treeId ?? null,
-    };
-  }
 }
 
 function normalizeRecordType(value?: string): TreeRecordRouteType | null {
-  if (value === 'condition' || value === 'phase' || value === 'harvest' || value === 'manual-care') {
+  if (value === 'condition' || value === 'phase' || value === 'harvest') {
     return value;
   }
 
@@ -539,74 +424,6 @@ function OptionChip({
       </Text>
     </Pressable>
   );
-}
-
-function ManualCareTargetFields({
-  customTargetNote,
-  onCustomTargetNoteChange,
-  onTargetColumnChange,
-  onTargetRowChange,
-  onTargetTypeChange,
-  targetColumn,
-  targetRow,
-  targetType,
-}: {
-  customTargetNote: string;
-  onCustomTargetNoteChange: (value: string) => void;
-  onTargetColumnChange: (value: string) => void;
-  onTargetRowChange: (value: string) => void;
-  onTargetTypeChange: (value: TargetType) => void;
-  targetColumn: string;
-  targetRow: string;
-  targetType: TargetType;
-}) {
-  const options: TargetType[] = ['tree', 'farm', 'row', 'column', 'custom'];
-
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-        Target perawatan *
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-        {options.map((option) => (
-          <OptionChip
-            key={option}
-            active={targetType === option}
-            label={formatTargetLabel(option)}
-            onPress={() => onTargetTypeChange(option)}
-          />
-        ))}
-      </View>
-      {targetType === 'tree' ? (
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
-          Target tetap pohon dari timeline ini.
-        </Text>
-      ) : null}
-      {targetType === 'row' ? <InputField label="Baris target *" onChangeText={onTargetRowChange} value={targetRow} /> : null}
-      {targetType === 'column' ? <InputField label="Kolom target *" onChangeText={onTargetColumnChange} value={targetColumn} /> : null}
-      {targetType === 'custom' ? <InputField label="Catatan target khusus *" onChangeText={onCustomTargetNoteChange} value={customTargetNote} /> : null}
-    </View>
-  );
-}
-
-function formatTargetLabel(targetType: TargetType): string {
-  if (targetType === 'tree') {
-    return 'Pohon ini';
-  }
-
-  if (targetType === 'farm') {
-    return 'Seluruh kebun';
-  }
-
-  if (targetType === 'row') {
-    return 'Baris';
-  }
-
-  if (targetType === 'column') {
-    return 'Kolom';
-  }
-
-  return 'Khusus';
 }
 
 function InputField({

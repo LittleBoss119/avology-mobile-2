@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import type {
   ActivityStatus,
   CareActivity,
+  CareActivityOrigin,
   CareCategory,
   CareTask,
   CareTaskDetail,
@@ -39,7 +40,7 @@ const CARE_TASK_SELECT =
   'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, requires_photo, created_at, updated_at';
 
 const CARE_ACTIVITY_SELECT =
-  'id, farm_id, care_task_id, performed_by, status, note, performed_at';
+  'id, farm_id, care_task_id, performed_by, status, note, performed_at, asal, category, produk';
 
 type CareTaskRow = {
   id: string;
@@ -66,11 +67,14 @@ type CareTaskRow = {
 type CareActivityRow = {
   id: string;
   farm_id: string;
-  care_task_id: string;
+  care_task_id: string | null;
   performed_by: string;
   status: ActivityStatus;
   note: string | null;
   performed_at: string;
+  asal: CareActivityOrigin;
+  category: CareCategory | null;
+  produk: string | null;
 };
 
 type MembershipRow = {
@@ -256,6 +260,12 @@ export async function getOperationalReportFollowUpTasks(
 
   for (const activity of activitiesResult.data ?? []) {
     const mappedActivity = mapCareActivity(activity);
+
+    // Catatan inisiatif tidak punya tugas induk, jadi tidak ikut dikelompokkan.
+    if (!mappedActivity.careTaskId) {
+      continue;
+    }
+
     const existingActivities = activitiesByTaskId.get(mappedActivity.careTaskId) ?? [];
     existingActivities.push(mappedActivity);
     activitiesByTaskId.set(mappedActivity.careTaskId, existingActivities);
@@ -943,12 +953,15 @@ function mapCareTask(
 
 function mapCareActivity(row: CareActivityRow): CareActivity {
   return {
+    asal: row.asal,
     careTaskId: row.care_task_id,
+    category: row.category,
     farmId: row.farm_id,
     id: row.id,
     note: row.note,
     performedAt: row.performed_at,
     performedBy: row.performed_by,
+    produk: row.produk,
     status: row.status,
   };
 }

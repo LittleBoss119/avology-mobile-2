@@ -10,7 +10,6 @@ import type {
   GetConditionRecordPhotosInput,
   GetGrowthPhaseRecordPhotosInput,
   GetHarvestRecordPhotosInput,
-  GetManualCareRecordPhotosInput,
   GetTreeMainPhotoData,
   GetPhotoSignedUrlData,
   ListConditionRecordPhotosForTreeInput,
@@ -20,7 +19,6 @@ import type {
   ListTaskProofPhotosForActivitiesInput,
   GrowthPhaseRecordPhoto,
   HarvestRecordPhoto,
-  ManualCareRecordPhoto,
   OperationalReportPhoto,
   OperationalReportPhotoMap,
   PhotoAttachment,
@@ -36,7 +34,6 @@ import type {
   UploadEntityPhotoInput,
   UploadGrowthPhaseRecordPhotoInput,
   UploadHarvestRecordPhotoInput,
-  UploadManualCareRecordPhotoInput,
   UploadOperationalReportPhotoInput,
   UploadTaskProofPhotoInput,
   UploadTreeMainPhotoInput,
@@ -60,14 +57,12 @@ const allowedEntityTypes: PhotoAttachmentEntityType[] = [
   'operational_report',
   'task_proof',
   'harvest_record',
-  'manual_care_record',
 ];
 
 const entityPathFolders: Record<PhotoAttachmentEntityType, PhotoAttachmentPathFolder> = {
   condition_record: 'condition-reports',
   growth_phase_record: 'growth-phase-records',
   harvest_record: 'harvest-records',
-  manual_care_record: 'manual-care-records',
   operational_report: 'operational-reports',
   task_proof: 'task-proofs',
   tree_main: 'trees',
@@ -1018,58 +1013,6 @@ export async function getHarvestRecordPhotos(
 
   if (result.error) {
     return fail(result.error, 'Gagal memuat foto panen.');
-  }
-
-  return ok(result.data);
-}
-
-export async function uploadManualCareRecordPhoto(
-  input: UploadManualCareRecordPhotoInput
-): Promise<ServiceResult<ManualCareRecordPhoto>> {
-  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
-  const manualCareRecordId = normalizeRequiredText(
-    input.manualCareRecordId,
-    'Catatan perawatan manual tidak valid.'
-  );
-
-  if (farmId instanceof Error) {
-    return fail(farmId);
-  }
-
-  if (manualCareRecordId instanceof Error) {
-    return fail(manualCareRecordId);
-  }
-
-  const result = await uploadEntityPhoto({
-    base64: input.base64,
-    caption: input.caption,
-    entityId: manualCareRecordId,
-    entityType: 'manual_care_record',
-    farmId,
-    fileName: input.fileName,
-    isPrimary: false,
-    localUri: input.localUri,
-    mimeType: input.mimeType,
-  });
-
-  if (result.error) {
-    return fail(result.error, 'Foto perawatan manual gagal diunggah.');
-  }
-
-  return ok(result.data);
-}
-
-export async function getManualCareRecordPhotos(
-  input: GetManualCareRecordPhotosInput
-): Promise<ServiceResult<ManualCareRecordPhoto[]>> {
-  const result = await listEntityPhotos({
-    entityId: input.manualCareRecordId,
-    entityType: 'manual_care_record',
-    farmId: input.farmId,
-  });
-
-  if (result.error) {
-    return fail(result.error, 'Gagal memuat foto perawatan manual.');
   }
 
   return ok(result.data);

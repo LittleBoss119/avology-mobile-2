@@ -1,19 +1,27 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '../constants/theme';
-import { createManualCareRecord } from '../services/manualCareService';
+import { createCareActivity } from '../services/careActivityService';
 import { getTreeDetail } from '../services/treeService';
 import type { CareCategory, Tree } from '../types/domain';
-import type { PickedPhotoAsset } from '../types/media';
 import { formatCareCategory } from '../utils/displayFormat';
 import { formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { careCategoryOptions } from './care-sop-components';
-import { PhotoAttachmentPicker } from './media';
 import { Button, Card, DateField, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
 
-export function TreeManualCareRecordScreen({
+// Pencatatan perawatan inisiatif untuk SATU pohon: pohonnya ditentukan oleh
+// konteks route (user masuk dari detail pohon tertentu), jadi tidak ada pemilih
+// pohon di sini -- konteksnya sudah jelas dan memilih ulang justru rancu.
+//
+// Model datanya tetap many-to-many (care_activity_trees): dari jalur ini
+// isinya selalu 1 baris. Pencatatan multi-pohon akan punya layar dan titik
+// masuk sendiri, terpisah dari detail pohon.
+//
+// Tidak ada lampiran foto: foto sengaja dipangkas untuk catatan perawatan dan
+// hanya disisakan di kondisi pohon serta bukti tugas.
+export function TreeCareActivityScreen({
   basePath,
   treeId,
 }: {
@@ -25,7 +33,7 @@ export function TreeManualCareRecordScreen({
   const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
-  const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
+  const [produk, setProduk] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [tree, setTree] = React.useState<Tree | null>(null);
 
@@ -83,21 +91,13 @@ export function TreeManualCareRecordScreen({
     setSubmitting(true);
     setError(null);
 
-    const result = await createManualCareRecord({
+    const result = await createCareActivity({
       category,
       farmId: tree.farmId,
       note,
       performedAt: eventDate,
-      photo: selectedPhoto
-        ? {
-            base64: selectedPhoto.base64,
-            fileName: selectedPhoto.fileName,
-            mimeType: selectedPhoto.mimeType,
-            uri: selectedPhoto.uri,
-          }
-        : null,
-      targetTreeId: tree.id,
-      targetType: 'tree',
+      produk,
+      treeIds: [tree.id],
     });
 
     if (result.error) {
@@ -107,17 +107,6 @@ export function TreeManualCareRecordScreen({
     }
 
     setSubmitting(false);
-
-    if (result.data.warningMessage) {
-      Alert.alert('Catatan perawatan tersimpan', result.data.warningMessage, [
-        {
-          text: 'OK',
-          onPress: () => router.replace(`${basePath}/${tree.id}`),
-        },
-      ]);
-      return;
-    }
-
     router.replace(`${basePath}/${tree.id}`);
   }
 
@@ -171,22 +160,29 @@ export function TreeManualCareRecordScreen({
         </View>
       </FormSection>
 
+      <FormSection title="Produk yang dipakai" description="Opsional. Merek pupuk atau pestisida yang digunakan.">
+        <TextInput
+          onChangeText={setProduk}
+          placeholder="Opsional"
+          placeholderTextColor={colors.textSoft}
+          style={{
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            borderCurve: 'continuous',
+            borderRadius: radius.md,
+            borderWidth: 1,
+            color: colors.text,
+            fontSize: 16,
+            paddingHorizontal: spacing.lg,
+            paddingVertical: spacing.md,
+          }}
+          value={produk}
+        />
+      </FormSection>
+
       <FormSection title="Catatan perawatan">
         <TextArea onChangeText={setNote} placeholder="Opsional" value={note} />
       </FormSection>
-
-      <PhotoAttachmentPicker
-        disabled={submitting}
-        helperText="Opsional, simpan bukti aktivitas perawatan."
-        label="Foto perawatan"
-        selectedPhoto={selectedPhoto}
-        onError={setError}
-        onRemove={() => setSelectedPhoto(null)}
-        onSelect={(asset) => {
-          setError(null);
-          setSelectedPhoto(asset);
-        }}
-      />
     </Screen>
   );
 }

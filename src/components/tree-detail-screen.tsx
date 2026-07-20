@@ -9,7 +9,6 @@ import {
   deleteTreeMainPhoto,
   getGrowthPhaseRecordPhotos,
   getHarvestRecordPhotos,
-  getManualCareRecordPhotos,
   getTreeMainPhoto,
   listConditionRecordPhotosForTree,
   uploadTreeMainPhoto,
@@ -22,7 +21,6 @@ import type {
   ConditionRecordPhotoMap,
   GrowthPhaseRecordPhotoMap,
   HarvestRecordPhotoMap,
-  ManualCareRecordPhotoMap,
   PickedPhotoAsset,
   TreeMainPhoto,
 } from '../types/media';
@@ -70,7 +68,6 @@ export function TreeDetailScreen({
   const [conditionPhotoMap, setConditionPhotoMap] = React.useState<ConditionRecordPhotoMap>({});
   const [growthPhasePhotoMap, setGrowthPhasePhotoMap] = React.useState<GrowthPhaseRecordPhotoMap>({});
   const [harvestPhotoMap, setHarvestPhotoMap] = React.useState<HarvestRecordPhotoMap>({});
-  const [manualCarePhotoMap, setManualCarePhotoMap] = React.useState<ManualCareRecordPhotoMap>({});
   const [photoActionLoading, setPhotoActionLoading] = React.useState(false);
   const [photoSourceOpen, setPhotoSourceOpen] = React.useState(false);
   const [reports, setReports] = React.useState<TreeConditionReport[]>([]);
@@ -85,7 +82,6 @@ export function TreeDetailScreen({
       setConditionPhotoMap({});
       setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
-      setManualCarePhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -102,7 +98,6 @@ export function TreeDetailScreen({
       setConditionPhotoMap({});
       setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
-      setManualCarePhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -115,7 +110,6 @@ export function TreeDetailScreen({
       setConditionPhotoMap({});
       setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
-      setManualCarePhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -141,13 +135,11 @@ export function TreeDetailScreen({
       setHistory([]);
       setGrowthPhasePhotoMap({});
       setHarvestPhotoMap({});
-      setManualCarePhotoMap({});
     } else {
       setHistory(historyResult.data);
       await Promise.all([
         loadGrowthPhasePhotos(treeResult.data.farmId, historyResult.data),
         loadHarvestPhotos(treeResult.data.farmId, historyResult.data),
-        loadManualCarePhotos(treeResult.data.farmId, historyResult.data),
       ]);
     }
 
@@ -310,42 +302,6 @@ export function TreeDetailScreen({
         <ErrorBanner message={error} />
         <EmptyState title="Pohon tidak ditemukan" subtitle="Pohon mungkin sudah tidak tersedia atau akses ditolak." />
       </Screen>
-    );
-  }
-
-  async function loadManualCarePhotos(farmId: string, historyItems: TreeHistoryItem[]) {
-    const manualCareRecordIds = Array.from(
-      new Set(
-        historyItems
-          .filter((item) => item.historyType === 'manual_care' && Boolean(item.sourceId))
-          .map((item) => item.sourceId as string)
-      )
-    );
-
-    if (manualCareRecordIds.length === 0) {
-      setManualCarePhotoMap({});
-      return;
-    }
-
-    const entries = await Promise.all(
-      manualCareRecordIds.map(async (manualCareRecordId) => {
-        const result = await getManualCareRecordPhotos({
-          farmId,
-          manualCareRecordId,
-        });
-
-        if (result.error || result.data.length === 0) {
-          return null;
-        }
-
-        return [manualCareRecordId, result.data] as const;
-      })
-    );
-
-    setManualCarePhotoMap(
-      Object.fromEntries(
-        entries.filter((entry): entry is [string, ManualCareRecordPhotoMap[string]] => entry !== null)
-      )
     );
   }
 
@@ -522,7 +478,6 @@ export function TreeDetailScreen({
         growthPhasePhotoMap={growthPhasePhotoMap}
         harvestPhotoMap={harvestPhotoMap}
         history={history}
-        manualCarePhotoMap={manualCarePhotoMap}
         onRecordPress={handleOpenHistoryRecord}
         viewerMode={mode}
       />

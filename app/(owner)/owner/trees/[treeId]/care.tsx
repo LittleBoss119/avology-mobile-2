@@ -1,9 +1,9 @@
 import { useLocalSearchParams } from 'expo-router';
 
-import { TreeManualCareRecordScreen } from '../../../../../src/components/tree-manual-care-record-screen';
+import { TreeCareActivityScreen } from '../../../../../src/components/tree-care-activity-screen';
 
-export default function OwnerCreateManualCareRecordScreen() {
+export default function OwnerCreateCareActivityScreen() {
   const { treeId } = useLocalSearchParams<{ treeId: string }>();
 
-  return <TreeManualCareRecordScreen basePath="/owner/trees" treeId={treeId} />;
+  return <TreeCareActivityScreen basePath="/owner/trees" treeId={treeId} />;
 }

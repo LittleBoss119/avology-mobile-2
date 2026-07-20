@@ -15,21 +15,15 @@ import {
   getHarvestRecordDetail,
   softDeleteOwnHarvestRecord,
 } from '../services/harvestService';
-import {
-  getManualCareRecordDetail,
-  softDeleteOwnManualCareRecord,
-} from '../services/manualCareService';
 import { getFarmActorDisplayProfiles } from '../services/memberService';
 import {
   getConditionRecordPhotos,
   getGrowthPhaseRecordPhotos,
   getHarvestRecordPhotos,
-  getManualCareRecordPhotos,
 } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
 import { useAuth } from '../context/auth-context';
 import type {
-  CareCategory,
   MemberRole,
   ServiceResult,
   SuccessData,
@@ -37,7 +31,7 @@ import type {
   UUID,
 } from '../types/domain';
 import type { PhotoAttachmentPreviewItem } from '../types/media';
-import { formatCareCategory, formatPersonDisplayName, formatTargetType } from '../utils/displayFormat';
+import { formatPersonDisplayName } from '../utils/displayFormat';
 import { formatGrowthPhase, formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { PhotoAttachmentPreviewList } from './media';
 import {
@@ -52,7 +46,9 @@ import {
   TopAppBar,
 } from './ui';
 
-export type TreeRecordRouteType = 'condition' | 'phase' | 'harvest' | 'manual-care';
+// 'manual-care' dicabut: catatan perawatan sengaja tidak punya layar
+// detail/edit -- edit & hapus dilepas (lihat migrasi 027).
+export type TreeRecordRouteType = 'condition' | 'phase' | 'harvest';
 
 type TreeRecordDetailScreenProps = {
   basePath: '/owner/trees' | '/worker/trees';
@@ -253,7 +249,7 @@ export function TreeRecordDetailScreen({
 }
 
 function normalizeRecordType(value?: string): TreeRecordRouteType | null {
-  if (value === 'condition' || value === 'phase' || value === 'harvest' || value === 'manual-care') {
+  if (value === 'condition' || value === 'phase' || value === 'harvest') {
     return value;
   }
 
@@ -357,36 +353,7 @@ async function loadRecordDetail(
     };
   }
 
-  const result = await getManualCareRecordDetail({ recordId });
-
-  if (result.error) {
-    return result;
-  }
-
-  const authorDisplay = await resolveRecordAuthor(result.data.farmId, result.data.recordedBy);
-
-  return {
-    data: {
-      authorId: result.data.recordedBy,
-      authorName: authorDisplay.fullName,
-      authorRole: authorDisplay.role,
-      authorVerb: 'recorded',
-      canEdit: result.data.canEdit === true,
-      createdAt: result.data.createdAt,
-      eventAt: result.data.performedAt,
-      eventLabel: 'Tanggal perawatan',
-      farmId: result.data.farmId,
-      note: result.data.note,
-      recordLabel: 'Perawatan manual',
-      rows: [
-        { label: 'Jenis perawatan', value: formatCareCategory(result.data.category as CareCategory) },
-        { label: 'Target perawatan', value: formatManualCareTarget(result.data.targetType, result.data.targetRow, result.data.targetColumn, result.data.customTargetNote) },
-      ],
-      title: 'Detail catatan perawatan',
-      updatedAt: result.data.updatedAt,
-    },
-    error: null,
-  };
+  return unknownRecordType(recordType);
 }
 
 async function resolveRecordAuthor(
@@ -432,8 +399,17 @@ async function loadRecordPhotos(
     return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl, photo.attachment.caption)), error: null };
   }
 
-  const result = await getManualCareRecordPhotos({ manualCareRecordId: recordId, farmId });
-  return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl, photo.attachment.caption)), error: null };
+  return unknownRecordType(recordType);
+}
+
+// Guard eksahustif: recordType sudah dipersempit ke never di titik ini, jadi
+// cabang ini hanya tercapai bila union TreeRecordRouteType bertambah tanpa
+// pemanggilnya ikut disesuaikan.
+function unknownRecordType(recordType: never): ServiceResult<never> {
+  return {
+    data: null,
+    error: { message: `Jenis catatan tidak dikenal: ${String(recordType)}` },
+  };
 }
 
 function toPreviewPhoto(id: UUID, url: string, caption?: string | null): PhotoAttachmentPreviewItem {
@@ -452,36 +428,7 @@ function softDeleteRecord(
     return softDeleteOwnGrowthPhaseRecord({ recordId });
   }
 
-  if (recordType === 'harvest') {
-    return softDeleteOwnHarvestRecord({ recordId });
-  }
-
-  return softDeleteOwnManualCareRecord({ recordId });
-}
-
-function formatManualCareTarget(
-  targetType: string,
-  targetRow?: string | null,
-  targetColumn?: string | null,
-  customTargetNote?: string | null
-): string {
-  if (targetType === 'row') {
-    return targetRow ? `Baris ${targetRow}` : 'Baris';
-  }
-
-  if (targetType === 'column') {
-    return targetColumn ? `Kolom ${targetColumn}` : 'Kolom';
-  }
-
-  if (targetType === 'custom') {
-    return customTargetNote || 'Target khusus';
-  }
-
-  if (targetType === 'tree') {
-    return 'Pohon ini';
-  }
-
-  return formatTargetType('farm');
+  return softDeleteOwnHarvestRecord({ recordId });
 }
 
 function formatDateTime(value: string): string {

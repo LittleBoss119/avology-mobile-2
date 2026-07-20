@@ -6,8 +6,7 @@ export type PhotoAttachmentEntityType =
   | 'growth_phase_record'
   | 'operational_report'
   | 'task_proof'
-  | 'harvest_record'
-  | 'manual_care_record';
+  | 'harvest_record';
 
 export type PhotoAttachmentPathFolder =
   | 'trees'
@@ -15,8 +14,7 @@ export type PhotoAttachmentPathFolder =
   | 'growth-phase-records'
   | 'operational-reports'
   | 'task-proofs'
-  | 'harvest-records'
-  | 'manual-care-records';
+  | 'harvest-records';
 
 export type PhotoAttachment = {
   id: UUID;
@@ -219,25 +217,6 @@ export type UploadHarvestRecordPhotoInput = {
 export type GetHarvestRecordPhotosInput = {
   farmId: UUID;
   harvestRecordId: UUID;
-};
-
-export type ManualCareRecordPhoto = PhotoAttachmentWithSignedUrl;
-
-export type ManualCareRecordPhotoMap = Record<UUID, ManualCareRecordPhoto[]>;
-
-export type UploadManualCareRecordPhotoInput = {
-  farmId: UUID;
-  manualCareRecordId: UUID;
-  localUri: string;
-  base64?: string | null;
-  fileName?: string | null;
-  mimeType?: string | null;
-  caption?: string | null;
-};
-
-export type GetManualCareRecordPhotosInput = {
-  farmId: UUID;
-  manualCareRecordId: UUID;
 };
 
 export type PhotoAttachmentPreviewItem = {

@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentProfile } from './authService';
 import { getFarmActorDisplayProfiles, getFarmMemberBasicProfiles } from './memberService';
 import type {
+  CareActivityOrigin,
   GetTreeHistoryInput,
   MemberRole,
   MemberStatus,
@@ -14,7 +15,7 @@ import type {
 import { fail, ok } from '../utils/serviceResult';
 
 const TREE_HISTORY_SELECT =
-  'source_id, tree_id, farm_id, history_type, title, description, actor_id, happened_at';
+  'source_id, tree_id, farm_id, history_type, title, description, actor_id, happened_at, asal';
 
 type TreeHistoryRow = {
   source_id: string | null;
@@ -25,6 +26,7 @@ type TreeHistoryRow = {
   description: string | null;
   actor_id: string;
   happened_at: string;
+  asal: CareActivityOrigin | null;
 };
 
 type TreeFarmRow = {
@@ -184,6 +186,7 @@ function mapTreeHistoryItem(row: TreeHistoryRow): TreeHistoryItem {
     description: row.description,
     actorId: row.actor_id,
     happenedAt: row.happened_at,
+    asal: row.asal,
   };
 }
 

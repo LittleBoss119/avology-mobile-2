@@ -56,6 +56,8 @@ export type TaskStatus = 'pending' | 'completed' | 'postponed';
 
 export type ActivityStatus = 'completed' | 'postponed';
 
+export type CareActivityOrigin = 'terjadwal' | 'inisiatif';
+
 export type ServiceError = {
   message: string;
   code?: string;
@@ -204,28 +206,7 @@ export type HarvestRecord = {
   canEdit?: boolean;
 };
 
-export type ManualCareRecord = {
-  id: UUID;
-  farmId: UUID;
-  recordedBy: UUID;
-  category: CareCategory;
-  targetType: TargetType;
-  targetRow: string | null;
-  targetColumn: string | null;
-  targetTreeId: UUID | null;
-  customTargetNote: string | null;
-  note: string | null;
-  performedAt: string;
-  createdAt: string;
-  updatedAt?: string | null;
-  isDeleted?: boolean;
-  deletedAt?: string | null;
-  deletedBy?: UUID | null;
-  deleteReason?: string | null;
-  canEdit?: boolean;
-};
-
-export type TreeHistoryType = 'condition' | 'phase' | 'care' | 'harvest' | 'manual_care';
+export type TreeHistoryType = 'condition' | 'phase' | 'care' | 'harvest';
 
 export type TreeHistoryItem = {
   sourceId?: UUID | null;
@@ -238,6 +219,8 @@ export type TreeHistoryItem = {
   actorName?: string | null;
   actorRole?: MemberRole | null;
   happenedAt: string;
+  // Hanya terisi untuk historyType 'care'; sumber lain bernilai null.
+  asal?: CareActivityOrigin | null;
 };
 
 export type OperationalReport = {
@@ -331,11 +314,16 @@ export type CareTask = {
 export type CareActivity = {
   id: UUID;
   farmId: UUID;
-  careTaskId: UUID;
+  // null untuk catatan inisiatif (asal='inisiatif'), yang tidak berasal dari tugas.
+  careTaskId: UUID | null;
   performedBy: UUID;
   status: ActivityStatus;
   note: string | null;
   performedAt: string;
+  asal: CareActivityOrigin;
+  // Hanya terisi untuk catatan inisiatif; untuk 'terjadwal' kategori ada di care_tasks.
+  category: CareCategory | null;
+  produk: string | null;
 };
 
 export type CareScheduleDetail = CareSchedule & {
@@ -508,52 +496,23 @@ export type SoftDeleteHarvestRecordInput = {
   reason?: string | null;
 };
 
-export type CreateManualCareRecordInput = {
+// Pencatatan realisasi perawatan inisiatif. Satu catatan dapat berdampak ke
+// banyak pohon, sehingga target berupa daftar treeIds (bukan satu pohon).
+export type CreateCareActivityInput = {
   farmId: UUID;
-  targetType: TargetType;
   category: CareCategory;
-  targetRow?: string | null;
-  targetColumn?: string | null;
-  targetTreeId?: UUID | null;
-  customTargetNote?: string | null;
+  treeIds: UUID[];
   note?: string | null;
+  produk?: string | null;
   performedAt?: string | null;
-  photo?: {
-    uri: string;
-    base64?: string | null;
-    fileName?: string | null;
-    mimeType?: string | null;
-  } | null;
 };
 
-export type CreateManualCareRecordData = {
-  recordId: UUID;
-  warningMessage?: string | null;
+export type CreateCareActivityData = {
+  activityId: UUID;
 };
 
-export type GetManualCareRecordsByTreeInput = {
+export type GetCareActivitiesByTreeInput = {
   treeId: UUID;
-};
-
-export type GetManualCareRecordDetailInput = {
-  recordId: UUID;
-};
-
-export type UpdateManualCareRecordInput = {
-  recordId: UUID;
-  targetType: TargetType;
-  category: CareCategory;
-  targetRow?: string | null;
-  targetColumn?: string | null;
-  targetTreeId?: UUID | null;
-  customTargetNote?: string | null;
-  note?: string | null;
-  performedAt?: string | null;
-};
-
-export type SoftDeleteManualCareRecordInput = {
-  recordId: UUID;
-  reason?: string | null;
 };
 
 export type GetFloweringAndFruitingTreesInput = {
