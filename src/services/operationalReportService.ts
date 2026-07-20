@@ -11,7 +11,6 @@ import type {
   OperationalReportCategory,
   OperationalReportEditEligibility,
   OperationalReportStatus,
-  ReopenOperationalReportInput,
   ServiceResult,
   SuccessData,
   UpdateOwnOperationalReportData,
@@ -239,46 +238,6 @@ export async function updateOperationalReportStatus(
     p_operational_report_id: reportId,
     p_owner_response_note: normalizeOptionalText(input.ownerResponseNote),
     p_status: status,
-  });
-
-  if (error) {
-    return fail(new Error(mapOwnerOperationalReportActionError(error)));
-  }
-
-  return ok({
-    success: true,
-  });
-}
-
-export async function reopenOperationalReport(
-  input: ReopenOperationalReportInput
-): Promise<ServiceResult<SuccessData>> {
-  const reportId = normalizeRequiredText(
-    input.operationalReportId,
-    'Laporan operasional tidak ditemukan.'
-  );
-
-  if (reportId instanceof Error) {
-    return fail(reportId);
-  }
-
-  const reportResult = await getOperationalReportDetail({
-    operationalReportId: reportId,
-  });
-
-  if (reportResult.error) {
-    return fail(reportResult.error);
-  }
-
-  const accessResult = await ensureActiveOwner(reportResult.data.farmId);
-
-  if (accessResult.error) {
-    return fail(accessResult.error);
-  }
-
-  const { error } = await supabase.rpc('reopen_operational_report', {
-    p_note: normalizeOptionalText(input.note),
-    p_report_id: reportId,
   });
 
   if (error) {
@@ -567,10 +526,6 @@ function mapOwnerOperationalReportActionError(error: { code?: string; message?: 
 
   if (message.includes('not found')) {
     return 'Laporan tidak ditemukan atau akses tidak aktif.';
-  }
-
-  if (message.includes('only resolved or rejected')) {
-    return 'Hanya laporan selesai atau ditolak yang bisa dibuka ulang.';
   }
 
   if (message.includes('invalid input value') || message.includes('operational_report_status')) {

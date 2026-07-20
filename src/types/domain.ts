@@ -564,11 +564,6 @@ export type UpdateOperationalReportStatusInput = {
   status: OperationalReportStatus;
 };
 
-export type ReopenOperationalReportInput = {
-  operationalReportId: UUID;
-  note?: string | null;
-};
-
 export type OperationalReportEditEligibility = {
   canEdit: boolean;
   reason?: string | null;

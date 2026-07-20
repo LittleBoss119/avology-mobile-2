@@ -21,7 +21,6 @@ import {
   getOperationalReportEditEligibility,
   getOperationalReportDetail,
   getOperationalReports,
-  reopenOperationalReport,
   updateOwnOperationalReport,
   updateOperationalReportStatus,
 } from '../services/operationalReportService';
@@ -1215,29 +1214,6 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     setUpdatingStatus(null);
   }
 
-  async function handleReopenReport() {
-    if (!report || updatingStatus) {
-      return;
-    }
-
-    setUpdatingStatus('in_progress');
-    setError(null);
-
-    const result = await reopenOperationalReport({
-      note: ownerResponseNote,
-      operationalReportId: report.id,
-    });
-
-    if (result.error) {
-      setError(result.error.message);
-      setUpdatingStatus(null);
-      return;
-    }
-
-    await loadDetail();
-    setUpdatingStatus(null);
-  }
-
   if (loading) {
     return <LoadingState message="Memuat detail laporan..." />;
   }
@@ -1293,7 +1269,6 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
         ownerResponseNote={ownerResponseNote}
         onCreateTask={() => router.push(`/owner/reports/${report.id}/task`)}
         onChangeOwnerResponseNote={setOwnerResponseNote}
-        onReopenReport={handleReopenReport}
         onUpdateStatus={handleStatusUpdate}
         reportStatus={report.status}
         updatingStatus={updatingStatus}
@@ -1691,7 +1666,6 @@ function OwnerReportDecisionSection({
   ownerResponseNote,
   onCreateTask,
   onChangeOwnerResponseNote,
-  onReopenReport,
   onUpdateStatus,
   reportStatus,
   updatingStatus,
@@ -1702,7 +1676,6 @@ function OwnerReportDecisionSection({
   ownerResponseNote: string;
   onCreateTask: () => void;
   onChangeOwnerResponseNote: (value: string) => void;
-  onReopenReport: () => void;
   onUpdateStatus: (status: OperationalReportStatus) => void;
   reportStatus: OperationalReportStatus;
   updatingStatus: OperationalReportStatus | null;
@@ -1725,17 +1698,6 @@ function OwnerReportDecisionSection({
         text: confirmTitle,
       },
     ]);
-  }
-
-  function confirmReopen() {
-    Alert.alert(
-      'Buka ulang laporan?',
-      `Laporan akan dikembalikan ke status diproses agar bisa ditindaklanjuti kembali.${followUpWarning}`,
-      [
-        { style: 'cancel', text: 'Kembali' },
-        { onPress: onReopenReport, text: 'Buka ulang' },
-      ]
-    );
   }
 
   const noteField = (
@@ -1923,13 +1885,6 @@ function OwnerReportDecisionSection({
       <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
         {reportStatus === 'resolved' ? 'Laporan selesai.' : 'Laporan ditolak.'}
       </Text>
-      {noteField}
-      <Button
-        title="Buka Ulang Laporan"
-        loading={updatingStatus === 'in_progress'}
-        variant="secondary"
-        onPress={confirmReopen}
-      />
     </Card>
   );
 }
