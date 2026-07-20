@@ -7,7 +7,6 @@ import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import {
   deleteTreeMainPhoto,
-  getHarvestRecordPhotos,
   getTreeMainPhoto,
   listConditionRecordPhotosForTree,
   uploadTreeMainPhoto,
@@ -18,7 +17,6 @@ import { pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type { Tree, TreeConditionReport, TreeHistoryItem } from '../types/domain';
 import type {
   ConditionRecordPhotoMap,
-  HarvestRecordPhotoMap,
   PickedPhotoAsset,
   TreeMainPhoto,
 } from '../types/media';
@@ -64,7 +62,6 @@ export function TreeDetailScreen({
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [history, setHistory] = React.useState<TreeHistoryItem[]>([]);
   const [conditionPhotoMap, setConditionPhotoMap] = React.useState<ConditionRecordPhotoMap>({});
-  const [harvestPhotoMap, setHarvestPhotoMap] = React.useState<HarvestRecordPhotoMap>({});
   const [photoActionLoading, setPhotoActionLoading] = React.useState(false);
   const [photoSourceOpen, setPhotoSourceOpen] = React.useState(false);
   const [reports, setReports] = React.useState<TreeConditionReport[]>([]);
@@ -77,7 +74,6 @@ export function TreeDetailScreen({
       setTree(null);
       setTreeMainPhoto(null);
       setConditionPhotoMap({});
-      setHarvestPhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -92,7 +88,6 @@ export function TreeDetailScreen({
       setTree(null);
       setTreeMainPhoto(null);
       setConditionPhotoMap({});
-      setHarvestPhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -103,7 +98,6 @@ export function TreeDetailScreen({
       setTree(null);
       setTreeMainPhoto(null);
       setConditionPhotoMap({});
-      setHarvestPhotoMap({});
       setHistory([]);
       setReports([]);
       return;
@@ -127,10 +121,8 @@ export function TreeDetailScreen({
     if (historyResult.error) {
       setError(historyResult.error.message);
       setHistory([]);
-      setHarvestPhotoMap({});
     } else {
       setHistory(historyResult.data);
-      await loadHarvestPhotos(treeResult.data.farmId, historyResult.data);
     }
 
     if (photoResult.error) {
@@ -151,42 +143,6 @@ export function TreeDetailScreen({
       setConditionPhotoMap({});
     }
   }, [mode, treeId]);
-
-  async function loadHarvestPhotos(farmId: string, historyItems: TreeHistoryItem[]) {
-    const harvestRecordIds = Array.from(
-      new Set(
-        historyItems
-          .filter((item) => item.historyType === 'harvest' && Boolean(item.sourceId))
-          .map((item) => item.sourceId as string)
-      )
-    );
-
-    if (harvestRecordIds.length === 0) {
-      setHarvestPhotoMap({});
-      return;
-    }
-
-    const entries = await Promise.all(
-      harvestRecordIds.map(async (harvestRecordId) => {
-        const result = await getHarvestRecordPhotos({
-          farmId,
-          harvestRecordId,
-        });
-
-        if (result.error || result.data.length === 0) {
-          return null;
-        }
-
-        return [harvestRecordId, result.data] as const;
-      })
-    );
-
-    setHarvestPhotoMap(
-      Object.fromEntries(
-        entries.filter((entry): entry is [string, HarvestRecordPhotoMap[string]] => entry !== null)
-      )
-    );
-  }
 
   useFocusEffect(
     React.useCallback(() => {
@@ -429,7 +385,6 @@ export function TreeDetailScreen({
       <TreeHistoryTimeline
         conditionPhotoMap={conditionPhotoMap}
         currentUserId={profile?.id}
-        harvestPhotoMap={harvestPhotoMap}
         history={history}
         onRecordPress={handleOpenHistoryRecord}
         viewerMode={mode}

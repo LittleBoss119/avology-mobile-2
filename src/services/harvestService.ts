@@ -1,5 +1,4 @@
 import { supabase } from '../lib/supabase';
-import { uploadHarvestRecordPhoto } from './photoAttachmentService';
 import type {
   CreateHarvestRecordData,
   CreateHarvestRecordInput,
@@ -94,28 +93,8 @@ export async function createHarvestRecord(
     return fail(error, 'Gagal menyimpan catatan panen.');
   }
 
-  if (input.photo?.uri) {
-    const photoResult = await uploadHarvestRecordPhoto({
-      base64: input.photo.base64,
-      farmId: input.farmId,
-      fileName: input.photo.fileName,
-      harvestRecordId: data.id,
-      localUri: input.photo.uri,
-      mimeType: input.photo.mimeType,
-    });
-
-    if (photoResult.error) {
-      return ok({
-        recordId: data.id,
-        warningMessage:
-          'Catatan panen tersimpan, tetapi foto panen gagal diunggah. Periksa koneksi lalu coba unggah ulang nanti.',
-      });
-    }
-  }
-
   return ok({
     recordId: data.id,
-    warningMessage: null,
   });
 }
 

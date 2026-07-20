@@ -15,7 +15,6 @@ import type {
 } from '../types/domain';
 import type {
   ConditionRecordPhotoMap,
-  HarvestRecordPhotoMap,
   PickedPhotoAsset,
 } from '../types/media';
 import { colors, radius, spacing, typography } from '../constants/theme';
@@ -90,7 +89,6 @@ export type ConditionReportListProps = {
 export type TreeHistoryTimelineProps = {
   conditionPhotoMap?: ConditionRecordPhotoMap;
   currentUserId?: string | null;
-  harvestPhotoMap?: HarvestRecordPhotoMap;
   history: TreeHistoryItem[];
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
   viewerMode?: TreeHistoryViewerMode;
@@ -532,7 +530,6 @@ export function ConditionReportList({
 export function TreeHistoryTimeline({
   conditionPhotoMap = {},
   currentUserId,
-  harvestPhotoMap = {},
   history,
   onRecordPress,
   viewerMode = 'owner',
@@ -553,7 +550,6 @@ export function TreeHistoryTimeline({
           key={buildHistoryItemKey(item, index)}
           conditionPhotoMap={conditionPhotoMap}
           currentUserId={currentUserId}
-          harvestPhotoMap={harvestPhotoMap}
           item={item}
           onRecordPress={onRecordPress}
           viewerMode={viewerMode}
@@ -599,14 +595,12 @@ export function ConditionReportItem({
 function TreeHistoryTimelineItem({
   conditionPhotoMap,
   currentUserId,
-  harvestPhotoMap,
   item,
   onRecordPress,
   viewerMode,
 }: {
   conditionPhotoMap: ConditionRecordPhotoMap;
   currentUserId?: string | null;
-  harvestPhotoMap: HarvestRecordPhotoMap;
   item: TreeHistoryItem;
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
   viewerMode: TreeHistoryViewerMode;
@@ -615,10 +609,6 @@ function TreeHistoryTimelineItem({
     item.historyType === 'condition' && item.sourceId
       ? conditionPhotoMap[item.sourceId]?.signedUrl
       : null;
-  const harvestPhotoUrls =
-    item.historyType === 'harvest' && item.sourceId
-      ? harvestPhotoMap[item.sourceId]?.map((photo) => photo.signedUrl) ?? []
-      : [];
   const careOriginLabel = item.historyType === 'care' ? formatCareOrigin(item.asal) : null;
   const routeRecordType = getRouteRecordType(item);
   const canOpenRecord = Boolean(item.sourceId && routeRecordType && onRecordPress);
@@ -671,7 +661,6 @@ function TreeHistoryTimelineItem({
             </Text>
           ) : null}
           {conditionPhotoUrl ? <PhotoThumbnail photoUrl={conditionPhotoUrl} /> : null}
-          {harvestPhotoUrls.length > 0 ? <PhotoThumbnailRow photoUrls={harvestPhotoUrls} /> : null}
           <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
             {getHistoryActorPrefix(item.historyType)}{' '}
             {formatActorDisplayName({

@@ -452,17 +452,10 @@ export type CreateHarvestRecordInput = {
   fruitCondition?: string | null;
   note?: string | null;
   harvestedAt?: string | null;
-  photo?: {
-    uri: string;
-    base64?: string | null;
-    fileName?: string | null;
-    mimeType?: string | null;
-  } | null;
 };
 
 export type CreateHarvestRecordData = {
   recordId: UUID;
-  warningMessage?: string | null;
 };
 
 export type GetHarvestRecordsByTreeInput = {

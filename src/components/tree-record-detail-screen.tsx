@@ -15,7 +15,6 @@ import {
 import { getFarmActorDisplayProfiles } from '../services/memberService';
 import {
   getConditionRecordPhotos,
-  getHarvestRecordPhotos,
 } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
 import { useAuth } from '../context/auth-context';
@@ -344,8 +343,7 @@ async function loadRecordPhotos(
   }
 
   if (recordType === 'harvest') {
-    const result = await getHarvestRecordPhotos({ harvestRecordId: recordId, farmId });
-    return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl, photo.attachment.caption)), error: null };
+    return { data: [], error: null };
   }
 
   return unknownRecordType(recordType);

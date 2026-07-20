@@ -1,14 +1,12 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Alert, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '../constants/theme';
 import { createHarvestRecord } from '../services/harvestService';
 import { getTreeDetail } from '../services/treeService';
 import type { Tree } from '../types/domain';
-import type { PickedPhotoAsset } from '../types/media';
 import { formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
-import { PhotoAttachmentPicker } from './media';
 import { Button, Card, DateField, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
 
 export function TreeHarvestRecordScreen({
@@ -24,7 +22,6 @@ export function TreeHarvestRecordScreen({
   const [fruitCount, setFruitCount] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
-  const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [tree, setTree] = React.useState<Tree | null>(null);
 
@@ -95,14 +92,6 @@ export function TreeHarvestRecordScreen({
       fruitCount: parsedFruitCount,
       harvestedAt: eventDate,
       note,
-      photo: selectedPhoto
-        ? {
-            base64: selectedPhoto.base64,
-            fileName: selectedPhoto.fileName,
-            mimeType: selectedPhoto.mimeType,
-            uri: selectedPhoto.uri,
-          }
-        : null,
       treeId: tree.id,
     });
 
@@ -113,17 +102,6 @@ export function TreeHarvestRecordScreen({
     }
 
     setSubmitting(false);
-
-    if (result.data.warningMessage) {
-      Alert.alert('Catatan panen tersimpan', result.data.warningMessage, [
-        {
-          text: 'OK',
-          onPress: () => router.replace(`${basePath}/${tree.id}`),
-        },
-      ]);
-      return;
-    }
-
     router.replace(`${basePath}/${tree.id}`);
   }
 
@@ -174,19 +152,6 @@ export function TreeHarvestRecordScreen({
       <FormSection title="Catatan tambahan">
         <TextArea onChangeText={setNote} placeholder="Opsional" value={note} />
       </FormSection>
-
-      <PhotoAttachmentPicker
-        disabled={submitting}
-        helperText="Opsional, simpan bukti hasil panen dari pohon ini."
-        label="Foto panen"
-        selectedPhoto={selectedPhoto}
-        onError={setError}
-        onRemove={() => setSelectedPhoto(null)}
-        onSelect={(asset) => {
-          setError(null);
-          setSelectedPhoto(asset);
-        }}
-      />
     </Screen>
   );
 }

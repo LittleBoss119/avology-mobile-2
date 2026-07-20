@@ -8,7 +8,6 @@ import type {
   DeleteTreeMainPhotoInput,
   DeletePhotoAttachmentInput,
   GetConditionRecordPhotosInput,
-  GetHarvestRecordPhotosInput,
   GetTreeMainPhotoData,
   GetPhotoSignedUrlData,
   ListConditionRecordPhotosForTreeInput,
@@ -16,7 +15,6 @@ import type {
   ListOperationalReportPhotosForReportsInput,
   ListPhotoAttachmentsInput,
   ListTaskProofPhotosForActivitiesInput,
-  HarvestRecordPhoto,
   OperationalReportPhoto,
   OperationalReportPhotoMap,
   PhotoAttachment,
@@ -30,7 +28,6 @@ import type {
   TreeMainPhotoMap,
   UploadConditionRecordPhotoInput,
   UploadEntityPhotoInput,
-  UploadHarvestRecordPhotoInput,
   UploadOperationalReportPhotoInput,
   UploadTaskProofPhotoInput,
   UploadTreeMainPhotoInput,
@@ -52,12 +49,10 @@ const allowedEntityTypes: PhotoAttachmentEntityType[] = [
   'condition_record',
   'operational_report',
   'task_proof',
-  'harvest_record',
 ];
 
 const entityPathFolders: Record<PhotoAttachmentEntityType, PhotoAttachmentPathFolder> = {
   condition_record: 'condition-reports',
-  harvest_record: 'harvest-records',
   operational_report: 'operational-reports',
   task_proof: 'task-proofs',
   tree_main: 'trees',
@@ -910,55 +905,6 @@ export async function getTaskProofPhotos(
   return ok(
     photos.filter((photo): photo is TaskProofPhoto => photo !== null)
   );
-}
-
-export async function uploadHarvestRecordPhoto(
-  input: UploadHarvestRecordPhotoInput
-): Promise<ServiceResult<HarvestRecordPhoto>> {
-  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
-  const harvestRecordId = normalizeRequiredText(input.harvestRecordId, 'Catatan panen tidak valid.');
-
-  if (farmId instanceof Error) {
-    return fail(farmId);
-  }
-
-  if (harvestRecordId instanceof Error) {
-    return fail(harvestRecordId);
-  }
-
-  const result = await uploadEntityPhoto({
-    base64: input.base64,
-    caption: input.caption,
-    entityId: harvestRecordId,
-    entityType: 'harvest_record',
-    farmId,
-    fileName: input.fileName,
-    isPrimary: false,
-    localUri: input.localUri,
-    mimeType: input.mimeType,
-  });
-
-  if (result.error) {
-    return fail(result.error, 'Foto panen gagal diunggah.');
-  }
-
-  return ok(result.data);
-}
-
-export async function getHarvestRecordPhotos(
-  input: GetHarvestRecordPhotosInput
-): Promise<ServiceResult<HarvestRecordPhoto[]>> {
-  const result = await listEntityPhotos({
-    entityId: input.harvestRecordId,
-    entityType: 'harvest_record',
-    farmId: input.farmId,
-  });
-
-  if (result.error) {
-    return fail(result.error, 'Gagal memuat foto panen.');
-  }
-
-  return ok(result.data);
 }
 
 export async function listTaskProofPhotosForActivities(

@@ -4,15 +4,13 @@ export type PhotoAttachmentEntityType =
   | 'tree_main'
   | 'condition_record'
   | 'operational_report'
-  | 'task_proof'
-  | 'harvest_record';
+  | 'task_proof';
 
 export type PhotoAttachmentPathFolder =
   | 'trees'
   | 'condition-reports'
   | 'operational-reports'
-  | 'task-proofs'
-  | 'harvest-records';
+  | 'task-proofs';
 
 export type PhotoAttachment = {
   id: UUID;
@@ -177,25 +175,6 @@ export type GetTaskProofPhotosInput = {
 export type ListTaskProofPhotosForActivitiesInput = {
   farmId: UUID;
   activityIds: UUID[];
-};
-
-export type HarvestRecordPhoto = PhotoAttachmentWithSignedUrl;
-
-export type HarvestRecordPhotoMap = Record<UUID, HarvestRecordPhoto[]>;
-
-export type UploadHarvestRecordPhotoInput = {
-  farmId: UUID;
-  harvestRecordId: UUID;
-  localUri: string;
-  base64?: string | null;
-  fileName?: string | null;
-  mimeType?: string | null;
-  caption?: string | null;
-};
-
-export type GetHarvestRecordPhotosInput = {
-  farmId: UUID;
-  harvestRecordId: UUID;
 };
 
 export type PhotoAttachmentPreviewItem = {
