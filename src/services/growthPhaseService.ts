@@ -10,7 +10,6 @@ import type {
   MemberRole,
   MemberStatus,
   ServiceResult,
-  SoftDeleteGrowthPhaseRecordInput,
   SuccessData,
   Tree,
   TreeConditionStatus,
@@ -207,21 +206,6 @@ export async function updateOwnGrowthPhaseRecord(
 
   if (error) {
     return fail(error, 'Catatan fase pertumbuhan gagal diperbarui.');
-  }
-
-  return ok({ success: true });
-}
-
-export async function softDeleteOwnGrowthPhaseRecord(
-  input: SoftDeleteGrowthPhaseRecordInput
-): Promise<ServiceResult<SuccessData>> {
-  const { error } = await supabase.rpc('soft_delete_own_growth_phase_record', {
-    p_reason: normalizeOptionalText(input.reason),
-    p_record_id: input.recordId,
-  });
-
-  if (error) {
-    return fail(error, 'Catatan fase pertumbuhan gagal dihapus.');
   }
 
   return ok({ success: true });

@@ -9,7 +9,6 @@ import type {
   MemberRole,
   MemberStatus,
   ServiceResult,
-  SoftDeleteConditionReportInput,
   SuccessData,
   TreeConditionReport,
   TreeConditionStatus,
@@ -196,21 +195,6 @@ export async function updateOwnConditionReport(
 
   if (error) {
     return fail(error, 'Laporan kondisi pohon gagal diperbarui.');
-  }
-
-  return ok({ success: true });
-}
-
-export async function softDeleteOwnConditionReport(
-  input: SoftDeleteConditionReportInput
-): Promise<ServiceResult<SuccessData>> {
-  const { error } = await supabase.rpc('soft_delete_own_tree_condition_report', {
-    p_reason: normalizeOptionalText(input.reason),
-    p_report_id: input.reportId,
-  });
-
-  if (error) {
-    return fail(error, 'Laporan kondisi pohon gagal dihapus.');
   }
 
   return ok({ success: true });

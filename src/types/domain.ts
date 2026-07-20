@@ -418,11 +418,6 @@ export type UpdateConditionReportInput = {
   reportedAt?: string | null;
 };
 
-export type SoftDeleteConditionReportInput = {
-  reportId: UUID;
-  reason?: string | null;
-};
-
 export type CreateGrowthPhaseRecordInput = {
   farmId: UUID;
   treeId: UUID;
@@ -448,11 +443,6 @@ export type UpdateGrowthPhaseRecordInput = {
   phase: GrowthPhase;
   note?: string | null;
   recordedAt?: string | null;
-};
-
-export type SoftDeleteGrowthPhaseRecordInput = {
-  recordId: UUID;
-  reason?: string | null;
 };
 
 export type CreateHarvestRecordInput = {
@@ -489,11 +479,6 @@ export type UpdateHarvestRecordInput = {
   fruitCondition?: string | null;
   note?: string | null;
   harvestedAt?: string | null;
-};
-
-export type SoftDeleteHarvestRecordInput = {
-  recordId: UUID;
-  reason?: string | null;
 };
 
 // Pencatatan realisasi perawatan inisiatif. Satu catatan dapat berdampak ke

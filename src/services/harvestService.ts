@@ -9,7 +9,6 @@ import type {
   MemberRole,
   MemberStatus,
   ServiceResult,
-  SoftDeleteHarvestRecordInput,
   SuccessData,
   UpdateHarvestRecordInput,
   UUID,
@@ -206,21 +205,6 @@ export async function updateOwnHarvestRecord(
 
   if (error) {
     return fail(error, 'Catatan panen gagal diperbarui.');
-  }
-
-  return ok({ success: true });
-}
-
-export async function softDeleteOwnHarvestRecord(
-  input: SoftDeleteHarvestRecordInput
-): Promise<ServiceResult<SuccessData>> {
-  const { error } = await supabase.rpc('soft_delete_own_harvest_record', {
-    p_reason: normalizeOptionalText(input.reason),
-    p_record_id: input.recordId,
-  });
-
-  if (error) {
-    return fail(error, 'Catatan panen gagal dihapus.');
   }
 
   return ok({ success: true });

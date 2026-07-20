@@ -1,19 +1,16 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { colors, spacing, typography } from '../constants/theme';
 import {
   getConditionReportDetail,
-  softDeleteOwnConditionReport,
 } from '../services/conditionReportService';
 import {
   getGrowthPhaseRecordDetail,
-  softDeleteOwnGrowthPhaseRecord,
 } from '../services/growthPhaseService';
 import {
   getHarvestRecordDetail,
-  softDeleteOwnHarvestRecord,
 } from '../services/harvestService';
 import { getFarmActorDisplayProfiles } from '../services/memberService';
 import {
@@ -26,7 +23,6 @@ import { useAuth } from '../context/auth-context';
 import type {
   MemberRole,
   ServiceResult,
-  SuccessData,
   Tree,
   UUID,
 } from '../types/domain';
@@ -85,7 +81,6 @@ export function TreeRecordDetailScreen({
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [photos, setPhotos] = React.useState<PhotoAttachmentPreviewItem[]>([]);
-  const [submitting, setSubmitting] = React.useState(false);
   const [tree, setTree] = React.useState<Tree | null>(null);
   const normalizedType = normalizeRecordType(recordType);
 
@@ -129,47 +124,6 @@ export function TreeRecordDetailScreen({
     loadDetail().finally(() => setLoading(false));
   }, [loadDetail]);
 
-  function handleDeletePress() {
-    Alert.alert(
-      'Hapus catatan?',
-      'Catatan akan disembunyikan dari riwayat pohon. Data tidak dihapus permanen.',
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus catatan',
-          style: 'destructive',
-          onPress: () => {
-            runDelete();
-          },
-        },
-      ]
-    );
-  }
-
-  async function runDelete() {
-    if (!recordId || !normalizedType || !treeId) {
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-    const result = await softDeleteRecord(normalizedType, recordId);
-
-    if (result.error) {
-      setError(result.error.message);
-      setSubmitting(false);
-      return;
-    }
-
-    setSubmitting(false);
-    Alert.alert('Catatan berhasil dihapus dari riwayat.', '', [
-      {
-        text: 'OK',
-        onPress: () => router.replace(`${basePath}/${treeId}`),
-      },
-    ]);
-  }
-
   if (loading) {
     return <LoadingState message="Memuat detail catatan..." />;
   }
@@ -188,10 +142,7 @@ export function TreeRecordDetailScreen({
     <Screen
       footer={
         detail.canEdit ? (
-          <>
-            <Button title="Edit catatan" disabled={submitting} onPress={() => router.push(`${basePath}/${treeId}/records/${normalizedType}/${recordId}/edit`)} />
-            <Button title="Hapus catatan" variant="danger" loading={submitting} onPress={handleDeletePress} />
-          </>
+          <Button title="Edit catatan" onPress={() => router.push(`${basePath}/${treeId}/records/${normalizedType}/${recordId}/edit`)} />
         ) : undefined
       }
     >
@@ -414,21 +365,6 @@ function unknownRecordType(recordType: never): ServiceResult<never> {
 
 function toPreviewPhoto(id: UUID, url: string, caption?: string | null): PhotoAttachmentPreviewItem {
   return { caption, id, url };
-}
-
-function softDeleteRecord(
-  recordType: TreeRecordRouteType,
-  recordId: UUID
-): Promise<ServiceResult<SuccessData>> {
-  if (recordType === 'condition') {
-    return softDeleteOwnConditionReport({ reportId: recordId });
-  }
-
-  if (recordType === 'phase') {
-    return softDeleteOwnGrowthPhaseRecord({ recordId });
-  }
-
-  return softDeleteOwnHarvestRecord({ recordId });
 }
 
 function formatDateTime(value: string): string {
