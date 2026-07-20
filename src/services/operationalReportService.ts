@@ -18,12 +18,6 @@ import type {
   UpdateOperationalReportStatusInput,
   UUID,
 } from '../types/domain';
-import {
-  deletePhotoAttachment,
-  getOperationalReportPhotos,
-  uploadOperationalReportPhoto,
-} from './photoAttachmentService';
-import type { OperationalReportPhoto } from '../types/media';
 import { fail, ok } from '../utils/serviceResult';
 
 const OPERATIONAL_REPORT_SELECT =
@@ -325,16 +319,8 @@ export async function updateOwnOperationalReport(
     return fail(new Error(mapUpdateOwnOperationalReportError(error)));
   }
 
-  const warningMessage = await updateOperationalReportPhoto({
-    farmId: reportResult.data.farmId,
-    photo: input.photo,
-    removeExistingPhoto: input.removeExistingPhoto === true,
-    reportId: reportResult.data.id,
-  });
-
   return ok({
     reportId: reportResult.data.id,
-    warningMessage,
   });
 }
 
@@ -409,62 +395,6 @@ async function getOperationalReportFollowUpTaskExists(
   }
 
   return ok((data ?? []).length > 0);
-}
-
-async function updateOperationalReportPhoto(input: {
-  farmId: UUID;
-  photo?: UpdateOwnOperationalReportInput['photo'];
-  removeExistingPhoto: boolean;
-  reportId: UUID;
-}): Promise<string | null> {
-  if (!input.photo?.uri && !input.removeExistingPhoto) {
-    return null;
-  }
-
-  const existingPhotoResult = await getOperationalReportPhotos({
-    farmId: input.farmId,
-    reportId: input.reportId,
-  });
-
-  if (existingPhotoResult.error) {
-    return 'Laporan berhasil diperbarui, tetapi foto lama belum dapat diperiksa.';
-  }
-
-  const existingPhotos = existingPhotoResult.data;
-
-  if (input.photo?.uri) {
-    const uploadResult = await uploadOperationalReportPhoto({
-      base64: input.photo.base64,
-      farmId: input.farmId,
-      fileName: input.photo.fileName,
-      localUri: input.photo.uri,
-      mimeType: input.photo.mimeType,
-      reportId: input.reportId,
-    });
-
-    if (uploadResult.error) {
-      return 'Laporan berhasil diperbarui, tetapi foto laporan gagal diunggah.';
-    }
-
-    return deleteOperationalReportPhotos(
-      existingPhotos.filter((photo) => photo.attachment.id !== uploadResult.data.attachment.id)
-    );
-  }
-
-  return deleteOperationalReportPhotos(existingPhotos);
-}
-
-async function deleteOperationalReportPhotos(
-  photos: OperationalReportPhoto[]
-): Promise<string | null> {
-  const results = await Promise.all(
-    photos.map((photo) => deletePhotoAttachment({ photoId: photo.attachment.id }))
-  );
-  const failedDelete = results.find((result) => result.error);
-
-  return failedDelete?.error
-    ? 'Laporan berhasil diperbarui, tetapi foto laporan lama belum dapat dihapus.'
-    : null;
 }
 
 function mapUpdateOwnOperationalReportError(error: { code?: string; message?: string }): string {

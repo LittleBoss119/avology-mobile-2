@@ -3,13 +3,11 @@ import type { UUID } from './domain';
 export type PhotoAttachmentEntityType =
   | 'tree_main'
   | 'condition_record'
-  | 'operational_report'
   | 'task_proof';
 
 export type PhotoAttachmentPathFolder =
   | 'trees'
   | 'condition-reports'
-  | 'operational-reports'
   | 'task-proofs';
 
 export type PhotoAttachment = {
@@ -120,33 +118,6 @@ export type ListConditionRecordPhotosForTreeInput = {
   farmId: UUID;
   treeId: UUID;
   conditionRecordIds: UUID[];
-};
-
-export type OperationalReportPhoto = {
-  attachment: PhotoAttachment;
-  signedUrl: string;
-};
-
-export type OperationalReportPhotoMap = Record<UUID, OperationalReportPhoto>;
-
-export type UploadOperationalReportPhotoInput = {
-  farmId: UUID;
-  reportId: UUID;
-  localUri: string;
-  base64?: string | null;
-  fileName?: string | null;
-  mimeType?: string | null;
-  caption?: string | null;
-};
-
-export type GetOperationalReportPhotosInput = {
-  farmId: UUID;
-  reportId: UUID;
-};
-
-export type ListOperationalReportPhotosForReportsInput = {
-  farmId: UUID;
-  reportIds: UUID[];
 };
 
 export type TaskProofPhoto = {
