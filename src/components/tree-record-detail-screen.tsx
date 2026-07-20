@@ -187,14 +187,24 @@ export function TreeRecordDetailScreen({
         </View>
       </Card>
 
-      <Card>
-        <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
-          Foto catatan
-        </Text>
-        <PhotoAttachmentPreviewList emptyText="Tidak ada foto pada catatan ini." photos={photos} />
-      </Card>
+      {recordTypeHasPhotos(normalizedType) ? (
+        <Card>
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+            Foto catatan
+          </Text>
+          <PhotoAttachmentPreviewList emptyText="Tidak ada foto pada catatan ini." photos={photos} />
+        </Card>
+      ) : null}
     </Screen>
   );
+}
+
+// Hanya condition_record yang masih menyimpan foto. Foto untuk phase & harvest
+// dihapus di B3a/B3b, sehingga section "Foto catatan" disembunyikan untuk kedua
+// tipe itu (bukan dirender kosong). task_proof & operational report punya foto
+// tapi ditangani layar lain, bukan di sini.
+function recordTypeHasPhotos(recordType: TreeRecordRouteType | null): boolean {
+  return recordType === 'condition';
 }
 
 function normalizeRecordType(value?: string): TreeRecordRouteType | null {
