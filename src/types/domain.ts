@@ -500,6 +500,12 @@ export type GetFloweringAndFruitingTreesInput = {
   farmId: UUID;
 };
 
+// Pohon fase berbunga/berbuah diperkaya recorded_at fase 'flowering' TERAKHIR
+// (RF-11a). null bila pohon belum pernah punya catatan fase berbunga.
+export type FloweringMonitoringTree = Tree & {
+  lastFloweringAt: string | null;
+};
+
 export type GetTreeHistoryInput = {
   treeId: UUID;
 };

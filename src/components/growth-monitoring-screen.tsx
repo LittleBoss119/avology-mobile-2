@@ -4,8 +4,9 @@ import { Text, View } from 'react-native';
 
 import { useAuth } from '../context/auth-context';
 import { getFloweringAndFruitingTrees } from '../services/growthPhaseService';
-import type { GrowthPhase, Tree } from '../types/domain';
+import type { FloweringMonitoringTree, GrowthPhase } from '../types/domain';
 import { formatGrowthPhase, formatTreeLocation } from '../utils/treeFormat';
+import { FloweringAgeMarker } from './flowering-marker';
 import { GrowthPhaseBadge } from './tree-components';
 import { Button, Card, EmptyState, ErrorBanner, LoadingState, MetaRow, PageIntro, Screen } from './ui';
 
@@ -13,7 +14,7 @@ export function OwnerGrowthMonitoringScreen() {
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [trees, setTrees] = React.useState<Tree[]>([]);
+  const [trees, setTrees] = React.useState<FloweringMonitoringTree[]>([]);
 
   const farmId = currentFarm?.farmId;
 
@@ -114,7 +115,7 @@ function TreePhaseSection({
   emptyTitle: string;
   phase: GrowthPhase;
   title: string;
-  trees: Tree[];
+  trees: FloweringMonitoringTree[];
 }) {
   return (
     <View style={{ gap: 12 }}>
@@ -138,7 +139,7 @@ function TreePhaseSection({
   );
 }
 
-function MonitoringTreeCard({ tree }: { tree: Tree }) {
+function MonitoringTreeCard({ tree }: { tree: FloweringMonitoringTree }) {
   return (
     <Card>
       <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '700' }}>
@@ -149,6 +150,7 @@ function MonitoringTreeCard({ tree }: { tree: Tree }) {
       {tree.currentGrowthPhase ? (
         <MetaRow label="Fase saat ini" value={formatGrowthPhase(tree.currentGrowthPhase)} />
       ) : null}
+      <FloweringAgeMarker currentGrowthPhase={tree.currentGrowthPhase} lastFloweringAt={tree.lastFloweringAt} />
       <Button title="Buka Detail" variant="secondary" onPress={() => router.push(`/owner/trees/${tree.id}`)} />
     </Card>
   );

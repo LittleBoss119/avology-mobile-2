@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import type {
   CreateGrowthPhaseRecordData,
   CreateGrowthPhaseRecordInput,
+  FloweringMonitoringTree,
   GetFloweringAndFruitingTreesInput,
   GetGrowthPhaseRecordDetailInput,
   GetGrowthPhaseRecordsInput,
@@ -213,7 +214,7 @@ export async function updateOwnGrowthPhaseRecord(
 
 export async function getFloweringAndFruitingTrees(
   input: GetFloweringAndFruitingTreesInput
-): Promise<ServiceResult<Tree[]>> {
+): Promise<ServiceResult<FloweringMonitoringTree[]>> {
   const accessResult = await ensureActiveOwner(input.farmId);
 
   if (accessResult.error) {
@@ -234,7 +235,57 @@ export async function getFloweringAndFruitingTrees(
     return fail(error, 'Gagal memuat monitoring fase berbunga dan berbuah.');
   }
 
-  return ok((data ?? []).map(mapTree));
+  const treeRows = data ?? [];
+
+  // RF-11a: perkaya tiap pohon dengan recorded_at fase 'flowering' terakhir.
+  const lastFloweringResult = await getLastFloweringByTree(treeRows.map((row) => row.id));
+
+  if (lastFloweringResult.error) {
+    return fail(lastFloweringResult.error);
+  }
+
+  const lastFloweringByTree = lastFloweringResult.data;
+
+  return ok(
+    treeRows.map((row) => ({
+      ...mapTree(row),
+      lastFloweringAt: lastFloweringByTree.get(row.id) ?? null,
+    }))
+  );
+}
+
+// Query kedua (pola secondary-query yang sudah dipakai di repo): ambil semua
+// record fase 'flowering' untuk pohon-pohon tsb, terurut recorded_at desc,
+// lalu ambil kemunculan pertama per pohon = tanggal berbunga TERAKHIR.
+async function getLastFloweringByTree(
+  treeIds: string[]
+): Promise<ServiceResult<Map<string, string>>> {
+  if (treeIds.length === 0) {
+    return ok(new Map());
+  }
+
+  const { data, error } = await supabase
+    .from('growth_phase_records')
+    .select('tree_id, recorded_at')
+    .in('tree_id', treeIds)
+    .eq('phase', 'flowering')
+    .eq('is_deleted', false)
+    .order('recorded_at', { ascending: false })
+    .returns<{ tree_id: string; recorded_at: string }[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat tanggal berbunga terakhir.');
+  }
+
+  const lastFloweringByTree = new Map<string, string>();
+
+  for (const row of data ?? []) {
+    if (!lastFloweringByTree.has(row.tree_id)) {
+      lastFloweringByTree.set(row.tree_id, row.recorded_at);
+    }
+  }
+
+  return ok(lastFloweringByTree);
 }
 
 async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessData>> {

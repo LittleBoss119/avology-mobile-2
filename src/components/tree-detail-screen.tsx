@@ -34,6 +34,7 @@ import {
   type TreeHistoryRouteRecordType,
   TreeVisualPlaceholder,
 } from './tree-components';
+import { FloweringAgeMarker } from './flowering-marker';
 import {
   appTheme,
   Card,
@@ -337,6 +338,12 @@ export function TreeDetailScreen({
     router.push(`${basePath}/${tree.id}/records/${recordType}/${item.sourceId}`);
   }
 
+  // RF-11a: tanggal fase 'flowering' TERAKHIR diturunkan dari history yang sudah
+  // dimuat (item 'phase' membawa title enum mentah + happenedAt=recorded_at, sudah
+  // terurut desc & terfilter is_deleted). Tidak perlu query/service tambahan.
+  const lastFloweringAt =
+    history.find((item) => item.historyType === 'phase' && item.title === 'flowering')?.happenedAt ?? null;
+
   const displayCode = formatTreeDisplayCode(tree);
 
   return (
@@ -378,6 +385,8 @@ export function TreeDetailScreen({
       />
 
       <InfoGrid mode={mode} tree={tree} />
+
+      <FloweringAgeMarker currentGrowthPhase={tree.currentGrowthPhase} lastFloweringAt={lastFloweringAt} />
 
       <ActionSection basePath={basePath} tree={tree} />
 

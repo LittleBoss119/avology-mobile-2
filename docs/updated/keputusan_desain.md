@@ -61,6 +61,19 @@ Simpan di `docs/` dalam repo agar ikut versi kode, bukan di folder Downloads.
 
 ---
 
+## Dependensi yang ditambahkan
+
+Catatan dependency non-trivial yang sengaja dimasukkan ke repo beserta alasannya, supaya penambahan library tidak terulang atau ditinjau ulang tanpa konteks.
+
+### react-native-svg (ditambahkan di Iterasi B, changeset B-2 / RF-11a)
+
+- Konteks: repo semula tidak punya library ikon; ikon lama (CameraGlyph dll) digambar tangan dari View+border.
+- Keputusan: pasang react-native-svg (versi cocok Expo SDK 56 via expo install) sebagai fondasi ikon, dipakai pertama untuk ikon penanda umur berbunga (FlowerIcon/FlowerOffIcon, path verbatim dari Tabler Icons) dan ikon marker riwayat pohon di commit 2.
+- Alasan: react-native-svg adalah dependency standar ekosistem Expo/RN; lebih mudah dijaga daripada menggambar banyak ikon manual dari View+border.
+- Alternatif yang ditolak: lanjut pola glyph buatan tangan (nol dependency baru, tapi rapuh & sulit dijaga untuk banyak ikon).
+
+---
+
 ## Aturan main untuk diri sendiri
 
 1. **Sebelum menambah fitur, cek dokumen ini.** Kalau ada di daftar "sengaja tidak ada", jangan tambah tanpa alasan baru yang lolos triangulasi.
