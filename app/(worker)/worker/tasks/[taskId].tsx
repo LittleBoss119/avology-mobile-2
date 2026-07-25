@@ -628,6 +628,7 @@ export default function WorkerTaskDetailScreen() {
             <Card key={activity.id}>
               <MetaRow label="Status" value={formatActivityStatus(activity.status)} />
               <MetaRow label="Waktu" value={formatDateTime(activity.performedAt)} />
+              <MetaRow label="Produk" value={activity.produk} />
               <MetaRow label="Catatan" value={activity.note} />
               {activity.status === 'completed' ? (
                 <TaskProofPhotoPreview photo={proofPhotoMap[activity.id]} />
