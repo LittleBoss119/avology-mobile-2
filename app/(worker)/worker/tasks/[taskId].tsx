@@ -49,6 +49,7 @@ export default function WorkerTaskDetailScreen() {
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [completeNote, setCompleteNote] = React.useState('');
+  const [completeProduk, setCompleteProduk] = React.useState('');
   const [editNote, setEditNote] = React.useState('');
   const [editProofPhoto, setEditProofPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [editStatus, setEditStatus] = React.useState<ActivityStatus>('completed');
@@ -140,6 +141,7 @@ export default function WorkerTaskDetailScreen() {
 
     const result = await completeTask({
       note: completeNote,
+      produk: completeProduk,
       taskId: task.id,
     });
 
@@ -178,6 +180,7 @@ export default function WorkerTaskDetailScreen() {
     }
 
     setCompleteNote('');
+    setCompleteProduk('');
     setProofPhoto(null);
     setShowCompleteInput(false);
     await loadDetail();
@@ -503,12 +506,15 @@ export default function WorkerTaskDetailScreen() {
           </View>
 
           {showCompleteInput ? (
-            <TextArea
-              label="Catatan Realisasi"
-              onChangeText={setCompleteNote}
-              placeholder="Contoh: Pekerjaan selesai sesuai instruksi"
-              value={completeNote}
-            />
+            <>
+              <TextArea
+                label="Catatan Realisasi"
+                onChangeText={setCompleteNote}
+                placeholder="Contoh: Pekerjaan selesai sesuai instruksi"
+                value={completeNote}
+              />
+              <ProdukField onChangeText={setCompleteProduk} value={completeProduk} />
+            </>
           ) : null}
 
           {showPostponeInput ? (
@@ -675,6 +681,41 @@ function TextArea({
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.md,
           textAlignVertical: 'top',
+        }}
+        value={value}
+      />
+    </View>
+  );
+}
+
+function ProdukField({
+  onChangeText,
+  value,
+}: {
+  onChangeText: (value: string) => void;
+  value: string;
+}) {
+  // Konsisten dengan field produk form inisiatif (tree-care-activity-screen.tsx):
+  // opsional, satu baris, label "Produk yang dipakai", placeholder "Opsional".
+  return (
+    <View style={{ gap: 7 }}>
+      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
+        Produk yang dipakai
+      </Text>
+      <TextInput
+        onChangeText={onChangeText}
+        placeholder="Opsional"
+        placeholderTextColor={colors.textSoft}
+        style={{
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderCurve: 'continuous',
+          borderRadius: radius.md,
+          borderWidth: 1,
+          color: colors.text,
+          fontSize: 16,
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
         }}
         value={value}
       />

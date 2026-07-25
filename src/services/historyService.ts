@@ -15,7 +15,7 @@ import type {
 import { fail, ok } from '../utils/serviceResult';
 
 const TREE_HISTORY_SELECT =
-  'source_id, tree_id, farm_id, history_type, title, description, actor_id, happened_at, asal';
+  'source_id, tree_id, farm_id, history_type, title, description, actor_id, happened_at, asal, produk';
 
 type TreeHistoryRow = {
   source_id: string | null;
@@ -27,6 +27,7 @@ type TreeHistoryRow = {
   actor_id: string;
   happened_at: string;
   asal: CareActivityOrigin | null;
+  produk: string | null;
 };
 
 type TreeFarmRow = {
@@ -187,6 +188,7 @@ function mapTreeHistoryItem(row: TreeHistoryRow): TreeHistoryItem {
     actorId: row.actor_id,
     happenedAt: row.happened_at,
     asal: row.asal,
+    produk: row.produk,
   };
 }
 

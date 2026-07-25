@@ -393,6 +393,7 @@ export async function completeTask(
 
   const { data, error } = await supabase.rpc('complete_task', {
     p_note: normalizeOptionalText(input.note),
+    p_produk: normalizeOptionalText(input.produk),
     p_task_id: input.taskId,
   });
 

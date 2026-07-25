@@ -221,6 +221,9 @@ export type TreeHistoryItem = {
   happenedAt: string;
   // Hanya terisi untuk historyType 'care'; sumber lain bernilai null.
   asal?: CareActivityOrigin | null;
+  // Produk/merek perawatan (RF-12). Hanya terisi untuk historyType 'care'
+  // yang mencatat produk; null untuk sumber lain atau care tanpa produk.
+  produk: string | null;
 };
 
 export type OperationalReport = {
@@ -702,6 +705,7 @@ export type GetTaskDetailInput = {
 export type CompleteTaskInput = {
   taskId: UUID;
   note?: string | null;
+  produk?: string | null;
 };
 
 export type CompleteTaskData = {

@@ -983,13 +983,25 @@ function formatHistoryTitle(item: TreeHistoryItem): string {
 }
 
 function formatHistoryDescription(item: TreeHistoryItem): string | null {
-  // Catatan inisiatif tanpa note jatuh ke kategori mentah dari view
-  // (mis. 'watering'), jadi diterjemahkan ke label Indonesia di sini.
-  if (item.historyType === 'care' && isCareCategory(item.description)) {
-    return formatCareCategory(item.description);
+  if (item.historyType !== 'care') {
+    return item.description;
   }
 
-  return item.description;
+  // Catatan inisiatif tanpa note jatuh ke kategori mentah dari view
+  // (mis. 'watering'), jadi diterjemahkan ke label Indonesia di sini.
+  const base = isCareCategory(item.description)
+    ? formatCareCategory(item.description)
+    : item.description;
+
+  // RF-12: produk/merek tampil inline di baris deskripsi, mis. "Semprot · Decis 25 EC".
+  // Tanpa produk cukup tampilkan base; jangan sampai ada pemisah menggantung/"null".
+  const produk = item.produk?.trim() ? item.produk.trim() : null;
+
+  if (base && produk) {
+    return `${base} · ${produk}`;
+  }
+
+  return base ?? produk;
 }
 
 function isCareCategory(value?: string | null): value is CareCategory {
