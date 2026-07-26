@@ -61,6 +61,21 @@ Simpan di `docs/` dalam repo agar ikut versi kode, bukan di folder Downloads.
 
 ---
 
+## Drift DB<->repo: get_farm_actor_display_profiles (ditemukan di Iterasi B / B-2b)
+
+- RPC get_farm_actor_display_profiles seharusnya ada sejak migration 011, tapi live DB
+  tidak memilikinya (terkonfirmasi via SQL Editor). Bukan drop yang tercatat di migration
+  mana pun (031 tidak menyentuhnya) -- ini drift DB<->repo (011 tak pernah diterapkan
+  penuh, atau di-drop lewat SQL manual di luar migration).
+- Gejala: nama pencatat di riwayat pohon selalu "Anggota kebun" untuk viewer worker,
+  karena panggilan RPC gagal -> fallback get_member_basic_profiles yang owner-only.
+- Perbaikan: migration 033 memulihkan RPC (guard is_active_farm_member, bukan owner-only,
+  agar worker juga bisa resolve nama). Dijalankan manual via SQL Editor.
+- Pelajaran: live DB bisa melenceng dari migration ter-commit; verifikasi keberadaan
+  fungsi/objek di DB, jangan asumsikan dari migration yang tercatat.
+
+---
+
 ## Dependensi yang ditambahkan
 
 Catatan dependency non-trivial yang sengaja dimasukkan ke repo beserta alasannya, supaya penambahan library tidak terulang atau ditinjau ulang tanpa konteks.
