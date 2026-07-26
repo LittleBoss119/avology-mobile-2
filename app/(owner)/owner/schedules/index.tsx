@@ -24,6 +24,7 @@ import { useAuth } from '../../../../src/context/auth-context';
 import { getCareScheduleDetail, getCareSchedules } from '../../../../src/services/careScheduleService';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import type { CareSchedule, CareScheduleDetail, FarmMemberBasicProfile } from '../../../../src/types/domain';
+import { scheduleDueMarker } from '../../../../src/utils/taskDueDate';
 
 type ScheduleStatusFilter = 'all' | 'today' | 'unfinished' | 'completed' | 'postponed' | 'cancelled';
 type ScheduleSourceFilter = 'all' | 'manual' | 'sop';
@@ -136,6 +137,7 @@ export default function CareScheduleListScreen() {
     })
   );
   const hasActiveFilters = statusFilter !== 'all' || sourceFilter !== 'all';
+  const todayIso = getTodayIsoDate();
 
   function clearFilters() {
     setStatusFilter('all');
@@ -199,6 +201,7 @@ export default function CareScheduleListScreen() {
             <CompactScheduleCard
               key={schedule.id}
               detail={details[schedule.id]}
+              dueMarker={scheduleDueMarker(schedule, details[schedule.id], todayIso)}
               onPress={() => router.push(`/owner/schedules/${schedule.id}`)}
               schedule={schedule}
               workerNames={workerNames}
@@ -309,11 +312,15 @@ function ScheduleFilterControls({
 
 function CompactScheduleCard({
   detail,
+  dueMarker,
   onPress,
   schedule,
   workerNames,
 }: {
   detail?: CareScheduleDetail;
+  // RF-11b: penanda jatuh tempo level-jadwal. null → badge status agregat & border
+  // kartu persis seperti sebelumnya (nol perubahan bila tidak ada task jatuh tempo).
+  dueMarker?: 'overdue' | 'due_today' | null;
   onPress: () => void;
   schedule: CareSchedule;
   workerNames: Record<string, string>;
@@ -324,7 +331,7 @@ function CompactScheduleCard({
 
   return (
     <Pressable onPress={onPress}>
-      <Card>
+      <Card variant={dueMarker === 'overdue' ? 'danger' : dueMarker === 'due_today' ? 'warning' : 'default'}>
         <View style={{ gap: spacing.sm }}>
           <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 8, justifyContent: 'space-between' }}>
             <Text
@@ -335,7 +342,13 @@ function CompactScheduleCard({
             >
               {schedule.title}
             </Text>
-            <Badge label={formatScheduleStatusLabel(status)} maxWidth={116} tone={getScheduleStatusTone(status)} />
+            {dueMarker === 'overdue' ? (
+              <Badge label="Terlambat" maxWidth={116} tone="danger" />
+            ) : dueMarker === 'due_today' ? (
+              <Badge label="Hari ini" maxWidth={116} tone="warning" />
+            ) : (
+              <Badge label={formatScheduleStatusLabel(status)} maxWidth={116} tone={getScheduleStatusTone(status)} />
+            )}
           </View>
 
           <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
