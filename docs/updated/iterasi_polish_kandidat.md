@@ -24,3 +24,13 @@ Simpan di `docs/` agar ikut versi kode.
   kunci) dengan hierarki yang jelas, bukan sekadar kartu angka bertumpuk.
 - **Ditunda karena:** redesign menyeluruh = scope besar, di luar Iterasi B; ditangani saat
   Iterasi Polish bersama rombak layar lain, per-layar, bukan sekaligus global.
+
+---
+
+## Ganti bottom sheet ke @gorhom/bottom-sheet (kandidat Iterasi Polish)
+
+- Sheet "Catat aktivitas" sekarang pakai Modal bawaan (fungsional, styling sudah
+  dirapikan). Untuk kualitas gesture/animasi lebih baik, kandidat migrasi ke
+  @gorhom/bottom-sheet — TAPI butuh react-native-gesture-handler + reanimated +
+  konfigurasi root (GestureHandlerRootView, babel reanimated plugin). Ditunda karena
+  menyentuh fondasi app & berisiko; dikerjakan saat tidak dikejar deadline.

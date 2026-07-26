@@ -9,6 +9,10 @@ type IconProps = {
   size?: number;
 };
 
+function StrokePath({ color, d }: { color: string; d: string }) {
+  return <Path d={d} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />;
+}
+
 export function FlowerIcon({ color, size = 20 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -54,6 +58,51 @@ export function FlowerOffIcon({ color, size = 20 }: IconProps) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </Svg>
+  );
+}
+
+export function AlertTriangleIcon({ color, size = 20 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <StrokePath color={color} d="M12 9v4" />
+      <StrokePath color={color} d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" />
+      <StrokePath color={color} d="M12 16h.01" />
+    </Svg>
+  );
+}
+
+export function BasketIcon({ color, size = 20 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <StrokePath color={color} d="M10 14a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <StrokePath color={color} d="M5.001 8h13.999a2 2 0 0 1 1.977 2.304l-1.255 7.152a3 3 0 0 1 -2.966 2.544h-9.512a3 3 0 0 1 -2.965 -2.544l-1.255 -7.152a2 2 0 0 1 1.977 -2.304" />
+      <StrokePath color={color} d="M17 10l-2 -6" />
+      <StrokePath color={color} d="M7 10l2 -6" />
+    </Svg>
+  );
+}
+
+export function SprayIcon({ color, size = 20 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <StrokePath color={color} d="M4 12a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v7a2 2 0 0 1 -2 2h-4a2 2 0 0 1 -2 -2l0 -7" />
+      <StrokePath color={color} d="M6 10v-4a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v4" />
+      <StrokePath color={color} d="M15 7h.01" />
+      <StrokePath color={color} d="M18 9h.01" />
+      <StrokePath color={color} d="M18 5h.01" />
+      <StrokePath color={color} d="M21 3h.01" />
+      <StrokePath color={color} d="M21 7h.01" />
+      <StrokePath color={color} d="M21 11h.01" />
+      <StrokePath color={color} d="M10 7h1" />
+    </Svg>
+  );
+}
+
+export function ChevronRightIcon({ color, size = 20 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <StrokePath color={color} d="M9 6l6 6l-6 6" />
     </Svg>
   );
 }

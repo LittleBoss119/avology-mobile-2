@@ -25,6 +25,7 @@ import {
   formatTreeDisplayCode,
 } from '../utils/treeFormat';
 import { appTheme, Badge, Button, Card, EmptyState, Field, MetaRow, PhotoPickerCard } from './ui';
+import { AlertTriangleIcon, BasketIcon, ChevronRightIcon, FlowerIcon, SprayIcon } from './icons';
 
 export type TreeFormValues = {
   rowPosition: string;
@@ -87,7 +88,6 @@ export type ConditionReportListProps = {
 };
 
 export type TreeHistoryTimelineProps = {
-  conditionPhotoMap?: ConditionRecordPhotoMap;
   currentUserId?: string | null;
   history: TreeHistoryItem[];
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
@@ -528,7 +528,6 @@ export function ConditionReportList({
 }
 
 export function TreeHistoryTimeline({
-  conditionPhotoMap = {},
   currentUserId,
   history,
   onRecordPress,
@@ -548,7 +547,6 @@ export function TreeHistoryTimeline({
       {history.map((item, index) => (
         <TreeHistoryTimelineItem
           key={buildHistoryItemKey(item, index)}
-          conditionPhotoMap={conditionPhotoMap}
           currentUserId={currentUserId}
           item={item}
           onRecordPress={onRecordPress}
@@ -593,89 +591,78 @@ export function ConditionReportItem({
 }
 
 function TreeHistoryTimelineItem({
-  conditionPhotoMap,
   currentUserId,
   item,
   onRecordPress,
   viewerMode,
 }: {
-  conditionPhotoMap: ConditionRecordPhotoMap;
   currentUserId?: string | null;
   item: TreeHistoryItem;
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
   viewerMode: TreeHistoryViewerMode;
 }) {
-  const conditionPhotoUrl =
-    item.historyType === 'condition' && item.sourceId
-      ? conditionPhotoMap[item.sourceId]?.signedUrl
-      : null;
   const careOriginLabel = item.historyType === 'care' ? formatCareOrigin(item.asal) : null;
   const routeRecordType = getRouteRecordType(item);
   const canOpenRecord = Boolean(item.sourceId && routeRecordType && onRecordPress);
   const content = (
     <View style={{ flexDirection: 'row', gap: spacing.md }}>
-      <View style={{ alignItems: 'center', paddingTop: spacing.sm }}>
-        <View
-          style={{
-            alignItems: 'center',
-            backgroundColor: getTimelineDotColor(item.historyType),
-            borderRadius: 999,
-            height: 24,
-            justifyContent: 'center',
-            width: 24,
-          }}
-        >
-          <Text selectable style={{ color: getTimelineTextColor(item.historyType), fontSize: 11, fontWeight: '900' }}>
-            {getTimelineMarker(item.historyType)}
-          </Text>
-        </View>
-        <View style={{ backgroundColor: colors.divider, flex: 1, marginTop: spacing.sm, width: 1 }} />
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: getTimelineDotColor(item.historyType),
+          borderRadius: 999,
+          height: 34,
+          justifyContent: 'center',
+          marginTop: spacing.xs,
+          width: 34,
+        }}
+      >
+        {getTimelineIcon(item.historyType, getTimelineTextColor(item.historyType))}
       </View>
       <View style={{ flex: 1 }}>
         <View
           style={{
+            alignItems: 'center',
             backgroundColor: colors.surface,
             borderColor: canOpenRecord ? colors.primaryBorder : colors.border,
             borderCurve: 'continuous',
             borderRadius: radius.xl,
             borderWidth: 1,
+            flexDirection: 'row',
             gap: spacing.sm,
             padding: spacing.md,
           }}
         >
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-            <View style={{ flexDirection: 'row', flexShrink: 1, gap: spacing.sm }}>
-              <Badge label={formatHistoryType(item.historyType)} tone={getHistoryTone(item.historyType)} />
-              {careOriginLabel ? <Badge label={careOriginLabel} tone="muted" /> : null}
+          <View style={{ flex: 1, gap: spacing.sm }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+              <View style={{ flexDirection: 'row', flexShrink: 1, gap: spacing.sm }}>
+                <Badge label={formatHistoryType(item.historyType)} tone={getHistoryTone(item.historyType)} />
+                {careOriginLabel ? <Badge label={careOriginLabel} tone="muted" /> : null}
+              </View>
+              <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
+                {formatEventDate(item.happenedAt)}
+              </Text>
             </View>
+            <Text selectable style={{ color: colors.text, fontSize: typography.bodyStrong.fontSize, fontWeight: '800', lineHeight: typography.bodyStrong.lineHeight }}>
+              {formatHistoryTitle(item)}
+            </Text>
+            {formatHistoryDescription(item) ? (
+              <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+                {formatHistoryDescription(item)}
+              </Text>
+            ) : null}
             <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
-              {formatEventDate(item.happenedAt)}
+              {getHistoryActorPrefix(item.historyType)}{' '}
+              {formatActorDisplayName({
+                actorId: item.actorId,
+                actorName: item.actorName,
+                actorRole: item.actorRole,
+                currentUserId,
+                viewerMode,
+              })}
             </Text>
           </View>
-          <Text selectable style={{ color: colors.text, fontSize: typography.bodyStrong.fontSize, fontWeight: '800', lineHeight: typography.bodyStrong.lineHeight }}>
-            {formatHistoryTitle(item)}
-          </Text>
-          {formatHistoryDescription(item) ? (
-            <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-              {formatHistoryDescription(item)}
-            </Text>
-          ) : null}
-          {conditionPhotoUrl ? <PhotoThumbnail photoUrl={conditionPhotoUrl} /> : null}
-          <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
-            {getHistoryActorPrefix(item.historyType)}{' '}
-            {formatActorDisplayName({
-              actorId: item.actorId,
-              actorName: item.actorName,
-              actorRole: item.actorRole,
-              currentUserId,
-              viewerMode,
-            })}
-          </Text>
-          {canOpenRecord ? (
-            <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
-              Lihat detail
-            </Text>
-          ) : null}
+          {canOpenRecord ? <ChevronRightIcon color={colors.textSoft} size={20} /> : null}
         </View>
       </View>
     </View>
@@ -818,20 +805,20 @@ function getTimelineTextColor(type: TreeHistoryType): string {
   return '#184E91';
 }
 
-function getTimelineMarker(type: TreeHistoryType): string {
+function getTimelineIcon(type: TreeHistoryType, color: string) {
   if (type === 'condition') {
-    return '!';
+    return <AlertTriangleIcon color={color} size={18} />;
   }
 
   if (type === 'phase') {
-    return '+';
+    return <FlowerIcon color={color} size={18} />;
   }
 
   if (type === 'harvest') {
-    return '#';
+    return <BasketIcon color={color} size={18} />;
   }
 
-  return '*';
+  return <SprayIcon color={color} size={18} />;
 }
 
 type BadgeTone = 'danger' | 'muted' | 'success' | 'warning';

@@ -23,7 +23,6 @@ import type {
 import {
   formatGrowthPhase,
   formatTreeAge,
-  formatTreeArchiveStatusLabel,
   formatTreeDisplayCode,
   formatTreeLocation,
 } from '../utils/treeFormat';
@@ -35,15 +34,13 @@ import {
   TreeVisualPlaceholder,
 } from './tree-components';
 import { FloweringAgeMarker } from './flowering-marker';
+import { AlertTriangleIcon, BasketIcon, ChevronRightIcon, FlowerIcon, SprayIcon } from './icons';
 import {
-  appTheme,
-  Card,
+  Button,
   EmptyState,
   ErrorBanner,
   LoadingState,
-  MetaRow,
   Screen,
-  SectionHeader,
   TopAppBar,
 } from './ui';
 
@@ -61,6 +58,7 @@ export function TreeDetailScreen({
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [recordSheetOpen, setRecordSheetOpen] = React.useState(false);
   const [history, setHistory] = React.useState<TreeHistoryItem[]>([]);
   const [conditionPhotoMap, setConditionPhotoMap] = React.useState<ConditionRecordPhotoMap>({});
   const [photoActionLoading, setPhotoActionLoading] = React.useState(false);
@@ -384,15 +382,20 @@ export function TreeDetailScreen({
         visible={photoSourceOpen}
       />
 
-      <InfoGrid mode={mode} tree={tree} />
+      <InfoGrid tree={tree} />
 
       <FloweringAgeMarker currentGrowthPhase={tree.currentGrowthPhase} lastFloweringAt={lastFloweringAt} />
 
-      <ActionSection basePath={basePath} tree={tree} />
+      <Button title="Catat aktivitas" onPress={() => setRecordSheetOpen(true)} />
+      <RecordActivitySheet
+        basePath={basePath}
+        onClose={() => setRecordSheetOpen(false)}
+        treeId={tree.id}
+        visible={recordSheetOpen}
+      />
 
-      <SectionTitle subtitle="Riwayat kondisi, fase tumbuh, hasil panen, perawatan, dan aktivitas yang tercatat." title="Timeline Riwayat" />
+      <SectionTitle subtitle="Riwayat kondisi, fase tumbuh, hasil panen, perawatan, dan aktivitas yang tercatat." title="Riwayat pohon" />
       <TreeHistoryTimeline
-        conditionPhotoMap={conditionPhotoMap}
         currentUserId={profile?.id}
         history={history}
         onRecordPress={handleOpenHistoryRecord}
@@ -451,7 +454,7 @@ function TreeDetailHero({
   tree: Tree;
 }) {
   return (
-    <Card variant="highlight">
+    <View style={{ gap: spacing.md }}>
       <View>
         <TreeVisualPlaceholder condition={tree.currentCondition} photoUrl={photoUrl} />
         {photoLoading ? (
@@ -477,100 +480,163 @@ function TreeDetailHero({
           <Text selectable style={{ color: colors.primary, fontSize: 32, fontWeight: '900', lineHeight: 38 }}>
             {displayCode}
           </Text>
-          <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 22 }}>
-            {tree.variety || 'Varietas belum diisi'}
+          <Text selectable style={{ color: colors.textMuted, fontSize: 15, lineHeight: 21 }}>
+            {formatTreeLocation(tree)}
           </Text>
         </View>
         <View style={{ justifyContent: 'center' }}>
           <ConditionStatusBadge status={tree.currentCondition} />
         </View>
       </View>
-    </Card>
+    </View>
   );
 }
 
-function InfoGrid({ mode, tree }: { mode: TreeDetailMode; tree: Tree }) {
+function InfoGrid({ tree }: { tree: Tree }) {
   const items = [
     { label: 'Varietas', value: tree.variety || 'Belum diisi' },
-    { label: 'Tanggal Tanam', value: formatFriendlyDate(tree.plantedAt) },
-    { label: 'Umur Pohon', value: formatTreeAge(tree.plantedAt) },
-    { label: 'Lokasi', value: formatTreeLocation(tree) },
-    { label: 'Fase Tumbuh', value: formatGrowthPhase(tree.currentGrowthPhase) },
+    { label: 'Tanggal tanam', value: formatFriendlyDate(tree.plantedAt) },
+    { label: 'Umur pohon', value: formatTreeAge(tree.plantedAt) },
+    { label: 'Fase tumbuh', value: formatGrowthPhase(tree.currentGrowthPhase) },
   ];
 
-  if (mode === 'owner') {
-    items.push({ label: 'Status Arsip', value: formatTreeArchiveStatusLabel(tree.isArchived) });
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.lg }}>
+      {items.map((item) => (
+        <View key={item.label} style={{ flexBasis: '50%', paddingRight: spacing.md }}>
+          <InfoCell label={item.label} value={item.value} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function InfoCell({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={{ gap: 3 }}>
+      <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
+        {label}
+      </Text>
+      <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function RecordActivitySheet({
+  basePath,
+  onClose,
+  treeId,
+  visible,
+}: {
+  basePath: string;
+  onClose: () => void;
+  treeId: string;
+  visible: boolean;
+}) {
+  function goTo(path: string) {
+    onClose();
+    router.push(path);
   }
 
   return (
-    <Card>
-      <SectionHeader title="Informasi Pohon" description="Identitas dan kondisi utama pohon." />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.lg }}>
-        {items.map((item) => (
-          <View key={item.label} style={{ flexBasis: '50%', gap: spacing.xs, paddingRight: spacing.md }}>
-            <MetaRow label={item.label} value={item.value} />
-          </View>
-        ))}
-      </View>
-    </Card>
-  );
-}
-
-function ActionSection({
-  basePath,
-  tree,
-}: {
-  basePath: string;
-  tree: Tree;
-}) {
-  return (
-    <Card>
-      <SectionHeader title="Aksi Pohon" description="Catat kondisi, fase, hasil panen, atau perawatan pohon ini." />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-        <TreeActionButton
-          label="Catat Kondisi"
-          onPress={() => router.push(`${basePath}/${tree.id}/report`)}
-          tone="primary"
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <Pressable
+          accessibilityLabel="Tutup"
+          accessibilityRole="button"
+          onPress={onClose}
+          style={{ backgroundColor: 'rgba(30,42,36,0.5)', bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 }}
         />
-        <TreeActionButton label="Catat Fase" onPress={() => router.push(`${basePath}/${tree.id}/phase`)} />
-        <TreeActionButton label="Catat panen" onPress={() => router.push(`${basePath}/${tree.id}/harvest`)} />
-        <TreeActionButton label="Catat perawatan" onPress={() => router.push(`${basePath}/${tree.id}/care`)} />
+        <View
+          style={{
+            backgroundColor: colors.surface,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            gap: spacing.sm,
+            paddingBottom: spacing['3xl'],
+            paddingHorizontal: spacing.xl,
+            paddingTop: spacing.md,
+          }}
+        >
+          <View style={{ alignSelf: 'center', backgroundColor: colors.border, borderRadius: 999, height: 5, marginBottom: spacing.xs, width: 44 }} />
+          <Text selectable style={{ color: colors.text, fontSize: 19, fontWeight: '900', paddingBottom: spacing.xs }}>
+            Catat aktivitas
+          </Text>
+          <RecordActivityRow
+            icon={<AlertTriangleIcon color="#7A5600" size={20} />}
+            iconBg="#FCEFC7"
+            label="Catat kondisi"
+            onPress={() => goTo(`${basePath}/${treeId}/report`)}
+          />
+          <RecordActivityRow
+            icon={<FlowerIcon color="#065F2E" size={20} />}
+            iconBg="#E7F6EC"
+            label="Catat fase"
+            onPress={() => goTo(`${basePath}/${treeId}/phase`)}
+          />
+          <RecordActivityRow
+            icon={<BasketIcon color="#8A5B00" size={20} />}
+            iconBg="#FFF4D6"
+            label="Catat panen"
+            onPress={() => goTo(`${basePath}/${treeId}/harvest`)}
+          />
+          <RecordActivityRow
+            icon={<SprayIcon color="#184E91" size={20} />}
+            iconBg="#E7EEF8"
+            label="Catat perawatan"
+            onPress={() => goTo(`${basePath}/${treeId}/care`)}
+          />
+        </View>
       </View>
-    </Card>
+    </Modal>
   );
 }
 
-function TreeActionButton({
+function RecordActivityRow({
+  icon,
+  iconBg,
   label,
   onPress,
-  tone = 'secondary',
 }: {
+  icon: React.ReactNode;
+  iconBg: string;
   label: string;
   onPress: () => void;
-  tone?: 'primary' | 'secondary';
 }) {
-  const isPrimary = tone === 'primary';
-
   return (
     <Pressable
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: isPrimary ? colors.primary : colors.surface,
-        borderColor: isPrimary ? colors.primary : colors.border,
+        backgroundColor: colors.surface,
+        borderColor: colors.border,
         borderCurve: 'continuous',
         borderRadius: radius.lg,
         borderWidth: 1,
-        flexBasis: 132,
-        flexGrow: 1,
-        justifyContent: 'center',
-        minHeight: 50,
-        paddingHorizontal: 10,
+        flexDirection: 'row',
+        gap: spacing.md,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.md,
       }}
     >
-      <Text selectable style={{ color: isPrimary ? colors.white : colors.primary, fontSize: 14, fontWeight: '900' }}>
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: iconBg,
+          borderRadius: 999,
+          height: 38,
+          justifyContent: 'center',
+          width: 38,
+        }}
+      >
+        {icon}
+      </View>
+      <Text selectable style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '800' }}>
         {label}
       </Text>
+      <ChevronRightIcon color={colors.textSoft} size={20} />
     </Pressable>
   );
 }
