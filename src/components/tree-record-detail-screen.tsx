@@ -4,6 +4,9 @@ import { Text, View } from 'react-native';
 
 import { colors, spacing, typography } from '../constants/theme';
 import {
+  getCareActivityDetail,
+} from '../services/careActivityService';
+import {
   getConditionReportDetail,
 } from '../services/conditionReportService';
 import {
@@ -25,7 +28,7 @@ import type {
   UUID,
 } from '../types/domain';
 import type { PhotoAttachmentPreviewItem } from '../types/media';
-import { formatPersonDisplayName } from '../utils/displayFormat';
+import { formatCareCategory, formatPersonDisplayName } from '../utils/displayFormat';
 import { formatGrowthPhase, formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { PhotoAttachmentPreviewList } from './media';
 import {
@@ -40,9 +43,9 @@ import {
   TopAppBar,
 } from './ui';
 
-// 'manual-care' dicabut: catatan perawatan sengaja tidak punya layar
-// detail/edit -- edit & hapus dilepas (lihat migrasi 027).
-export type TreeRecordRouteType = 'condition' | 'phase' | 'harvest';
+// Catatan perawatan (care) punya layar detail READ-ONLY (US-14 / Iterasi C):
+// bisa dibuka untuk dilihat, tetapi tetap tidak bisa diedit/dihapus (migrasi 027).
+export type TreeRecordRouteType = 'condition' | 'phase' | 'harvest' | 'care';
 
 type TreeRecordDetailScreenProps = {
   basePath: '/owner/trees' | '/worker/trees';
@@ -63,7 +66,12 @@ type DetailState = {
   farmId: UUID;
   note: string | null;
   recordLabel: string;
+  // Badge sekunder (mis. asal perawatan Terjadwal/Inisiatif), tone muted. Opsional.
+  originLabel?: string | null;
   rows: Array<{ label: string; value: string | null }>;
+  // false untuk record read-only-by-design (perawatan): sembunyikan hint
+  // "hanya bisa diubah oleh pelapor" yang tidak relevan. Default (undefined) = tampil.
+  supportsEdit?: boolean;
   title: string;
   updatedAt?: string | null;
 };
@@ -160,7 +168,10 @@ export function TreeRecordDetailScreen({
 
       <Card>
         <View style={{ gap: spacing.md }}>
-          <Badge label={detail.recordLabel} tone="info" />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+            <Badge label={detail.recordLabel} tone="info" />
+            {detail.originLabel ? <Badge label={detail.originLabel} tone="muted" /> : null}
+          </View>
           <MetaRow label={detail.eventLabel} value={formatEventDate(detail.eventAt)} />
           <MetaRow
             label={detail.authorVerb === 'harvested' ? 'Dipanen oleh' : 'Dicatat oleh'}
@@ -179,7 +190,7 @@ export function TreeRecordDetailScreen({
             <MetaRow key={row.label} label={row.label} value={row.value} />
           ))}
           <MetaRow label="Catatan" value={detail.note || '-'} />
-          {!detail.canEdit ? (
+          {!detail.canEdit && detail.supportsEdit !== false ? (
             <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
               Catatan ini hanya bisa diubah oleh pelapor.
             </Text>
@@ -208,7 +219,7 @@ function recordTypeHasPhotos(recordType: TreeRecordRouteType | null): boolean {
 }
 
 function normalizeRecordType(value?: string): TreeRecordRouteType | null {
-  if (value === 'condition' || value === 'phase' || value === 'harvest') {
+  if (value === 'condition' || value === 'phase' || value === 'harvest' || value === 'care') {
     return value;
   }
 
@@ -312,6 +323,59 @@ async function loadRecordDetail(
     };
   }
 
+  if (recordType === 'care') {
+    const result = await getCareActivityDetail({ activityId: recordId });
+
+    if (result.error) {
+      return result;
+    }
+
+    const care = result.data;
+    const authorDisplay = await resolveRecordAuthor(care.farmId, care.performedBy);
+
+    const rows: Array<{ label: string; value: string | null }> = [];
+
+    // Judul tugas induk hanya untuk terjadwal & bila keresolve (RLS worker bisa null).
+    if (care.asal === 'terjadwal' && care.taskTitle) {
+      rows.push({ label: 'Dari tugas', value: care.taskTitle });
+    }
+
+    if (care.category) {
+      rows.push({ label: 'Kategori', value: formatCareCategory(care.category) });
+    }
+
+    if (care.produk && care.produk.trim()) {
+      rows.push({ label: 'Produk', value: care.produk });
+    }
+
+    // Status hanya informatif untuk terjadwal (inisiatif selalu completed).
+    if (care.asal === 'terjadwal') {
+      rows.push({ label: 'Status', value: care.status === 'completed' ? 'Selesai' : 'Tertunda' });
+    }
+
+    return {
+      data: {
+        authorId: care.performedBy,
+        authorName: authorDisplay.fullName,
+        authorRole: authorDisplay.role,
+        authorVerb: 'recorded',
+        canEdit: false,
+        createdAt: null,
+        eventAt: care.performedAt,
+        eventLabel: 'Tanggal perawatan',
+        farmId: care.farmId,
+        note: care.note,
+        originLabel: care.asal === 'terjadwal' ? 'Terjadwal' : 'Inisiatif',
+        recordLabel: 'Perawatan',
+        rows,
+        supportsEdit: false,
+        title: 'Detail catatan perawatan',
+        updatedAt: null,
+      },
+      error: null,
+    };
+  }
+
   return unknownRecordType(recordType);
 }
 
@@ -353,6 +417,10 @@ async function loadRecordPhotos(
   }
 
   if (recordType === 'harvest') {
+    return { data: [], error: null };
+  }
+
+  if (recordType === 'care') {
     return { data: [], error: null };
   }
 

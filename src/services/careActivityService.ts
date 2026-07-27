@@ -1,10 +1,12 @@
 import { supabase } from '../lib/supabase';
 import type {
   CareActivity,
+  CareActivityDetail,
   CareCategory,
   CreateCareActivityData,
   CreateCareActivityInput,
   GetCareActivitiesByTreeInput,
+  GetCareActivityDetailInput,
   ServiceResult,
   UUID,
 } from '../types/domain';
@@ -95,6 +97,55 @@ export async function getCareActivitiesByTree(
   }
 
   return ok((data ?? []).map(mapCareActivity));
+}
+
+// Detail read-only satu catatan perawatan (US-14 / Iterasi C). Untuk asal='terjadwal',
+// judul & kategori diambil dari tugas induk; kalau RLS menolak worker membaca tugas
+// milik orang lain, taskTitle dibiarkan null (bukan error) dan baris terkait di-skip.
+export async function getCareActivityDetail(
+  input: GetCareActivityDetailInput | UUID
+): Promise<ServiceResult<CareActivityDetail>> {
+  const activityId = typeof input === 'string' ? input : input.activityId;
+
+  const { data, error } = await supabase
+    .from('care_activities')
+    .select(CARE_ACTIVITY_SELECT)
+    .eq('id', activityId)
+    .maybeSingle<CareActivityRow>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat detail catatan perawatan.');
+  }
+
+  if (!data) {
+    return fail(new Error('Catatan perawatan tidak ditemukan atau tidak dapat diakses.'));
+  }
+
+  const activity = mapCareActivity(data);
+
+  let taskTitle: string | null = null;
+  let category = activity.category;
+
+  if (activity.asal === 'terjadwal' && activity.careTaskId) {
+    // maybeSingle: kalau RLS menyaring tugas milik orang lain, hasilnya 0 baris
+    // (data null, tanpa error) -> taskTitle & kategori tetap null, ditangani anggun.
+    const taskResult = await supabase
+      .from('care_tasks')
+      .select('title, category')
+      .eq('id', activity.careTaskId)
+      .maybeSingle<{ title: string | null; category: CareCategory | null }>();
+
+    if (!taskResult.error && taskResult.data) {
+      taskTitle = normalizeOptionalText(taskResult.data.title);
+      category = taskResult.data.category ?? null;
+    }
+  }
+
+  return ok({
+    ...activity,
+    category,
+    taskTitle,
+  });
 }
 
 function mapCareActivity(row: CareActivityRow): CareActivity {

@@ -329,6 +329,17 @@ export type CareActivity = {
   produk: string | null;
 };
 
+// Detail read-only satu catatan perawatan (US-14 / Iterasi C).
+export type CareActivityDetail = CareActivity & {
+  // Judul tugas induk (asal='terjadwal'). null bila inisiatif ATAU tugas tak dapat
+  // dibaca (RLS: worker hanya boleh baca tugas yang di-assign ke dirinya).
+  taskTitle: string | null;
+};
+
+export type GetCareActivityDetailInput = {
+  activityId: UUID;
+};
+
 export type CareScheduleDetail = CareSchedule & {
   tasks: CareTask[];
 };

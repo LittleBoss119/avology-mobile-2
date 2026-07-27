@@ -95,7 +95,7 @@ export type TreeHistoryTimelineProps = {
 };
 
 type TreeHistoryViewerMode = 'owner' | 'worker';
-export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest';
+export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest' | 'care';
 
 export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
@@ -911,8 +911,12 @@ function getRouteRecordType(item: TreeHistoryItem): TreeHistoryRouteRecordType |
     return 'harvest';
   }
 
-  // 'care' tidak punya layar detail/edit: catatan perawatan sengaja tidak
-  // dapat diedit atau dihapus (lihat migrasi 027).
+  // 'care' punya layar detail READ-ONLY (US-14 / Iterasi C): bisa dibuka untuk
+  // dilihat, tapi tetap tidak bisa diedit/dihapus (lihat migrasi 027).
+  if (item.historyType === 'care') {
+    return 'care';
+  }
+
   return null;
 }
 
