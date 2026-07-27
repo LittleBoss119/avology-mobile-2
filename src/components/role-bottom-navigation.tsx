@@ -3,7 +3,8 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, radius, spacing, typography } from '../constants/theme';
+import { colors, radius, spacing, tokens, typography } from '../constants/theme';
+import { Icon, type IconName } from './icons';
 
 type NavigationItem = {
   icon: NavigationIconName;
@@ -12,7 +13,16 @@ type NavigationItem = {
   match: string[];
 };
 
-type NavigationIconName = 'calendar' | 'document' | 'farm' | 'home' | 'leaf' | 'user' | 'checklist';
+type NavigationIconName = 'document' | 'farm' | 'home' | 'leaf' | 'checklist';
+
+// Peta nama ikon navigasi (internal) → IconName Tabler di icons.tsx.
+const NAV_ICON: Record<NavigationIconName, IconName> = {
+  home: 'home',
+  checklist: 'list-check',
+  leaf: 'tree',
+  document: 'file-text',
+  farm: 'building-warehouse',
+};
 
 export function RoleBottomNavigation({ role }: { role: 'owner' | 'worker' }) {
   const insets = useSafeAreaInsets();
@@ -52,38 +62,31 @@ export function RoleBottomNavigation({ role }: { role: 'owner' | 'worker' }) {
             <Pressable
               key={item.href}
               onPress={() => router.replace(item.href)}
-              style={({ pressed }) => ({
+              style={{
                 alignItems: 'center',
-                backgroundColor: isActive ? colors.primarySoft : pressed ? colors.surfaceMuted : colors.surface,
+                backgroundColor: isActive ? tokens.color.brand.soft : 'transparent',
                 borderCurve: 'continuous',
-                borderRadius: radius.lg,
+                borderRadius: tokens.radius.cardInner,
                 flex: 1,
-                gap: 4,
+                gap: 2,
                 justifyContent: 'center',
                 minHeight: 52,
                 paddingHorizontal: 4,
                 paddingVertical: 5,
-              })}
+              }}
             >
-              <View
-                style={{
-                  alignItems: 'center',
-                  backgroundColor: isActive ? colors.primary : colors.surfaceMuted,
-                  borderRadius: radius.round,
-                  height: 25,
-                  justifyContent: 'center',
-                  width: 25,
-                }}
-              >
-                <NavigationIcon active={isActive} name={item.icon} />
-              </View>
+              <Icon
+                name={NAV_ICON[item.icon]}
+                size={tokens.icon.lg}
+                color={isActive ? tokens.color.brand.base : tokens.color.text.tertiary}
+              />
               <Text
                 selectable={false}
                 numberOfLines={1}
                 style={{
-                  color: isActive ? colors.primary : colors.textMuted,
+                  color: isActive ? tokens.color.brand.base : tokens.color.text.tertiary,
                   fontSize: typography.navLabel.fontSize,
-                  fontWeight: isActive ? '900' : '700',
+                  fontWeight: isActive ? '500' : '400',
                   lineHeight: typography.navLabel.lineHeight,
                   textAlign: 'center',
                 }}
@@ -198,98 +201,3 @@ const workerTopLevelPaths = [
   '/worker/farm',
   '/worker/profile',
 ];
-
-function NavigationIcon({ active, name }: { active: boolean; name: NavigationIconName }) {
-  const color = active ? colors.surface : colors.textMuted;
-
-  if (name === 'home') {
-    return (
-      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <View
-          style={{
-            borderColor: color,
-            borderLeftWidth: 2,
-            borderTopWidth: 2,
-            height: 10,
-            transform: [{ rotate: '45deg' }],
-            width: 10,
-          }}
-        />
-        <View style={{ borderColor: color, borderWidth: 2, height: 8, marginTop: -3, width: 11 }} />
-      </View>
-    );
-  }
-
-  if (name === 'leaf') {
-    return (
-      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <View
-          style={{
-            borderColor: color,
-            borderRadius: 999,
-            borderWidth: 2,
-            height: 14,
-            transform: [{ rotate: '-35deg' }],
-            width: 9,
-          }}
-        />
-        <View style={{ backgroundColor: color, height: 10, marginTop: -3, width: 2 }} />
-      </View>
-    );
-  }
-
-  if (name === 'calendar') {
-    return (
-      <View style={{ borderColor: color, borderRadius: 3, borderWidth: 2, height: 16, width: 15 }}>
-        <View style={{ backgroundColor: color, height: 2, marginTop: 3 }} />
-      </View>
-    );
-  }
-
-  if (name === 'checklist') {
-    return (
-      <View style={{ gap: 3 }}>
-        {[0, 1, 2].map((item) => (
-          <View key={item} style={{ alignItems: 'center', flexDirection: 'row', gap: 2 }}>
-            <View style={{ borderColor: color, borderRadius: 2, borderWidth: 1.5, height: 4, width: 4 }} />
-            <View style={{ backgroundColor: color, borderRadius: 999, height: 2, width: 10 }} />
-          </View>
-        ))}
-      </View>
-    );
-  }
-
-  if (name === 'document') {
-    return (
-      <View style={{ borderColor: color, borderRadius: 3, borderWidth: 2, gap: 2, height: 16, padding: 3, width: 13 }}>
-        <View style={{ backgroundColor: color, borderRadius: 999, height: 2, width: 6 }} />
-        <View style={{ backgroundColor: color, borderRadius: 999, height: 2, width: 5 }} />
-      </View>
-    );
-  }
-
-  if (name === 'farm') {
-    return (
-      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{ borderColor: color, borderRadius: 3, borderWidth: 2, height: 13, width: 17 }} />
-        <View
-          style={{
-            backgroundColor: color,
-            height: 10,
-            marginTop: -11,
-            transform: [{ rotate: '-30deg' }],
-            width: 2,
-          }}
-        />
-        <View style={{ backgroundColor: color, height: 2, marginTop: 2, width: 12 }} />
-      </View>
-    );
-  }
-
-  return (
-    <View style={{ alignItems: 'center' }}>
-      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 2, height: 8, width: 8 }} />
-      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 2, height: 8, marginTop: -1, width: 14 }} />
-    </View>
-  );
-}

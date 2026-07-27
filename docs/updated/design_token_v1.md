@@ -140,6 +140,10 @@ tersebar (18/20) + stroke 2 dari [icons.tsx](../../src/components/icons.tsx).
 Elevation: `tokens.elevation.overlay` menggantikan shadow literal menu detail-pohon
 (shadowColor `#1E2A24`→`#17231B`, radius 14→16, elevation 5→6).
 
+> **Pengecualian:** label bottom navigation tetap 11px, di luar skala `type`
+> (minimum 12). Alasan: lima tab, label 'Beranda'/'Laporan' berisiko terpotong
+> di layar sempit. Keputusan sadar, bukan token yang terlewat.
+
 ---
 
 ## 6. Token LAMA yang direncanakan DIHAPUS (commit pembersih akhir Polish)
