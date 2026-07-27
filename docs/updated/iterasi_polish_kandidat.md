@@ -47,3 +47,26 @@ Simpan di `docs/` agar ikut versi kode.
   diintip dari `description` untuk kasus inisiatif-tanpa-catatan (view: `description =
   COALESCE(NULLIF(TRIM(note),''), category::text)`). Untuk terjadwal & care ber-catatan,
   kategori tidak tersedia di item — itulah kenapa perbaikan andal butuh view diperluas.
+
+---
+
+## Iterasi D — Notifikasi (DIDESCOPE di v1)
+
+- Push notification OS: didescope (butuh development build + server; "boleh gagal"
+  per landasan v4 & keputusan_desain).
+- Sistem notifikasi in-app (lonceng + badge belum-dibaca + halaman pusat notifikasi):
+  dipertimbangkan, tapi didescope juga — butuh tabel notifikasi + status baca per-user
+  + logika "kapan notif lahir". Kelas fitur berstate; risiko "mandek jilid dua".
+- Kebutuhan inti "tahu jadwal telat" SUDAH ditutup penanda in-app RF-11b (badge
+  terlambat/jatuh-tempo di daftar jadwal, Iterasi B).
+- Kandidat lanjutan (kalau UAT menunjukkan perlu): reminder ringkas di beranda, atau
+  sistem notifikasi penuh. Bangun kalau terbukti dibutuhkan, bukan default.
+
+---
+
+## Angka tugas di Beranda owner salah hitung (perbaiki saat Polish)
+
+- `dashboardService.countFarmUnfinishedTasks`: masih menghitung postponed sebagai
+  "belum selesai"; `countFarmTasksDueToday`: tanpa filter status & tanpa kecualikan
+  jadwal cancelled. Perbaiki agar selaras definisi RF-11b (eksklusif: terlambat/
+  hari ini/akan datang; kecualikan postponed & cancelled).
