@@ -34,3 +34,16 @@ Simpan di `docs/` agar ikut versi kode.
   @gorhom/bottom-sheet — TAPI butuh react-native-gesture-handler + reanimated +
   konfigurasi root (GestureHandlerRootView, babel reanimated plugin). Ditunda karena
   menyentuh fondasi app & berisiko; dikerjakan saat tidak dikejar deadline.
+
+---
+
+## Judul kartu perawatan di riwayat pohon = kategori (kandidat Iterasi Polish)
+
+- Judul kartu perawatan di riwayat pohon sebaiknya = kategori (mis. "Penyiraman"), bukan
+  "Perawatan inisiatif" yang redundan dengan badge. Butuh migration view 034 (tambah kolom
+  `category` ke cabang care `tree_history_view`: `COALESCE(ca.category, ct.category)`) +
+  update service + client. Ditunda ke Polish karena kosmetik & butuh migration.
+- Konteks temuan: `TreeHistoryItem` tak punya field `category`; kategori hanya bisa
+  diintip dari `description` untuk kasus inisiatif-tanpa-catatan (view: `description =
+  COALESCE(NULLIF(TRIM(note),''), category::text)`). Untuk terjadwal & care ber-catatan,
+  kategori tidak tersedia di item — itulah kenapa perbaikan andal butuh view diperluas.
