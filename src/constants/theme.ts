@@ -194,7 +194,7 @@ export const tokens = {
     meta:       { fontSize: 13, fontWeight: '400', lineHeight: 18 },
     caption:    { fontSize: 12, fontWeight: '600', lineHeight: 16 },
   },
-  icon: { sm: 16, md: 20, lg: 24, stroke: 2 },
+  icon: { xs: 14, sm: 16, md: 20, lg: 24, stroke: 2 },
   elevation: {
     overlay: {
       shadowColor: '#17231B', shadowOpacity: 0.1, shadowRadius: 16,

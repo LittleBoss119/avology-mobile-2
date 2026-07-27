@@ -34,7 +34,7 @@ import {
   TreeVisualPlaceholder,
 } from './tree-components';
 import { FloweringAgeMarker } from './flowering-marker';
-import { AlertTriangleIcon, BasketIcon, ChevronRightIcon, FlowerIcon, SprayIcon } from './icons';
+import { AlertTriangleIcon, BasketIcon, ChevronRightIcon, FlowerIcon, Icon, SprayIcon } from './icons';
 import {
   Button,
   EmptyState,
@@ -433,9 +433,7 @@ function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuP
           width: 44,
         }}
       >
-        <Text selectable style={{ color: '#065F2E', fontSize: 22, fontWeight: '900', lineHeight: 24 }}>
-          ...
-        </Text>
+        <Icon name="dots" size={20} color="#065F2E" />
       </Pressable>
     ) : undefined;
 

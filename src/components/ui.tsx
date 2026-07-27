@@ -28,6 +28,7 @@ import {
   type StatusTone,
 } from '../constants/theme';
 import { sanitizeDisplayValue, sanitizeUserFacingMessage } from '../utils/displayFormat';
+import { Icon } from './icons';
 
 const colors = {
   ...designColors,
@@ -196,9 +197,7 @@ export function TopAppBar({
               width: 44,
             }}
           >
-            <Text selectable={false} style={{ color: colors.primary, fontSize: 24, fontWeight: '900', lineHeight: 26 }}>
-              {'<'}
-            </Text>
+            <Icon name="chevron-left" size={20} color={colors.primary} />
           </Pressable>
         ) : titleAlign === 'center' ? (
           <View style={{ height: 44, width: 44 }} />
@@ -267,7 +266,7 @@ export function ProfileIconButton({
         width: 42,
       })}
     >
-      <UserGlyph color={colors.primary} />
+      <Icon name="user" size={20} color={colors.primary} />
     </Pressable>
   );
 }
@@ -623,9 +622,7 @@ export function FilterChip({
       >
         {valueLabel ? `${label}: ${valueLabel}` : label}
       </Text>
-      <Text selectable={false} style={{ color: active ? colors.primary : colors.textSoft, fontSize: 12, fontWeight: '900' }}>
-        v
-      </Text>
+      <Icon name="chevron-down" size={14} color={active ? colors.primary : colors.textSoft} />
     </Pressable>
   );
 }
@@ -797,7 +794,7 @@ export function DateField({
           paddingHorizontal: spacing.lg,
         }}
       >
-          <DateFieldCalendarIcon />
+          <Icon name="calendar" size={20} color={colors.primary} />
           <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
             {formatFriendlyDate(value, placeholder)}
           </Text>
@@ -825,7 +822,7 @@ export function CompactMetaItem({
 }) {
   return (
     <View style={{ alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 5 }}>
-      <CompactMetaIcon name={icon} />
+      <Icon name={icon} size={14} color={colors.muted} />
       <Text
         selectable
         ellipsizeMode="tail"
@@ -834,41 +831,6 @@ export function CompactMetaItem({
       >
         {label}
       </Text>
-    </View>
-  );
-}
-
-function CompactMetaIcon({ name }: { name: 'calendar' | 'target' | 'user' }) {
-  const color = colors.muted;
-
-  if (name === 'calendar') {
-    return (
-      <View style={{ borderColor: color, borderRadius: 3, borderWidth: 1.5, height: 14, width: 13 }}>
-        <View style={{ backgroundColor: color, height: 1.5, marginTop: 3 }} />
-      </View>
-    );
-  }
-
-  if (name === 'target') {
-    return (
-      <View style={{ alignItems: 'center', borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 14, justifyContent: 'center', width: 14 }}>
-        <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, width: 6 }} />
-      </View>
-    );
-  }
-
-  return (
-    <View style={{ alignItems: 'center', width: 14 }}>
-      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, width: 6 }} />
-      <View style={{ borderColor: color, borderRadius: 999, borderWidth: 1.5, height: 6, marginTop: -1, width: 12 }} />
-    </View>
-  );
-}
-
-function DateFieldCalendarIcon() {
-  return (
-    <View style={{ borderColor: colors.primary, borderRadius: 4, borderWidth: 2, height: 18, width: 17 }}>
-      <View style={{ backgroundColor: colors.primary, height: 2, marginTop: 4 }} />
     </View>
   );
 }
@@ -1114,7 +1076,7 @@ export function SearchFilterRow({
             width: 56,
           }}
         >
-          <FilterGlyph active={filterActive} />
+          <Icon name="filter" size={20} color={filterActive ? colors.surface : colors.primary} />
         </Pressable>
       ) : null}
     </View>
@@ -1258,9 +1220,7 @@ export function PhotoPickerCard({
               width: 34,
             })}
           >
-            <Text selectable={false} style={{ color: colors.surface, fontSize: 18, fontWeight: '900', lineHeight: 20 }}>
-              x
-            </Text>
+            <Icon name="x" size={16} color={colors.surface} />
           </Pressable>
         ) : null}
         {loading ? (
@@ -1440,80 +1400,8 @@ function getCardVariantStyle(
   };
 }
 
-function FilterGlyph({ active }: { active: boolean }) {
-  const color = active ? colors.surface : colors.primary;
-
-  return (
-    <View style={{ gap: 4 }}>
-      <View style={{ backgroundColor: color, borderRadius: radius.round, height: 2, width: 22 }} />
-      <View style={{ backgroundColor: color, borderRadius: radius.round, height: 2, marginLeft: 4, width: 14 }} />
-      <View style={{ backgroundColor: color, borderRadius: radius.round, height: 2, width: 18 }} />
-    </View>
-  );
-}
-
 export function CameraGlyph({ color = colors.primary }: { color?: string }) {
-  return (
-    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <View
-        style={{
-          borderColor: color,
-          borderRadius: 5,
-          borderWidth: 2,
-          height: 19,
-          justifyContent: 'center',
-          width: 25,
-        }}
-      >
-        <View
-          style={{
-            alignSelf: 'center',
-            borderColor: color,
-            borderRadius: radius.round,
-            borderWidth: 2,
-            height: 8,
-            width: 8,
-          }}
-        />
-      </View>
-      <View
-        style={{
-          backgroundColor: color,
-          borderRadius: 2,
-          height: 4,
-          position: 'absolute',
-          top: 1,
-          width: 9,
-        }}
-      />
-    </View>
-  );
-}
-
-function UserGlyph({ color }: { color: string }) {
-  return (
-    <View style={{ alignItems: 'center', width: 18 }}>
-      <View
-        style={{
-          borderColor: color,
-          borderRadius: radius.round,
-          borderWidth: 2,
-          height: 8,
-          width: 8,
-        }}
-      />
-      <View
-        style={{
-          borderColor: color,
-          borderRadius: radius.round,
-          borderWidth: 2,
-          height: 9,
-          marginTop: -1,
-          width: 16,
-        }}
-      />
-    </View>
-  );
+  return <Icon name="camera" color={color} size={24} />;
 }
 
 function normalizeStatus(status: string): string {

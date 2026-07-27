@@ -133,7 +133,9 @@ tersebar di layar juga mengikuti aturan ini saat migrasi.)
 | *(tak ada)* | — | `layout.rowMinHeight` | 48 | **baru** |
 | *(tak ada)* | — | `layout.tapTarget` | 44 | **baru** (a11y target) |
 
-Ikon: `tokens.icon` (sm16/md20/lg24/stroke2) memformalkan ukuran SVG yang
+Ikon: `tokens.icon` skala **xs14 / sm16 / md20 / lg24** (+ `stroke` 2). `xs:14`
+ditambahkan di P-2b-1 untuk `CompactMetaItem` (24 pemakai, nol perubahan layout)
++ caret chevron di chip filter; sm16/md20/lg24 memformalkan ukuran SVG yang
 tersebar (18/20) + stroke 2 dari [icons.tsx](../../src/components/icons.tsx).
 Elevation: `tokens.elevation.overlay` menggantikan shadow literal menu detail-pohon
 (shadowColor `#1E2A24`→`#17231B`, radius 14→16, elevation 5→6).

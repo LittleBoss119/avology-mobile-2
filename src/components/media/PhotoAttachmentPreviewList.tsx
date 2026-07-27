@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Modal, Pressable, Text, View } from 'react-na
 
 import { colors, radius, spacing, typography } from '../../constants/theme';
 import type { PhotoAttachmentPreviewItem } from '../../types/media';
+import { Icon } from '../icons';
 
 export type PhotoAttachmentPreviewListProps = {
   disabled?: boolean;
@@ -90,9 +91,7 @@ export function PhotoAttachmentPreviewList({
                     width: 32,
                   })}
                 >
-                  <Text selectable={false} style={{ color: colors.surface, fontSize: 17, fontWeight: '900', lineHeight: 19 }}>
-                    x
-                  </Text>
+                  <Icon name="x" size={16} color={colors.surface} />
                 </Pressable>
               ) : null}
             </View>
