@@ -165,19 +165,49 @@ async function countFarmTasksDueToday(
   farmId: string,
   today: string
 ): Promise<CountResult> {
-  return supabase
-    .from('care_tasks')
-    .select('id', { count: 'exact', head: true })
-    .eq('farm_id', farmId)
-    .eq('due_date', today);
+  // Jatuh tempo hari ini & masih 'pending'. task_status tidak punya nilai
+  // 'cancelled' (migrasi 001), jadi completed/postponed cukup dibuang lewat
+  // status='pending'. Pembatalan hanya di level jadwal (care_schedules
+  // .is_cancelled), disaring countActiveWorkerTaskRows; task tanpa schedule
+  // (care_schedule_id NULL, mis. dari laporan operasional) TETAP dihitung.
+  return countActiveWorkerTaskRows(
+    supabase
+      .from('care_tasks')
+      .select('id, care_schedule_id')
+      .eq('farm_id', farmId)
+      .eq('due_date', today)
+      .eq('status', 'pending')
+  );
 }
 
 async function countFarmUnfinishedTasks(farmId: string): Promise<CountResult> {
-  return supabase
-    .from('care_tasks')
-    .select('id', { count: 'exact', head: true })
-    .eq('farm_id', farmId)
-    .in('status', ['pending', 'postponed']);
+  // 'Belum selesai' = pending saja (sebelumnya keliru ikut 'postponed').
+  // Kecualikan task dari jadwal yang dibatalkan via countActiveWorkerTaskRows;
+  // task tanpa schedule (care_schedule_id NULL) tetap dihitung.
+  return countActiveWorkerTaskRows(
+    supabase
+      .from('care_tasks')
+      .select('id, care_schedule_id')
+      .eq('farm_id', farmId)
+      .eq('status', 'pending')
+  );
+}
+
+// Terlambat = due_date < hari ini & masih pending, minus jadwal dibatalkan.
+// Diekspor untuk dipakai nanti (P-4); belum disambungkan ke OwnerDashboardSummary.
+// Menghitung 'today' sendiri via getTodayIsoDate() agar berdiri sendiri, memakai
+// pola tanggal device-local yang sama dengan getTodayIsoDate lain & RF-11b.
+export async function countFarmOverdueTasks(farmId: string): Promise<CountResult> {
+  const today = getTodayIsoDate();
+
+  return countActiveWorkerTaskRows(
+    supabase
+      .from('care_tasks')
+      .select('id, care_schedule_id')
+      .eq('farm_id', farmId)
+      .lt('due_date', today)
+      .eq('status', 'pending')
+  );
 }
 
 async function countNewOperationalReports(farmId: string): Promise<CountResult> {
