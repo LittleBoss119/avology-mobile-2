@@ -185,7 +185,7 @@ export default function CareScheduleListScreen() {
           <Text selectable style={{ color: colors.textMuted, fontSize: typography.small.fontSize }}>
             {displayedSchedules.length} jadwal
           </Text>
-          <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>
             Terdekat
           </Text>
         </View>
@@ -217,10 +217,10 @@ function ScheduleHero({ summary }: { summary: ReturnType<typeof buildScheduleSum
   return (
     <Card variant="heroGreen">
       <View style={{ gap: 4 }}>
-        <Text selectable style={{ color: '#DDEFE2', fontSize: 15, fontWeight: '800' }}>
+        <Text selectable style={{ color: '#DDEFE2', fontSize: 15, fontWeight: '700' }}>
           Hari Ini
         </Text>
-        <Text selectable style={{ color: '#FFFFFF', fontSize: 28, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+        <Text selectable style={{ color: '#FFFFFF', fontSize: 28, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
           {summary.today} jadwal
         </Text>
         <Text selectable style={{ color: '#DDEFE2', lineHeight: 20 }}>
@@ -259,10 +259,10 @@ function HeroMetric({
         padding: 11,
       }}
     >
-      <Text selectable style={{ color: '#DDEFE2', fontSize: 12, fontWeight: '800' }}>
+      <Text selectable style={{ color: '#DDEFE2', fontSize: 12, fontWeight: '700' }}>
         {label}
       </Text>
-      <Text selectable style={{ color: valueColor, fontSize: 23, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+      <Text selectable style={{ color: valueColor, fontSize: 23, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
         {value}
       </Text>
     </View>
@@ -338,7 +338,7 @@ function CompactScheduleCard({
               selectable
               ellipsizeMode="tail"
               numberOfLines={1}
-              style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '900' }}
+              style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '700' }}
             >
               {schedule.title}
             </Text>
@@ -352,7 +352,7 @@ function CompactScheduleCard({
           </View>
 
           <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '800' }}>
+            <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
               {formatCareCategory(schedule.category)}
             </Text>
             {schedule.careSopId ? <Badge label="SOP" maxWidth={64} tone="warning" /> : null}
@@ -500,7 +500,7 @@ function CreateMenuButton({
         paddingHorizontal: spacing.md,
       }}
     >
-      <Text selectable={false} style={{ color: primary ? colors.surface : colors.primary, fontSize: 14, fontWeight: '900' }}>
+      <Text selectable={false} style={{ color: primary ? colors.surface : colors.primary, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
     </Pressable>

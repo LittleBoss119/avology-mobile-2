@@ -337,7 +337,7 @@ function OwnerFilterPanel({
         <View style={{ alignSelf: 'center', backgroundColor: colors.border, borderRadius: 999, height: 5, width: 48 }} />
         <View style={{ alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
           <View style={{ flex: 1, gap: 4 }}>
-            <Text selectable style={{ color: colors.text, fontSize: 20, fontWeight: '900' }}>
+            <Text selectable style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>
               Filter Pohon
             </Text>
             <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
@@ -432,7 +432,7 @@ function SheetDoneButton({ onPress }: { onPress: () => void }) {
         paddingVertical: 9,
       }}
     >
-      <Text selectable style={{ color: colors.primary, fontSize: 14, fontWeight: '900' }}>
+      <Text selectable style={{ color: colors.primary, fontSize: 14, fontWeight: '700' }}>
         Selesai
       </Text>
     </Pressable>
@@ -442,7 +442,7 @@ function SheetDoneButton({ onPress }: { onPress: () => void }) {
 function FilterSection({ children, title }: { children: React.ReactNode; title: string }) {
   return (
     <View style={{ gap: 9 }}>
-      <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
         {title}
       </Text>
       {children}

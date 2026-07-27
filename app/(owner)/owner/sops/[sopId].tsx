@@ -175,7 +175,7 @@ export default function CareSOPDetailScreen() {
 
       {!sop.isActive ? (
         <Card variant="warning">
-          <Text selectable style={{ color: colors.warning, fontSize: 16, fontWeight: '800', lineHeight: 22 }}>
+          <Text selectable style={{ color: colors.warning, fontSize: 16, fontWeight: '700', lineHeight: 22 }}>
             SOP ini nonaktif. Aktifkan kembali sebelum digunakan untuk jadwal baru.
           </Text>
         </Card>
@@ -204,7 +204,7 @@ export default function CareSOPDetailScreen() {
       </Card>
 
       <Card>
-        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
           Instruksi Default
         </Text>
         <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -213,7 +213,7 @@ export default function CareSOPDetailScreen() {
       </Card>
 
       <Card>
-        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
           Acuan Jadwal
         </Text>
         {reference ? (
@@ -328,7 +328,7 @@ function MenuActionItem({
         paddingVertical: 11,
       })}
     >
-      <Text selectable style={{ color: tone === 'danger' ? colors.danger : colors.text, fontSize: 14, fontWeight: '800' }}>
+      <Text selectable style={{ color: tone === 'danger' ? colors.danger : colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
     </Pressable>

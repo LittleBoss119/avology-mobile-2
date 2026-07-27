@@ -176,10 +176,10 @@ function SummaryPill({ label, value }: { label: string; value: number }) {
         padding: 11,
       }}
     >
-      <Text selectable numberOfLines={1} style={{ color: appTheme.muted, fontSize: 12, fontWeight: '800' }}>
+      <Text selectable numberOfLines={1} style={{ color: appTheme.muted, fontSize: 12, fontWeight: '700' }}>
         {label}
       </Text>
-      <Text selectable style={{ color: appTheme.primary, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+      <Text selectable style={{ color: appTheme.primary, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
         {value}
       </Text>
     </View>

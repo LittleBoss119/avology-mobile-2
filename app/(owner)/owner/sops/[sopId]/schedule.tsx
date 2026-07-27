@@ -294,7 +294,7 @@ export default function CreateScheduleFromSOPScreen() {
       <FormSection title="Pilih SOP" description="SOP yang dipilih menjadi dasar jadwal dan tugas pekerja.">
         <View style={{ gap: spacing.sm }}>
           <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
-            <Text selectable style={{ color: colors.text, flex: 1, fontSize: 17, fontWeight: '900', lineHeight: 23 }}>
+            <Text selectable style={{ color: colors.text, flex: 1, fontSize: 17, fontWeight: '700', lineHeight: 23 }}>
               {sop.name}
             </Text>
             <Badge label={sop.isActive ? 'Aktif' : 'Nonaktif'} maxWidth={92} tone={sop.isActive ? 'success' : 'muted'} />

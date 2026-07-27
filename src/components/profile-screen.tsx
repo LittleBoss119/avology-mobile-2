@@ -142,12 +142,12 @@ export function ProfileScreen() {
                   width: 58,
                 }}
               >
-                <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '900' }}>
+                <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '700' }}>
                   {initial}
                 </Text>
               </View>
               <View style={{ flex: 1, gap: spacing.xs }}>
-                <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800', lineHeight: typography.h3.lineHeight }}>
+                <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700', lineHeight: typography.h3.lineHeight }}>
                   {displayName}
                 </Text>
                 <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
@@ -158,7 +158,7 @@ export function ProfileScreen() {
           </Card>
 
           <Card>
-            <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+            <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
               Data Pribadi
             </Text>
             <View style={{ gap: spacing.md }}>
@@ -169,7 +169,7 @@ export function ProfileScreen() {
           </Card>
 
           <Card>
-            <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+            <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
               Pengaturan Akun
             </Text>
             <Button
@@ -187,7 +187,7 @@ export function ProfileScreen() {
           </Card>
 
           <Card>
-            <Text selectable style={{ color: colors.danger, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+            <Text selectable style={{ color: colors.danger, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
               Keluar Akun
             </Text>
             <Button

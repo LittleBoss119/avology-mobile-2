@@ -161,7 +161,7 @@ export default function OwnerTaskDetailScreen() {
       <ErrorBanner message={error} />
 
       <Card variant="highlight">
-        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '700', lineHeight: 28 }}>
           {task.title}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
@@ -240,7 +240,7 @@ export default function OwnerTaskDetailScreen() {
               <MetaRow label="Catatan" value={activity.note} />
               {activity.status === 'completed' ? (
                 <>
-                  <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '800' }}>
+                  <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '700' }}>
                     Bukti Realisasi
                   </Text>
                   <TaskProofPhotoPreview

@@ -470,7 +470,7 @@ export default function WorkerTaskDetailScreen() {
 
       {isCancelledByOwner ? (
         <Card variant="danger">
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
             Tugas ini sudah dibatalkan oleh owner.
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -480,7 +480,7 @@ export default function WorkerTaskDetailScreen() {
       ) : null}
 
       <Card>
-        <Text selectable style={{ color: colors.text, fontSize: 18, fontWeight: '900' }}>
+        <Text selectable style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>
           Instruksi
         </Text>
         <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
@@ -564,7 +564,7 @@ export default function WorkerTaskDetailScreen() {
           />
 
           <View style={{ gap: spacing.sm }}>
-            <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
+            <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
               Bukti realisasi
             </Text>
             {task.requiresPhoto && editStatus === 'completed' ? (
@@ -602,7 +602,7 @@ export default function WorkerTaskDetailScreen() {
 
       {task.operationalReportId ? (
         <Card>
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
             Sumber Laporan
           </Text>
           {report ? (
@@ -749,7 +749,7 @@ function RealizationOption({
         padding: spacing.md,
       }}
     >
-      <Text selectable style={{ color: active ? colors.primary : colors.text, fontSize: 16, fontWeight: '800' }}>
+      <Text selectable style={{ color: active ? colors.primary : colors.text, fontSize: 16, fontWeight: '700' }}>
         {label}
       </Text>
       <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>

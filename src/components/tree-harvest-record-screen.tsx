@@ -123,7 +123,7 @@ export function TreeHarvestRecordScreen({
 
       {tree ? (
         <Card variant="highlight">
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
             Konteks Pohon
           </Text>
           <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />

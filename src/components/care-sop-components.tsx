@@ -60,7 +60,7 @@ export function CareSOPCard({
             selectable
             ellipsizeMode="tail"
             numberOfLines={1}
-            style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '900', lineHeight: 23 }}
+            style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '700', lineHeight: 23 }}
           >
             {sop.name}
           </Text>
@@ -68,7 +68,7 @@ export function CareSOPCard({
         </View>
 
         <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '800' }}>
+          <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
             {formatCareCategoryShort(sop.category)}
           </Text>
           {reference && isActionableReference(reference) ? (

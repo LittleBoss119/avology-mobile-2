@@ -475,7 +475,7 @@ function TreeDetailHero({
       </View>
       <View style={{ flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: spacing.xs }}>
-          <Text selectable style={{ color: colors.primary, fontSize: 32, fontWeight: '900', lineHeight: 38 }}>
+          <Text selectable style={{ color: colors.primary, fontSize: 32, fontWeight: '700', lineHeight: 38 }}>
             {displayCode}
           </Text>
           <Text selectable style={{ color: colors.textMuted, fontSize: 15, lineHeight: 21 }}>
@@ -559,7 +559,7 @@ function RecordActivitySheet({
           }}
         >
           <View style={{ alignSelf: 'center', backgroundColor: colors.border, borderRadius: 999, height: 5, marginBottom: spacing.xs, width: 44 }} />
-          <Text selectable style={{ color: colors.text, fontSize: 19, fontWeight: '900', paddingBottom: spacing.xs }}>
+          <Text selectable style={{ color: colors.text, fontSize: 19, fontWeight: '700', paddingBottom: spacing.xs }}>
             Catat aktivitas
           </Text>
           <RecordActivityRow
@@ -631,7 +631,7 @@ function RecordActivityRow({
       >
         {icon}
       </View>
-      <Text selectable style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '800' }}>
+      <Text selectable style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '700' }}>
         {label}
       </Text>
       <ChevronRightIcon color={colors.textSoft} size={20} />
@@ -734,7 +734,7 @@ function PhotoSourceSheet({
         }}
       >
         <View style={{ alignSelf: 'center', backgroundColor: '#DCE7D5', borderRadius: 999, height: 5, width: 48 }} />
-        <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '900' }}>
+        <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700' }}>
           Foto Pohon
         </Text>
         <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
@@ -763,7 +763,7 @@ function MenuItem({
 }) {
   return (
     <Pressable disabled={disabled} onPress={onPress} style={{ opacity: disabled ? 0.6 : 1, padding: 14 }}>
-      <Text selectable style={{ color: danger ? colors.danger : colors.text, fontSize: 15, fontWeight: '800' }}>
+      <Text selectable style={{ color: danger ? colors.danger : colors.text, fontSize: 15, fontWeight: '700' }}>
         {label}
       </Text>
     </Pressable>
@@ -773,7 +773,7 @@ function MenuItem({
 function SectionTitle({ subtitle, title }: { subtitle?: string; title: string }) {
   return (
     <View style={{ gap: spacing.xs, paddingTop: spacing.xs }}>
-      <Text selectable style={{ color: colors.text, fontSize: typography.h2.fontSize, fontWeight: '800', lineHeight: typography.h2.lineHeight }}>
+      <Text selectable style={{ color: colors.text, fontSize: typography.h2.fontSize, fontWeight: '700', lineHeight: typography.h2.lineHeight }}>
         {title}
       </Text>
       {subtitle ? (

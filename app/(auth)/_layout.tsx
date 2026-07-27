@@ -49,7 +49,7 @@ export default function AuthLayout() {
         headerStyle: { backgroundColor: '#F7FAF3' },
         headerShadowVisible: false,
         headerTintColor: '#065F2E',
-        headerTitleStyle: { color: '#1E2A24', fontWeight: '800' },
+        headerTitleStyle: { color: '#1E2A24', fontWeight: '700' },
         contentStyle: { backgroundColor: '#F7FAF3' },
       }}
     >

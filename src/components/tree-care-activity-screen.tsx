@@ -128,7 +128,7 @@ export function TreeCareActivityScreen({
 
       {tree ? (
         <Card variant="highlight">
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
             Konteks Pohon
           </Text>
           <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
@@ -213,7 +213,7 @@ function CategoryOption({
         paddingVertical: spacing.sm,
       }}
     >
-      <Text selectable style={{ color: selected ? colors.white : colors.text, fontSize: 14, fontWeight: '800' }}>
+      <Text selectable style={{ color: selected ? colors.white : colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
     </Pressable>

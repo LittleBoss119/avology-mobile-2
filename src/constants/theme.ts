@@ -78,19 +78,19 @@ export const radius = {
 type FontWeight = TextStyle['fontWeight'];
 
 export const typography = {
-  display: { fontSize: 32, fontWeight: '800' as FontWeight, lineHeight: 38 },
-  h1: { fontSize: 28, fontWeight: '800' as FontWeight, lineHeight: 34 },
-  h2: { fontSize: 22, fontWeight: '800' as FontWeight, lineHeight: 28 },
-  h3: { fontSize: 18, fontWeight: '700' as FontWeight, lineHeight: 24 },
-  title: { fontSize: 30, fontWeight: '800' as FontWeight, lineHeight: 36 },
+  display: { fontSize: 32, fontWeight: '700' as FontWeight, lineHeight: 38 },
+  h1: { fontSize: 28, fontWeight: '700' as FontWeight, lineHeight: 34 },
+  h2: { fontSize: 22, fontWeight: '700' as FontWeight, lineHeight: 28 },
+  h3: { fontSize: 18, fontWeight: '600' as FontWeight, lineHeight: 24 },
+  title: { fontSize: 30, fontWeight: '700' as FontWeight, lineHeight: 36 },
   screenTitle: { fontSize: 20, fontWeight: '700' as FontWeight, lineHeight: 26 },
-  sectionTitle: { fontSize: 17, fontWeight: '700' as FontWeight, lineHeight: 23 },
+  sectionTitle: { fontSize: 17, fontWeight: '600' as FontWeight, lineHeight: 23 },
   body: { fontSize: 16, fontWeight: '400' as FontWeight, lineHeight: 22 },
-  bodyStrong: { fontSize: 16, fontWeight: '700' as FontWeight, lineHeight: 22 },
+  bodyStrong: { fontSize: 16, fontWeight: '600' as FontWeight, lineHeight: 22 },
   small: { fontSize: 14, fontWeight: '400' as FontWeight, lineHeight: 20 },
   meta: { fontSize: 13, fontWeight: '400' as FontWeight, lineHeight: 18 },
   caption: { fontSize: 12, fontWeight: '600' as FontWeight, lineHeight: 16 },
-  badge: { fontSize: 12, fontWeight: '700' as FontWeight, lineHeight: 16 },
+  badge: { fontSize: 12, fontWeight: '600' as FontWeight, lineHeight: 16 },
   navLabel: { fontSize: 11, fontWeight: '600' as FontWeight, lineHeight: 14 },
 } as const;
 

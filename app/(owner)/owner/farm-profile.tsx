@@ -206,7 +206,7 @@ export default function OwnerFarmProfileScreen() {
                 padding: spacing.lg,
               }}
             >
-              <Text selectable style={{ color: colors.text, fontSize: 24, fontWeight: '900', letterSpacing: 0 }}>
+              <Text selectable style={{ color: colors.text, fontSize: 24, fontWeight: '700', letterSpacing: 0 }}>
                 {farm.joinCode}
               </Text>
             </View>

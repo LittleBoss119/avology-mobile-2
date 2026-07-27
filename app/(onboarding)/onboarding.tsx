@@ -30,7 +30,7 @@ export default function OnboardingDecisionScreen() {
       <Card variant="highlight">
         <View style={{ gap: spacing.sm }}>
           <Badge label="Pemilik" tone="info" />
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
             Buat Kebun
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -51,7 +51,7 @@ export default function OnboardingDecisionScreen() {
       <Card>
         <View style={{ gap: spacing.sm }}>
           <Badge label="Pekerja" tone="neutral" />
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
             Gabung Kebun
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>

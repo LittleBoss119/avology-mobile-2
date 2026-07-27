@@ -172,7 +172,7 @@ function MemberRow({ actor }: { actor: FarmActorDisplayProfile }) {
         padding: spacing.md,
       }}
     >
-      <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
         {actor.fullName}
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>

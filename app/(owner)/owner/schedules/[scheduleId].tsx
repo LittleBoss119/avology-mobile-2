@@ -238,7 +238,7 @@ export default function CareScheduleDetailScreen() {
         </Card>
       ) : hasRealization ? (
         <Card variant="warning">
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
             Jadwal tidak dapat diubah
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -247,7 +247,7 @@ export default function CareScheduleDetailScreen() {
         </Card>
       ) : (
         <Card>
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
             Pengaturan Jadwal
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -269,7 +269,7 @@ export default function CareScheduleDetailScreen() {
       )}
 
       <Card>
-        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
           Instruksi
         </Text>
         <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -388,7 +388,7 @@ function OwnerScheduleTaskCard({
                 color: colors.primary,
                 flex: 1,
                 fontSize: 17,
-                fontWeight: '900',
+                fontWeight: '700',
                 lineHeight: 23,
               }}
             >
@@ -399,7 +399,7 @@ function OwnerScheduleTaskCard({
 
           <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {task.category ? (
-              <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '800' }}>
+              <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
                 {formatCareCategory(task.category)}
               </Text>
             ) : null}

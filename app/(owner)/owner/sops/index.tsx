@@ -182,7 +182,7 @@ export default function CareSOPListScreen() {
           <Text selectable style={{ color: colors.textMuted, fontSize: 14 }}>
             {displayedSops.length} SOP
           </Text>
-          <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>
             Perawatan
           </Text>
         </View>
@@ -219,10 +219,10 @@ function SOPSummary({
 }) {
   return (
     <Card variant="heroGreen">
-      <Text selectable style={{ color: '#DDEFE2', fontSize: 15, fontWeight: '800' }}>
+      <Text selectable style={{ color: '#DDEFE2', fontSize: 15, fontWeight: '700' }}>
         SOP Perawatan
       </Text>
-      <Text selectable style={{ color: '#FFFFFF', fontSize: 28, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+      <Text selectable style={{ color: '#FFFFFF', fontSize: 28, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
         {total} template
       </Text>
       <View style={{ flexDirection: 'row', gap: 9 }}>
@@ -246,10 +246,10 @@ function SummaryPill({ label, value }: { label: string; value: number }) {
         padding: 11,
       }}
     >
-      <Text selectable style={{ color: '#DDEFE2', fontSize: 12, fontWeight: '800' }}>
+      <Text selectable style={{ color: '#DDEFE2', fontSize: 12, fontWeight: '700' }}>
         {label}
       </Text>
-      <Text selectable style={{ color: '#A6D96A', fontSize: 23, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+      <Text selectable style={{ color: '#A6D96A', fontSize: 23, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
         {value}
       </Text>
     </View>

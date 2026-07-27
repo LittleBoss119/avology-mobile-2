@@ -136,10 +136,10 @@ function TaskSummary({ tasks }: { tasks: CareTask[] }) {
   return (
     <Card variant="heroGreen">
       <View style={{ gap: spacing.xs }}>
-        <Text selectable style={{ color: '#DDEFE2', fontSize: 15, fontWeight: '800' }}>
+        <Text selectable style={{ color: '#DDEFE2', fontSize: 15, fontWeight: '700' }}>
           Hari Ini
         </Text>
-        <Text selectable style={{ color: colors.surface, fontSize: 28, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+        <Text selectable style={{ color: colors.surface, fontSize: 28, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
           {countTodayOpenTasks(tasks)} tugas
         </Text>
       </View>
@@ -165,10 +165,10 @@ function SummaryPill({ label, value }: { label: string; value: number }) {
         padding: 11,
       }}
     >
-      <Text selectable numberOfLines={1} style={{ color: '#DDEFE2', fontSize: 12, fontWeight: '800' }}>
+      <Text selectable numberOfLines={1} style={{ color: '#DDEFE2', fontSize: 12, fontWeight: '700' }}>
         {label}
       </Text>
-      <Text selectable style={{ color: colors.surface, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+      <Text selectable style={{ color: colors.surface, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
         {value}
       </Text>
     </View>
@@ -185,7 +185,7 @@ function WorkerTaskCard({ onPress, task }: { onPress: () => void; task: CareTask
               selectable
               ellipsizeMode="tail"
               numberOfLines={1}
-              style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '900', lineHeight: 23 }}
+              style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '700', lineHeight: 23 }}
             >
               {task.title}
             </Text>
@@ -194,7 +194,7 @@ function WorkerTaskCard({ onPress, task }: { onPress: () => void; task: CareTask
 
           <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {task.category ? (
-              <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '800' }}>
+              <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
                 {formatCareCategory(task.category)}
               </Text>
             ) : null}

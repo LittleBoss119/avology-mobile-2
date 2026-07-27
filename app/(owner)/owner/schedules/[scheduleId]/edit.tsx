@@ -183,7 +183,7 @@ export default function EditCareScheduleScreen() {
         <TopAppBar title="Edit jadwal" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <Card variant="warning">
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
             Jadwal tidak bisa diedit
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>

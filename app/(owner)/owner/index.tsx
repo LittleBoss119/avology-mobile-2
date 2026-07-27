@@ -134,7 +134,7 @@ function OwnerHero({
   return (
     <Card variant="heroGreen">
       <View style={{ gap: 6 }}>
-        <Text selectable style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '900' }}>
+        <Text selectable style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '700' }}>
           Kondisi Kebun
         </Text>
         <Text selectable style={{ color: '#DDEFE2', lineHeight: 21 }}>
@@ -145,7 +145,7 @@ function OwnerHero({
       </View>
       <View style={{ flexDirection: 'row', gap: 16, justifyContent: 'space-between' }}>
         <View style={{ flex: 1 }}>
-          <Text selectable style={{ color: '#FFFFFF', fontSize: 52, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+          <Text selectable style={{ color: '#FFFFFF', fontSize: 52, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
             {healthyPercent}%
           </Text>
           <Text selectable style={{ color: '#DDEFE2', fontSize: 15, lineHeight: 21 }}>
@@ -185,7 +185,7 @@ function HeroMetric({ label, value, warning }: { label: string; value: number; w
       <Text selectable style={{ color: '#DDEFE2', fontSize: 12, fontWeight: '700' }}>
         {label}
       </Text>
-      <Text selectable style={{ color: warning ? '#F6D77A' : '#FFFFFF', fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+      <Text selectable style={{ color: warning ? '#F6D77A' : '#FFFFFF', fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
         {value}
       </Text>
     </View>
@@ -200,14 +200,14 @@ function PriorityCard({ priority }: { priority: PriorityInsight }) {
       <Card variant={priority.tone === 'danger' ? 'danger' : 'warning'}>
         <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
           <View style={{ flex: 1, gap: 5 }}>
-            <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '800' }}>
+            <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
               {priority.title}
             </Text>
             <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
               {priority.description}
             </Text>
           </View>
-          <Text selectable style={{ color: toneColor, fontSize: 24, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+          <Text selectable style={{ color: toneColor, fontSize: 24, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
             {priority.value}
           </Text>
         </View>
@@ -220,7 +220,7 @@ function PositiveStatusPanel({ notes }: { notes: string[] }) {
   return (
     <Card variant="softGreen">
       <View style={{ gap: 4 }}>
-        <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '800' }}>
+        <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
           Tidak ada prioritas mendesak.
         </Text>
         {notes.map((note) => (
@@ -251,7 +251,7 @@ function MonitoringPanel({ items }: { items: MonitoringItem[] }) {
             <Text selectable style={{ color: colors.textMuted, fontSize: 14, fontWeight: '700' }}>
               {item.label}
             </Text>
-            <Text selectable style={{ color: colors.text, fontSize: 18, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+            <Text selectable style={{ color: colors.text, fontSize: 18, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
               {item.value}
             </Text>
           </View>
@@ -292,7 +292,7 @@ function DashboardActionButton({
       <Text selectable style={{ color: primary ? colors.primarySoft : colors.textMuted, fontSize: 12, fontWeight: '700' }}>
         {meta}
       </Text>
-      <Text selectable style={{ color: primary ? colors.surface : colors.text, fontSize: 14, fontWeight: '900', lineHeight: 18 }}>
+      <Text selectable style={{ color: primary ? colors.surface : colors.text, fontSize: 14, fontWeight: '700', lineHeight: 18 }}>
         {label}
       </Text>
     </Pressable>

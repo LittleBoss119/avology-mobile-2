@@ -258,10 +258,10 @@ function SummaryChip({
         padding: spacing.md,
       }}
     >
-      <Text selectable style={{ color: toneStyle.text, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+      <Text selectable style={{ color: toneStyle.text, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
         {value}
       </Text>
-      <Text selectable style={{ color: colors.textMuted, fontSize: 12, fontWeight: '800' }}>
+      <Text selectable style={{ color: colors.textMuted, fontSize: 12, fontWeight: '700' }}>
         {label}
       </Text>
     </View>
@@ -285,7 +285,7 @@ function WorkerAccessCard({
     <Card padding={compact ? spacing.md : spacing.cardPadding} variant={compact ? 'default' : 'softGreen'}>
       <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: spacing.xs }}>
-          <Text selectable numberOfLines={2} style={{ color: colors.text, fontSize: 17, fontWeight: '900', lineHeight: 23 }}>
+          <Text selectable numberOfLines={2} style={{ color: colors.text, fontSize: 17, fontWeight: '700', lineHeight: 23 }}>
             {worker.fullName}
           </Text>
           {worker.phone ? (

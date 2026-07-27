@@ -59,7 +59,7 @@ export function CareScheduleCard({
     <Card>
       <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: 5 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '900', lineHeight: 24 }}>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '700', lineHeight: 24 }}>
             {schedule.title}
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
@@ -109,7 +109,7 @@ export function CareTaskSummaryCard({
             selectable
             ellipsizeMode="tail"
             numberOfLines={1}
-            style={{ color: '#065F2E', flex: 1, fontSize: 17, fontWeight: '900', lineHeight: 23 }}
+            style={{ color: '#065F2E', flex: 1, fontSize: 17, fontWeight: '700', lineHeight: 23 }}
           >
             {task.title}
           </Text>
@@ -279,7 +279,7 @@ function ScheduleFormSection({
 }) {
   return (
     <View style={{ gap: spacing.md }}>
-      <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
         {title}
       </Text>
       <View style={{ gap: spacing.md }}>{children}</View>
@@ -313,7 +313,7 @@ function ProofOptionButton({
         paddingHorizontal: spacing.md,
       }}
     >
-      <Text selectable style={{ color: active ? colors.surface : colors.text, fontSize: 14, fontWeight: '800' }}>
+      <Text selectable style={{ color: active ? colors.surface : colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
     </Pressable>

@@ -102,7 +102,7 @@ export default function OwnerFarmHubScreen() {
             padding: spacing.md,
           }}
         >
-          <Text selectable style={{ color: colors.text, fontSize: 24, fontWeight: '900', letterSpacing: 1 }}>
+          <Text selectable style={{ color: colors.text, fontSize: 24, fontWeight: '700', letterSpacing: 1 }}>
             {farm?.joinCode ?? 'Belum tersedia'}
           </Text>
           <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
@@ -166,7 +166,7 @@ function NavRow({ label, onPress, subtitle }: { label: string; onPress: () => vo
       })}
     >
       <View style={{ flex: 1, gap: spacing.xs }}>
-        <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
+        <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
           {label}
         </Text>
         {subtitle ? (
@@ -175,7 +175,7 @@ function NavRow({ label, onPress, subtitle }: { label: string; onPress: () => vo
           </Text>
         ) : null}
       </View>
-      <Text selectable style={{ color: colors.primary, fontSize: 20, fontWeight: '900' }}>
+      <Text selectable style={{ color: colors.primary, fontSize: 20, fontWeight: '700' }}>
         {'>'}
       </Text>
     </Pressable>
@@ -198,7 +198,7 @@ function SummaryPill({ label, tone = 'success', value }: { label: string; tone?:
         padding: spacing.md,
       }}
     >
-      <Text selectable style={{ color: tone === 'warning' ? colors.warning : colors.success, fontSize: isUnavailable ? 15 : 22, fontWeight: '900' }}>
+      <Text selectable style={{ color: tone === 'warning' ? colors.warning : colors.success, fontSize: isUnavailable ? 15 : 22, fontWeight: '700' }}>
         {value}
       </Text>
       <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
@@ -218,7 +218,7 @@ function WorkerPreviewRow({ worker }: { worker: WorkerMembership }) {
         padding: spacing.md,
       }}
     >
-      <Text selectable numberOfLines={1} style={{ color: colors.text, fontSize: 15, fontWeight: '800' }}>
+      <Text selectable numberOfLines={1} style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
         {worker.fullName}
       </Text>
       {worker.phone ? (

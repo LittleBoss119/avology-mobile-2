@@ -119,7 +119,7 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
       </TreeVisualPlaceholder>
 
       <View style={{ gap: spacing.xs, paddingHorizontal: spacing.xs, paddingBottom: spacing.xs }}>
-        <Text selectable numberOfLines={1} style={{ color: colors.primary, fontSize: 22, fontWeight: '900' }}>
+        <Text selectable numberOfLines={1} style={{ color: colors.primary, fontSize: 22, fontWeight: '700' }}>
           {displayCode}
         </Text>
         <View style={{ alignItems: 'flex-start', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
@@ -302,7 +302,7 @@ export function TreeForm({
           <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
             Kode pohon otomatis
           </Text>
-          <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '900' }}>
+          <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '700' }}>
             {previewCode ?? 'Lokasi belum lengkap'}
           </Text>
         </View>
@@ -354,7 +354,7 @@ export function TreeForm({
               paddingVertical: spacing.md,
             }}
           >
-            <Text selectable style={{ color: values.plantedAt ? colors.text : colors.textSoft, fontSize: 16, fontWeight: '800' }}>
+            <Text selectable style={{ color: values.plantedAt ? colors.text : colors.textSoft, fontSize: 16, fontWeight: '700' }}>
               {formatDateForDisplay(values.plantedAt)}
             </Text>
           </Pressable>
@@ -446,7 +446,7 @@ function TreeFormSection({
   return (
     <View style={{ gap: spacing.md }}>
       <View style={{ gap: spacing.xs }}>
-        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
           {title}
         </Text>
         {description ? (
@@ -481,7 +481,7 @@ function DateActionButton({
         paddingVertical: spacing.sm,
       }}
     >
-      <Text selectable style={{ color: muted ? colors.textMuted : colors.primary, fontSize: 13, fontWeight: '800' }}>
+      <Text selectable style={{ color: muted ? colors.textMuted : colors.primary, fontSize: 13, fontWeight: '700' }}>
         {label}
       </Text>
     </Pressable>
@@ -643,7 +643,7 @@ function TreeHistoryTimelineItem({
                 {formatEventDate(item.happenedAt)}
               </Text>
             </View>
-            <Text selectable style={{ color: colors.text, fontSize: typography.bodyStrong.fontSize, fontWeight: '800', lineHeight: typography.bodyStrong.lineHeight }}>
+            <Text selectable style={{ color: colors.text, fontSize: typography.bodyStrong.fontSize, fontWeight: '700', lineHeight: typography.bodyStrong.lineHeight }}>
               {formatHistoryTitle(item)}
             </Text>
             {formatHistoryDescription(item) ? (
@@ -738,7 +738,7 @@ function PhotoThumbnail({ photoUrl }: { photoUrl: string }) {
             source={{ uri: photoUrl }}
             style={{ borderRadius: 14, height: '78%', width: '100%' }}
           />
-          <Text selectable style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800', marginTop: 14 }}>
+          <Text selectable style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginTop: 14 }}>
             Tutup
           </Text>
         </Pressable>

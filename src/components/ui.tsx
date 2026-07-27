@@ -215,7 +215,7 @@ export function TopAppBar({
             style={{
               color: colors.text,
               fontSize: resolvedVariant === 'main' ? typography.screenTitle.fontSize : 20,
-              fontWeight: resolvedVariant === 'main' ? typography.screenTitle.fontWeight : '800',
+              fontWeight: resolvedVariant === 'main' ? typography.screenTitle.fontWeight : '700',
               lineHeight: typography.screenTitle.lineHeight,
               textAlign: titleAlign,
             }}
@@ -321,12 +321,12 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
           width: compact ? 52 : 72,
         }}
       >
-        <Text selectable style={{ color: '#FFFFFF', fontSize: compact ? 24 : 34, fontWeight: '900' }}>
+        <Text selectable style={{ color: '#FFFFFF', fontSize: compact ? 24 : 34, fontWeight: '700' }}>
           A
         </Text>
       </View>
       <View style={{ alignItems: compact ? 'flex-start' : 'center', gap: spacing.xs }}>
-        <Text selectable style={{ color: colors.text, fontSize: compact ? 20 : 24, fontWeight: '900' }}>
+        <Text selectable style={{ color: colors.text, fontSize: compact ? 20 : 24, fontWeight: '700' }}>
           Avology
         </Text>
         <Text selectable style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>
@@ -363,7 +363,7 @@ export function SectionHeader({
             color: colors.text,
             flex: 1,
             fontSize: typography.h3.fontSize,
-            fontWeight: '800',
+            fontWeight: '700',
             lineHeight: typography.h3.lineHeight,
           }}
         >
@@ -371,7 +371,7 @@ export function SectionHeader({
         </Text>
         {actionLabel && onActionPress ? (
           <Pressable onPress={onActionPress} style={{ paddingHorizontal: spacing.xs, paddingVertical: spacing.xs }}>
-            <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
+            <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>
               {actionLabel}
             </Text>
           </Pressable>
@@ -538,7 +538,7 @@ export function MetricCard({
           >
             {label}
           </Text>
-          <Text selectable style={{ color: textColor, fontSize: 25, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+          <Text selectable style={{ color: textColor, fontSize: 25, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
             {value}
           </Text>
         </View>
@@ -568,7 +568,7 @@ export function ChipButton({
         paddingVertical: spacing.sm + 1,
       }}
     >
-      <Text selectable style={{ color: active ? '#FFFFFF' : colors.text, fontSize: 14, fontWeight: '800' }}>
+      <Text selectable style={{ color: active ? '#FFFFFF' : colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
     </Pressable>
@@ -616,7 +616,7 @@ export function FilterChip({
         style={{
           color: active ? colors.primary : colors.text,
           fontSize: 13,
-          fontWeight: '800',
+          fontWeight: '700',
           lineHeight: 18,
         }}
       >
@@ -677,7 +677,7 @@ export function FilterChipsRow({
             paddingVertical: spacing.sm,
           })}
         >
-          <Text selectable={false} style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
+          <Text selectable={false} style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>
             {clearLabel}
           </Text>
         </Pressable>
@@ -689,7 +689,7 @@ export function FilterChipsRow({
 export function SectionTitle({ subtitle, title }: { subtitle?: string; title: string }) {
   return (
     <View style={{ gap: 4, paddingTop: 4 }}>
-      <Text selectable style={{ color: colors.text, fontSize: 19, fontWeight: '800' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 19, fontWeight: '700' }}>
         {title}
       </Text>
       {subtitle ? (
@@ -1141,7 +1141,7 @@ export function PhotoPickerCard({
     <Card>
       <View style={{ gap: spacing.xs }}>
         <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
-          <Text selectable style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '700' }}>
             {title}
           </Text>
           {required ? <Badge label="Wajib" tone="warning" /> : null}
@@ -1191,7 +1191,7 @@ export function PhotoPickerCard({
             >
               <CameraGlyph color={colors.primary} />
             </View>
-            <Text selectable={false} style={{ color: colors.text, fontWeight: '800', textAlign: 'center' }}>
+            <Text selectable={false} style={{ color: colors.text, fontWeight: '700', textAlign: 'center' }}>
               {emptyLabel}
             </Text>
             <Text selectable={false} style={{ color: colors.muted, fontSize: 13, textAlign: 'center' }}>

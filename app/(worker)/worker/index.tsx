@@ -100,7 +100,7 @@ function WorkerHero({
     <Card variant={hasTodayTask ? 'heroGreen' : 'softGreen'}>
       <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
         <View style={{ flex: 1, gap: 8 }}>
-          <Text selectable style={{ color: hasTodayTask ? colors.surface : colors.text, fontSize: 20, fontWeight: '900' }}>
+          <Text selectable style={{ color: hasTodayTask ? colors.surface : colors.text, fontSize: 20, fontWeight: '700' }}>
             Tugas Hari Ini
           </Text>
           <Text selectable style={{ color: hasTodayTask ? colors.primarySoft : colors.textMuted, lineHeight: 21 }}>
@@ -111,7 +111,7 @@ function WorkerHero({
               : 'Belum ada tugas hari ini.'}
           </Text>
         </View>
-        <Text selectable style={{ color: hasTodayTask ? colors.surface : colors.primary, fontSize: 52, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+        <Text selectable style={{ color: hasTodayTask ? colors.surface : colors.primary, fontSize: 52, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
           {summary?.todayTasks ?? 0}
         </Text>
       </View>
@@ -161,7 +161,7 @@ function HeroMetric({
           color: warning ? colors.warning : active ? colors.surface : colors.text,
           fontSize: 22,
           fontVariant: ['tabular-nums'],
-          fontWeight: '900',
+          fontWeight: '700',
         }}
       >
         {value}
@@ -174,7 +174,7 @@ function TaskFocusCard({ summary }: { summary: WorkerDashboardSummary | null }) 
   if (!summary) {
     return (
       <Card>
-        <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '800' }}>
+        <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
           Data tugas belum tersedia.
         </Text>
         <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
@@ -188,7 +188,7 @@ function TaskFocusCard({ summary }: { summary: WorkerDashboardSummary | null }) 
     return (
       <Pressable onPress={() => router.push('/worker/tasks')}>
         <Card variant="warning">
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
             {summary.todayTasks} tugas perlu dikerjakan
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -203,7 +203,7 @@ function TaskFocusCard({ summary }: { summary: WorkerDashboardSummary | null }) 
     return (
       <Pressable onPress={() => router.push('/worker/tasks')}>
         <Card variant="warning">
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
             {summary.unfinishedTasks} tugas masih terbuka
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -216,7 +216,7 @@ function TaskFocusCard({ summary }: { summary: WorkerDashboardSummary | null }) 
 
   return (
     <Card variant="softGreen">
-      <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+      <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
         Belum ada tugas hari ini.
       </Text>
       <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -257,7 +257,7 @@ function DashboardActionButton({
       <Text selectable style={{ color: primary ? colors.primarySoft : colors.textMuted, fontSize: 12, fontWeight: '700' }}>
         {meta}
       </Text>
-      <Text selectable style={{ color: primary ? colors.surface : colors.text, fontSize: 14, fontWeight: '900', lineHeight: 18 }}>
+      <Text selectable style={{ color: primary ? colors.surface : colors.text, fontSize: 14, fontWeight: '700', lineHeight: 18 }}>
         {label}
       </Text>
     </Pressable>

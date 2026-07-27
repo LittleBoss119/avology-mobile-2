@@ -28,12 +28,12 @@ export default function GetStartedScreen() {
             width: 74,
           }}
         >
-          <Text selectable={false} style={{ color: colors.surface, fontSize: 34, fontWeight: '900' }}>
+          <Text selectable={false} style={{ color: colors.surface, fontSize: 34, fontWeight: '700' }}>
             A
           </Text>
         </View>
         <View style={{ alignItems: 'center', gap: spacing.sm }}>
-          <Text selectable style={{ color: colors.text, fontSize: typography.display.fontSize, fontWeight: '900', lineHeight: typography.display.lineHeight }}>
+          <Text selectable style={{ color: colors.text, fontSize: typography.display.fontSize, fontWeight: '700', lineHeight: typography.display.lineHeight }}>
             Avology
           </Text>
           <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23, textAlign: 'center' }}>

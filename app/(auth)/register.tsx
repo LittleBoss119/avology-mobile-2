@@ -131,7 +131,7 @@ function PasswordField({
           value={value}
         />
         <Pressable accessibilityRole="button" onPress={onToggleVisible} style={{ padding: spacing.sm }}>
-          <Text selectable={false} style={{ color: colors.primary, fontSize: 13, fontWeight: '800' }}>
+          <Text selectable={false} style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>
             {visible ? 'Sembunyikan' : 'Lihat'}
           </Text>
         </Pressable>
@@ -155,7 +155,7 @@ function InlineAuthLink({
         {prefix}
       </Text>
       <Pressable accessibilityRole="button" onPress={onPress} style={{ paddingVertical: spacing.sm }}>
-        <Text selectable={false} style={{ color: colors.primary, fontWeight: '800' }}>
+        <Text selectable={false} style={{ color: colors.primary, fontWeight: '700' }}>
           {actionLabel}
         </Text>
       </Pressable>

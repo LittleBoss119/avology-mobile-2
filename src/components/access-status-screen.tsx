@@ -93,7 +93,7 @@ export function AccessStatusScreen({
         <View style={{ alignItems: 'flex-start' }}>
           <Badge label={formatRole(currentFarm.role)} tone="info" />
         </View>
-        <Text selectable style={{ color: colors.text, fontSize: typography.h1.fontSize, fontWeight: '800', lineHeight: typography.h1.lineHeight }}>
+        <Text selectable style={{ color: colors.text, fontSize: typography.h1.fontSize, fontWeight: '700', lineHeight: typography.h1.lineHeight }}>
           Halo, {displayName}
         </Text>
         <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
@@ -103,7 +103,7 @@ export function AccessStatusScreen({
       <ErrorBanner message={error?.message} />
       <Card variant={statusCardVariant}>
         <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' }}>
-          <Text selectable style={{ color: colors.text, flex: 1, fontSize: typography.h3.fontSize, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, flex: 1, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
             {statusTitle}
           </Text>
           <Badge label={formatMemberStatus(currentFarm.status)} tone={statusTone} />
@@ -113,7 +113,7 @@ export function AccessStatusScreen({
         <MetaRow label="Status" value={formatMemberStatus(currentFarm.status)} />
       </Card>
       <Card variant={currentFarm.status === 'pending' ? 'info' : 'danger'}>
-        <Text selectable style={{ color: currentFarm.status === 'pending' ? colors.info : colors.danger, fontWeight: '800', lineHeight: 21 }}>
+        <Text selectable style={{ color: currentFarm.status === 'pending' ? colors.info : colors.danger, fontWeight: '700', lineHeight: 21 }}>
           {noticeText}
         </Text>
       </Card>

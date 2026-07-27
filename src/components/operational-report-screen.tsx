@@ -598,7 +598,7 @@ export function WorkerEditOperationalReportScreen({ reportId }: { reportId?: str
         <TopAppBar title="Edit laporan" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <Card variant="warning">
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '800' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
             Laporan tidak bisa diedit
           </Text>
           <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -1325,7 +1325,7 @@ function ReportDetailSummaryCard({
       <View style={{ gap: spacing.md }}>
         <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' }}>
           <View style={{ flex: 1, gap: spacing.sm }}>
-            <Text selectable style={{ color: colors.text, fontSize: 22, fontWeight: '900', lineHeight: 28 }}>
+            <Text selectable style={{ color: colors.text, fontSize: 22, fontWeight: '700', lineHeight: 28 }}>
               {`Laporan ${formatOperationalReportCategory(report.category)}`}
             </Text>
             <Text selectable style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
@@ -1462,7 +1462,7 @@ function OwnerReportDecisionSection({
         />
         {allFollowUpTasksCompleted ? (
           <>
-            <Text selectable style={{ color: appTheme.primary, fontWeight: '800', lineHeight: 21 }}>
+            <Text selectable style={{ color: appTheme.primary, fontWeight: '700', lineHeight: 21 }}>
               Tugas tindak lanjut sudah selesai. Tinjau hasilnya lalu tandai laporan selesai.
             </Text>
             {noteField}
@@ -1596,7 +1596,7 @@ function OperationalReportCard({
             selectable
             ellipsizeMode="tail"
             numberOfLines={2}
-            style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '900', lineHeight: 22 }}
+            style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '700', lineHeight: 22 }}
           >
             {`Laporan ${formatOperationalReportCategory(report.category)}`}
           </Text>
@@ -1704,10 +1704,10 @@ function ReportSummary({ reports, title }: { reports: OperationalReport[]; title
               padding: spacing.sm,
             }}
           >
-            <Text selectable numberOfLines={2} style={{ color: colors.textMuted, fontSize: 11, fontWeight: '800', lineHeight: 15 }}>
+            <Text selectable numberOfLines={2} style={{ color: colors.textMuted, fontSize: 11, fontWeight: '700', lineHeight: 15 }}>
               {item.label}
             </Text>
-            <Text selectable style={{ color: getSummaryToneColor(item.tone), fontSize: 20, fontVariant: ['tabular-nums'], fontWeight: '900' }}>
+            <Text selectable style={{ color: getSummaryToneColor(item.tone), fontSize: 20, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
               {item.value}
             </Text>
           </View>
@@ -1731,7 +1731,7 @@ function ReportFollowUpSection({
 }) {
   return (
     <View style={{ gap: 12 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '800', paddingTop: 4 }}>
+      <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
         Tindak Lanjut
       </Text>
 
@@ -1779,7 +1779,7 @@ function ReportFollowUpTaskCard({
         <Text
           selectable
           numberOfLines={2}
-          style={{ color: '#1E2A24', flex: 1, fontSize: 16, fontWeight: '900', lineHeight: 22 }}
+          style={{ color: '#1E2A24', flex: 1, fontSize: 16, fontWeight: '700', lineHeight: 22 }}
         >
           {task.title}
         </Text>
@@ -1798,7 +1798,7 @@ function ReportFollowUpTaskCard({
 
       {task.activities.length > 0 ? (
         <View style={{ gap: 10 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '800' }}>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '700' }}>
             Realisasi
           </Text>
           {task.activities.map((activity) => (
@@ -1814,7 +1814,7 @@ function ReportFollowUpTaskCard({
               }}
             >
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-                <Text selectable style={{ color: '#1E2A24', flex: 1, fontWeight: '800' }}>
+                <Text selectable style={{ color: '#1E2A24', flex: 1, fontWeight: '700' }}>
                   {formatActivityStatus(activity.status)}
                 </Text>
                 <Badge label={formatActivityStatus(activity.status)} maxWidth={110} tone={getActivityTone(activity.status)} />

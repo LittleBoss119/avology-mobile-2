@@ -40,7 +40,7 @@ export function FloweringAgeMarker({
   return (
     <View style={[markerBase, { backgroundColor: colors.primarySoft, borderColor: colors.primaryBorder }]}>
       <FlowerIcon color={colors.primary} size={18} />
-      <Text selectable style={{ color: colors.primary, fontSize: 14, fontWeight: '800' }}>
+      <Text selectable style={{ color: colors.primary, fontSize: 14, fontWeight: '700' }}>
         {days} hari sejak berbunga
       </Text>
     </View>
