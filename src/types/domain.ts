@@ -354,6 +354,7 @@ export type OwnerDashboardSummary = {
   problemTrees: number;
   todayTasks: number;
   unfinishedTasks: number;
+  overdueTasks: number;
   newOperationalReports: number;
   pendingWorkers: number;
   floweringTrees: number;
