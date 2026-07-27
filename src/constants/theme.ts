@@ -154,3 +154,51 @@ export const theme = {
 } as const;
 
 export type StatusTone = keyof typeof statusColors;
+
+export const tokens = {
+  color: {
+    brand:   { base: '#065F2E', dark: '#044722', soft: '#E7F5EC', border: '#B7DFC0', on: '#FFFFFF' },
+    text:    { primary: '#17231B', secondary: '#5B6B60', tertiary: '#8A978D', onBrand: '#FFFFFF', onBrandMuted: '#DDEFE2' },
+    surface: { canvas: '#F7FAF3', card: '#FFFFFF', subtle: '#F1F6EA' },
+    line:    { card: '#DDE8D8', hairline: '#E7EEE3' },
+    status: {
+      success: { text: '#16803C', bg: '#E2F6E8', border: '#B8E3C3' },
+      warning: { text: '#B7791F', bg: '#FFF4D6', border: '#F3D78A' },
+      danger:  { text: '#C2410C', bg: '#FDE7E7', border: '#F2B8B5' },
+      info:    { text: '#2563EB', bg: '#E8F1FF', border: '#BDD6FF' },
+      neutral: { text: '#4B5563', bg: '#F3F4F6', border: '#E5E7EB' },
+    },
+    record: {
+      condition: { text: '#7A5600', bg: '#FCEFC7', border: '#EBD9A0' },
+      phase:     { text: '#065F2E', bg: '#E7F5EC', border: '#B7DFC0' },
+      harvest:   { text: '#9A4C0A', bg: '#FDEBD9', border: '#F2C69B' },
+      care:      { text: '#184E91', bg: '#E7EEF8', border: '#C2D4EC' },
+    },
+    overlay: { scrim: 'rgba(23,35,27,0.45)', scrimLight: 'rgba(23,35,27,0.12)' },
+  },
+  space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32, xxxxl: 40 },
+  layout: {
+    screenX: 16, screenTop: 20, sectionGap: 24, cardPadding: 16,
+    listGap: 12, rowMinHeight: 48, controlHeight: 56, tapTarget: 44,
+  },
+  radius: { control: 14, cardInner: 16, card: 20, sheet: 28, pill: 999 },
+  type: {
+    display:    { fontSize: 32, fontWeight: '700', lineHeight: 38 },
+    title:      { fontSize: 24, fontWeight: '700', lineHeight: 30 },
+    heading:    { fontSize: 20, fontWeight: '700', lineHeight: 26 },
+    subheading: { fontSize: 17, fontWeight: '600', lineHeight: 23 },
+    body:       { fontSize: 16, fontWeight: '400', lineHeight: 22 },
+    bodySmall:  { fontSize: 14, fontWeight: '400', lineHeight: 20 },
+    bodyStrong: { fontSize: 16, fontWeight: '600', lineHeight: 22 },
+    label:      { fontSize: 14, fontWeight: '500', lineHeight: 20 },
+    meta:       { fontSize: 13, fontWeight: '400', lineHeight: 18 },
+    caption:    { fontSize: 12, fontWeight: '600', lineHeight: 16 },
+  },
+  icon: { sm: 16, md: 20, lg: 24, stroke: 2 },
+  elevation: {
+    overlay: {
+      shadowColor: '#17231B', shadowOpacity: 0.1, shadowRadius: 16,
+      shadowOffset: { width: 0, height: 4 }, elevation: 6,
+    },
+  },
+} as const;
