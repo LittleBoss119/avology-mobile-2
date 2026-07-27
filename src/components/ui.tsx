@@ -77,7 +77,7 @@ export function Screen({
     ? 128 + insets.bottom
     : floatingAction
       ? 132
-      : spacing['2xl'];
+      : tokens.space.xxxl;
 
   return (
     <View style={{ flex: 1, backgroundColor }}>
