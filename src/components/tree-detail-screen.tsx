@@ -2,7 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, Text, View } from 'react-native';
 
-import { colors, radius, spacing, typography } from '../constants/theme';
+import { colors, radius, spacing, tokens, typography } from '../constants/theme';
 import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import {
@@ -425,7 +425,7 @@ function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuP
         style={{
           alignItems: 'center',
           backgroundColor: '#FFFFFF',
-          borderColor: '#DCE7D5',
+          borderColor: colors.border,
           borderRadius: 999,
           borderWidth: 1,
           height: 44,
@@ -667,16 +667,12 @@ function OwnerTreeMenu({
           <View
             style={{
               backgroundColor: '#FFFFFF',
-              borderColor: '#DCE7D5',
+              borderColor: colors.border,
               borderRadius: 14,
               borderWidth: 1,
-              elevation: 5,
               minWidth: 210,
               overflow: 'hidden',
-              shadowColor: '#1E2A24',
-              shadowOffset: { height: 4, width: 0 },
-              shadowOpacity: 0.14,
-              shadowRadius: 14,
+              ...tokens.elevation.overlay,
             }}
           >
             <MenuItem
@@ -686,13 +682,13 @@ function OwnerTreeMenu({
             />
             {hasPhoto ? (
               <>
-                <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
+                <View style={{ backgroundColor: colors.border, height: 1 }} />
                 <MenuItem danger disabled={actionLoading} label="Hapus Foto Pohon" onPress={onDeletePhoto} />
               </>
             ) : null}
-            <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
+            <View style={{ backgroundColor: colors.border, height: 1 }} />
             <MenuItem label="Edit Pohon" onPress={onEdit} />
-            <View style={{ backgroundColor: '#DCE7D5', height: 1 }} />
+            <View style={{ backgroundColor: colors.border, height: 1 }} />
             <MenuItem
               danger={!tree.isArchived}
               disabled={actionLoading}
@@ -733,7 +729,7 @@ function PhotoSourceSheet({
           paddingTop: 12,
         }}
       >
-        <View style={{ alignSelf: 'center', backgroundColor: '#DCE7D5', borderRadius: 999, height: 5, width: 48 }} />
+        <View style={{ alignSelf: 'center', backgroundColor: colors.border, borderRadius: 999, height: 5, width: 48 }} />
         <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700' }}>
           Foto Pohon
         </Text>

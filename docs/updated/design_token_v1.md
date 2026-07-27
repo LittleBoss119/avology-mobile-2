@@ -107,7 +107,7 @@ tersebar di layar juga mengikuti aturan ini saat migrasi.)
 | Lama | Nilai | Baru | Nilai | Catatan |
 |---|---|---|---|---|
 | `sm` | 8 | `radius.control` | 14 | naik (skala baru tak punya 8) |
-| `md` | 12 | `radius.control` | 14 | 12→14 |
+| `md` | 12 | `radius.tile` | 12 | **sama** — token `tile` ditambah P-4b; `control` (14) bukan peran yang tepat |
 | `input` / `button` | 14 | `radius.control` | 14 | sama |
 | `lg` / `imageCard` | 16 | `radius.cardInner` | 16 | sama |
 | `screenCard` | 18 | `radius.card` | 20 | 18→20 |
@@ -116,6 +116,13 @@ tersebar di layar juga mengikuti aturan ini saat migrasi.)
 | *(literal sheet)* | 28 | `radius.sheet` | 28 | sama |
 | *(literal sheet)* | 30 | `radius.sheet` | 28 | 30→28 |
 | `round` / `chip` | 999 | `radius.pill` | 999 | sama |
+
+> **P-4b — `radius.tile: 12` ditambahkan** (setelah `control`). Nilai 12 dipakai
+> **23×** (thumbnail foto & blok-dalam menengah); `control` (14) bukan nama/nilai
+> yang tepat untuk peran itu. Token disediakan saja — **23 pemakaian belum
+> dimigrasikan** (jatah unit layar). Juga di P-4b: `Card` pakai `radius.card` (20,
+> dari `screenCard` 18); `Button` primary & non-primary pakai `layout.controlHeight`
+> (56) sehingga `spacing.buttonHeight` (52) jadi nol pemakai (dibiarkan).
 
 ---
 

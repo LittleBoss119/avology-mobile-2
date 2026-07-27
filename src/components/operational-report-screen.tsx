@@ -2128,7 +2128,7 @@ function TextArea({
         placeholderTextColor="#94A098"
         style={{
           backgroundColor: '#FFFFFF',
-          borderColor: '#DDE4DA',
+          borderColor: colors.border,
           borderCurve: 'continuous',
           borderRadius: 8,
           borderWidth: 1,

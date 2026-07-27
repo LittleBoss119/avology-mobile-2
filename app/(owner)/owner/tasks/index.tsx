@@ -167,7 +167,7 @@ function SummaryPill({ label, value }: { label: string; value: number }) {
     <View
       style={{
         backgroundColor: '#FFFFFF',
-        borderColor: '#DCE7D5',
+        borderColor: appTheme.border,
         borderRadius: 14,
         borderWidth: 1,
         flexBasis: '22%',

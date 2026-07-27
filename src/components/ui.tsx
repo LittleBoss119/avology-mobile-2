@@ -24,6 +24,7 @@ import {
   spacing,
   statusColors,
   theme,
+  tokens,
   typography,
   type StatusTone,
 } from '../constants/theme';
@@ -274,7 +275,7 @@ export function ProfileIconButton({
 export function MainTabHeader({
   onProfilePress,
   roleLabel,
-  roleTone = 'info',
+  roleTone = 'neutral',
   subtitle,
   title,
 }: {
@@ -406,7 +407,7 @@ export function Card({
         {
           ...cardStyle,
           borderCurve: 'continuous',
-          borderRadius: radius.screenCard,
+          borderRadius: tokens.radius.card,
           borderWidth: 1,
           gap: spacing.md,
           padding,
@@ -880,7 +881,7 @@ export function Button({
         gap: spacing.sm,
         height: isIcon ? (size === 'small' ? 40 : 48) : undefined,
         justifyContent: 'center',
-        minHeight: isIcon ? undefined : size === 'small' ? 40 : isPrimary ? 56 : spacing.buttonHeight,
+        minHeight: isIcon ? undefined : size === 'small' ? 40 : tokens.layout.controlHeight,
         minWidth: isIcon ? (size === 'small' ? 40 : 48) : undefined,
         opacity: disabled ? 0.6 : 1,
         paddingHorizontal: isIcon ? 0 : size === 'small' ? spacing.md : spacing.lg,

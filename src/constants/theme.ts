@@ -181,7 +181,7 @@ export const tokens = {
     screenX: 16, screenTop: 20, sectionGap: 24, cardPadding: 16,
     listGap: 12, rowMinHeight: 48, controlHeight: 56, tapTarget: 44,
   },
-  radius: { control: 14, cardInner: 16, card: 20, sheet: 28, pill: 999 },
+  radius: { control: 14, tile: 12, cardInner: 16, card: 20, sheet: 28, pill: 999 },
   type: {
     display:    { fontSize: 32, fontWeight: '700', lineHeight: 38 },
     title:      { fontSize: 24, fontWeight: '700', lineHeight: 30 },
