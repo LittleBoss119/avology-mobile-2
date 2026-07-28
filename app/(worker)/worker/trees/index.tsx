@@ -1,10 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
+import { BottomSheet } from '../../../../src/components/bottom-sheet';
 import { TreeCard } from '../../../../src/components/tree-components';
 import { EmptyState, ErrorBanner, FilterChipsRow, LoadingState, MainTabHeader, SearchFilterRow, Screen } from '../../../../src/components/ui';
-import { colors, spacing } from '../../../../src/constants/theme';
+import { colors, spacing, tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { listTreeMainPhotosForFarm } from '../../../../src/services/photoAttachmentService';
 import { getTrees } from '../../../../src/services/treeService';
@@ -283,32 +284,13 @@ function WorkerFilterPanel({
   visible: boolean;
 }) {
   return (
-    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.12)', flex: 1 }} onPress={onClose} />
-      <View
-        style={{
-          backgroundColor: colors.surface,
-          borderTopLeftRadius: 30,
-          borderTopRightRadius: 30,
-          gap: 20,
-          paddingBottom: 28,
-          paddingHorizontal: 22,
-          paddingTop: 10,
-        }}
-      >
-        <View style={{ alignSelf: 'center', backgroundColor: colors.border, borderRadius: 999, height: 5, width: 48 }} />
-        <View style={{ alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-          <View style={{ flex: 1, gap: 4 }}>
-            <Text selectable style={{ color: colors.text, fontSize: 20, fontWeight: '700' }}>
-              Filter Pohon
-            </Text>
-            <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
-              Pilih kondisi, fase, dan umur pohon aktif.
-            </Text>
-          </View>
-          <SheetDoneButton onPress={onClose} />
-        </View>
-
+    <BottomSheet
+      onClose={onClose}
+      subtitle="Pilih kondisi, fase, dan umur pohon aktif."
+      title="Filter Pohon"
+      visible={visible}
+    >
+      <View style={{ gap: tokens.space.xl }}>
         <FilterSection title="Kondisi">
           <ChipRow>
             {conditionFilterOptions.map((filter) => (
@@ -347,8 +329,10 @@ function WorkerFilterPanel({
             ))}
           </ChipRow>
         </FilterSection>
+
+        <SheetDoneButton onPress={onClose} />
       </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
@@ -357,6 +341,7 @@ function SheetDoneButton({ onPress }: { onPress: () => void }) {
     <Pressable
       onPress={onPress}
       style={{
+        alignItems: 'center',
         backgroundColor: colors.primarySoft,
         borderColor: colors.primaryBorder,
         borderRadius: 999,
