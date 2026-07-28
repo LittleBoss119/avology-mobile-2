@@ -111,7 +111,7 @@ const ownerNavigationItems: NavigationItem[] = [
   {
     href: '/owner/schedules',
     icon: 'checklist',
-    label: 'Tugas',
+    label: 'Jadwal',
     match: ['/owner/schedules', '/owner/tasks'],
   },
   {

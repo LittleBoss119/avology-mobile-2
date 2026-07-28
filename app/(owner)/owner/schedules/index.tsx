@@ -145,7 +145,7 @@ export default function CareScheduleListScreen() {
   return (
     <Screen floatingAction={<AddScheduleFab onPress={() => setAddSheetOpen(true)} />}>
       <MainTabHeader
-        title="Tugas"
+        title="Jadwal"
         roleLabel="Pemilik"
         subtitle="Pantau jadwal kerja dan perawatan."
         onProfilePress={() => router.push('/owner/profile')}
