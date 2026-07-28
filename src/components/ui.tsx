@@ -651,7 +651,7 @@ export function FilterChipsRow({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={style}
+      style={[{ flexGrow: 0 }, style]}
       contentContainerStyle={{
         alignItems: 'center',
         gap: spacing.sm,

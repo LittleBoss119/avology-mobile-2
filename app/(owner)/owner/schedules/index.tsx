@@ -160,22 +160,17 @@ export default function CareScheduleListScreen() {
         value={search}
       />
 
-      {/* Bungkus <View>: cegah FilterChipsRow (ScrollView horizontal) memuai
-          vertikal di dalam <View flex:1> milik Screen saat daftar pendek,
-          agar isi layar tetap rata atas. */}
-      <View>
-        <FilterChipsRow>
-          {statusFilters.map((filter) => (
-            <ChipButton
-              key={filter.value}
-              active={statusFilter === filter.value}
-              count={schedules.filter((schedule) => matchesActive(schedule, filter.value)).length}
-              label={filter.label}
-              onPress={() => setStatusFilter(filter.value)}
-            />
-          ))}
-        </FilterChipsRow>
-      </View>
+      <FilterChipsRow>
+        {statusFilters.map((filter) => (
+          <ChipButton
+            key={filter.value}
+            active={statusFilter === filter.value}
+            count={schedules.filter((schedule) => matchesActive(schedule, filter.value)).length}
+            label={filter.label}
+            onPress={() => setStatusFilter(filter.value)}
+          />
+        ))}
+      </FilterChipsRow>
 
       {error ? null : (
         <>
