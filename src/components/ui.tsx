@@ -550,10 +550,12 @@ export function MetricCard({
 
 export function ChipButton({
   active,
+  count,
   label,
   onPress,
 }: {
   active: boolean;
+  count?: number;
   label: string;
   onPress: () => void;
 }) {
@@ -570,7 +572,7 @@ export function ChipButton({
       }}
     >
       <Text selectable style={{ color: active ? '#FFFFFF' : colors.text, fontSize: 14, fontWeight: '700' }}>
-        {label}
+        {count === undefined ? label : `${label} · ${count}`}
       </Text>
     </Pressable>
   );
