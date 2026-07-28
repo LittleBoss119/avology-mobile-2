@@ -1,12 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
+import { Icon } from '../../../../src/components/icons';
 import {
   Badge,
-  CameraGlyph,
   Card,
   ChipButton,
   CompactMetaItem,
@@ -17,7 +17,7 @@ import {
   MainTabHeader,
   Screen,
 } from '../../../../src/components/ui';
-import { colors, radius, spacing } from '../../../../src/constants/theme';
+import { tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getWorkerTasks } from '../../../../src/services/careTaskService';
 import type { CareTask, TaskStatus } from '../../../../src/types/domain';
@@ -88,24 +88,30 @@ export default function WorkerTaskListScreen() {
       />
       <ErrorBanner message={error} />
 
-      <TaskSummary tasks={tasks} />
+      {error ? null : (
+        <>
+          <RangeFilter selectedRange={rangeFilter} onSelect={setRangeFilter} tasks={tasks} />
 
-      <RangeFilter selectedRange={rangeFilter} onSelect={setRangeFilter} />
+          <Text selectable style={styles.metaLine}>
+            {`${filteredTasks.length} tugas`}
+          </Text>
 
-      {filteredTasks.length === 0 ? (
-        <EmptyState
-          title={tasks.length === 0 ? 'Belum ada tugas.' : rangeFilter === 'today' ? 'Belum ada tugas hari ini.' : 'Tidak ada tugas pada filter ini.'}
-        />
-      ) : (
-        <View style={{ gap: 12 }}>
-          {filteredTasks.map((task) => (
-            <WorkerTaskCard
-              key={task.id}
-              task={task}
-              onPress={() => router.push(`/worker/tasks/${task.id}`)}
+          {filteredTasks.length === 0 ? (
+            <EmptyState
+              title={tasks.length === 0 ? 'Belum ada tugas.' : rangeFilter === 'today' ? 'Belum ada tugas hari ini.' : 'Tidak ada tugas pada filter ini.'}
             />
-          ))}
-        </View>
+          ) : (
+            <View style={styles.list}>
+              {filteredTasks.map((task) => (
+                <WorkerTaskCard
+                  key={task.id}
+                  task={task}
+                  onPress={() => router.push(`/worker/tasks/${task.id}`)}
+                />
+              ))}
+            </View>
+          )}
+        </>
       )}
     </Screen>
   );
@@ -114,9 +120,11 @@ export default function WorkerTaskListScreen() {
 function RangeFilter({
   onSelect,
   selectedRange,
+  tasks,
 }: {
   onSelect: (range: TaskRangeFilter) => void;
   selectedRange: TaskRangeFilter;
+  tasks: CareTask[];
 }) {
   return (
     <FilterChipsRow>
@@ -124,6 +132,7 @@ function RangeFilter({
         <ChipButton
           key={filter.value}
           active={selectedRange === filter.value}
+          count={countTasksForRange(tasks, filter.value)}
           label={filter.label}
           onPress={() => onSelect(filter.value)}
         />
@@ -132,111 +141,46 @@ function RangeFilter({
   );
 }
 
-function TaskSummary({ tasks }: { tasks: CareTask[] }) {
-  return (
-    <Card variant="heroGreen">
-      <View style={{ gap: spacing.xs }}>
-        <Text selectable style={{ color: '#DDEFE2', fontSize: 15, fontWeight: '700' }}>
-          Hari Ini
-        </Text>
-        <Text selectable style={{ color: colors.surface, fontSize: 28, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
-          {countTodayOpenTasks(tasks)} tugas
-        </Text>
-      </View>
-      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-        <SummaryPill label="Belum" value={countTasksByStatus(tasks, 'pending')} />
-        <SummaryPill label="Selesai" value={countTasksByStatus(tasks, 'completed')} />
-        <SummaryPill label="Tertunda" value={countTasksByStatus(tasks, 'postponed')} />
-      </View>
-    </Card>
-  );
-}
-
-function SummaryPill({ label, value }: { label: string; value: number }) {
-  return (
-    <View
-      style={{
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        borderColor: 'rgba(255,255,255,0.22)',
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        flex: 1,
-        gap: 3,
-        padding: 11,
-      }}
-    >
-      <Text selectable numberOfLines={1} style={{ color: '#DDEFE2', fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-      <Text selectable style={{ color: colors.surface, fontSize: 22, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 function WorkerTaskCard({ onPress, task }: { onPress: () => void; task: CareTask }) {
+  const heading = task.category ? formatCareCategory(task.category) : task.title;
+  const showTitleRow = Boolean(task.title) && task.category !== null;
+
   return (
     <Pressable onPress={onPress}>
-      <Card>
-        <View style={{ gap: spacing.sm }}>
-          <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
-            <Text
-              selectable
-              ellipsizeMode="tail"
-              numberOfLines={1}
-              style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '700', lineHeight: 23 }}
-            >
-              {task.title}
-            </Text>
-            <Badge label={formatTaskStatusLabel(task.status)} maxWidth={100} tone={getTaskTone(task.status)} />
-          </View>
+      <Card style={styles.card} variant="default">
+        <View style={styles.cardRow1}>
+          <Text selectable numberOfLines={1} style={styles.cardHeading}>
+            {heading}
+          </Text>
+          <Badge label={formatTaskStatusLabel(task.status)} maxWidth={100} tone={getTaskTone(task.status)} />
+        </View>
 
-          <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {task.category ? (
-              <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
-                {formatCareCategory(task.category)}
+        {showTitleRow ? (
+          <Text selectable numberOfLines={1} style={styles.cardTitle}>
+            {task.title}
+          </Text>
+        ) : null}
+
+        {task.instruction ? (
+          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={styles.cardInstruction}>
+            {task.instruction}
+          </Text>
+        ) : null}
+
+        <View style={styles.cardMeta}>
+          <CompactMetaItem icon="calendar" label={formatDate(task.dueDate)} />
+          <CompactMetaItem icon="target" label={formatCareTarget(task)} />
+          {task.requiresPhoto ? (
+            <View style={styles.cardPhoto}>
+              <Icon name="camera" size={tokens.icon.xs} color={tokens.color.text.secondary} />
+              <Text selectable style={styles.cardAttribute}>
+                Butuh foto
               </Text>
-            ) : null}
-            {task.requiresPhoto ? <ProofPhotoIndicator /> : null}
-          </View>
-
-          {task.instruction ? (
-            <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-              {task.instruction}
-            </Text>
-          ) : null}
-
-          <View style={{ gap: spacing.xs }}>
-            <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md }}>
-              <CompactMetaItem icon="calendar" label={formatDate(task.dueDate)} />
-              <CompactMetaItem icon="target" label={formatCareTarget(task)} />
             </View>
-          </View>
+          ) : null}
         </View>
       </Card>
     </Pressable>
-  );
-}
-
-function ProofPhotoIndicator() {
-  return (
-    <View
-      accessibilityLabel="Perlu bukti foto"
-      style={{
-        alignItems: 'center',
-        backgroundColor: colors.warningBg,
-        borderColor: colors.warningBorder,
-        borderCurve: 'continuous',
-        borderRadius: radius.round,
-        borderWidth: 1,
-        height: 26,
-        justifyContent: 'center',
-        width: 26,
-      }}
-    >
-      <CameraGlyph color={colors.warning} />
-    </View>
   );
 }
 
@@ -272,6 +216,18 @@ function getTaskTone(status: TaskStatus): 'muted' | 'success' | 'warning' {
   return 'muted';
 }
 
+function countTasksForRange(tasks: CareTask[], range: TaskRangeFilter): number {
+  if (range === 'today') {
+    return countTodayOpenTasks(tasks);
+  }
+
+  if (range === 'pending' || range === 'postponed' || range === 'completed') {
+    return countTasksByStatus(tasks, range);
+  }
+
+  return tasks.length;
+}
+
 function countTasksByStatus(tasks: CareTask[], status: TaskStatus): number {
   return tasks.filter((task) => task.status === status).length;
 }
@@ -302,3 +258,28 @@ function getTodayIsoDate(): string {
   const day = `${date.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+const styles = StyleSheet.create({
+  metaLine: { ...tokens.type.meta, color: tokens.color.text.tertiary },
+  list: { gap: tokens.space.md },
+
+  card: { gap: 0 },
+  cardRow1: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: tokens.space.sm,
+    justifyContent: 'space-between',
+  },
+  cardHeading: { ...tokens.type.subheading, color: tokens.color.text.primary, flex: 1 },
+  cardTitle: { ...tokens.type.meta, color: tokens.color.text.tertiary, marginTop: tokens.space.xs },
+  cardInstruction: { ...tokens.type.meta, color: tokens.color.text.tertiary, marginTop: tokens.space.xs },
+  cardMeta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: tokens.space.md,
+    marginTop: tokens.space.sm,
+  },
+  cardPhoto: { alignItems: 'center', flexDirection: 'row', gap: tokens.space.xs },
+  cardAttribute: { ...tokens.type.meta, color: tokens.color.text.secondary },
+});
