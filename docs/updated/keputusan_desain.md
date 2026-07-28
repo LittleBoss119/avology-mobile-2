@@ -89,6 +89,21 @@ Catatan dependency non-trivial yang sengaja dimasukkan ke repo beserta alasannya
 
 ---
 
+## Daftar tugas owner (/owner/tasks) sengaja tanpa pintu masuk UI
+Layar app/(owner)/owner/tasks/index.tsx ada dan berfungsi, tapi tidak ada
+satu pun tautan navigasi menuju ke sana. Tab "Jadwal" mengarah ke
+/owner/schedules; rute /owner/tasks hanya terdaftar di router dan tercantum
+di array `match` bottom navigation untuk penyorotan tab.
+
+Ini keputusan sadar, bukan kelalaian: owner mengelola pekerjaan lewat jadwal,
+bukan lewat tugas satuan. Detail /owner/tasks/[taskId] tetap hidup dan
+dijangkau dari detail jadwal serta laporan operasional.
+
+Kandidat disambungkan setelah Iterasi Polish, kalau ada kebutuhan nyata.
+Menyambungkannya sekarang akan menambah satu layar ke antrean polish.
+
+---
+
 ## Aturan main untuk diri sendiri
 
 1. **Sebelum menambah fitur, cek dokumen ini.** Kalau ada di daftar "sengaja tidak ada", jangan tambah tanpa alasan baru yang lolos triangulasi.
