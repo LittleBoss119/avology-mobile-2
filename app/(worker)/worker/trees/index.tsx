@@ -117,11 +117,6 @@ export default function WorkerTreeListScreen() {
       ),
     [ageRange, conditionFilters, debouncedSearch, phaseFilters, trees]
   );
-  const hasActiveSearchOrFilter =
-    debouncedSearch.length > 0 ||
-    conditionFilters.length > 0 ||
-    phaseFilters.length > 0 ||
-    ageRange !== 'all';
 
   function toggleConditionFilter(condition: TreeConditionStatus) {
     setConditionFilters((current) => toggleArrayValue(current, condition));
@@ -135,6 +130,7 @@ export default function WorkerTreeListScreen() {
     setAgeRange('all');
     setConditionFilters([]);
     setPhaseFilters([]);
+    setSearch('');
   }
 
   if (loading) {
@@ -146,7 +142,7 @@ export default function WorkerTreeListScreen() {
       <MainTabHeader
         title="Pohon"
         roleLabel="Pekerja"
-        subtitle={`${trees.length} pohon aktif di ${farmName}.`}
+        subtitle={`Pohon aktif di ${farmName}.`}
         onProfilePress={() => router.push('/worker/profile')}
       />
       <ErrorBanner message={error} />
@@ -162,7 +158,7 @@ export default function WorkerTreeListScreen() {
         onOpenFilters={() => setFilterOpen(true)}
         phaseFilters={phaseFilters}
       />
-      <ResultCount active={hasActiveSearchOrFilter} count={displayedTrees.length} />
+      <ResultCount count={displayedTrees.length} />
 
       <WorkerFilterPanel
         ageRange={ageRange}
@@ -176,7 +172,14 @@ export default function WorkerTreeListScreen() {
       />
 
       {displayedTrees.length === 0 ? (
-        <EmptyState title="Belum ada pohon" subtitle="Data pohon akan muncul setelah pemilik menambahkannya." />
+        trees.length === 0 ? (
+          <EmptyState title="Belum ada pohon" subtitle="Data pohon akan muncul setelah pemilik menambahkannya." />
+        ) : (
+          <EmptyState
+            title="Tidak ada pohon yang cocok"
+            subtitle="Ubah atau atur ulang filter untuk melihat pohon lain."
+          />
+        )
       ) : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
           {displayedTrees.map((tree) => (
@@ -210,10 +213,10 @@ function SearchFilterBar({
   );
 }
 
-function ResultCount({ active, count }: { active: boolean; count: number }) {
+function ResultCount({ count }: { count: number }) {
   return (
     <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700', marginTop: -6 }}>
-      {active ? `Menampilkan ${count} pohon` : `Menampilkan ${count} pohon`}
+      {`Menampilkan ${count} pohon`}
     </Text>
   );
 }

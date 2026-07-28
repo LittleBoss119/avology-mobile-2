@@ -127,12 +127,6 @@ export default function OwnerTreeListScreen() {
       ),
     [ageRange, conditionFilters, debouncedSearch, phaseFilters, trees]
   );
-  const hasActiveSearchOrFilter =
-    debouncedSearch.length > 0 ||
-    conditionFilters.length > 0 ||
-    phaseFilters.length > 0 ||
-    ageRange !== 'all' ||
-    archived;
 
   function toggleConditionFilter(condition: TreeConditionStatus) {
     setConditionFilters((current) => toggleArrayValue(current, condition));
@@ -147,6 +141,7 @@ export default function OwnerTreeListScreen() {
     setArchived(false);
     setConditionFilters([]);
     setPhaseFilters([]);
+    setSearch('');
   }
 
   if (loading) {
@@ -158,7 +153,7 @@ export default function OwnerTreeListScreen() {
       <MainTabHeader
         title="Pohon"
         roleLabel="Pemilik"
-        subtitle={`${trees.length} pohon ${archived ? 'diarsipkan' : 'aktif'} di ${farmName}.`}
+        subtitle={`Kelola pohon ${archived ? 'diarsipkan' : 'aktif'} di ${farmName}.`}
         onProfilePress={() => router.push('/owner/profile')}
       />
       <ErrorBanner message={error} />
@@ -175,7 +170,7 @@ export default function OwnerTreeListScreen() {
         onOpenFilters={() => setFilterOpen(true)}
         phaseFilters={phaseFilters}
       />
-      <ResultCount active={hasActiveSearchOrFilter} count={displayedTrees.length} />
+      <ResultCount count={displayedTrees.length} />
 
       <OwnerFilterPanel
         ageRange={ageRange}
@@ -191,17 +186,24 @@ export default function OwnerTreeListScreen() {
       />
 
       {displayedTrees.length === 0 ? (
-        <View style={{ gap: spacing.md }}>
+        trees.length === 0 ? (
+          <View style={{ gap: spacing.md }}>
+            <EmptyState
+              title={archived ? 'Belum ada pohon diarsipkan' : 'Belum ada pohon'}
+              subtitle={
+                archived
+                  ? 'Pohon yang diarsipkan pemilik akan muncul di sini.'
+                  : 'Tambahkan pohon pertama untuk mulai memantau kondisi kebun.'
+              }
+            />
+            {!archived ? <Button title="Tambah Pohon" onPress={() => router.push('/owner/trees/create')} /> : null}
+          </View>
+        ) : (
           <EmptyState
-            title={archived ? 'Belum ada pohon diarsipkan' : 'Belum ada pohon'}
-            subtitle={
-              archived
-                ? 'Pohon yang diarsipkan pemilik akan muncul di sini.'
-                : 'Tambahkan pohon pertama untuk mulai memantau kebun.'
-            }
+            title="Tidak ada pohon yang cocok"
+            subtitle="Ubah atau atur ulang filter untuk melihat pohon lain."
           />
-          {!archived ? <Button title="Tambah Pohon" onPress={() => router.push('/owner/trees/create')} /> : null}
-        </View>
+        )
       ) : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
           {displayedTrees.map((tree) => (
@@ -235,10 +237,10 @@ function SearchFilterBar({
   );
 }
 
-function ResultCount({ active, count }: { active: boolean; count: number }) {
+function ResultCount({ count }: { count: number }) {
   return (
     <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700', marginTop: -6 }}>
-      {active ? `Menampilkan ${count} pohon` : `Menampilkan ${count} pohon`}
+      {`Menampilkan ${count} pohon`}
     </Text>
   );
 }
