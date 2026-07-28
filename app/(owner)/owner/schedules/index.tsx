@@ -1,12 +1,14 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { BottomSheet, SheetActionRow } from '../../../../src/components/bottom-sheet';
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
+import { Icon } from '../../../../src/components/icons';
 import {
   Badge,
-  CameraGlyph,
+  Button,
   Card,
   ChipButton,
   CompactMetaItem,
@@ -15,11 +17,10 @@ import {
   FilterChipsRow,
   LoadingState,
   MainTabHeader,
-  SearchFilterRow,
-  SectionHeader,
   Screen,
+  SearchFilterRow,
 } from '../../../../src/components/ui';
-import { colors, radius, spacing, typography } from '../../../../src/constants/theme';
+import { tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getCareScheduleDetail, getCareSchedules } from '../../../../src/services/careScheduleService';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
@@ -47,10 +48,11 @@ const sourceFilters: Array<{ label: string; value: ScheduleSourceFilter }> = [
 
 export default function CareScheduleListScreen() {
   const { currentFarm } = useAuth();
-  const [createMenuOpen, setCreateMenuOpen] = React.useState(false);
+  const [addSheetOpen, setAddSheetOpen] = React.useState(false);
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
   const [details, setDetails] = React.useState<Record<string, CareScheduleDetail>>({});
   const [error, setError] = React.useState<string | null>(null);
+  const [filterSheetOpen, setFilterSheetOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [schedules, setSchedules] = React.useState<CareSchedule[]>([]);
   const [search, setSearch] = React.useState('');
@@ -126,35 +128,22 @@ export default function CareScheduleListScreen() {
     return <LoadingState message="Memuat jadwal perawatan..." />;
   }
 
-  const summary = buildScheduleSummary(schedules, details);
-  const displayedSchedules = schedules.filter((schedule) =>
-    matchesScheduleFilters(schedule, {
+  const todayIso = getTodayIsoDate();
+
+  function matchesActive(schedule: CareSchedule, status: ScheduleStatusFilter): boolean {
+    return matchesScheduleFilters(schedule, {
       detail: details[schedule.id],
       search: debouncedSearch,
       sourceFilter,
-      statusFilter,
+      statusFilter: status,
       workerNames,
-    })
-  );
-  const hasActiveFilters = statusFilter !== 'all' || sourceFilter !== 'all';
-  const todayIso = getTodayIsoDate();
-
-  function clearFilters() {
-    setStatusFilter('all');
-    setSourceFilter('all');
+    });
   }
 
+  const displayedSchedules = schedules.filter((schedule) => matchesActive(schedule, statusFilter));
+
   return (
-    <Screen
-      floatingAction={
-        <CreateScheduleFab
-          open={createMenuOpen}
-          onClose={() => setCreateMenuOpen(false)}
-          onToggle={() => setCreateMenuOpen((current) => !current)}
-        />
-      }
-      floatingActionBottom={86}
-    >
+    <Screen floatingAction={<AddScheduleFab onPress={() => setAddSheetOpen(true)} />}>
       <MainTabHeader
         title="Tugas"
         roleLabel="Pemilik"
@@ -163,150 +152,63 @@ export default function CareScheduleListScreen() {
       />
       <ErrorBanner message={error} />
 
-      <ScheduleHero summary={summary} />
-
       <SearchFilterRow
+        filterActive={sourceFilter !== 'all'}
         onChangeText={setSearch}
+        onFilterPress={() => setFilterSheetOpen(true)}
         placeholder="Cari judul, target, atau pekerja"
         value={search}
       />
 
-      <ScheduleFilterControls
-        hasActiveFilters={hasActiveFilters}
-        onClear={clearFilters}
-        onSourceChange={setSourceFilter}
-        onStatusChange={setStatusFilter}
-        sourceFilter={sourceFilter}
-        statusFilter={statusFilter}
-      />
-
-      <SectionHeader title="Daftar Jadwal">
-        <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text selectable style={{ color: colors.textMuted, fontSize: typography.small.fontSize }}>
-            {displayedSchedules.length} jadwal
-          </Text>
-          <Text selectable style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>
-            Terdekat
-          </Text>
-        </View>
-      </SectionHeader>
-
-      {displayedSchedules.length === 0 ? (
-        <EmptyState
-          title={schedules.length === 0 ? 'Belum ada jadwal.' : 'Tidak ada jadwal pada filter ini.'}
-        />
-      ) : (
-        <View style={{ gap: 10 }}>
-          {displayedSchedules.map((schedule) => (
-            <CompactScheduleCard
-              key={schedule.id}
-              detail={details[schedule.id]}
-              dueMarker={scheduleDueMarker(schedule, details[schedule.id], todayIso)}
-              onPress={() => router.push(`/owner/schedules/${schedule.id}`)}
-              schedule={schedule}
-              workerNames={workerNames}
+      {/* Bungkus <View>: cegah FilterChipsRow (ScrollView horizontal) memuai
+          vertikal di dalam <View flex:1> milik Screen saat daftar pendek,
+          agar isi layar tetap rata atas. */}
+      <View>
+        <FilterChipsRow>
+          {statusFilters.map((filter) => (
+            <ChipButton
+              key={filter.value}
+              active={statusFilter === filter.value}
+              count={schedules.filter((schedule) => matchesActive(schedule, filter.value)).length}
+              label={filter.label}
+              onPress={() => setStatusFilter(filter.value)}
             />
           ))}
-        </View>
+        </FilterChipsRow>
+      </View>
+
+      {error ? null : (
+        <>
+          <Text selectable style={styles.metaLine}>
+            {`${displayedSchedules.length} jadwal · urut terdekat`}
+          </Text>
+          {displayedSchedules.length === 0 ? (
+            <EmptyState title={schedules.length === 0 ? 'Belum ada jadwal.' : 'Tidak ada jadwal pada filter ini.'} />
+          ) : (
+            <View style={styles.list}>
+              {displayedSchedules.map((schedule) => (
+                <CompactScheduleCard
+                  key={schedule.id}
+                  detail={details[schedule.id]}
+                  dueMarker={scheduleDueMarker(schedule, details[schedule.id], todayIso)}
+                  onPress={() => router.push(`/owner/schedules/${schedule.id}`)}
+                  schedule={schedule}
+                  workerNames={workerNames}
+                />
+              ))}
+            </View>
+          )}
+        </>
       )}
+
+      <AddScheduleSheet onClose={() => setAddSheetOpen(false)} visible={addSheetOpen} />
+      <ScheduleFilterSheet
+        onClose={() => setFilterSheetOpen(false)}
+        onSourceChange={setSourceFilter}
+        sourceFilter={sourceFilter}
+        visible={filterSheetOpen}
+      />
     </Screen>
-  );
-}
-
-function ScheduleHero({ summary }: { summary: ReturnType<typeof buildScheduleSummary> }) {
-  return (
-    <Card variant="heroGreen">
-      <View style={{ gap: 4 }}>
-        <Text selectable style={{ color: '#DDEFE2', fontSize: 15, fontWeight: '700' }}>
-          Hari Ini
-        </Text>
-        <Text selectable style={{ color: '#FFFFFF', fontSize: 28, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
-          {summary.today} jadwal
-        </Text>
-        <Text selectable style={{ color: '#DDEFE2', lineHeight: 20 }}>
-          {summary.unfinished} belum selesai dari seluruh jadwal aktif.
-        </Text>
-      </View>
-      <View style={{ flexDirection: 'row', gap: 9 }}>
-        <HeroMetric label="Belum" value={summary.unfinished} tone="warning" />
-        <HeroMetric label="Selesai" value={summary.completed} tone="success" />
-        <HeroMetric label="Tertunda" value={summary.postponed} tone="warning" />
-      </View>
-    </Card>
-  );
-}
-
-function HeroMetric({
-  label,
-  tone,
-  value,
-}: {
-  label: string;
-  tone: 'danger' | 'success' | 'warning';
-  value: number;
-}) {
-  const valueColor = tone === 'success' ? '#A6D96A' : tone === 'danger' ? '#FDA29B' : '#F6D77A';
-
-  return (
-    <View
-      style={{
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        borderColor: 'rgba(255,255,255,0.22)',
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        flex: 1,
-        gap: 3,
-        padding: 11,
-      }}
-    >
-      <Text selectable style={{ color: '#DDEFE2', fontSize: 12, fontWeight: '700' }}>
-        {label}
-      </Text>
-      <Text selectable style={{ color: valueColor, fontSize: 23, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function ScheduleFilterControls({
-  hasActiveFilters,
-  onClear,
-  onSourceChange,
-  onStatusChange,
-  sourceFilter,
-  statusFilter,
-}: {
-  hasActiveFilters: boolean;
-  onClear: () => void;
-  onSourceChange: (filter: ScheduleSourceFilter) => void;
-  onStatusChange: (filter: ScheduleStatusFilter) => void;
-  sourceFilter: ScheduleSourceFilter;
-  statusFilter: ScheduleStatusFilter;
-}) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <FilterChipsRow hasActiveFilters={hasActiveFilters} onClear={onClear}>
-        {statusFilters.map((filter) => (
-          <ChipButton
-            key={filter.value}
-            active={statusFilter === filter.value}
-            label={filter.label}
-            onPress={() => onStatusChange(filter.value)}
-          />
-        ))}
-      </FilterChipsRow>
-      <FilterChipsRow>
-        {sourceFilters.map((filter) => (
-          <ChipButton
-            key={filter.value}
-            active={sourceFilter === filter.value}
-            label={filter.label}
-            onPress={() => onSourceChange(filter.value)}
-          />
-        ))}
-      </FilterChipsRow>
-    </View>
   );
 }
 
@@ -318,209 +220,138 @@ function CompactScheduleCard({
   workerNames,
 }: {
   detail?: CareScheduleDetail;
-  // RF-11b: penanda jatuh tempo level-jadwal. null → badge status agregat & border
-  // kartu persis seperti sebelumnya (nol perubahan bila tidak ada task jatuh tempo).
+  // RF-11b: penanda jatuh tempo level-jadwal. null → badge status agregat.
   dueMarker?: 'overdue' | 'due_today' | null;
   onPress: () => void;
   schedule: CareSchedule;
   workerNames: Record<string, string>;
 }) {
   const status = getScheduleStatus(schedule, detail);
-  const progress = getScheduleProgress(detail);
   const workers = getScheduleWorkerNames(detail, workerNames);
+  const taskCount = detail?.tasks.length ?? 0;
 
   return (
     <Pressable onPress={onPress}>
-      <Card variant={dueMarker === 'overdue' ? 'danger' : dueMarker === 'due_today' ? 'warning' : 'default'}>
-        <View style={{ gap: spacing.sm }}>
-          <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 8, justifyContent: 'space-between' }}>
-            <Text
-              selectable
-              ellipsizeMode="tail"
-              numberOfLines={1}
-              style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '700' }}
-            >
-              {schedule.title}
-            </Text>
-            {dueMarker === 'overdue' ? (
-              <Badge label="Terlambat" maxWidth={116} tone="danger" />
-            ) : dueMarker === 'due_today' ? (
-              <Badge label="Hari ini" maxWidth={116} tone="warning" />
-            ) : (
-              <Badge label={formatScheduleStatusLabel(status)} maxWidth={116} tone={getScheduleStatusTone(status)} />
-            )}
-          </View>
+      <Card style={styles.card} variant="default">
+        <View style={styles.cardRow1}>
+          <Text selectable numberOfLines={1} style={styles.cardCategory}>
+            {formatCareCategory(schedule.category)}
+          </Text>
+          {dueMarker === 'overdue' ? (
+            <Badge label="Terlambat" maxWidth={116} tone="danger" />
+          ) : dueMarker === 'due_today' ? (
+            <Badge label="Hari ini" maxWidth={116} tone="warning" />
+          ) : (
+            <Badge label={formatScheduleStatusLabel(status)} maxWidth={116} tone={getScheduleStatusTone(status)} />
+          )}
+        </View>
 
-          <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
-              {formatCareCategory(schedule.category)}
-            </Text>
-            {schedule.careSopId ? <Badge label="SOP" maxWidth={64} tone="warning" /> : null}
-            {schedule.requiresPhoto ? <ProofPhotoIndicator /> : null}
-          </View>
+        {schedule.title ? (
+          <Text selectable numberOfLines={1} style={styles.cardTitle}>
+            {schedule.title}
+          </Text>
+        ) : null}
 
-          <ScheduleCardMeta
-            date={formatDate(schedule.scheduledDate)}
-            progress={progress}
-            target={formatCareTarget(schedule)}
-            workers={workers}
-          />
+        <View style={styles.cardMeta1}>
+          <CompactMetaItem icon="calendar" label={formatDate(schedule.scheduledDate)} />
+          <CompactMetaItem icon="target" label={formatCareTarget(schedule)} />
+        </View>
+
+        <View style={styles.cardMeta2}>
+          <CompactMetaItem icon="user" label={formatWorkerSummary(workers)} />
+          {taskCount > 1 ? (
+            <Text selectable numberOfLines={1} style={styles.cardProgress}>
+              {getScheduleProgress(detail)}
+            </Text>
+          ) : null}
+          {schedule.careSopId ? (
+            <Text selectable style={styles.cardAttribute}>
+              SOP
+            </Text>
+          ) : null}
+          {schedule.requiresPhoto ? (
+            <View style={styles.cardPhoto}>
+              <Icon name="camera" size={tokens.icon.xs} color={tokens.color.text.secondary} />
+              <Text selectable style={styles.cardAttribute}>
+                Butuh foto
+              </Text>
+            </View>
+          ) : null}
         </View>
       </Card>
     </Pressable>
   );
 }
 
-function ScheduleCardMeta({
-  date,
-  progress,
-  target,
-  workers,
-}: {
-  date: string;
-  progress: string;
-  target: string;
-  workers: string[];
-}) {
+function AddScheduleFab({ onPress }: { onPress: () => void }) {
   return (
-    <View style={{ gap: 6 }}>
-      <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        <CompactMetaItem icon="calendar" label={date} />
-        <CompactMetaItem icon="target" label={target} />
-      </View>
-      <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        <CompactMetaItem icon="user" label={formatWorkerSummary(workers)} />
-        <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
-          {progress}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function ProofPhotoIndicator() {
-  return (
-    <View
-      accessibilityLabel="Perlu bukti foto"
-      style={{
-        alignItems: 'center',
-        backgroundColor: colors.warningBg,
-        borderColor: colors.warningBorder,
-        borderCurve: 'continuous',
-        borderRadius: radius.round,
-        borderWidth: 1,
-        height: 26,
-        justifyContent: 'center',
-        width: 26,
-      }}
-    >
-      <CameraGlyph color={colors.warning} />
-    </View>
-  );
-}
-
-function CreateScheduleFab({
-  onClose,
-  onToggle,
-  open,
-}: {
-  onClose: () => void;
-  onToggle: () => void;
-  open: boolean;
-}) {
-  function goTo(path: '/owner/sops' | '/owner/schedules/create') {
-    onClose();
-    router.push(path);
-  }
-
-  return (
-    <View style={{ alignItems: 'flex-end', gap: spacing.sm }}>
-      {open ? (
-        <View
-          style={{
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            borderCurve: 'continuous',
-            borderRadius: radius.lg,
-            borderWidth: 1,
-            gap: spacing.sm,
-            padding: spacing.sm,
-            width: 178,
-          }}
-        >
-          <CreateMenuButton label="Dari SOP" onPress={() => goTo('/owner/sops')} />
-          <CreateMenuButton label="Buat Jadwal" primary onPress={() => goTo('/owner/schedules/create')} />
-        </View>
-      ) : null}
-      <Pressable
-        accessibilityLabel="Buat jadwal"
-        accessibilityRole="button"
-        onPress={onToggle}
-        style={{
-          alignItems: 'center',
-          backgroundColor: colors.primary,
-          borderColor: colors.primaryBorder,
-          borderRadius: 999,
-          borderWidth: 1,
-          height: 58,
-          justifyContent: 'center',
-          width: 58,
-        }}
-      >
-        <Text selectable={false} style={{ color: '#FFFFFF', fontSize: open ? 28 : 36, fontWeight: '400', lineHeight: 40 }}>
-          {open ? 'x' : '+'}
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function CreateMenuButton({
-  label,
-  onPress,
-  primary,
-}: {
-  label: string;
-  onPress: () => void;
-  primary?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={{
-        alignItems: 'center',
-        backgroundColor: primary ? colors.primary : colors.primarySoft,
-        borderColor: primary ? colors.primary : colors.primaryBorder,
-        borderCurve: 'continuous',
-        borderRadius: radius.button,
-        borderWidth: 1,
-        minHeight: 42,
-        justifyContent: 'center',
-        paddingHorizontal: spacing.md,
-      }}
-    >
-      <Text selectable={false} style={{ color: primary ? colors.surface : colors.primary, fontSize: 14, fontWeight: '700' }}>
-        {label}
+    <Pressable accessibilityLabel="Tambah jadwal" accessibilityRole="button" onPress={onPress} style={styles.fab}>
+      <Text selectable={false} style={styles.fabPlus}>
+        +
       </Text>
     </Pressable>
   );
 }
 
-function buildScheduleSummary(
-  schedules: CareSchedule[],
-  details: Record<string, CareScheduleDetail>
-): { completed: number; postponed: number; today: number; unfinished: number } {
-  const today = getTodayIsoDate();
-  const activeSchedules = schedules.filter((schedule) => !schedule.isCancelled);
-  const statuses = activeSchedules.map((schedule) => getScheduleStatus(schedule, details[schedule.id]));
+function AddScheduleSheet({ onClose, visible }: { onClose: () => void; visible: boolean }) {
+  function goTo(path: '/owner/schedules/create' | '/owner/sops') {
+    onClose();
+    router.push(path);
+  }
 
-  return {
-    completed: statuses.filter((status) => status === 'completed').length,
-    postponed: statuses.filter((status) => status === 'postponed').length,
-    today: activeSchedules.filter((schedule) => schedule.scheduledDate === today).length,
-    unfinished: statuses.filter((status) => status === 'unfinished').length,
-  };
+  return (
+    <BottomSheet onClose={onClose} title="Tambah jadwal" visible={visible}>
+      <View style={styles.sheetRows}>
+        <SheetActionRow
+          description="Susun jadwal dari awal"
+          icon="calendar"
+          iconTone="brand"
+          onPress={() => goTo('/owner/schedules/create')}
+          title="Buat jadwal manual"
+        />
+        <SheetActionRow
+          description="Pakai template yang tersimpan"
+          icon="file-text"
+          iconTone="neutral"
+          onPress={() => goTo('/owner/sops')}
+          title="Buat dari SOP"
+        />
+      </View>
+    </BottomSheet>
+  );
+}
+
+function ScheduleFilterSheet({
+  onClose,
+  onSourceChange,
+  sourceFilter,
+  visible,
+}: {
+  onClose: () => void;
+  onSourceChange: (filter: ScheduleSourceFilter) => void;
+  sourceFilter: ScheduleSourceFilter;
+  visible: boolean;
+}) {
+  return (
+    <BottomSheet onClose={onClose} subtitle="Pilih sumber jadwal." title="Filter jadwal" visible={visible}>
+      <View style={styles.filterSheetBody}>
+        <Text selectable style={styles.filterLabel}>
+          Sumber
+        </Text>
+        <FilterChipsRow>
+          {sourceFilters.map((filter) => (
+            <ChipButton
+              key={filter.value}
+              active={sourceFilter === filter.value}
+              label={filter.label}
+              onPress={() => onSourceChange(filter.value)}
+            />
+          ))}
+        </FilterChipsRow>
+        <Button title="Selesai" variant="secondary" onPress={onClose} />
+      </View>
+    </BottomSheet>
+  );
 }
 
 function matchesScheduleFilters(
@@ -679,3 +510,49 @@ function getTodayIsoDate(): string {
   const day = `${date.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+const styles = StyleSheet.create({
+  metaLine: { ...tokens.type.meta, color: tokens.color.text.tertiary },
+  list: { gap: tokens.space.md },
+
+  card: { gap: 0 },
+  cardRow1: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: tokens.space.sm,
+    justifyContent: 'space-between',
+  },
+  cardCategory: { ...tokens.type.subheading, color: tokens.color.text.primary, flex: 1 },
+  cardTitle: { ...tokens.type.meta, color: tokens.color.text.tertiary, marginTop: tokens.space.xs },
+  cardMeta1: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: tokens.space.md,
+    marginTop: tokens.space.sm,
+  },
+  cardMeta2: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: tokens.space.md,
+    marginTop: tokens.space.xs,
+  },
+  cardProgress: { ...tokens.type.meta, color: tokens.color.text.secondary },
+  cardAttribute: { ...tokens.type.meta, color: tokens.color.text.secondary },
+  cardPhoto: { alignItems: 'center', flexDirection: 'row', gap: tokens.space.xs },
+
+  fab: {
+    alignItems: 'center',
+    backgroundColor: tokens.color.brand.base,
+    borderRadius: tokens.radius.pill,
+    height: tokens.layout.controlHeight,
+    justifyContent: 'center',
+    width: tokens.layout.controlHeight,
+  },
+  fabPlus: { ...tokens.type.display, color: tokens.color.brand.on },
+
+  sheetRows: { gap: tokens.space.sm },
+  filterSheetBody: { gap: tokens.space.md },
+  filterLabel: { ...tokens.type.label, color: tokens.color.text.primary },
+});
