@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
 import { colors, radius, spacing, tokens, typography } from '../constants/theme';
 import { getTreeConditionReports } from '../services/conditionReportService';
@@ -33,8 +33,9 @@ import {
   type TreeHistoryRouteRecordType,
   TreeVisualPlaceholder,
 } from './tree-components';
+import { BottomSheet, SheetActionRow } from './bottom-sheet';
 import { FloweringAgeMarker } from './flowering-marker';
-import { AlertTriangleIcon, BasketIcon, ChevronRightIcon, FlowerIcon, Icon, SprayIcon } from './icons';
+import { Icon } from './icons';
 import {
   Button,
   EmptyState,
@@ -357,7 +358,6 @@ export function TreeDetailScreen({
       />
       {mode === 'owner' ? (
         <OwnerTreeMenu
-          actionLoading={actionLoading || photoActionLoading}
           hasPhoto={Boolean(treeMainPhoto)}
           onArchiveToggle={() => {
             setMenuOpen(false);
@@ -375,7 +375,6 @@ export function TreeDetailScreen({
         />
       ) : null}
       <PhotoSourceSheet
-        loading={photoActionLoading}
         onCameraPress={handleTakePhotoFromCamera}
         onClose={() => setPhotoSourceOpen(false)}
         onGalleryPress={handlePickPhotoFromGallery}
@@ -539,108 +538,38 @@ function RecordActivitySheet({
   }
 
   return (
-    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Pressable
-          accessibilityLabel="Tutup"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={{ backgroundColor: 'rgba(30,42,36,0.5)', bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 }}
+    <BottomSheet onClose={onClose} title="Catat aktivitas" visible={visible}>
+      <View style={{ gap: tokens.space.sm }}>
+        <SheetActionRow
+          icon="alert-triangle"
+          iconTone="condition"
+          title="Catat kondisi"
+          onPress={() => goTo(`${basePath}/${treeId}/report`)}
         />
-        <View
-          style={{
-            backgroundColor: colors.surface,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            gap: spacing.sm,
-            paddingBottom: spacing['3xl'],
-            paddingHorizontal: spacing.xl,
-            paddingTop: spacing.md,
-          }}
-        >
-          <View style={{ alignSelf: 'center', backgroundColor: colors.border, borderRadius: 999, height: 5, marginBottom: spacing.xs, width: 44 }} />
-          <Text selectable style={{ color: colors.text, fontSize: 19, fontWeight: '700', paddingBottom: spacing.xs }}>
-            Catat aktivitas
-          </Text>
-          <RecordActivityRow
-            icon={<AlertTriangleIcon color="#7A5600" size={20} />}
-            iconBg="#FCEFC7"
-            label="Catat kondisi"
-            onPress={() => goTo(`${basePath}/${treeId}/report`)}
-          />
-          <RecordActivityRow
-            icon={<FlowerIcon color="#065F2E" size={20} />}
-            iconBg="#E7F6EC"
-            label="Catat fase"
-            onPress={() => goTo(`${basePath}/${treeId}/phase`)}
-          />
-          <RecordActivityRow
-            icon={<BasketIcon color="#8A5B00" size={20} />}
-            iconBg="#FFF4D6"
-            label="Catat panen"
-            onPress={() => goTo(`${basePath}/${treeId}/harvest`)}
-          />
-          <RecordActivityRow
-            icon={<SprayIcon color="#184E91" size={20} />}
-            iconBg="#E7EEF8"
-            label="Catat perawatan"
-            onPress={() => goTo(`${basePath}/${treeId}/care`)}
-          />
-        </View>
+        <SheetActionRow
+          icon="flower"
+          iconTone="phase"
+          title="Catat fase"
+          onPress={() => goTo(`${basePath}/${treeId}/phase`)}
+        />
+        <SheetActionRow
+          icon="basket"
+          iconTone="harvest"
+          title="Catat panen"
+          onPress={() => goTo(`${basePath}/${treeId}/harvest`)}
+        />
+        <SheetActionRow
+          icon="spray"
+          iconTone="care"
+          title="Catat perawatan"
+          onPress={() => goTo(`${basePath}/${treeId}/care`)}
+        />
       </View>
-    </Modal>
-  );
-}
-
-function RecordActivityRow({
-  icon,
-  iconBg,
-  label,
-  onPress,
-}: {
-  icon: React.ReactNode;
-  iconBg: string;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        alignItems: 'center',
-        backgroundColor: colors.surface,
-        borderColor: colors.border,
-        borderCurve: 'continuous',
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        flexDirection: 'row',
-        gap: spacing.md,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.md,
-      }}
-    >
-      <View
-        style={{
-          alignItems: 'center',
-          backgroundColor: iconBg,
-          borderRadius: 999,
-          height: 38,
-          justifyContent: 'center',
-          width: 38,
-        }}
-      >
-        {icon}
-      </View>
-      <Text selectable style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '700' }}>
-        {label}
-      </Text>
-      <ChevronRightIcon color={colors.textSoft} size={20} />
-    </Pressable>
+    </BottomSheet>
   );
 }
 
 function OwnerTreeMenu({
-  actionLoading,
   hasPhoto,
   onArchiveToggle,
   onClose,
@@ -650,7 +579,6 @@ function OwnerTreeMenu({
   tree,
   visible,
 }: {
-  actionLoading: boolean;
   hasPhoto: boolean;
   onArchiveToggle: () => void;
   onClose: () => void;
@@ -661,108 +589,47 @@ function OwnerTreeMenu({
   visible: boolean;
 }) {
   return (
-    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.04)', flex: 1 }} onPress={onClose}>
-        <View style={{ alignItems: 'flex-end', paddingRight: 20, paddingTop: 92 }}>
-          <View
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderColor: colors.border,
-              borderRadius: 14,
-              borderWidth: 1,
-              minWidth: 210,
-              overflow: 'hidden',
-              ...tokens.elevation.overlay,
-            }}
-          >
-            <MenuItem
-              disabled={actionLoading}
-              label={hasPhoto ? 'Ganti Foto Pohon' : 'Tambah Foto Pohon'}
-              onPress={onPhotoChange}
-            />
-            {hasPhoto ? (
-              <>
-                <View style={{ backgroundColor: colors.border, height: 1 }} />
-                <MenuItem danger disabled={actionLoading} label="Hapus Foto Pohon" onPress={onDeletePhoto} />
-              </>
-            ) : null}
-            <View style={{ backgroundColor: colors.border, height: 1 }} />
-            <MenuItem label="Edit Pohon" onPress={onEdit} />
-            <View style={{ backgroundColor: colors.border, height: 1 }} />
-            <MenuItem
-              danger={!tree.isArchived}
-              disabled={actionLoading}
-              label={tree.isArchived ? 'Pulihkan Pohon' : 'Arsipkan Pohon'}
-              onPress={onArchiveToggle}
-            />
-          </View>
-        </View>
-      </Pressable>
-    </Modal>
+    <BottomSheet onClose={onClose} title="Kelola pohon" visible={visible}>
+      <View style={{ gap: tokens.space.sm }}>
+        <SheetActionRow
+          icon="camera"
+          iconTone="brand"
+          title={hasPhoto ? 'Ganti Foto Pohon' : 'Tambah Foto Pohon'}
+          onPress={onPhotoChange}
+        />
+        {hasPhoto ? (
+          <SheetActionRow icon="x" iconTone="neutral" title="Hapus Foto Pohon" onPress={onDeletePhoto} />
+        ) : null}
+        <SheetActionRow icon="file-text" iconTone="neutral" title="Edit Pohon" onPress={onEdit} />
+        <SheetActionRow
+          icon="building-warehouse"
+          iconTone="neutral"
+          title={tree.isArchived ? 'Pulihkan Pohon' : 'Arsipkan Pohon'}
+          onPress={onArchiveToggle}
+        />
+      </View>
+    </BottomSheet>
   );
 }
 
 function PhotoSourceSheet({
-  loading,
   onCameraPress,
   onClose,
   onGalleryPress,
   visible,
 }: {
-  loading: boolean;
   onCameraPress: () => void;
   onClose: () => void;
   onGalleryPress: () => void;
   visible: boolean;
 }) {
   return (
-    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable style={{ backgroundColor: 'rgba(30,42,36,0.12)', flex: 1 }} onPress={onClose} />
-      <View
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          gap: 12,
-          paddingBottom: 28,
-          paddingHorizontal: 22,
-          paddingTop: 12,
-        }}
-      >
-        <View style={{ alignSelf: 'center', backgroundColor: colors.border, borderRadius: 999, height: 5, width: 48 }} />
-        <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700' }}>
-          Foto Pohon
-        </Text>
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
-          Ambil foto baru atau pilih dari galeri.
-        </Text>
-        <MenuItem disabled={loading} label="Ambil Foto" onPress={onCameraPress} />
-        <View style={{ backgroundColor: colors.divider, height: 1 }} />
-        <MenuItem disabled={loading} label="Pilih dari Galeri" onPress={onGalleryPress} />
-        <View style={{ backgroundColor: colors.divider, height: 1 }} />
-        <MenuItem disabled={loading} label="Batal" onPress={onClose} />
+    <BottomSheet onClose={onClose} subtitle="Pilih sumber foto." title="Tambah foto" visible={visible}>
+      <View style={{ gap: tokens.space.sm }}>
+        <SheetActionRow icon="camera" iconTone="brand" title="Ambil Foto" onPress={onCameraPress} />
+        <SheetActionRow icon="file-text" iconTone="neutral" title="Pilih Galeri" onPress={onGalleryPress} />
       </View>
-    </Modal>
-  );
-}
-
-function MenuItem({
-  danger,
-  disabled,
-  label,
-  onPress,
-}: {
-  danger?: boolean;
-  disabled?: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable disabled={disabled} onPress={onPress} style={{ opacity: disabled ? 0.6 : 1, padding: 14 }}>
-      <Text selectable style={{ color: danger ? colors.danger : colors.text, fontSize: 15, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </Pressable>
+    </BottomSheet>
   );
 }
 
