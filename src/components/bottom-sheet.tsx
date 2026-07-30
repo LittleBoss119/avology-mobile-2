@@ -101,6 +101,52 @@ export function SheetActionRow({
   );
 }
 
+// Sheet sumber foto bersama: kamera / galeri, plus Hapus opsional saat sudah
+// ada foto. Label & judul bisa dioverride agar cocok di beberapa konteks (foto
+// pohon di detail, bukti tugas, foto kondisi); default menjaga tampilan lama.
+export function PhotoSourceSheet({
+  cameraLabel = 'Ambil Foto',
+  deleteLabel = 'Hapus Foto',
+  galleryLabel = 'Pilih Galeri',
+  hasPhoto,
+  onCameraPress,
+  onClose,
+  onDeletePhoto,
+  onGalleryPress,
+  subtitle = 'Pilih sumber foto.',
+  title,
+  visible,
+}: {
+  cameraLabel?: string;
+  deleteLabel?: string;
+  galleryLabel?: string;
+  hasPhoto: boolean;
+  onCameraPress: () => void;
+  onClose: () => void;
+  onDeletePhoto: () => void;
+  onGalleryPress: () => void;
+  subtitle?: string;
+  title?: string;
+  visible: boolean;
+}) {
+  return (
+    <BottomSheet
+      onClose={onClose}
+      subtitle={subtitle}
+      title={title ?? (hasPhoto ? 'Foto pohon' : 'Tambah foto')}
+      visible={visible}
+    >
+      <View style={{ gap: tokens.space.sm }}>
+        <SheetActionRow icon="camera" iconTone="brand" title={cameraLabel} onPress={onCameraPress} />
+        <SheetActionRow icon="file-text" iconTone="neutral" title={galleryLabel} onPress={onGalleryPress} />
+        {hasPhoto ? (
+          <SheetActionRow icon="x" iconTone="neutral" title={deleteLabel} onPress={onDeletePhoto} />
+        ) : null}
+      </View>
+    </BottomSheet>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
   backdrop: {

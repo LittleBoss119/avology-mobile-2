@@ -33,7 +33,7 @@ import {
   type TreeHistoryRouteRecordType,
   TreeVisualPlaceholder,
 } from './tree-components';
-import { BottomSheet, SheetActionRow } from './bottom-sheet';
+import { BottomSheet, PhotoSourceSheet, SheetActionRow } from './bottom-sheet';
 import { FloweringAgeMarker } from './flowering-marker';
 import { Icon } from './icons';
 import {
@@ -358,25 +358,27 @@ export function TreeDetailScreen({
       />
       {mode === 'owner' ? (
         <OwnerTreeMenu
-          hasPhoto={Boolean(treeMainPhoto)}
           onArchiveToggle={() => {
             setMenuOpen(false);
             handleArchiveToggle();
           }}
           onClose={() => setMenuOpen(false)}
-          onDeletePhoto={handleDeletePhoto}
           onEdit={() => {
             setMenuOpen(false);
             router.push(`${basePath}/${tree.id}/edit`);
           }}
-          onPhotoChange={handleOpenPhotoSource}
           tree={tree}
           visible={menuOpen}
         />
       ) : null}
       <PhotoSourceSheet
+        hasPhoto={Boolean(treeMainPhoto)}
         onCameraPress={handleTakePhotoFromCamera}
         onClose={() => setPhotoSourceOpen(false)}
+        onDeletePhoto={() => {
+          setPhotoSourceOpen(false);
+          handleDeletePhoto();
+        }}
         onGalleryPress={handlePickPhotoFromGallery}
         visible={photoSourceOpen}
       />
@@ -570,36 +572,21 @@ function RecordActivitySheet({
 }
 
 function OwnerTreeMenu({
-  hasPhoto,
   onArchiveToggle,
   onClose,
-  onDeletePhoto,
   onEdit,
-  onPhotoChange,
   tree,
   visible,
 }: {
-  hasPhoto: boolean;
   onArchiveToggle: () => void;
   onClose: () => void;
-  onDeletePhoto: () => void;
   onEdit: () => void;
-  onPhotoChange: () => void;
   tree: Tree;
   visible: boolean;
 }) {
   return (
-    <BottomSheet onClose={onClose} title="Kelola pohon" visible={visible}>
+    <BottomSheet onClose={onClose} title="Kelola data pohon" visible={visible}>
       <View style={{ gap: tokens.space.sm }}>
-        <SheetActionRow
-          icon="camera"
-          iconTone="brand"
-          title={hasPhoto ? 'Ganti Foto Pohon' : 'Tambah Foto Pohon'}
-          onPress={onPhotoChange}
-        />
-        {hasPhoto ? (
-          <SheetActionRow icon="x" iconTone="neutral" title="Hapus Foto Pohon" onPress={onDeletePhoto} />
-        ) : null}
         <SheetActionRow icon="file-text" iconTone="neutral" title="Edit Pohon" onPress={onEdit} />
         <SheetActionRow
           icon="building-warehouse"
@@ -607,27 +594,6 @@ function OwnerTreeMenu({
           title={tree.isArchived ? 'Pulihkan Pohon' : 'Arsipkan Pohon'}
           onPress={onArchiveToggle}
         />
-      </View>
-    </BottomSheet>
-  );
-}
-
-function PhotoSourceSheet({
-  onCameraPress,
-  onClose,
-  onGalleryPress,
-  visible,
-}: {
-  onCameraPress: () => void;
-  onClose: () => void;
-  onGalleryPress: () => void;
-  visible: boolean;
-}) {
-  return (
-    <BottomSheet onClose={onClose} subtitle="Pilih sumber foto." title="Tambah foto" visible={visible}>
-      <View style={{ gap: tokens.space.sm }}>
-        <SheetActionRow icon="camera" iconTone="brand" title="Ambil Foto" onPress={onCameraPress} />
-        <SheetActionRow icon="file-text" iconTone="neutral" title="Pilih Galeri" onPress={onGalleryPress} />
       </View>
     </BottomSheet>
   );

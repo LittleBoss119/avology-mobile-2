@@ -4,7 +4,6 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Platform,
   Pressable,
@@ -30,6 +29,7 @@ import {
 } from '../constants/theme';
 import { sanitizeDisplayValue, sanitizeUserFacingMessage } from '../utils/displayFormat';
 import { Icon } from './icons';
+import { PhotoSourceSheet } from './bottom-sheet';
 
 const colors = {
   ...designColors,
@@ -1171,6 +1171,7 @@ export function PhotoPickerCard({
   takePhotoLabel?: string;
   title?: string;
 }) {
+  const [sourceSheetOpen, setSourceSheetOpen] = React.useState(false);
   const hasImage = Boolean(imageUri);
   const sourceActions = [
     onTakePhoto ? { label: takePhotoLabel, onPress: onTakePhoto } : null,
@@ -1187,17 +1188,27 @@ export function PhotoPickerCard({
       return;
     }
 
-    Alert.alert('Tambah foto', 'Pilih sumber foto.', [
-      ...sourceActions.map((action) => ({
-        text: action.label,
-        onPress: action.onPress,
-      })),
-      { style: 'cancel' as const, text: 'Batal' },
-    ]);
+    setSourceSheetOpen(true);
   }
 
   return (
     <Card>
+      <PhotoSourceSheet
+        cameraLabel={takePhotoLabel}
+        galleryLabel={choosePhotoLabel}
+        hasPhoto={false}
+        visible={sourceSheetOpen}
+        onCameraPress={() => {
+          setSourceSheetOpen(false);
+          onTakePhoto?.();
+        }}
+        onClose={() => setSourceSheetOpen(false)}
+        onDeletePhoto={() => setSourceSheetOpen(false)}
+        onGalleryPress={() => {
+          setSourceSheetOpen(false);
+          onChoosePhoto?.();
+        }}
+      />
       <View style={{ gap: spacing.xs }}>
         <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
           <Text selectable style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '700' }}>
@@ -1253,9 +1264,6 @@ export function PhotoPickerCard({
             <Text selectable={false} style={{ color: colors.text, fontWeight: '700', textAlign: 'center' }}>
               {emptyLabel}
             </Text>
-            <Text selectable={false} style={{ color: colors.muted, fontSize: 13, textAlign: 'center' }}>
-              Ketuk area ini untuk memilih sumber foto.
-            </Text>
           </View>
         )}
         {onRemovePhoto && hasImage ? (
@@ -1301,17 +1309,6 @@ export function PhotoPickerCard({
       </Pressable>
 
       {error ? <ErrorBanner message={error} /> : null}
-
-      {!hasImage && sourceActions.length > 1 ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          {onTakePhoto ? (
-            <Button disabled={loading} size="small" title={takePhotoLabel} variant="quiet" onPress={onTakePhoto} />
-          ) : null}
-          {onChoosePhoto ? (
-            <Button disabled={loading} size="small" title={choosePhotoLabel} variant="quiet" onPress={onChoosePhoto} />
-          ) : null}
-        </View>
-      ) : null}
     </Card>
   );
 }
