@@ -58,6 +58,7 @@ export function Screen({
   floatingAction,
   floatingActionBottom = 24,
   footer,
+  header,
   contentStyle,
   variant = 'default',
   stickyFooter,
@@ -66,6 +67,7 @@ export function Screen({
   floatingAction?: React.ReactNode;
   floatingActionBottom?: number;
   footer?: React.ReactNode;
+  header?: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   variant?: 'default' | 'soft' | 'surface';
   stickyFooter?: React.ReactNode;
@@ -81,6 +83,23 @@ export function Screen({
 
   return (
     <View style={{ flex: 1, backgroundColor }}>
+      {header ? (
+        // Header fixed (tidak menggulung): sibling di atas ScrollView, di dalam
+        // View flex:1 terluar. Duduk di background variant yang sama (0.3) supaya
+        // tak belang; pemisah hairline bawah tanpa shadow, tanpa onScroll. Inset
+        // atas TIDAK diterapkan di sini — TopAppBar di dalam `header` yang
+        // menerapkannya (ui.tsx TopAppBar), agar tidak dobel (0.1/safe-area).
+        <View
+          style={{
+            backgroundColor,
+            borderBottomColor: colors.border,
+            borderBottomWidth: 1,
+            paddingHorizontal: spacing.screenHorizontal,
+          }}
+        >
+          {header}
+        </View>
+      ) : null}
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
