@@ -3,10 +3,14 @@ import React from 'react';
 import { Alert } from 'react-native';
 
 import {
+  clearResolvedTreeFormErrors,
   formatDateForDb,
+  hasTreeFormErrors,
   parseDbDate,
   TreeMainPhotoFormSection,
   TreeForm,
+  validateTreeForm,
+  type TreeFormErrors,
   type TreeFormValues,
 } from '../../../../../src/components/tree-components';
 import { useSnackbar } from '../../../../../src/components/snackbar';
@@ -34,11 +38,17 @@ export default function OwnerEditTreeScreen() {
   const [currentPhoto, setCurrentPhoto] = React.useState<TreeMainPhoto | null>(null);
   const [deletePhotoRequested, setDeletePhotoRequested] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [errors, setErrors] = React.useState<TreeFormErrors>({});
   const [farmId, setFarmId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [values, setValues] = React.useState<TreeFormValues>(initialValues);
+
+  function handleValuesChange(next: TreeFormValues) {
+    setValues(next);
+    setErrors((prev) => clearResolvedTreeFormErrors(prev, next));
+  }
 
   React.useEffect(() => {
     let isMounted = true;
@@ -101,10 +111,14 @@ export default function OwnerEditTreeScreen() {
       return;
     }
 
-    if (!values.rowPosition.trim() || !values.columnPosition.trim()) {
-      setError('Baris dan kolom wajib diisi untuk membuat kode pohon.');
+    const nextErrors = validateTreeForm(values);
+
+    if (hasTreeFormErrors(nextErrors)) {
+      setErrors(nextErrors);
       return;
     }
+
+    setErrors({});
 
     if (!farmId) {
       setError('Data kebun pohon tidak ditemukan.');
@@ -237,12 +251,7 @@ export default function OwnerEditTreeScreen() {
       >
         <TopAppBar title="Edit Pohon" onBack={() => router.back()} />
         <ErrorBanner message={error} />
-        <TreeForm
-          dateSectionDescription="Perbarui tanggal tanam jika ada perubahan."
-          dateSectionTitle="Data Pertumbuhan"
-          values={values}
-          onChange={setValues}
-        />
+        <TreeForm errors={errors} values={values} onChange={handleValuesChange} />
         <TreeMainPhotoFormSection
           currentPhotoUrl={currentPhoto?.signedUrl}
           deleteRequested={deletePhotoRequested}

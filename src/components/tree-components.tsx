@@ -1,6 +1,5 @@
 import React from 'react';
-import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
-import { Image, Modal, Platform, Pressable, Text, View } from 'react-native';
+import { Image, Modal, Pressable, Text, View } from 'react-native';
 
 import type {
   CareCategory,
@@ -17,14 +16,14 @@ import type {
   ConditionRecordPhotoMap,
   PickedPhotoAsset,
 } from '../types/media';
-import { colors, radius, spacing, typography } from '../constants/theme';
+import { colors, radius, spacing, tokens, typography } from '../constants/theme';
 import { formatCareCategory, formatPersonDisplayName } from '../utils/displayFormat';
 import {
   buildTreeDisplayCode,
   formatGrowthPhase,
   formatTreeDisplayCode,
 } from '../utils/treeFormat';
-import { appTheme, Badge, Button, Card, EmptyState, Field, MetaRow, PhotoPickerCard } from './ui';
+import { appTheme, Badge, Button, Card, DateField, EmptyState, Field, MetaRow, PhotoPickerCard } from './ui';
 import { AlertTriangleIcon, BasketIcon, ChevronRightIcon, FlowerIcon, SprayIcon } from './icons';
 
 export type TreeFormValues = {
@@ -41,9 +40,15 @@ export type TreeCardProps = {
   onPress?: () => void;
 };
 
+export type TreeFormErrors = {
+  columnPosition?: string;
+  plantedAt?: string;
+  rowPosition?: string;
+  variety?: string;
+};
+
 export type TreeFormProps = {
-  dateSectionDescription?: string;
-  dateSectionTitle?: string;
+  errors?: TreeFormErrors;
   values: TreeFormValues;
   onChange: (values: TreeFormValues) => void;
 };
@@ -247,14 +252,8 @@ export function TreeVisualPlaceholder({
   );
 }
 
-export function TreeForm({
-  dateSectionDescription = 'Tanggal tanam boleh dikosongkan jika belum diketahui.',
-  dateSectionTitle = 'Tanggal Tanam',
-  onChange,
-  values,
-}: TreeFormProps) {
+export function TreeForm({ errors, onChange, values }: TreeFormProps) {
   const previewCode = buildTreeDisplayCode(values);
-  const [datePickerOpen, setDatePickerOpen] = React.useState(false);
 
   function updateTextValue(field: 'rowPosition' | 'columnPosition' | 'variety', value: string) {
     onChange({
@@ -268,18 +267,6 @@ export function TreeForm({
       ...values,
       plantedAt: value,
     });
-  }
-
-  function handleDateValueChange(_event: DateTimePickerChangeEvent, selectedDate: Date) {
-    if (Platform.OS === 'android') {
-      setDatePickerOpen(false);
-    }
-
-    updateDateValue(selectedDate);
-  }
-
-  function handleDateDismiss() {
-    setDatePickerOpen(false);
   }
 
   return (
@@ -299,16 +286,24 @@ export function TreeForm({
             padding: spacing.md,
           }}
         >
-          <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
+          <Text selectable style={{ color: colors.textMuted, fontSize: tokens.type.meta.fontSize, fontWeight: '700' }}>
             Kode pohon otomatis
           </Text>
-          <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '700' }}>
-            {previewCode ?? 'Lokasi belum lengkap'}
+          <Text
+            selectable
+            style={{
+              color: previewCode ? colors.primary : colors.textSoft,
+              fontSize: tokens.type.title.fontSize,
+              fontWeight: '700',
+            }}
+          >
+            {previewCode ?? 'Lengkapi baris & kolom'}
           </Text>
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
             <Field
+              error={errors?.rowPosition}
               label="Baris *"
               onChangeText={(value) => updateTextValue('rowPosition', value)}
               placeholder="A"
@@ -317,6 +312,7 @@ export function TreeForm({
           </View>
           <View style={{ flex: 1 }}>
             <Field
+              error={errors?.columnPosition}
               label="Kolom *"
               onChangeText={(value) => updateTextValue('columnPosition', value)}
               placeholder="1"
@@ -325,6 +321,7 @@ export function TreeForm({
           </View>
         </View>
         <Field
+          error={errors?.variety}
           label="Varietas *"
           onChangeText={(value) => updateTextValue('variety', value)}
           placeholder="Contoh: Alpukat mentega"
@@ -332,53 +329,59 @@ export function TreeForm({
         />
       </TreeFormSection>
 
-      <TreeFormSection
-        title={dateSectionTitle}
-        description={dateSectionDescription}
-      >
-        <View style={{ gap: spacing.sm }}>
-          <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-            Tanggal Tanam
-          </Text>
-          <Pressable
-            accessibilityLabel="Pilih tanggal tanam"
-            accessibilityRole="button"
-            onPress={() => setDatePickerOpen(true)}
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              borderCurve: 'continuous',
-              borderRadius: radius.md,
-              borderWidth: 1,
-              paddingHorizontal: spacing.lg,
-              paddingVertical: spacing.md,
-            }}
-          >
-            <Text selectable style={{ color: values.plantedAt ? colors.text : colors.textSoft, fontSize: 16, fontWeight: '700' }}>
-              {formatDateForDisplay(values.plantedAt)}
-            </Text>
-          </Pressable>
-          {datePickerOpen ? (
-            <DateTimePicker
-              display={Platform.OS === 'ios' ? 'inline' : 'default'}
-              mode="date"
-              onDismiss={handleDateDismiss}
-              onNeutralButtonPress={handleDateDismiss}
-              onValueChange={handleDateValueChange}
-              value={values.plantedAt ?? new Date()}
-            />
-          ) : null}
-          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19 }}>
-            Kosongkan jika tanggal tanam belum diketahui.
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-            <DateActionButton label="Gunakan hari ini" onPress={() => updateDateValue(new Date())} />
-            {values.plantedAt ? <DateActionButton label="Kosongkan" muted onPress={() => updateDateValue(null)} /> : null}
-          </View>
-        </View>
-      </TreeFormSection>
+      <DateField
+        error={errors?.plantedAt}
+        label="Tanggal tanam *"
+        value={formatDateForDb(values.plantedAt)}
+        onChangeDate={(value) => updateDateValue(parseDbDate(value))}
+      />
     </View>
   );
+}
+
+// Validasi bersama create & edit: tandai semua field wajib yang kosong sekaligus.
+export function validateTreeForm(values: TreeFormValues): TreeFormErrors {
+  const errors: TreeFormErrors = {};
+
+  if (!values.rowPosition.trim()) {
+    errors.rowPosition = 'Baris wajib diisi.';
+  }
+
+  if (!values.columnPosition.trim()) {
+    errors.columnPosition = 'Kolom wajib diisi.';
+  }
+
+  if (!values.variety.trim()) {
+    errors.variety = 'Varietas wajib diisi.';
+  }
+
+  if (!values.plantedAt) {
+    errors.plantedAt = 'Tanggal tanam wajib dipilih.';
+  }
+
+  return errors;
+}
+
+export function hasTreeFormErrors(errors: TreeFormErrors): boolean {
+  return Boolean(errors.rowPosition || errors.columnPosition || errors.variety || errors.plantedAt);
+}
+
+// Hapus error field yang sudah terisi (dipakai saat nilai berubah); tak pernah
+// menambah error baru supaya pesan tidak muncul sambil mengetik.
+export function clearResolvedTreeFormErrors(
+  errors: TreeFormErrors,
+  values: TreeFormValues
+): TreeFormErrors {
+  if (!hasTreeFormErrors(errors)) {
+    return errors;
+  }
+
+  return {
+    columnPosition: values.columnPosition.trim() ? undefined : errors.columnPosition,
+    plantedAt: values.plantedAt ? undefined : errors.plantedAt,
+    rowPosition: values.rowPosition.trim() ? undefined : errors.rowPosition,
+    variety: values.variety.trim() ? undefined : errors.variety,
+  };
 }
 
 export function TreeMainPhotoFormSection({
@@ -409,20 +412,19 @@ export function TreeMainPhotoFormSection({
     <View style={{ gap: spacing.md }}>
       <PhotoPickerCard
         choosePhotoLabel="Pilih Galeri"
-        description="Opsional, digunakan sebagai identitas visual pohon."
         emptyLabel="Tambah foto pohon"
         imageUri={previewUri}
         loading={disabled}
         removeLabel="Hapus Foto"
         takePhotoLabel="Ambil Foto"
-        title="Foto Pohon"
+        title="Foto pohon"
         onChoosePhoto={onGalleryPress}
         onRemovePhoto={canRemove ? handleRemovePress : undefined}
         onTakePhoto={onCameraPress}
       />
 
       {deleteRequested && !photo ? (
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
+        <Text selectable style={{ color: colors.textMuted, lineHeight: tokens.type.bodySmall.lineHeight }}>
           Foto pohon saat ini akan dihapus setelah perubahan disimpan.
         </Text>
       ) : null}
@@ -446,45 +448,32 @@ function TreeFormSection({
   return (
     <View style={{ gap: spacing.md }}>
       <View style={{ gap: spacing.xs }}>
-        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
+        <Text
+          selectable
+          style={{
+            color: colors.text,
+            fontSize: tokens.type.subheading.fontSize,
+            fontWeight: '700',
+            lineHeight: tokens.type.subheading.lineHeight,
+          }}
+        >
           {title}
         </Text>
         {description ? (
-          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19 }}>
+          <Text
+            selectable
+            style={{
+              color: colors.textMuted,
+              fontSize: tokens.type.meta.fontSize,
+              lineHeight: tokens.type.meta.lineHeight,
+            }}
+          >
             {description}
           </Text>
         ) : null}
       </View>
       <View style={{ gap: spacing.md }}>{children}</View>
     </View>
-  );
-}
-
-function DateActionButton({
-  label,
-  muted,
-  onPress,
-}: {
-  label: string;
-  muted?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        backgroundColor: muted ? colors.surface : colors.primarySoft,
-        borderColor: muted ? colors.border : colors.primaryBorder,
-        borderRadius: radius.round,
-        borderWidth: 1,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-      }}
-    >
-      <Text selectable style={{ color: muted ? colors.textMuted : colors.primary, fontSize: 13, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -1077,18 +1066,6 @@ function formatEventDate(value: string): string {
   return date.toLocaleDateString('id-ID', {
     day: '2-digit',
     month: 'short',
-    year: 'numeric',
-  });
-}
-
-export function formatDateForDisplay(date: Date | null): string {
-  if (!date) {
-    return 'Pilih tanggal tanam';
-  }
-
-  return date.toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'long',
     year: 'numeric',
   });
 }

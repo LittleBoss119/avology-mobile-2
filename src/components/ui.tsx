@@ -724,6 +724,7 @@ export function SectionTitle({ subtitle, title }: { subtitle?: string; title: st
 }
 
 export function Field({
+  error,
   label,
   value,
   onChangeText,
@@ -731,6 +732,7 @@ export function Field({
   secureTextEntry,
   keyboardType,
 }: {
+  error?: string;
   label: string;
   value: string;
   onChangeText: (value: string) => void;
@@ -753,7 +755,7 @@ export function Field({
         secureTextEntry={secureTextEntry}
         style={{
           backgroundColor: colors.surface,
-          borderColor: colors.border,
+          borderColor: error ? tokens.color.status.danger.text : colors.border,
           borderCurve: 'continuous',
           borderRadius: 14,
           borderWidth: 1,
@@ -764,16 +766,30 @@ export function Field({
         }}
         value={value}
       />
+      {error ? (
+        <Text
+          selectable
+          style={{
+            color: tokens.color.status.danger.text,
+            fontSize: tokens.type.meta.fontSize,
+            lineHeight: tokens.type.meta.lineHeight,
+          }}
+        >
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 export function DateField({
+  error,
   label,
   onChangeDate,
   placeholder = 'Pilih tanggal',
   value,
 }: {
+  error?: string;
   label: string;
   onChangeDate: (value: string) => void;
   placeholder?: string;
@@ -805,7 +821,7 @@ export function DateField({
         style={{
           alignItems: 'center',
           backgroundColor: colors.surface,
-          borderColor: colors.border,
+          borderColor: error ? tokens.color.status.danger.text : colors.border,
           borderCurve: 'continuous',
           borderRadius: 14,
           borderWidth: 1,
@@ -821,6 +837,18 @@ export function DateField({
             {formatFriendlyDate(value, placeholder)}
           </Text>
         </Pressable>
+      {error ? (
+        <Text
+          selectable
+          style={{
+            color: tokens.color.status.danger.text,
+            fontSize: tokens.type.meta.fontSize,
+            lineHeight: tokens.type.meta.lineHeight,
+          }}
+        >
+          {error}
+        </Text>
+      ) : null}
       {showPicker ? (
         <DateTimePicker
           display="default"

@@ -3,9 +3,13 @@ import React from 'react';
 import { Alert } from 'react-native';
 
 import {
+  clearResolvedTreeFormErrors,
   formatDateForDb,
+  hasTreeFormErrors,
   TreeMainPhotoFormSection,
   TreeForm,
+  validateTreeForm,
+  type TreeFormErrors,
   type TreeFormValues,
 } from '../../../../src/components/tree-components';
 import { useSnackbar } from '../../../../src/components/snackbar';
@@ -28,15 +32,28 @@ export default function OwnerCreateTreeScreen() {
   const { currentFarm } = useAuth();
   const showSnackbar = useSnackbar();
   const [error, setError] = React.useState<string | null>(null);
+  const [errors, setErrors] = React.useState<TreeFormErrors>({});
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
-  const [values, setValues] = React.useState<TreeFormValues>(initialValues);
+  const [values, setValues] = React.useState<TreeFormValues>(() => ({
+    ...initialValues,
+    plantedAt: new Date(),
+  }));
+
+  function handleValuesChange(next: TreeFormValues) {
+    setValues(next);
+    setErrors((prev) => clearResolvedTreeFormErrors(prev, next));
+  }
 
   async function handleSubmit() {
-    if (!values.rowPosition.trim() || !values.columnPosition.trim()) {
-      setError('Baris dan kolom wajib diisi untuk membuat kode pohon.');
+    const nextErrors = validateTreeForm(values);
+
+    if (hasTreeFormErrors(nextErrors)) {
+      setErrors(nextErrors);
       return;
     }
+
+    setErrors({});
 
     if (!currentFarm?.farmId) {
       setError('Data kebun aktif tidak ditemukan.');
@@ -138,7 +155,7 @@ export default function OwnerCreateTreeScreen() {
       >
         <TopAppBar title="Tambah Pohon" onBack={() => router.back()} />
         <ErrorBanner message={error} />
-        <TreeForm values={values} onChange={setValues} />
+        <TreeForm errors={errors} values={values} onChange={handleValuesChange} />
         <TreeMainPhotoFormSection
           disabled={submitting}
           photo={selectedPhoto}
