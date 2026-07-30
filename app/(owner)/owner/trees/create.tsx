@@ -8,12 +8,14 @@ import {
   TreeForm,
   type TreeFormValues,
 } from '../../../../src/components/tree-components';
+import { useSnackbar } from '../../../../src/components/snackbar';
 import { Button, ErrorBanner, Screen, TopAppBar } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { pickImageFromGallery, takePhotoFromCamera } from '../../../../src/lib/media';
 import { uploadTreeMainPhoto } from '../../../../src/services/photoAttachmentService';
 import { createTree } from '../../../../src/services/treeService';
 import type { PickedPhotoAsset } from '../../../../src/types/media';
+import { buildTreeDisplayCode } from '../../../../src/utils/treeFormat';
 
 const initialValues: TreeFormValues = {
   rowPosition: '',
@@ -24,6 +26,7 @@ const initialValues: TreeFormValues = {
 
 export default function OwnerCreateTreeScreen() {
   const { currentFarm } = useAuth();
+  const showSnackbar = useSnackbar();
   const [error, setError] = React.useState<string | null>(null);
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -84,6 +87,8 @@ export default function OwnerCreateTreeScreen() {
     }
 
     setSubmitting(false);
+    const displayCode = buildTreeDisplayCode(values);
+    showSnackbar(displayCode ? `Pohon ${displayCode} ditambahkan` : 'Pohon ditambahkan');
     router.replace('/owner/trees');
   }
 

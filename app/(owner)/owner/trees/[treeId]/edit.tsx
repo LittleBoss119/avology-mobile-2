@@ -9,6 +9,7 @@ import {
   TreeForm,
   type TreeFormValues,
 } from '../../../../../src/components/tree-components';
+import { useSnackbar } from '../../../../../src/components/snackbar';
 import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../../src/components/ui';
 import { pickImageFromGallery, takePhotoFromCamera } from '../../../../../src/lib/media';
 import {
@@ -18,6 +19,7 @@ import {
 } from '../../../../../src/services/photoAttachmentService';
 import { getTreeDetail, updateTree } from '../../../../../src/services/treeService';
 import type { PickedPhotoAsset, TreeMainPhoto } from '../../../../../src/types/media';
+import { buildTreeDisplayCode } from '../../../../../src/utils/treeFormat';
 
 const initialValues: TreeFormValues = {
   rowPosition: '',
@@ -28,6 +30,7 @@ const initialValues: TreeFormValues = {
 
 export default function OwnerEditTreeScreen() {
   const { treeId } = useLocalSearchParams<{ treeId: string }>();
+  const showSnackbar = useSnackbar();
   const [currentPhoto, setCurrentPhoto] = React.useState<TreeMainPhoto | null>(null);
   const [deletePhotoRequested, setDeletePhotoRequested] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -172,6 +175,8 @@ export default function OwnerEditTreeScreen() {
     }
 
     setSubmitting(false);
+    const displayCode = buildTreeDisplayCode(values);
+    showSnackbar(displayCode ? `Pohon ${displayCode} diperbarui` : 'Pohon diperbarui');
     router.replace(`/owner/trees/${normalizedTreeId}`);
   }
 

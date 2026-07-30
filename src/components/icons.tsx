@@ -20,6 +20,7 @@ export type IconName =
   | 'chevron-down'
   | 'dots'
   | 'x'
+  | 'check'
   | 'calendar'
   | 'target'
   | 'user'
@@ -72,6 +73,7 @@ const ICON_PATHS: Record<IconName, string[]> = {
     'M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0',
   ],
   x: ['M18 6l-12 12', 'M6 6l12 12'],
+  check: ['M5 12l5 5l10 -10'],
   calendar: [
     'M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12',
     'M16 3v4',
