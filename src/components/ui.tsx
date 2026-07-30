@@ -740,6 +740,8 @@ export function Field({
   placeholder,
   secureTextEntry,
   keyboardType,
+  multiline,
+  numberOfLines,
 }: {
   error?: string;
   label: string;
@@ -748,6 +750,8 @@ export function Field({
   placeholder?: string;
   secureTextEntry?: boolean;
   keyboardType?: KeyboardTypeOptions;
+  multiline?: boolean;
+  numberOfLines?: number;
 }) {
   return (
     <View style={{ gap: spacing.sm }}>
@@ -758,6 +762,8 @@ export function Field({
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType={keyboardType}
+        multiline={multiline}
+        numberOfLines={multiline ? numberOfLines ?? 4 : undefined}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.textSoft}
@@ -772,9 +778,125 @@ export function Field({
           fontSize: 16,
           minHeight: 54,
           paddingHorizontal: spacing.lg,
+          ...(multiline
+            ? {
+                // literal 96 disengaja, sejalan dgn minHeight 54 / borderRadius 14 / fontSize 16 di atas; disapu saat migrasi Field ke tokens
+                minHeight: 96,
+                paddingVertical: tokens.space.md,
+              }
+            : null),
         }}
+        textAlignVertical={multiline ? 'top' : undefined}
         value={value}
       />
+      {error ? (
+        <Text
+          selectable
+          style={{
+            color: tokens.color.status.danger.text,
+            fontSize: tokens.type.meta.fontSize,
+            lineHeight: tokens.type.meta.lineHeight,
+          }}
+        >
+          {error}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+export type OptionItem = { value: string; label: string; disabled?: boolean };
+
+export function OptionChip({
+  label,
+  selected,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  selected?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const backgroundColor = disabled
+    ? tokens.color.surface.canvas
+    : selected
+      ? tokens.color.brand.soft
+      : tokens.color.surface.card;
+  const borderColor = disabled
+    ? tokens.color.line.hairline
+    : selected
+      ? tokens.color.brand.base
+      : tokens.color.line.card;
+  const textColor = disabled
+    ? tokens.color.text.tertiary
+    : selected
+      ? tokens.color.brand.base
+      : tokens.color.text.secondary;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled), selected: Boolean(selected) }}
+      disabled={disabled}
+      onPress={onPress}
+      style={{
+        alignItems: 'center',
+        backgroundColor,
+        borderColor,
+        borderCurve: 'continuous',
+        borderRadius: tokens.radius.pill,
+        borderWidth: 1,
+        justifyContent: 'center',
+        minHeight: tokens.layout.tapTarget,
+        paddingHorizontal: tokens.space.md,
+      }}
+    >
+      <Text
+        selectable={false}
+        style={{
+          color: textColor,
+          fontSize: tokens.type.label.fontSize,
+          fontWeight: tokens.type.label.fontWeight,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+export function OptionGroup({
+  label,
+  options,
+  value,
+  onChange,
+  error,
+}: {
+  label?: string;
+  options: OptionItem[];
+  value?: string | null;
+  onChange: (value: string) => void;
+  error?: string;
+}) {
+  return (
+    <View style={{ gap: tokens.space.sm }}>
+      {label ? (
+        <Text selectable style={{ color: tokens.color.text.primary, ...tokens.type.label }}>
+          {label}
+        </Text>
+      ) : null}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.sm }}>
+        {options.map((option) => (
+          <OptionChip
+            key={option.value}
+            disabled={option.disabled}
+            label={option.label}
+            onPress={() => onChange(option.value)}
+            selected={value === option.value}
+          />
+        ))}
+      </View>
       {error ? (
         <Text
           selectable
