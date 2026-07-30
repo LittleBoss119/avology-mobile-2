@@ -237,19 +237,9 @@ export default function OwnerEditTreeScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <Screen
-        footer={
-          <>
-            <Button title="Simpan Perubahan" loading={submitting} onPress={handleSubmit} />
-            <Button
-              title="Batal"
-              variant="secondary"
-              disabled={submitting}
-              onPress={() => router.back()}
-            />
-          </>
-        }
+        footer={<Button title="Simpan Perubahan" loading={submitting} onPress={handleSubmit} />}
+        header={<TopAppBar title="Edit Pohon" onBack={() => router.back()} />}
       >
-        <TopAppBar title="Edit Pohon" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <TreeForm errors={errors} values={values} onChange={handleValuesChange} />
         <TreeMainPhotoFormSection

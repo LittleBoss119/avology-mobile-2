@@ -1,8 +1,8 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
 
-import { colors, radius, spacing, tokens, typography } from '../constants/theme';
+import { colors, spacing, tokens, typography } from '../constants/theme';
 import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import {
@@ -31,7 +31,6 @@ import {
   ConditionStatusBadge,
   TreeHistoryTimeline,
   type TreeHistoryRouteRecordType,
-  TreeVisualPlaceholder,
 } from './tree-components';
 import { BottomSheet, PhotoSourceSheet, SheetActionRow } from './bottom-sheet';
 import { FloweringAgeMarker } from './flowering-marker';
@@ -207,10 +206,13 @@ export function TreeDetailScreen({
 
   if (!tree) {
     return (
-      <Screen>
-        <TopAppBar title="Detail Pohon" onBack={() => router.back()} />
+      <Screen header={<TopAppBar title="Detail Pohon" onBack={() => router.back()} />}>
         <ErrorBanner message={error} />
-        <EmptyState title="Pohon tidak ditemukan" subtitle="Pohon mungkin sudah tidak tersedia atau akses ditolak." />
+        {error ? (
+          <EmptyState title="Gagal memuat detail pohon" subtitle="Periksa koneksi lalu coba lagi." />
+        ) : (
+          <EmptyState title="Pohon tidak ditemukan" subtitle="Pohon mungkin sudah tidak tersedia atau akses ditolak." />
+        )}
       </Screen>
     );
   }
@@ -346,12 +348,13 @@ export function TreeDetailScreen({
   const displayCode = formatTreeDisplayCode(tree);
 
   return (
-    <Screen>
-      <TreeDetailTopBar mode={mode} onMenuPress={() => setMenuOpen(true)} />
+    <Screen header={<TreeDetailTopBar mode={mode} onMenuPress={() => setMenuOpen(true)} />}>
       <ErrorBanner message={error} />
 
       <TreeDetailHero
         displayCode={displayCode}
+        mode={mode}
+        onPhotoPress={handleOpenPhotoSource}
         photoLoading={photoActionLoading}
         photoUrl={treeMainPhoto?.signedUrl}
         tree={tree}
@@ -425,7 +428,7 @@ function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuP
         onPress={onMenuPress}
         style={{
           alignItems: 'center',
-          backgroundColor: '#FFFFFF',
+          backgroundColor: tokens.color.surface.card,
           borderColor: colors.border,
           borderRadius: 999,
           borderWidth: 1,
@@ -434,7 +437,7 @@ function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuP
           width: 44,
         }}
       >
-        <Icon name="dots" size={20} color="#065F2E" />
+        <Icon name="dots" size={20} color={tokens.color.brand.base} />
       </Pressable>
     ) : undefined;
 
@@ -443,25 +446,28 @@ function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuP
 
 function TreeDetailHero({
   displayCode,
+  mode,
+  onPhotoPress,
   photoLoading,
   photoUrl,
   tree,
 }: {
   displayCode: string;
+  mode: TreeDetailMode;
+  onPhotoPress: () => void;
   photoLoading?: boolean;
   photoUrl?: string | null;
   tree: Tree;
 }) {
   return (
     <View style={{ gap: spacing.md }}>
-      <View>
-        <TreeVisualPlaceholder condition={tree.currentCondition} photoUrl={photoUrl} />
+      <View style={{ borderRadius: tokens.radius.card, minHeight: 220, overflow: 'hidden' }}>
+        <TreePhotoArea mode={mode} onPhotoPress={onPhotoPress} photoUrl={photoUrl} />
         {photoLoading ? (
           <View
             style={{
               alignItems: 'center',
-              backgroundColor: 'rgba(6,95,46,0.66)',
-              borderRadius: radius.xl,
+              backgroundColor: tokens.color.overlay.scrim,
               bottom: 0,
               justifyContent: 'center',
               left: 0,
@@ -470,7 +476,7 @@ function TreeDetailHero({
               top: 0,
             }}
           >
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={tokens.color.brand.on} />
           </View>
         ) : null}
       </View>
@@ -487,6 +493,104 @@ function TreeDetailHero({
           <ConditionStatusBadge status={tree.currentCondition} />
         </View>
       </View>
+    </View>
+  );
+}
+
+function TreePhotoArea({
+  mode,
+  onPhotoPress,
+  photoUrl,
+}: {
+  mode: TreeDetailMode;
+  onPhotoPress: () => void;
+  photoUrl?: string | null;
+}) {
+  if (photoUrl) {
+    return (
+      <>
+        <Image
+          resizeMode="cover"
+          source={{ uri: photoUrl }}
+          style={{ bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 }}
+        />
+        {mode === 'owner' ? (
+          <Pressable
+            accessibilityLabel="Ubah foto pohon"
+            accessibilityRole="button"
+            onPress={onPhotoPress}
+            style={{
+              alignItems: 'center',
+              backgroundColor: tokens.color.brand.base,
+              borderRadius: tokens.radius.pill,
+              bottom: tokens.space.md,
+              height: 40,
+              justifyContent: 'center',
+              position: 'absolute',
+              right: tokens.space.md,
+              width: 40,
+            }}
+          >
+            <Icon name="camera" size={tokens.icon.md} color={tokens.color.brand.on} />
+          </Pressable>
+        ) : null}
+      </>
+    );
+  }
+
+  if (mode === 'owner') {
+    return (
+      <Pressable
+        accessibilityLabel="Tambah foto pohon"
+        accessibilityRole="button"
+        onPress={onPhotoPress}
+        style={{
+          alignItems: 'center',
+          backgroundColor: tokens.color.surface.subtle,
+          borderColor: tokens.color.line.card,
+          borderStyle: 'dashed',
+          borderWidth: 1,
+          justifyContent: 'center',
+          minHeight: 220,
+        }}
+      >
+        <View
+          style={{
+            alignItems: 'center',
+            backgroundColor: tokens.color.brand.soft,
+            borderRadius: tokens.radius.pill,
+            height: 48,
+            justifyContent: 'center',
+            width: 48,
+          }}
+        >
+          <Icon name="camera" size={24} color={tokens.color.brand.base} />
+        </View>
+        <Text
+          selectable
+          style={{ ...tokens.type.bodyStrong, color: tokens.color.text.secondary, marginTop: tokens.space.sm }}
+        >
+          Tambah foto
+        </Text>
+      </Pressable>
+    );
+  }
+
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        backgroundColor: tokens.color.surface.subtle,
+        borderColor: tokens.color.line.card,
+        borderStyle: 'solid',
+        borderWidth: 1,
+        justifyContent: 'center',
+        minHeight: 220,
+      }}
+    >
+      <Text selectable style={{ ...tokens.type.bodySmall, color: tokens.color.text.tertiary }}>
+        Belum ada foto
+      </Text>
     </View>
   );
 }

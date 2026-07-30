@@ -141,19 +141,9 @@ export default function OwnerCreateTreeScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <Screen
-        footer={
-          <>
-            <Button title="Simpan Pohon" loading={submitting} onPress={handleSubmit} />
-            <Button
-              title="Batal"
-              variant="secondary"
-              disabled={submitting}
-              onPress={() => router.replace('/owner/trees')}
-            />
-          </>
-        }
+        footer={<Button title="Simpan Pohon" loading={submitting} onPress={handleSubmit} />}
+        header={<TopAppBar title="Tambah Pohon" onBack={() => router.back()} />}
       >
-        <TopAppBar title="Tambah Pohon" onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <TreeForm errors={errors} values={values} onChange={handleValuesChange} />
         <TreeMainPhotoFormSection
