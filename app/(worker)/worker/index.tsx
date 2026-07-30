@@ -65,14 +65,26 @@ export default function WorkerDashboardScreen() {
   const workerName = formatPersonDisplayName(profile?.fullName, 'Pekerja kebun');
 
   return (
-    <Screen>
-      <MainTabHeader
-        title="Beranda"
-        roleLabel="Pekerja"
-        roleTone="neutral"
-        subtitle={farmName ? `Halo, ${workerName}. Tugas kamu di ${farmName} hari ini.` : `Halo, ${workerName}. Tugas kamu hari ini.`}
-        onProfilePress={() => router.push('/worker/profile')}
-      />
+    <Screen
+      header={
+        <MainTabHeader
+          title="Beranda"
+          roleLabel="Pekerja"
+          roleTone="neutral"
+          onProfilePress={() => router.push('/worker/profile')}
+        />
+      }
+    >
+      <Text
+        selectable
+        style={{
+          color: tokens.color.text.tertiary,
+          fontSize: tokens.type.body.fontSize,
+          lineHeight: tokens.type.body.lineHeight,
+        }}
+      >
+        {farmName ? `Halo, ${workerName}. Tugas kamu di ${farmName} hari ini.` : `Halo, ${workerName}. Tugas kamu hari ini.`}
+      </Text>
       <ErrorBanner message={error} />
 
       {summary === null ? null : (

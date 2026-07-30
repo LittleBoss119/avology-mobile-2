@@ -73,9 +73,9 @@ export default function OwnerFarmHubScreen() {
   );
 
   return (
-    <Screen>
-      <MainTabHeader title="Kebun" onProfilePress={() => router.push('/owner/profile')} />
-
+    <Screen
+      header={<MainTabHeader title="Kebun" onProfilePress={() => router.push('/owner/profile')} />}
+    >
       <Card variant="highlight">
         <SectionHeader title="Profil Kebun" />
         {!farm ? (

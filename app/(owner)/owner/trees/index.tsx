@@ -67,7 +67,6 @@ export default function OwnerTreeListScreen() {
   const [trees, setTrees] = React.useState<Tree[]>([]);
 
   const farmId = currentFarm?.farmId;
-  const farmName = currentFarm?.farm?.name ?? 'kebun aktif';
 
   const loadTrees = React.useCallback(async () => {
     if (!farmId) {
@@ -149,13 +148,16 @@ export default function OwnerTreeListScreen() {
   }
 
   return (
-    <Screen floatingAction={<FloatingAddButton onPress={() => router.push('/owner/trees/create')} />}>
-      <MainTabHeader
-        title="Pohon"
-        roleLabel="Pemilik"
-        subtitle={`Kelola pohon ${archived ? 'diarsipkan' : 'aktif'} di ${farmName}.`}
-        onProfilePress={() => router.push('/owner/profile')}
-      />
+    <Screen
+      floatingAction={<FloatingAddButton onPress={() => router.push('/owner/trees/create')} />}
+      header={
+        <MainTabHeader
+          title="Pohon"
+          roleLabel="Pemilik"
+          onProfilePress={() => router.push('/owner/profile')}
+        />
+      }
+    >
       <ErrorBanner message={error} />
       <SearchFilterBar
         onSearchChange={setSearch}

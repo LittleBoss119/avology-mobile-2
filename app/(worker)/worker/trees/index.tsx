@@ -57,7 +57,6 @@ export default function WorkerTreeListScreen() {
   const [trees, setTrees] = React.useState<Tree[]>([]);
 
   const farmId = currentFarm?.farmId;
-  const farmName = currentFarm?.farm?.name ?? 'kebun aktif';
 
   const loadTrees = React.useCallback(async () => {
     if (!farmId) {
@@ -138,13 +137,15 @@ export default function WorkerTreeListScreen() {
   }
 
   return (
-    <Screen>
-      <MainTabHeader
-        title="Pohon"
-        roleLabel="Pekerja"
-        subtitle={`Pohon aktif di ${farmName}.`}
-        onProfilePress={() => router.push('/worker/profile')}
-      />
+    <Screen
+      header={
+        <MainTabHeader
+          title="Pohon"
+          roleLabel="Pekerja"
+          onProfilePress={() => router.push('/worker/profile')}
+        />
+      }
+    >
       <ErrorBanner message={error} />
       <SearchFilterBar
         onSearchChange={setSearch}

@@ -71,13 +71,25 @@ export default function OwnerDashboardScreen() {
   const ownerName = formatPersonDisplayName(profile?.fullName, 'Pemilik kebun');
 
   return (
-    <Screen>
-      <MainTabHeader
-        title="Beranda"
-        roleLabel="Pemilik"
-        subtitle={farmName ? `Halo, ${ownerName}. Pantau ${farmName} hari ini.` : `Halo, ${ownerName}. Pantau kebun hari ini.`}
-        onProfilePress={() => router.push('/owner/profile')}
-      />
+    <Screen
+      header={
+        <MainTabHeader
+          title="Beranda"
+          roleLabel="Pemilik"
+          onProfilePress={() => router.push('/owner/profile')}
+        />
+      }
+    >
+      <Text
+        selectable
+        style={{
+          color: tokens.color.text.tertiary,
+          fontSize: tokens.type.body.fontSize,
+          lineHeight: tokens.type.body.lineHeight,
+        }}
+      >
+        {farmName ? `Halo, ${ownerName}. Pantau ${farmName} hari ini.` : `Halo, ${ownerName}. Pantau kebun hari ini.`}
+      </Text>
       <ErrorBanner message={error} />
 
       {summary === null ? null : summary.totalTrees === 0 ? (

@@ -176,12 +176,14 @@ export function PageIntro({
 }
 
 export function TopAppBar({
+  badge,
   right,
   subtitle,
   title,
   onBack,
   variant,
 }: {
+  badge?: React.ReactNode;
   right?: React.ReactNode;
   subtitle?: string;
   title: string;
@@ -229,19 +231,39 @@ export function TopAppBar({
             minWidth: 0,
           }}
         >
-          <Text
-            selectable
-            numberOfLines={1}
-            style={{
-              color: colors.text,
-              fontSize: resolvedVariant === 'main' ? typography.screenTitle.fontSize : 20,
-              fontWeight: resolvedVariant === 'main' ? typography.screenTitle.fontWeight : '700',
-              lineHeight: typography.screenTitle.lineHeight,
-              textAlign: titleAlign,
-            }}
-          >
-            {title}
-          </Text>
+          {badge ? (
+            <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, maxWidth: '100%' }}>
+              <Text
+                selectable
+                numberOfLines={1}
+                style={{
+                  color: colors.text,
+                  flexShrink: 1,
+                  fontSize: resolvedVariant === 'main' ? typography.screenTitle.fontSize : 20,
+                  fontWeight: resolvedVariant === 'main' ? typography.screenTitle.fontWeight : '700',
+                  lineHeight: typography.screenTitle.lineHeight,
+                  textAlign: titleAlign,
+                }}
+              >
+                {title}
+              </Text>
+              <View style={{ flexShrink: 0 }}>{badge}</View>
+            </View>
+          ) : (
+            <Text
+              selectable
+              numberOfLines={1}
+              style={{
+                color: colors.text,
+                fontSize: resolvedVariant === 'main' ? typography.screenTitle.fontSize : 20,
+                fontWeight: resolvedVariant === 'main' ? typography.screenTitle.fontWeight : '700',
+                lineHeight: typography.screenTitle.lineHeight,
+                textAlign: titleAlign,
+              }}
+            >
+              {title}
+            </Text>
+          )}
         </View>
         {right ?? (titleAlign === 'center' ? <View style={{ height: 44, width: 44 }} /> : null)}
       </View>
@@ -295,33 +317,20 @@ export function MainTabHeader({
   onProfilePress,
   roleLabel,
   roleTone = 'neutral',
-  subtitle,
   title,
 }: {
   onProfilePress: () => void;
   roleLabel?: string;
   roleTone?: BadgeTone;
-  subtitle?: string;
   title: string;
 }) {
   return (
-    <View style={{ gap: spacing.sm }}>
-      <TopAppBar
-        title={title}
-        variant="main"
-        right={<ProfileIconButton onPress={onProfilePress} />}
-      />
-      {roleLabel || subtitle ? (
-        <View style={{ gap: spacing.xs }}>
-          {roleLabel ? <Badge label={roleLabel} tone={roleTone} /> : null}
-          {subtitle ? (
-            <Text selectable style={{ color: colors.muted, fontSize: 15, lineHeight: 22 }}>
-              {subtitle}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
+    <TopAppBar
+      badge={roleLabel ? <Badge label={roleLabel} tone={roleTone} /> : undefined}
+      right={<ProfileIconButton onPress={onProfilePress} />}
+      title={title}
+      variant="main"
+    />
   );
 }
 

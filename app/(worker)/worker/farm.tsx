@@ -103,8 +103,9 @@ export default function WorkerFarmHubScreen() {
   }
 
   return (
-    <Screen>
-      <MainTabHeader title="Kebun" onProfilePress={() => router.push('/worker/profile')} />
+    <Screen
+      header={<MainTabHeader title="Kebun" onProfilePress={() => router.push('/worker/profile')} />}
+    >
       <ErrorBanner message={error} />
 
       <Card variant="highlight">

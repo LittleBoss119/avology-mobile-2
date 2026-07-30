@@ -143,13 +143,16 @@ export default function CareScheduleListScreen() {
   const displayedSchedules = schedules.filter((schedule) => matchesActive(schedule, statusFilter));
 
   return (
-    <Screen floatingAction={<AddScheduleFab onPress={() => setAddSheetOpen(true)} />}>
-      <MainTabHeader
-        title="Jadwal"
-        roleLabel="Pemilik"
-        subtitle="Pantau jadwal kerja dan perawatan."
-        onProfilePress={() => router.push('/owner/profile')}
-      />
+    <Screen
+      floatingAction={<AddScheduleFab onPress={() => setAddSheetOpen(true)} />}
+      header={
+        <MainTabHeader
+          title="Jadwal"
+          roleLabel="Pemilik"
+          onProfilePress={() => router.push('/owner/profile')}
+        />
+      }
+    >
       <ErrorBanner message={error} />
 
       <SearchFilterRow
