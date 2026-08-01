@@ -1,14 +1,17 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { colors, radius, spacing, typography } from '../constants/theme';
+import { tokens } from '../constants/theme';
 import { createGrowthPhaseRecord } from '../services/growthPhaseService';
 import { getTreeDetail } from '../services/treeService';
 import type { GrowthPhase, Tree } from '../types/domain';
 import { formatGrowthPhase, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { GrowthPhaseBadge } from './tree-components';
-import { Button, Card, DateField, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
+import { useSnackbar } from './snackbar';
+import { Button, Card, DateField, ErrorBanner, Field, FormSection, LoadingState, MetaRow, OptionGroup, Screen, TopAppBar } from './ui';
+
+type PhaseFormErrors = { phase?: string };
 
 const phaseOptions: GrowthPhase[] = [
   'initial_planting',
@@ -25,8 +28,10 @@ export function TreeGrowthPhaseRecordScreen({
   basePath: '/owner/trees' | '/worker/trees';
   treeId?: string;
 }) {
+  const showSnackbar = useSnackbar();
   const [error, setError] = React.useState<string | null>(null);
   const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
+  const [fieldErrors, setFieldErrors] = React.useState<PhaseFormErrors>({});
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
   const [phase, setPhase] = React.useState<GrowthPhase | null>(null);
@@ -80,10 +85,11 @@ export function TreeGrowthPhaseRecordScreen({
     }
 
     if (!phase) {
-      setError('Fase pertumbuhan wajib dipilih.');
+      setFieldErrors({ phase: 'Fase wajib dipilih.' });
       return;
     }
 
+    setFieldErrors({});
     setSubmitting(true);
     setError(null);
 
@@ -111,6 +117,7 @@ export function TreeGrowthPhaseRecordScreen({
     }
 
     setSubmitting(false);
+    showSnackbar('Fase pertumbuhan tercatat');
     router.replace(`${basePath}/${tree.id}`);
   }
 
@@ -120,31 +127,26 @@ export function TreeGrowthPhaseRecordScreen({
 
   return (
     <Screen
-      footer={
-        <>
-          <Button title="Simpan Fase" loading={submitting} onPress={handleSubmit} />
-          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
-        </>
-      }
+      footer={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
+      header={<TopAppBar title="Catat Fase" onBack={() => router.back()} />}
     >
-      <TopAppBar title="Catat Fase" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
       {tree ? (
         <Card variant="highlight">
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
+          <Text selectable style={{ color: tokens.color.text.primary, ...tokens.type.subheading }}>
             Konteks Pohon
           </Text>
           <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
           <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-          <View style={{ gap: spacing.xs }}>
-            <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
+          <View style={{ gap: tokens.space.xs }}>
+            <Text selectable style={{ color: tokens.color.text.tertiary, ...tokens.type.meta }}>
               Fase saat ini
             </Text>
             {tree.currentGrowthPhase ? (
               <GrowthPhaseBadge phase={tree.currentGrowthPhase} />
             ) : (
-              <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>
+              <Text selectable style={{ color: tokens.color.text.primary, ...tokens.type.bodyStrong }}>
                 {formatGrowthPhase(tree.currentGrowthPhase)}
               </Text>
             )}
@@ -152,96 +154,29 @@ export function TreeGrowthPhaseRecordScreen({
         </Card>
       ) : null}
 
-      <FormSection title="Fase Baru" description="Pilih fase pertumbuhan terbaru yang terlihat di pohon.">
-        <View style={{ gap: spacing.sm }}>
+      <FormSection title="Fase baru" description="Pilih fase pertumbuhan terbaru yang terlihat di pohon.">
+        <View style={{ gap: tokens.space.sm }}>
           <DateField label="Tanggal catatan *" onChangeDate={setEventDate} value={eventDate} />
-          {phaseOptions.map((option) => (
-            <SelectableOption
-              key={option}
-              active={phase === option}
-              disabled={submitting}
-              label={formatPhaseOption(option)}
-              onPress={() => setPhase(option)}
-            />
-          ))}
+          <OptionGroup
+            error={fieldErrors.phase}
+            options={phaseOptions.map((option) => ({
+              disabled: submitting,
+              label: formatPhaseOption(option),
+              value: option,
+            }))}
+            value={phase}
+            onChange={(value) => {
+              setFieldErrors((prev) => ({ ...prev, phase: undefined }));
+              setPhase(value as GrowthPhase);
+            }}
+          />
         </View>
       </FormSection>
 
       <FormSection title="Catatan" description="Catat tanda pertumbuhan yang terlihat di pohon.">
-        <TextArea disabled={submitting} onChangeText={setNote} placeholder="Opsional" value={note} />
+        <Field label="" multiline onChangeText={setNote} placeholder="Opsional" value={note} />
       </FormSection>
     </Screen>
-  );
-}
-
-function SelectableOption({
-  active,
-  disabled,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  disabled?: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      disabled={disabled}
-      onPress={onPress}
-      style={{
-        backgroundColor: active ? colors.primarySoft : colors.surface,
-        borderColor: active ? colors.primary : colors.border,
-        borderCurve: 'continuous',
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        opacity: disabled ? 0.6 : 1,
-        padding: spacing.md,
-      }}
-    >
-      <Text selectable style={{ color: active ? colors.primary : colors.text, fontSize: 15, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function TextArea({
-  disabled,
-  onChangeText,
-  placeholder,
-  value,
-}: {
-  disabled?: boolean;
-  onChangeText: (value: string) => void;
-  placeholder?: string;
-  value: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <TextInput
-        editable={!disabled}
-        multiline
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textSoft}
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderCurve: 'continuous',
-          borderRadius: radius.md,
-          borderWidth: 1,
-          color: colors.text,
-          fontSize: 16,
-          minHeight: 96,
-          opacity: disabled ? 0.6 : 1,
-          paddingHorizontal: spacing.lg,
-          paddingTop: spacing.md,
-          textAlignVertical: 'top',
-        }}
-        value={value}
-      />
-    </View>
   );
 }
 

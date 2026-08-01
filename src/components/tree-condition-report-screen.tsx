@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
 
-import { colors, radius, spacing, typography } from '../constants/theme';
+import { tokens } from '../constants/theme';
 import { createTreeConditionReport } from '../services/conditionReportService';
 import { uploadConditionRecordPhoto } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
@@ -11,7 +11,10 @@ import type { Tree, TreeConditionStatus } from '../types/domain';
 import type { PickedPhotoAsset } from '../types/media';
 import { formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { ConditionStatusBadge } from './tree-components';
-import { Button, Card, DateField, ErrorBanner, FormSection, LoadingState, MetaRow, PhotoPickerCard, Screen, TopAppBar } from './ui';
+import { useSnackbar } from './snackbar';
+import { Button, Card, DateField, ErrorBanner, Field, FormSection, LoadingState, MetaRow, OptionGroup, PhotoPickerCard, Screen, TopAppBar } from './ui';
+
+type ConditionFormErrors = { conditionStatus?: string };
 
 const conditionOptions: TreeConditionStatus[] = [
   'healthy',
@@ -29,9 +32,11 @@ export function TreeConditionReportScreen({
   basePath: '/owner/trees' | '/worker/trees';
   treeId?: string;
 }) {
+  const showSnackbar = useSnackbar();
   const [conditionStatus, setConditionStatus] = React.useState<TreeConditionStatus | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
+  const [fieldErrors, setFieldErrors] = React.useState<ConditionFormErrors>({});
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
   const [pendingConditionRecordId, setPendingConditionRecordId] = React.useState<string | null>(null);
@@ -91,10 +96,11 @@ export function TreeConditionReportScreen({
     }
 
     if (!conditionStatus) {
-      setError('Kondisi pohon wajib dipilih.');
+      setFieldErrors({ conditionStatus: 'Kondisi wajib dipilih.' });
       return;
     }
 
+    setFieldErrors({});
     setSubmitting(true);
     setError(null);
 
@@ -119,7 +125,7 @@ export function TreeConditionReportScreen({
         setPendingConditionRecordId(result.data.reportId);
         setSubmitting(false);
         setError(
-          'Laporan kondisi tersimpan, tetapi foto gagal diunggah. Tekan Simpan Kondisi lagi untuk mencoba unggah foto.'
+          'Laporan kondisi tersimpan, tetapi foto gagal diunggah. Tekan Simpan lagi untuk mencoba unggah foto.'
         );
         return;
       }
@@ -127,6 +133,7 @@ export function TreeConditionReportScreen({
 
     setSelectedPhoto(null);
     setSubmitting(false);
+    showSnackbar('Kondisi pohon tercatat');
     router.replace(`${basePath}/${tree.id}`);
   }
 
@@ -238,26 +245,21 @@ export function TreeConditionReportScreen({
 
   return (
     <Screen
-      footer={
-        <>
-          <Button title="Simpan Kondisi" loading={submitting} onPress={handleSubmit} />
-          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
-        </>
-      }
+      footer={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
+      header={<TopAppBar title="Catat Kondisi" onBack={() => router.back()} />}
     >
-      <TopAppBar title="Catat Kondisi" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
       {tree ? (
         <Card variant="highlight">
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
+          <Text selectable style={{ color: tokens.color.text.primary, ...tokens.type.subheading }}>
             Konteks Pohon
           </Text>
           <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
           <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
           <MetaRow label="Varietas" value={tree.variety ?? 'Belum diisi'} />
-          <View style={{ gap: spacing.xs }}>
-            <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
+          <View style={{ gap: tokens.space.xs }}>
+            <Text selectable style={{ color: tokens.color.text.tertiary, ...tokens.type.meta }}>
               Kondisi terakhir
             </Text>
             <ConditionStatusBadge status={tree.currentCondition} />
@@ -265,22 +267,26 @@ export function TreeConditionReportScreen({
         </Card>
       ) : null}
 
-      <FormSection title="Kondisi Baru" description="Pilih kondisi terbaru yang terlihat pada pohon.">
-        <View style={{ gap: spacing.sm }}>
+      <FormSection title="Kondisi baru" description="Pilih kondisi terbaru yang terlihat pada pohon.">
+        <View style={{ gap: tokens.space.sm }}>
           <DateField label="Tanggal catatan *" onChangeDate={setEventDate} value={eventDate} />
-          {conditionOptions.map((status) => (
-            <SelectableOption
-              key={status}
-              active={conditionStatus === status}
-              label={formatTreeConditionStatus(status)}
-              onPress={() => setConditionStatus(status)}
-            />
-          ))}
+          <OptionGroup
+            error={fieldErrors.conditionStatus}
+            options={conditionOptions.map((status) => ({
+              label: formatTreeConditionStatus(status),
+              value: status,
+            }))}
+            value={conditionStatus}
+            onChange={(value) => {
+              setFieldErrors((prev) => ({ ...prev, conditionStatus: undefined }));
+              setConditionStatus(value as TreeConditionStatus);
+            }}
+          />
         </View>
       </FormSection>
 
       <FormSection title="Catatan" description="Tambahkan gejala, tindakan, atau kondisi visual pohon.">
-        <TextArea onChangeText={setNote} placeholder="Opsional" value={note} />
+        <Field label="" multiline onChangeText={setNote} placeholder="Opsional" value={note} />
       </FormSection>
 
       <ConditionPhotoPicker
@@ -315,74 +321,11 @@ function ConditionPhotoPicker({
       loading={disabled}
       removeLabel="Hapus Foto"
       takePhotoLabel="Ambil Foto"
-      title="Foto Kondisi"
+      title="Foto kondisi"
       onChoosePhoto={onGalleryPress}
       onRemovePhoto={photo ? onRemove : undefined}
       onTakePhoto={onCameraPress}
     />
-  );
-}
-
-function SelectableOption({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        backgroundColor: active ? colors.primarySoft : colors.surface,
-        borderColor: active ? colors.primary : colors.border,
-        borderCurve: 'continuous',
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        padding: spacing.md,
-      }}
-    >
-      <Text selectable style={{ color: active ? colors.primary : colors.text, fontSize: 15, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function TextArea({
-  onChangeText,
-  placeholder,
-  value,
-}: {
-  onChangeText: (value: string) => void;
-  placeholder?: string;
-  value: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <TextInput
-        multiline
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textSoft}
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderCurve: 'continuous',
-          borderRadius: radius.md,
-          borderWidth: 1,
-          color: colors.text,
-          fontSize: 16,
-          minHeight: 96,
-          paddingHorizontal: spacing.lg,
-          paddingTop: spacing.md,
-          textAlignVertical: 'top',
-        }}
-        value={value}
-      />
-    </View>
   );
 }
 

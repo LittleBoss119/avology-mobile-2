@@ -1,13 +1,16 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Text } from 'react-native';
 
-import { colors, radius, spacing, typography } from '../constants/theme';
+import { tokens } from '../constants/theme';
 import { createHarvestRecord } from '../services/harvestService';
 import { getTreeDetail } from '../services/treeService';
 import type { Tree } from '../types/domain';
 import { formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
-import { Button, Card, DateField, ErrorBanner, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
+import { useSnackbar } from './snackbar';
+import { Button, Card, DateField, ErrorBanner, Field, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
+
+type HarvestFormErrors = { fruitCount?: string };
 
 export function TreeHarvestRecordScreen({
   basePath,
@@ -16,8 +19,10 @@ export function TreeHarvestRecordScreen({
   basePath: '/owner/trees' | '/worker/trees';
   treeId?: string;
 }) {
+  const showSnackbar = useSnackbar();
   const [error, setError] = React.useState<string | null>(null);
   const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
+  const [fieldErrors, setFieldErrors] = React.useState<HarvestFormErrors>({});
   const [fruitCondition, setFruitCondition] = React.useState('');
   const [fruitCount, setFruitCount] = React.useState('');
   const [loading, setLoading] = React.useState(true);
@@ -71,18 +76,19 @@ export function TreeHarvestRecordScreen({
       return;
     }
 
+    if (!fruitCount.trim()) {
+      setFieldErrors({ fruitCount: 'Jumlah buah dipanen wajib diisi.' });
+      return;
+    }
+
     const parsedFruitCount = Number(fruitCount);
 
-    if (!fruitCount.trim()) {
-      setError('Jumlah buah dipanen wajib diisi.');
-      return;
-    }
-
     if (!Number.isInteger(parsedFruitCount) || parsedFruitCount <= 0) {
-      setError('Jumlah buah harus lebih dari 0.');
+      setFieldErrors({ fruitCount: 'Jumlah buah harus lebih dari 0.' });
       return;
     }
 
+    setFieldErrors({});
     setSubmitting(true);
     setError(null);
 
@@ -102,6 +108,7 @@ export function TreeHarvestRecordScreen({
     }
 
     setSubmitting(false);
+    showSnackbar('Panen tercatat');
     router.replace(`${basePath}/${tree.id}`);
   }
 
@@ -111,19 +118,14 @@ export function TreeHarvestRecordScreen({
 
   return (
     <Screen
-      footer={
-        <>
-          <Button title="Simpan catatan panen" loading={submitting} onPress={handleSubmit} />
-          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
-        </>
-      }
+      footer={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
+      header={<TopAppBar title="Catat panen" onBack={() => router.back()} />}
     >
-      <TopAppBar title="Catat panen" onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
       {tree ? (
         <Card variant="highlight">
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
+          <Text selectable style={{ color: tokens.color.text.primary, ...tokens.type.subheading }}>
             Konteks Pohon
           </Text>
           <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
@@ -135,9 +137,13 @@ export function TreeHarvestRecordScreen({
       <FormSection title="Hasil panen" description="Catat jumlah buah yang dipanen dari pohon ini.">
         <DateField label="Tanggal panen *" onChangeDate={setEventDate} value={eventDate} />
         <Field
+          error={fieldErrors.fruitCount}
           keyboardType="number-pad"
           label="Jumlah buah dipanen *"
-          onChangeText={(value) => setFruitCount(value.replace(/[^0-9]/g, ''))}
+          onChangeText={(value) => {
+            setFruitCount(value.replace(/[^0-9]/g, ''));
+            setFieldErrors((prev) => ({ ...prev, fruitCount: undefined }));
+          }}
           placeholder="Contoh: 12"
           value={fruitCount}
         />
@@ -150,84 +156,9 @@ export function TreeHarvestRecordScreen({
       </FormSection>
 
       <FormSection title="Catatan tambahan">
-        <TextArea onChangeText={setNote} placeholder="Opsional" value={note} />
+        <Field label="" multiline onChangeText={setNote} placeholder="Opsional" value={note} />
       </FormSection>
     </Screen>
-  );
-}
-
-function Field({
-  keyboardType,
-  label,
-  onChangeText,
-  placeholder,
-  value,
-}: {
-  keyboardType?: 'default' | 'number-pad';
-  label: string;
-  onChangeText: (value: string) => void;
-  placeholder?: string;
-  value: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-        {label}
-      </Text>
-      <TextInput
-        keyboardType={keyboardType}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textSoft}
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderCurve: 'continuous',
-          borderRadius: radius.md,
-          borderWidth: 1,
-          color: colors.text,
-          fontSize: 16,
-          minHeight: 54,
-          paddingHorizontal: spacing.lg,
-        }}
-        value={value}
-      />
-    </View>
-  );
-}
-
-function TextArea({
-  onChangeText,
-  placeholder,
-  value,
-}: {
-  onChangeText: (value: string) => void;
-  placeholder?: string;
-  value: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <TextInput
-        multiline
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textSoft}
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderCurve: 'continuous',
-          borderRadius: radius.md,
-          borderWidth: 1,
-          color: colors.text,
-          fontSize: 16,
-          minHeight: 96,
-          paddingHorizontal: spacing.lg,
-          paddingTop: spacing.md,
-          textAlignVertical: 'top',
-        }}
-        value={value}
-      />
-    </View>
   );
 }
 
