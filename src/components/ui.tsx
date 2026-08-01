@@ -450,7 +450,7 @@ export function Card({
 
 export type BadgeTone = 'danger' | 'info' | 'muted' | 'neutral' | 'pending' | 'success' | 'warning';
 
-const badgeColors: Record<BadgeTone, { background: string; border: string; text: string }> = {
+export const badgeColors: Record<BadgeTone, { background: string; border: string; text: string }> = {
   danger: {
     background: statusColors.danger.background,
     border: statusColors.danger.border,
@@ -1203,6 +1203,7 @@ export function FormSection({
 
 export function SearchFilterRow({
   filterActive = false,
+  filterCount,
   onChangeText,
   onFilterPress,
   placeholder = 'Cari data',
@@ -1210,6 +1211,7 @@ export function SearchFilterRow({
   value,
 }: {
   filterActive?: boolean;
+  filterCount?: number;
   onChangeText: (value: string) => void;
   onFilterPress?: () => void;
   placeholder?: string;
@@ -1258,6 +1260,26 @@ export function SearchFilterRow({
           }}
         >
           <Icon name="filter" size={20} color={filterActive ? colors.surface : colors.primary} />
+          {(filterCount ?? 0) > 0 ? (
+            <View
+              style={{
+                alignItems: 'center',
+                backgroundColor: tokens.color.brand.base,
+                borderRadius: tokens.radius.pill,
+                height: 20,
+                justifyContent: 'center',
+                minWidth: 20,
+                paddingHorizontal: 4,
+                position: 'absolute',
+                right: -6,
+                top: -6,
+              }}
+            >
+              <Text selectable={false} style={{ ...tokens.type.caption, color: '#FFFFFF', textAlign: 'center' }}>
+                {filterCount}
+              </Text>
+            </View>
+          ) : null}
         </Pressable>
       ) : null}
     </View>
