@@ -106,10 +106,16 @@ Hasil keputusan sadar. Patuhi semua; kalau mau melanggar, minta izin eksplisit.
 - **Jarak header→konten** = `paddingTop: spacing.xl` (20) milik contentContainer.
 - **`TopAppBar` tidak punya border bawah sendiri.** Hairline satu-satunya ada di wrapper
   `header` milik `Screen`. Prop `subtitle` ada di `ui.tsx:182` tapi jangan diisi (aturan #1).
-- **`Field` shared** (`ui.tsx:735-792`) punya `error` inline (`ui.tsx:744`) tapi
-  **single-line saja** — tidak ada `multiline`.
-- **Tidak ada primitif "selectable option"/segmented** di `ui.tsx`. Setiap layar bikin
-  chip pilihan lokal sendiri.
+- **`Field` shared** punya `error` inline, dan sejak Unit 1a punya
+  `multiline?: boolean` + `numberOfLines?: number` (default 4, minHeight
+  multiline 96). Prop `error` berperilaku sama di kedua mode. `label`
+  masih **wajib** — pemakaian tanpa label terpaksa `label=""` (lihat §8).
+- **Primitif pilihan ADA sejak Unit 1a:** `OptionChip` (`label`, `selected?`,
+  `disabled?`, `onPress`) dan `OptionGroup` (`label?`, `options: OptionItem[]`,
+  `value?`, `onChange`, `error?`) — single-select, tanpa `multiple`.
+  `export type OptionItem = { value: string; label: string; disabled?: boolean }`.
+  Duplikat lokal yang BELUM dimigrasi: F5 (`OptionChip`), `care-sop-components`,
+  `care-schedule-components`, `sops/[sopId]/schedule` (`OptionGroup`).
 - **Bottom nav dirender di layout, di luar `Screen`** — tidak berinteraksi dengan header.
 - **`feedback.ts` ada di `src/components/feedback.ts`** (bukan `src/utils/`).
   `showSuccessToast` sebenarnya `Alert.alert` — nama menyesatkan. Pemakai: hanya
@@ -159,9 +165,10 @@ commit pembersih akhir setelah grep membuktikan nol pemakai.
 **Layout:** `screenX` 16 · `screenTop` 20 · `sectionGap` **24** · `cardPadding` 16 ·
 `listGap` 12 · `controlHeight` **56** · `rowMinHeight` 48 · `tapTarget` 44.
 
-**Tiga perubahan nilai yang DISENGAJA** (jangan dianggap bug):
+**Empat perubahan nilai yang DISENGAJA** (jangan dianggap bug):
 warna panen `#FFF4D6`/`#8A5B00` → `#FDEBD9`/`#9A4C0A` · `sectionGap` 18 → 24 ·
-`controlHeight` 52 → 56. Selain ini, migrasi token **tidak boleh** mengubah warna.
+`controlHeight` 52 → 56 · heading kartu "Konteks Pohon" 18/700 → subheading 17/600
+(tidak ada token 18/700; Unit 1b). Selain ini, migrasi token **tidak boleh** mengubah warna.
 
 **Belum dipetakan** (diputuskan saat layar terkait): accent visual pohon
 `#DCEFE3 #B8D8BF #5C8A45 #FFF8E8 #C49A25 #8A9A31 #A6D96A #FDA29B #F6D77A`,
@@ -218,108 +225,25 @@ lapangan + draft offline saja.**
 
 ### Fondasi — SELESAI
 Design token (`tokens` di `theme.ts`) · ikon SVG (`icons.tsx`, path Tabler) · bottom nav
-(`role-bottom-navigation.tsx`) · primitif shared di `ui.tsx` · `BottomSheet` +
-`PhotoSourceSheet` bersama · `Snackbar` (`snackbar.tsx`, `SnackbarProvider` di root
-layout, `showSnackbar(text)`, auto-dismiss 3500ms, tanpa tombol aksi).
+(`role-bottom-navigation.tsx`) · primitif shared di `ui.tsx` · primitif Unit 1a
+(`Field.multiline`, `OptionChip`, `OptionGroup`) · `BottomSheet` + `PhotoSourceSheet`
+bersama · `Snackbar` (`snackbar.tsx`, `SnackbarProvider` di root layout). API =
+**hook `useSnackbar()`**, BUKAN ekspor `showSnackbar` — ekspor itu tidak pernah ada,
+dokumen ini salah tulis sampai Unit 1b. Pakai: `const showSnackbar = useSnackbar();`
+lalu `showSnackbar('teks')`. Auto-dismiss 3500ms, tanpa tombol aksi. Contoh:
+`create.tsx:33`.
 
 ### Layar selesai dipoles penuh
 Beranda owner · beranda worker · daftar jadwal owner · daftar pohon owner · daftar tugas
-worker · detail pohon · P-13 form tambah/edit pohon · P-9b header sticky (lintas layar).
+worker · detail pohon · P-13 form tambah/edit pohon · P-9b header sticky (lintas layar) ·
+F1–F4 form catat perawatan/kondisi/panen/fase (Unit 1b).
 
 ### Kena migrasi header saja, belum direview isinya
 `worker/trees/index.tsx` · `owner/farm.tsx` · `worker/farm.tsx`
 
-### ⚠ BLOCKER AKTIF — P-9b belum tutup, nol commit
-
-`git log` tidak punya satu pun commit P-13/P-9b. 16 file `M` + 2 `??`, staging kosong,
-`ui.tsx` termodifikasi 165 baris. **Empat unit menumpuk di satu working tree.**
-
-Syarat tutup sebelum unit baru mana pun diimplementasikan:
-
-- [ ] Tes device P-9b Commit 3: detail pohon (owner + worker + cabang error), tambah
-      pohon, edit pohon
-- [ ] Regresi cepat: satu layar Pola B yang belum dimigrasi (Detail SOP / Login) —
-      header harus **masih ikut scroll**, membuktikan tidak bocor
-- [ ] Pisah jadi commit terpisah: P-13, P-9b c1, c2, c3, migrasi Modal→BottomSheet.
-      `ui.tsx` kena hampir semuanya → wajib `git add -p`
-- [ ] `snackbar.tsx` (untracked) ikut commit unit yang memperkenalkannya
-- [ ] Aturan §3 no.1 dan no.2 dicatat di `keputusan_desain.md`
-
-Kenapa keras: `ui.tsx` sudah 165 baris diff campur 5 niat. Tiap unit tambahan menaikkan
-peluang salah pisah, dan kalau salah pisah, rollback safety yang jadi alasan
-"satu unit satu commit" hilang — plus jejak velocity per iterasi untuk retrospektif PXP
-jadi tidak akurat.
-
-### Isi working tree per 30 Juli 2026 (dari `git status`)
-
-Dugaan pemetaan ke unit — **wajib dikonfirmasi dari diff sebelum commit**, jangan dipakai
-mentah:
-
-| File | +/− | Dugaan unit |
-|---|---|---|
-| `app/_layout.tsx` | 41 | Snackbar (SnackbarProvider di root) |
-| `src/components/snackbar.tsx` | `??` baru | Snackbar |
-| `src/components/tree-components.tsx` | 213 | P-13 (`TreeForm`, `validateTreeForm`) |
-| `app/(owner)/owner/trees/create.tsx` | 44 | P-13 + P-9b c3 |
-| `app/(owner)/owner/trees/[treeId]/edit.tsx` | 44 | P-13 + P-9b c3 |
-| `src/components/tree-detail-screen.tsx` | 182 | P-9b c3 |
-| `app/(owner)/owner/index.tsx` | 26 | P-9b c2 |
-| `app/(owner)/owner/schedules/index.tsx` | 17 | P-9b c2 |
-| `app/(owner)/owner/trees/index.tsx` | 18 | P-9b c2 |
-| `app/(owner)/owner/farm.tsx` | 6 | P-9b c2 |
-| `app/(worker)/worker/index.tsx` | 28 | P-9b c2 |
-| `app/(worker)/worker/tasks/index.tsx` | 16 | P-9b c2 |
-| `app/(worker)/worker/trees/index.tsx` | 17 | P-9b c2 |
-| `app/(worker)/worker/farm.tsx` | 5 | P-9b c2 |
-| `src/components/ui.tsx` | 165 | **CAMPUR** — c1 (prop `header`) + P-13 (`Field.error`) + PhotoPickerCard + kemungkinan snackbar |
-| `src/components/bottom-sheet.tsx` | 46 | `PhotoSourceSheet` shared — unit belum jelas |
-| `src/components/icons.tsx` | 2 | ikut unit yang butuh ikonnya |
-| `docs/updated/handoff_iterasi_polish.md` | `??` | digantikan file ini — hapus, jangan di-commit |
-
-Urutan commit yang disarankan (dari paling bawah dependensinya):
-**c1 (prop `header` di `Screen`) → snackbar → P-13 → c2 → c3 → PhotoSourceSheet.**
-
-### Prompt rencana pisah commit (READ-ONLY, jalankan sebelum `git add -p`)
-
-```
-Tugas: RENCANA PISAH COMMIT, READ-ONLY. Jangan ubah file, jangan stage, jangan
-commit, jangan stash. Hanya baca diff dan lapor.
-
-Baca `git diff` untuk file-file ini dan petakan SETIAP HUNK ke satu unit:
-  c1        = prop `header?: ReactNode` di Screen (aditif, sibling di luar ScrollView)
-  snackbar  = Snackbar + SnackbarProvider
-  P-13      = form tambah/edit pohon (TreeForm, validateTreeForm, Field.error inline)
-  c2        = 8 layar Pola A → slot header, MainTabHeader jadi satu baris
-  c3        = detail pohon + create/edit pohon → slot header, tombol Batal dibuang
-  sheet     = PhotoSourceSheet shared
-  ?         = tidak bisa ditentukan
-
-Fokus utama: `src/components/ui.tsx` (165 baris) dan `src/components/bottom-sheet.tsx`
-(46 baris). Untuk kedua file ini, daftarkan TIAP hunk: rentang baris, ringkasan satu
-baris isi perubahannya, unit tujuannya, dan tingkat keyakinan (pasti / ragu).
-
-Untuk 14 file lain, cukup satu baris per file: unit tujuannya + bukti dari diff.
-
-Lapor juga: hunk mana yang TIDAK BISA dipisah karena bercampur dalam satu blok
-kode (butuh `git add -e`, bukan `-p`).
-
-BERHENTI setelah laporan. Jangan stage apa pun. Jangan usulkan perintah git untuk
-dijalankan otomatis — Harish yang commit.
-```
-
-### Checklist tes device P-9b sebelum commit
-
-Header harus **tetap terpaku** saat konten digulung:
-- [ ] Detail pohon — owner
-- [ ] Detail pohon — worker
-- [ ] Detail pohon — cabang error (pohon tidak ditemukan / gagal muat)
-- [ ] Tambah pohon (validasi: submit kosong → semua field wajib ditandai **sekaligus**)
-- [ ] Edit pohon (submit sukses → **snackbar**, bukan Alert; keluar lewat chevron, nol Batal)
-
-Regresi kebocoran — header harus **masih ikut menggulung**:
-- [ ] Satu layar Pola B yang belum dimigrasi (Detail SOP atau Login)
-
-Kalau salah satu gagal, perbaiki **sebelum** memisah commit — jangan commit lalu tambal.
+### Status working tree
+P-9b, P-13, Unit 1a, dan Unit 1b sudah di-commit. Aturan tetap:
+satu unit = satu commit = satu titik verifikasi, dan Harish yang commit.
 
 ---
 
@@ -329,7 +253,7 @@ Kalau salah satu gagal, perbaiki **sebelum** memisah commit — jangan commit la
 |---|---|
 | **`owner/workers` header GANDA** (native "Manajemen Pekerja" + `TopAppBar` "Pekerja"). Bug. | Unit kebun & pekerja |
 | **`feedback.ts`** — `showSuccessToast` sebenarnya `Alert.alert`. Migrasi ke snackbar. Pemakai: `owner/workers.tsx:23`, `profile-screen.tsx:9`. | Unit kebun & pekerja |
-| **Rute `harvest` & `care` (owner+worker) berisiko header dobel** — tidak terdaftar di Stack layout, tidak menyetel `headerShown:false`, `screenOptions` default tidak mematikan header. Perlu konfirmasi device. | Unit 1b |
+| **Rute `harvest` & `care` (owner+worker) berisiko header dobel** — tidak terdaftar di Stack layout, tidak menyetel `headerShown:false`, `screenOptions` default tidak mematikan header. Perlu konfirmasi device. | SELESAI Unit 1b — terkonfirmasi bug, keduanya kini terdaftar di kedua Stack layout |
 | **Migrasi `Field` ke `tokens`** — masih literal (`borderRadius:14`, `minHeight:54`, `fontSize:16`). Blast radius = semua form. Radius 14 kebetulan sama dengan token → nol beda visual. | Unit terpisah, menjelang akhir |
 | **Reports header** belum migrasi — `operational-report-screen.tsx` mengoper header lewat prop sendiri, dirender sebagai anak scroll, satu-satunya pemakai `stickyFooter`. | Unit laporan |
 | **Pola C → `headerShown:false` + `TopAppBar`** untuk 4 layar owner. | Unit masing-masing |
@@ -338,6 +262,11 @@ Kalau salah satu gagal, perbaiki **sebelum** memisah commit — jangan commit la
 | **Redesign dashboard owner** — sekarang terasa daftar notifikasi (tumpukan kartu "ada X perlu ditindak"), bukan ringkasan visual. Tab bernama "Beranda" tapi konsepnya "Dashboard". Bagian atas ikut loading saat refresh. | Unit beranda owner |
 | **Prop `subtitle` di `TopAppBar`** masih ada. Setelah semua Pola B direview, evaluasi cabut total. | Commit pembersih |
 | **`stickyFooter`** nol pemakai. Kalau sampai akhir tetap nol, cabut. | Commit pembersih |
+| **`Field` mewajibkan `label`** — pemakaian tanpa label butuh `label=""`, menyisakan Text kosong + gap ~8px hantu. Pemakai: F1 produk & note, F2/F3/F4 note. Jadikan `label?: string`. | Unit `Field`-token |
+| **Jomplang label `Field` 14/700 vs `OptionGroup` 14/500.** Verdict device Unit 1b: BELUM DIISI. | Unit `Field`-token |
+| **Jalur retry foto F2 sukses masih diam** — dua `router.replace` tanpa snackbar, sisa pelanggaran aturan #5. Jangan tambal tanpa bisa mereproduksi upload gagal di device. | Unit apa pun yang menyentuh F2 lagi |
+| **Pola validasi Unit 1b = cek field langsung**, sah karena tiap file hanya punya satu field wajib. F5 punya banyak field wajib → prompt 1c WAJIB minta bangun-objek-lalu-cek, jangan nyontek 1b. | Unit 1c |
+| **Judul Stack `care`/`harvest` Title Case** (invisible, `headerShown:false`). | Commit pembersih |
 
 ---
 
@@ -375,6 +304,8 @@ Ketergantungan antar-file: **hanya F5 → F6**, type-only
 - **`subtitle` nol pemakai** — semua `TopAppBar` hanya `title` + `onBack`.
 - **Isolasi sempurna:** importir F1–F6 **hanya** 12 wrapper rute. Nol konsumen eksternal
   untuk ekspor apa pun. Mengubah F1–F6 saja tidak bisa merusak layar lain.
+  **Tidak lagi berlaku untuk Unit 1b** — perbaikan header dobel menyentuh
+  `app/(owner)/_layout.tsx` dan `app/(worker)/_layout.tsx`.
 - **Aturan foto dipatuhi.** `PhotoPickerCard` hanya di F2 (kondisi pohon). Nol foto di
   F1/F3/F4. F1:22-23 bahkan punya komentar eksplisit. F6 tampilkan foto hanya untuk
   tipe `condition` (F6:217-219).
@@ -412,7 +343,8 @@ Diduplikasi lokal di banyak file, tidak bisa di-dedupe tanpa menyentuh `ui.tsx`:
   → butuh prop aditif `Field.multiline?: boolean` (+ opsional `numberOfLines`/`minHeight`).
 - **Chip pilihan** (`CategoryOption` / `SelectableOption` / `OptionChip`) — lokal di
   F1, F2, F4, F5. Tidak ada primitifnya. → butuh **komponen shared baru** di `ui.tsx`.
-- **`Field`/`InputField` lokal** — F3, F5.
+- **`Field`/`InputField` lokal** — F3, F5. F3 **tidak punya** chip pilihan, hanya
+  `Field` lokal.
 - Literal sisa: `fontSize` (13/14/15/16), `fontWeight` `'600'/'700'`, `minHeight` 54/96,
   `lineHeight` 21. Semua enam masih impor `colors/radius/spacing/typography` lama,
   **nol yang impor `tokens`** (F1–F6 baris 5).
@@ -458,7 +390,7 @@ Prinsip: layar yang berbagi komponen digabung. Tiap unit otomatis memuat baris c
 
 | # | Unit | File | Catatan |
 |---|---|---|---|
-| **1** | Record pohon | F1–F6 (§9) | Pecah 1a/1b/1c |
+| **1** | Record pohon | F1–F6 (§9) | 1a + 1b SELESAI; sisa 1c (F5 edit + F6 detail) |
 | **1.5** | **Revisi daftar pohon** (BARU) | `owner/trees/index.tsx`, kartu pohon di `tree-components.tsx` | Filter, kartu, FAB inset — lihat §12 |
 | 2 | Tugas | `owner/tasks/index` (Pola C), `owner/tasks/[taskId]`, `worker/tasks/[taskId]` | Daftar worker sudah dipoles |
 | 3 | Jadwal | `owner/schedules/[scheduleId]`, `.../edit`, `owner/schedules/create` | Daftar sudah dipoles |
@@ -493,8 +425,8 @@ Aturan pelaporan:
   dan src/); Screen props children/header/footer/stickyFooter/floatingAction/
   floatingActionBottom/contentStyle/variant; safe-area atas oleh TopAppBar bukan
   Screen; hairline hanya di wrapper header milik Screen; bottom nav di layout di
-  luar Screen; Field shared single-line (tanpa multiline); tidak ada primitif
-  selectable-option di ui.tsx.
+  luar Screen; Field shared punya multiline + error inline sejak Unit 1a; primitif
+  pilihan OptionChip/OptionGroup ADA di ui.tsx sejak Unit 1a.
 
 FILE DALAM LINGKUP: [FILE]
 
@@ -603,3 +535,24 @@ satu ikon pohon dari `icons.tsx`, tanpa hiasan.
 tetap pill, tapi **ditumpuk dua baris** — jangan sejajar.
 
 **Wajib mockup visualizer dulu** sebelum implementasi K-2 dan K-3.
+
+### 31 Juli 2026 — Unit 1b TUTUP
+F1–F4 selesai; L1/L2 ikut tersentuh (header dobel `care`/`harvest`
+terkonfirmasi bug dan dibereskan). Tes device 8 alur lolos. −276 baris
+(263→178, 394→337, 239→170, 257→192). typecheck bersih; proyek tidak punya
+setup lint (nol eslint config/dependency, nol skrip `lint`).
+
+Keputusan yang jangan dibuka ulang:
+- **F2/F4 list → chip.** Alasan: F1 sudah chip untuk pekerjaan identik —
+  memilih satu dari daftar tertutup pendek. Dua cara memilih untuk satu jenis
+  keputusan = aturan #8 di level affordance input, bukan cuma aksi.
+  Fallback kalau device bermasalah: balikkan **F2 saja** ke list, F1/F4 tetap chip.
+- **Asterisk " *" dipertahankan.** Asterisk bicara sebelum submit, error inline
+  bicara sesudah — pekerjaan berbeda. Tanpa asterisk, satu-satunya cara tahu
+  field wajib adalah gagal dulu. TreeForm P-13 juga memakainya (`:307,316,325,334`).
+- **`eventDate` sengaja TIDAK divalidasi.** Prefilled; cabang kosong tidak
+  tercapai. Menambah validasi mati dilarang.
+- **`ErrorBanner` tidak dibuang**, hanya berhenti dipakai untuk validasi field.
+  Jatahnya error sistem: guard pohon tidak ditemukan, gagal simpan, retry foto F2.
+- Casing dirapikan: `Kondisi baru`, `Fase baru`, `Foto kondisi`. Tombol simpan
+  diseragamkan jadi `Simpan` di keempat layar.
