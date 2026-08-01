@@ -2,11 +2,13 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { BottomSheet } from '../../../../src/components/bottom-sheet';
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import { Icon } from '../../../../src/components/icons';
 import {
   Badge,
+  Button,
   Card,
   ChipButton,
   CompactMetaItem,
@@ -16,36 +18,59 @@ import {
   LoadingState,
   MainTabHeader,
   Screen,
+  SearchFilterRow,
 } from '../../../../src/components/ui';
-import { tokens } from '../../../../src/constants/theme';
+import { statusColors, tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getWorkerTasks } from '../../../../src/services/careTaskService';
-import type { CareTask, TaskStatus } from '../../../../src/types/domain';
+import type { CareTask, TargetType, TaskStatus } from '../../../../src/types/domain';
+import { formatTargetType } from '../../../../src/utils/displayFormat';
+import { taskTimeBucket, type TimeBucket } from '../../../../src/utils/taskDueDate';
 
-type TaskRangeFilter = 'today' | 'pending' | 'postponed' | 'completed' | 'all';
+type TimeFilter = 'all' | 'today' | 'overdue' | 'upcoming';
+type TaskTargetFilter = 'all' | TargetType;
+
+// Dua sumbu di sheet: Status (multi) + Target (satu). Tidak ada Sumber/Pekerja —
+// CareTask tak membawa careSopId, dan semua tugas milik pengguna ini sendiri.
+type SheetCriteria = {
+  statuses: TaskStatus[]; // array kosong = semua status
+  target: TaskTargetFilter;
+};
+
+const DEFAULT_CRITERIA: SheetCriteria = {
+  statuses: [],
+  target: 'all',
+};
+
+const timeFilters: Array<{ label: string; value: TimeFilter }> = [
+  { label: 'Semua', value: 'all' },
+  { label: 'Hari ini', value: 'today' },
+  { label: 'Terlambat', value: 'overdue' },
+  { label: 'Mendatang', value: 'upcoming' },
+];
+
+const statusOptions: Array<{ label: string; value: TaskStatus }> = [
+  { label: 'Belum', value: 'pending' },
+  { label: 'Tertunda', value: 'postponed' },
+  { label: 'Selesai', value: 'completed' },
+];
+
+// Urutan tampil target yang benar-benar muncul di data (bukan seluruh enum).
+const TARGET_ORDER: TargetType[] = ['farm', 'row', 'column', 'tree', 'custom'];
 
 export default function WorkerTaskListScreen() {
   const { currentFarm } = useAuth();
+  const [criteria, setCriteria] = React.useState<SheetCriteria>(DEFAULT_CRITERIA);
+  const [debouncedSearch, setDebouncedSearch] = React.useState('');
+  const [draft, setDraft] = React.useState<SheetCriteria>(DEFAULT_CRITERIA);
   const [error, setError] = React.useState<string | null>(null);
+  const [filterSheetOpen, setFilterSheetOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
-  const [rangeFilter, setRangeFilter] = React.useState<TaskRangeFilter>('today');
+  const [search, setSearch] = React.useState('');
   const [tasks, setTasks] = React.useState<CareTask[]>([]);
+  const [timeFilter, setTimeFilter] = React.useState<TimeFilter>('all');
 
   const farmId = currentFarm?.farmId;
-
-  const filteredTasks = React.useMemo(() => {
-    const today = getTodayIsoDate();
-
-    if (rangeFilter === 'today') {
-      return tasks.filter((task) => task.dueDate === today && task.status !== 'completed');
-    }
-
-    if (rangeFilter === 'pending' || rangeFilter === 'postponed' || rangeFilter === 'completed') {
-      return tasks.filter((task) => task.status === rangeFilter);
-    }
-
-    return tasks;
-  }, [rangeFilter, tasks]);
 
   const loadTasks = React.useCallback(async () => {
     if (!farmId) {
@@ -67,6 +92,12 @@ export default function WorkerTaskListScreen() {
     setTasks(result.data);
   }, [farmId]);
 
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
   useFocusEffect(
     React.useCallback(() => {
       setLoading(true);
@@ -76,6 +107,72 @@ export default function WorkerTaskListScreen() {
 
   if (loading) {
     return <LoadingState message="Memuat tugas..." />;
+  }
+
+  const todayIso = getTodayIsoDate();
+
+  // Ember waktu dihitung SEKALI per tugas, dipakai ulang untuk chip, badge kartu,
+  // dan urutan. scheduleIsCancelled = false: getWorkerTasks sudah menyaring keluar
+  // tugas dari jadwal yang dibatalkan sebelum data sampai ke sini.
+  const buckets: Record<string, TimeBucket> = {};
+  for (const task of tasks) {
+    buckets[task.id] = taskTimeBucket(task, todayIso, false);
+  }
+
+  function matchesTask(task: CareTask, sheet: SheetCriteria): boolean {
+    if (timeFilter !== 'all' && buckets[task.id] !== timeFilter) {
+      return false;
+    }
+
+    if (sheet.statuses.length > 0 && !sheet.statuses.includes(task.status)) {
+      return false;
+    }
+
+    if (sheet.target !== 'all' && task.targetType !== sheet.target) {
+      return false;
+    }
+
+    if (debouncedSearch) {
+      const searchable = [task.title, task.instruction, formatCareTarget(task)]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      if (!searchable.includes(debouncedSearch)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // Satu comparator, dueDate menaik untuk semua chip (untuk 'overdue': paling lama telat di atas).
+  const displayedTasks = tasks
+    .filter((task) => matchesTask(task, criteria))
+    .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
+
+  const activeGroupCount =
+    (criteria.statuses.length > 0 ? 1 : 0) + (criteria.target !== 'all' ? 1 : 0);
+
+  const presentTargets = new Set(tasks.map((task) => task.targetType));
+  const targetOptions: Array<{ label: string; value: TaskTargetFilter }> = [
+    { label: 'Semua', value: 'all' },
+    ...TARGET_ORDER.filter((target) => presentTargets.has(target)).map((target) => ({
+      label: formatTargetType(target),
+      value: target,
+    })),
+  ];
+
+  const hasNoData = tasks.length === 0;
+
+  function openFilterSheet() {
+    setDraft(criteria);
+    setFilterSheetOpen(true);
+  }
+
+  function applyDraft() {
+    setCriteria(draft);
+    setFilterSheetOpen(false);
   }
 
   return (
@@ -90,109 +187,247 @@ export default function WorkerTaskListScreen() {
     >
       <ErrorBanner message={error} />
 
-      {error ? null : (
+      {error ? null : hasNoData ? (
+        <EmptyState
+          icon="list-check"
+          subtitle="Tugas dari pemilik akan muncul di sini."
+          title="Belum ada tugas"
+          variant="plain"
+        />
+      ) : (
         <>
-          <RangeFilter selectedRange={rangeFilter} onSelect={setRangeFilter} tasks={tasks} />
+          <SearchFilterRow
+            filterActive={activeGroupCount > 0}
+            filterCount={activeGroupCount}
+            onChangeText={setSearch}
+            onFilterPress={openFilterSheet}
+            placeholder="Cari judul atau target"
+            value={search}
+          />
+
+          <FilterChipsRow>
+            {timeFilters.map((filter) => (
+              <ChipButton
+                key={filter.value}
+                active={timeFilter === filter.value}
+                label={filter.label}
+                onPress={() => setTimeFilter(filter.value)}
+              />
+            ))}
+          </FilterChipsRow>
 
           <Text selectable style={styles.metaLine}>
-            {`${filteredTasks.length} tugas`}
+            {`Menampilkan ${displayedTasks.length} tugas`}
           </Text>
 
-          {filteredTasks.length === 0 ? (
-            <EmptyState
-              title={tasks.length === 0 ? 'Belum ada tugas.' : rangeFilter === 'today' ? 'Belum ada tugas hari ini.' : 'Tidak ada tugas pada filter ini.'}
-            />
+          {displayedTasks.length === 0 ? (
+            debouncedSearch.length > 0 ? (
+              <EmptyState
+                icon="search"
+                subtitle={`Tidak ada tugas yang cocok dengan "${search.trim()}".`}
+                title="Tidak ada hasil"
+                variant="plain"
+              />
+            ) : (
+              <EmptyState
+                icon="filter"
+                subtitle="Tidak ada tugas dengan filter yang aktif."
+                title="Tidak ada yang cocok"
+                variant="plain"
+              />
+            )
           ) : (
             <View style={styles.list}>
-              {filteredTasks.map((task) => (
+              {displayedTasks.map((task) => (
                 <WorkerTaskCard
                   key={task.id}
-                  task={task}
+                  bucket={buckets[task.id]}
                   onPress={() => router.push(`/worker/tasks/${task.id}`)}
+                  task={task}
                 />
               ))}
             </View>
           )}
         </>
       )}
+
+      <TaskFilterSheet
+        draft={draft}
+        onApply={applyDraft}
+        onClose={() => setFilterSheetOpen(false)}
+        onDraftChange={setDraft}
+        targetOptions={targetOptions}
+        visible={filterSheetOpen}
+      />
     </Screen>
   );
 }
 
-function RangeFilter({
-  onSelect,
-  selectedRange,
-  tasks,
+function WorkerTaskCard({
+  bucket,
+  onPress,
+  task,
 }: {
-  onSelect: (range: TaskRangeFilter) => void;
-  selectedRange: TaskRangeFilter;
-  tasks: CareTask[];
+  // Ember waktu dihitung di layar sekali per tugas, dipakai untuk badge di sini.
+  bucket: TimeBucket;
+  onPress: () => void;
+  task: CareTask;
 }) {
-  return (
-    <FilterChipsRow>
-      {taskRangeFilters.map((filter) => (
-        <ChipButton
-          key={filter.value}
-          active={selectedRange === filter.value}
-          count={countTasksForRange(tasks, filter.value)}
-          label={filter.label}
-          onPress={() => onSelect(filter.value)}
-        />
-      ))}
-    </FilterChipsRow>
-  );
-}
+  const hasTitle = Boolean(task.title);
+  const categoryLabel = task.category ? formatCareCategory(task.category) : null;
+  const headingText = hasTitle ? task.title : categoryLabel ?? task.title;
+  const showCategoryRow = hasTitle && categoryLabel !== null;
 
-function WorkerTaskCard({ onPress, task }: { onPress: () => void; task: CareTask }) {
-  const heading = task.category ? formatCareCategory(task.category) : task.title;
-  const showTitleRow = Boolean(task.title) && task.category !== null;
+  const badge =
+    bucket === 'overdue' ? (
+      <Badge label="Terlambat" maxWidth={100} tone="danger" />
+    ) : (
+      <Badge label={formatTaskStatusLabel(task.status)} maxWidth={100} tone={getTaskTone(task.status)} />
+    );
+
+  const metaRow = (
+    <View style={styles.cardMeta}>
+      <CompactMetaItem icon="calendar" label={formatDate(task.dueDate)} />
+      <CompactMetaItem icon="target" label={formatCareTarget(task)} />
+    </View>
+  );
 
   return (
     <Pressable onPress={onPress}>
       <Card style={styles.card} variant="default">
         <View style={styles.cardRow1}>
-          <Text selectable numberOfLines={1} style={styles.cardHeading}>
-            {heading}
+          <Text selectable numberOfLines={1} style={[styles.cardTitle, styles.cardTitleFlex]}>
+            {headingText}
           </Text>
-          <Badge label={formatTaskStatusLabel(task.status)} maxWidth={100} tone={getTaskTone(task.status)} />
+          {badge}
         </View>
 
-        {showTitleRow ? (
-          <Text selectable numberOfLines={1} style={styles.cardTitle}>
-            {task.title}
-          </Text>
-        ) : null}
+        {/* Kategori/instruksi/meta satu gugus: jarak judul→gugus (card gap) lebih besar dari dalam gugus (xs). */}
+        <View style={styles.detailGroup}>
+          {showCategoryRow ? (
+            <Text selectable numberOfLines={1} style={styles.cardCategory}>
+              {categoryLabel}
+            </Text>
+          ) : null}
+          {task.instruction ? (
+            <Text selectable ellipsizeMode="tail" numberOfLines={2} style={styles.cardInstruction}>
+              {task.instruction}
+            </Text>
+          ) : null}
+          {metaRow}
+        </View>
 
-        {task.instruction ? (
-          <Text selectable ellipsizeMode="tail" numberOfLines={1} style={styles.cardInstruction}>
-            {task.instruction}
-          </Text>
-        ) : null}
-
-        <View style={styles.cardMeta}>
-          <CompactMetaItem icon="calendar" label={formatDate(task.dueDate)} />
-          <CompactMetaItem icon="target" label={formatCareTarget(task)} />
-          {task.requiresPhoto ? (
-            <View style={styles.cardPhoto}>
-              <Icon name="camera" size={tokens.icon.xs} color={tokens.color.text.secondary} />
-              <Text selectable style={styles.cardAttribute}>
-                Butuh foto
+        {task.requiresPhoto ? (
+          <View style={styles.cardAttributes}>
+            <View style={styles.proofPill}>
+              <Icon name="camera" size={tokens.icon.xs} color={statusColors.warning.text} />
+              <Text selectable={false} style={styles.proofPillText}>
+                Butuh bukti
               </Text>
             </View>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
       </Card>
     </Pressable>
   );
 }
 
-const taskRangeFilters: Array<{ label: string; value: TaskRangeFilter }> = [
-  { label: 'Hari Ini', value: 'today' },
-  { label: 'Belum', value: 'pending' },
-  { label: 'Tertunda', value: 'postponed' },
-  { label: 'Selesai', value: 'completed' },
-  { label: 'Semua', value: 'all' },
-];
+function TaskFilterSheet({
+  draft,
+  onApply,
+  onClose,
+  onDraftChange,
+  targetOptions,
+  visible,
+}: {
+  draft: SheetCriteria;
+  onApply: () => void;
+  onClose: () => void;
+  onDraftChange: (next: SheetCriteria) => void;
+  targetOptions: Array<{ label: string; value: TaskTargetFilter }>;
+  visible: boolean;
+}) {
+  const isDefault = draft.statuses.length === 0 && draft.target === 'all';
+
+  function toggleStatus(value: TaskStatus) {
+    const nextStatuses = draft.statuses.includes(value)
+      ? draft.statuses.filter((status) => status !== value)
+      : [...draft.statuses, value];
+    onDraftChange({ ...draft, statuses: nextStatuses });
+  }
+
+  return (
+    <BottomSheet onClose={onClose} title="Filter tugas" visible={visible}>
+      <View style={styles.filterSheetBody}>
+        <View style={styles.sheetResetRow}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={isDefault}
+            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
+            onPress={() => onDraftChange(DEFAULT_CRITERIA)}
+          >
+            <Text selectable={false} style={[styles.resetText, isDefault ? styles.resetTextDisabled : null]}>
+              Atur ulang
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.filterGroup}>
+          <Text selectable style={styles.filterLabel}>
+            Status
+          </Text>
+          <FilterChipsRow>
+            {statusOptions.map((option) => (
+              <StatusChip
+                key={option.value}
+                active={draft.statuses.includes(option.value)}
+                label={option.label}
+                onPress={() => toggleStatus(option.value)}
+              />
+            ))}
+          </FilterChipsRow>
+        </View>
+
+        <View style={styles.filterGroup}>
+          <Text selectable style={styles.filterLabel}>
+            Target
+          </Text>
+          <FilterChipsRow>
+            {targetOptions.map((option) => (
+              <ChipButton
+                key={option.value}
+                active={draft.target === option.value}
+                label={option.label}
+                onPress={() => onDraftChange({ ...draft, target: option.value })}
+              />
+            ))}
+          </FilterChipsRow>
+        </View>
+
+        <Button title="Terapkan" variant="primary" onPress={onApply} />
+      </View>
+    </BottomSheet>
+  );
+}
+
+function StatusChip({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={[styles.statusChip, active ? styles.statusChipActive : null]}>
+      {active ? <Icon name="check" size={tokens.icon.xs} color={tokens.color.brand.on} /> : null}
+      <Text selectable={false} style={[styles.statusChipText, active ? styles.statusChipTextActive : null]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 function formatTaskStatusLabel(status: TaskStatus): string {
   if (status === 'completed') {
@@ -216,27 +451,6 @@ function getTaskTone(status: TaskStatus): 'muted' | 'success' | 'warning' {
   }
 
   return 'muted';
-}
-
-function countTasksForRange(tasks: CareTask[], range: TaskRangeFilter): number {
-  if (range === 'today') {
-    return countTodayOpenTasks(tasks);
-  }
-
-  if (range === 'pending' || range === 'postponed' || range === 'completed') {
-    return countTasksByStatus(tasks, range);
-  }
-
-  return tasks.length;
-}
-
-function countTasksByStatus(tasks: CareTask[], status: TaskStatus): number {
-  return tasks.filter((task) => task.status === status).length;
-}
-
-function countTodayOpenTasks(tasks: CareTask[]): number {
-  const today = getTodayIsoDate();
-  return tasks.filter((task) => task.dueDate === today && task.status !== 'completed').length;
 }
 
 function formatDate(value: string): string {
@@ -265,23 +479,64 @@ const styles = StyleSheet.create({
   metaLine: { ...tokens.type.meta, color: tokens.color.text.tertiary },
   list: { gap: tokens.space.md },
 
-  card: { gap: 0 },
+  card: { gap: tokens.space.sm },
   cardRow1: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: tokens.space.sm,
     justifyContent: 'space-between',
   },
-  cardHeading: { ...tokens.type.subheading, color: tokens.color.text.primary, flex: 1 },
-  cardTitle: { ...tokens.type.meta, color: tokens.color.text.tertiary, marginTop: tokens.space.xs },
-  cardInstruction: { ...tokens.type.meta, color: tokens.color.text.tertiary, marginTop: tokens.space.xs },
+  cardTitle: { ...tokens.type.subheading, color: tokens.color.text.primary },
+  cardTitleFlex: { flex: 1 },
+  detailGroup: { gap: tokens.space.xs },
+  cardCategory: { ...tokens.type.meta, color: tokens.color.text.tertiary },
+  cardInstruction: { ...tokens.type.meta, color: tokens.color.text.tertiary },
   cardMeta: {
     alignItems: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: tokens.space.md,
-    marginTop: tokens.space.sm,
   },
-  cardPhoto: { alignItems: 'center', flexDirection: 'row', gap: tokens.space.xs },
-  cardAttribute: { ...tokens.type.meta, color: tokens.color.text.secondary },
+
+  cardAttributes: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: tokens.space.sm,
+  },
+  proofPill: {
+    alignItems: 'center',
+    backgroundColor: statusColors.warning.background,
+    borderRadius: tokens.radius.pill,
+    flexDirection: 'row',
+    gap: tokens.space.xs,
+    paddingHorizontal: tokens.space.sm,
+    paddingVertical: 2,
+  },
+  proofPillText: { ...tokens.type.caption, color: statusColors.warning.text },
+
+  filterSheetBody: { gap: tokens.space.md },
+  filterGroup: { gap: tokens.space.sm },
+  filterLabel: { ...tokens.type.label, color: tokens.color.text.primary },
+  sheetResetRow: { alignItems: 'flex-end' },
+  resetText: { ...tokens.type.label, color: tokens.color.brand.base },
+  resetTextDisabled: { color: tokens.color.text.tertiary },
+
+  statusChip: {
+    alignItems: 'center',
+    backgroundColor: tokens.color.surface.card,
+    borderColor: tokens.color.line.card,
+    borderRadius: tokens.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: tokens.space.xs,
+    paddingHorizontal: tokens.space.md,
+    paddingVertical: tokens.space.sm,
+  },
+  statusChipActive: {
+    backgroundColor: tokens.color.brand.base,
+    borderColor: tokens.color.brand.base,
+  },
+  statusChipText: { ...tokens.type.label, color: tokens.color.text.primary },
+  statusChipTextActive: { color: tokens.color.brand.on },
 });
