@@ -26,6 +26,10 @@ export type IconName =
   | 'user'
   | 'camera'
   | 'filter'
+  | 'search'
+  | 'adjustments-horizontal'
+  | 'plus'
+  | 'calendar-plus'
   | 'flower'
   | 'flower-off'
   | 'alert-triangle'
@@ -97,6 +101,33 @@ const ICON_PATHS: Record<IconName, string[]> = {
   ],
   filter: [
     'M4 4h16v2.172a2 2 0 0 1 -.586 1.414l-4.414 4.414v7l-6 2v-8.5l-4.48 -4.928a2 2 0 0 1 -.52 -1.345v-2.227',
+  ],
+  search: [
+    'M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0',
+    'M21 21l-6 -6',
+  ],
+  'adjustments-horizontal': [
+    'M12 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0',
+    'M4 6l8 0',
+    'M16 6l4 0',
+    'M6 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0',
+    'M4 12l2 0',
+    'M10 12l10 0',
+    'M15 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0',
+    'M4 18l11 0',
+    'M19 18l1 0',
+  ],
+  plus: [
+    'M12 5l0 14',
+    'M5 12l14 0',
+  ],
+  'calendar-plus': [
+    'M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v4',
+    'M16 3v4',
+    'M8 3v4',
+    'M4 11h16',
+    'M16 19h6',
+    'M19 16v6',
   ],
   flower: [
     'M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0',

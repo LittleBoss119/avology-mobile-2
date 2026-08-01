@@ -1,4 +1,19 @@
-import type { CareSchedule, CareScheduleDetail, TaskStatus } from '../types/domain';
+import type { CareSchedule, CareScheduleDetail, CareTask, TaskStatus } from '../types/domain';
+
+// Dua sistem klasifikasi waktu hidup berdampingan di file ini. Keduanya
+// display-layer & pure: STRING-COMPARE 'YYYY-MM-DD' terhadap tanggal LOKAL
+// hari ini (todayIso), bukan daysSinceLocal (timestamptz).
+//
+// (1) taskDueMarker / scheduleDueMarker → TaskDueMarker ('overdue' | 'due_today').
+//     Penanda jatuh tempo RINGKAS untuk badge kartu (RF-11b). Hanya menandai
+//     tugas 'pending'; completed/postponed/masa depan → null (tak ditandai).
+//
+// (2) taskTimeBucket / scheduleTimeBucket → TimeBucket
+//     ('overdue' | 'today' | 'upcoming' | 'inactive'). Ember waktu EKSHAUSTIF
+//     untuk pengelompokan/segmentasi list: setiap item selalu jatuh ke satu
+//     ember. Beda dari (1): masa depan punya nilai eksplisit 'upcoming', dan
+//     'postponed' TIDAK 'inactive' (tetap dikelompokkan menurut tanggalnya);
+//     'inactive' = jadwal dibatalkan atau tugas 'completed'.
 
 // RF-11b: klasifikasi jatuh tempo tugas untuk penanda in-app (display-layer, pure).
 // NON-PREDIKTIF & bukan level SOP — murni dari care_tasks.due_date + status yang
@@ -65,4 +80,74 @@ export function scheduleDueMarker(
   }
 
   return hasDueToday ? 'due_today' : null;
+}
+
+// Sistem (2): ember waktu ekshaustif. Lihat komentar kepala file untuk beda
+// dengan sistem (1). scheduleIsCancelled diterima sebagai argumen terpisah
+// (bukan di dalam `task`) supaya pemanggil bebas menyuplai status pembatalan
+// jadwal induk dari sumber mana pun.
+export type TimeBucket = 'overdue' | 'today' | 'upcoming' | 'inactive';
+
+export function taskTimeBucket(
+  task: { status: TaskStatus; dueDate: string },
+  todayIso: string,
+  scheduleIsCancelled: boolean
+): TimeBucket {
+  if (scheduleIsCancelled === true) {
+    return 'inactive';
+  }
+
+  if (task.status === 'completed') {
+    return 'inactive';
+  }
+
+  // Catatan: 'postponed' sengaja lolos ke sini — tetap dikelompokkan menurut tanggalnya.
+  if (task.dueDate < todayIso) {
+    return 'overdue';
+  }
+
+  if (task.dueDate === todayIso) {
+    return 'today';
+  }
+
+  return 'upcoming';
+}
+
+// Agregasi ember waktu level-jadwal, meniru pola prioritas scheduleDueMarker
+// (overdue menang, lalu today, lalu upcoming, selain itu inactive).
+export function scheduleTimeBucket(
+  schedule: CareSchedule,
+  tasks: CareTask[],
+  todayIso: string
+): TimeBucket {
+  if (schedule.isCancelled === true) {
+    return 'inactive';
+  }
+
+  let hasToday = false;
+  let hasUpcoming = false;
+
+  for (const task of tasks) {
+    const bucket = taskTimeBucket(task, todayIso, false);
+
+    if (bucket === 'overdue') {
+      return 'overdue';
+    }
+
+    if (bucket === 'today') {
+      hasToday = true;
+    } else if (bucket === 'upcoming') {
+      hasUpcoming = true;
+    }
+  }
+
+  if (hasToday) {
+    return 'today';
+  }
+
+  if (hasUpcoming) {
+    return 'upcoming';
+  }
+
+  return 'inactive';
 }

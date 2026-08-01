@@ -28,7 +28,7 @@ import {
   type StatusTone,
 } from '../constants/theme';
 import { sanitizeDisplayValue, sanitizeUserFacingMessage } from '../utils/displayFormat';
-import { Icon } from './icons';
+import { Icon, type IconName } from './icons';
 import { PhotoSourceSheet } from './bottom-sheet';
 
 const colors = {
@@ -1150,7 +1150,46 @@ export function LoadingState({ message = 'Memuat data...' }: { message?: string 
   );
 }
 
-export function EmptyState({ title, subtitle }: { title: string; subtitle?: string }) {
+export function EmptyState({
+  icon,
+  subtitle,
+  title,
+  variant = 'card',
+}: {
+  icon?: IconName;
+  subtitle?: string;
+  title: string;
+  variant?: 'card' | 'plain';
+}) {
+  if (variant === 'plain') {
+    return (
+      <View style={{ alignItems: 'center', gap: tokens.space.sm }}>
+        {icon ? (
+          <View
+            style={{
+              alignItems: 'center',
+              backgroundColor: tokens.color.surface.subtle,
+              borderRadius: tokens.radius.pill,
+              height: 56,
+              justifyContent: 'center',
+              width: 56,
+            }}
+          >
+            <Icon name={icon} size={24} color={tokens.color.text.tertiary} />
+          </View>
+        ) : null}
+        <Text selectable style={{ ...tokens.type.subheading, color: tokens.color.text.primary, textAlign: 'center' }}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text selectable style={{ ...tokens.type.meta, color: tokens.color.text.tertiary, textAlign: 'center' }}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <Card>
       <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
@@ -1229,19 +1268,32 @@ export function SearchFilterRow({
           borderRadius: radius.lg,
           borderWidth: 1,
           flex: 1,
+          flexDirection: 'row',
+          gap: spacing.sm,
           minHeight: 56,
           paddingHorizontal: spacing.lg,
         }}
       >
+        <Icon name="search" size={20} color={colors.textSoft} />
         <TextInput
           autoCapitalize="none"
           autoCorrect={false}
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={colors.textSoft}
-          style={{ color: colors.text, flex: 1, fontSize: 16, width: '100%' }}
+          style={{ color: colors.text, flex: 1, fontSize: 16 }}
           value={value}
         />
+        {value.length > 0 ? (
+          <Pressable
+            accessibilityLabel="Hapus pencarian"
+            accessibilityRole="button"
+            hitSlop={{ bottom: 12, left: 12, right: 12, top: 12 }}
+            onPress={() => onChangeText('')}
+          >
+            <Icon name="x" size={20} color={colors.textSoft} />
+          </Pressable>
+        ) : null}
       </View>
       {onFilterPress ? (
         <Pressable
@@ -1259,7 +1311,7 @@ export function SearchFilterRow({
             width: 56,
           }}
         >
-          <Icon name="filter" size={20} color={filterActive ? colors.surface : colors.primary} />
+          <Icon name="adjustments-horizontal" size={20} color={filterActive ? colors.surface : colors.primary} />
           {(filterCount ?? 0) > 0 ? (
             <View
               style={{
