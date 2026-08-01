@@ -222,17 +222,33 @@ export default function CareScheduleListScreen() {
     .filter((schedule) => matchesSchedule(schedule, criteria))
     .sort((a, b) => (a.scheduledDate < b.scheduledDate ? -1 : a.scheduledDate > b.scheduledDate ? 1 : 0));
 
-  const draftResultCount = schedules.filter((schedule) => matchesSchedule(schedule, draft)).length;
-
   const activeGroupCount =
     (criteria.statuses.length > 0 ? 1 : 0) +
     (criteria.source !== 'all' ? 1 : 0) +
     (criteria.target !== 'all' ? 1 : 0) +
     (criteria.worker !== 'all' ? 1 : 0);
 
+  // "Pekerja" hanya menawarkan pekerja yang BENAR-BENAR ditugaskan pada jadwal
+  // kebun ini (dari details yang sudah di-fetch), bukan seluruh anggota kebun —
+  // getFarmMemberBasicProfiles memuat semua status (pending/rejected/removed) +
+  // owner, sehingga peta workerNames tak layak jadi sumber opsi filter pekerja.
+  const assignedWorkerIds = new Set<string>();
+  for (const schedule of schedules) {
+    const detail = details[schedule.id];
+    if (!detail) {
+      continue;
+    }
+    for (const task of detail.tasks) {
+      if (workerNames[task.assignedTo]) {
+        assignedWorkerIds.add(task.assignedTo);
+      }
+    }
+  }
   const workerOptions: Array<{ label: string; value: string }> = [
     { label: 'Semua', value: 'all' },
-    ...Object.entries(workerNames).map(([userId, name]) => ({ label: name, value: userId })),
+    ...Array.from(assignedWorkerIds)
+      .map((userId) => ({ label: workerNames[userId], value: userId }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
   ];
 
   const hasNoData = schedules.length === 0;
@@ -332,7 +348,6 @@ export default function CareScheduleListScreen() {
         onApply={applyDraft}
         onClose={() => setFilterSheetOpen(false)}
         onDraftChange={setDraft}
-        resultCount={draftResultCount}
         visible={filterSheetOpen}
         workerOptions={workerOptions}
       />
@@ -367,41 +382,48 @@ function CompactScheduleCard({
       <Badge label={formatScheduleStatusLabel(status)} maxWidth={116} tone={getScheduleStatusTone(status)} />
     );
 
+  const metaRow = (
+    <View style={styles.cardMeta1}>
+      <CompactMetaItem icon="calendar" label={formatDate(schedule.scheduledDate)} />
+      <CompactMetaItem icon="target" label={formatCareTarget(schedule)} />
+      {taskCount > 1 ? (
+        <Text selectable numberOfLines={1} style={styles.cardProgress}>
+          {getScheduleProgress(detail)}
+        </Text>
+      ) : null}
+    </View>
+  );
+
   return (
     <Pressable onPress={onPress}>
       <Card style={styles.card} variant="default">
-        <View style={styles.headerGroup}>
-          {hasTitle ? (
-            <>
-              <View style={styles.cardRow1}>
-                <Text selectable numberOfLines={1} style={styles.cardCategory}>
-                  {formatCareCategory(schedule.category)}
-                </Text>
-                {badge}
-              </View>
-              <Text selectable numberOfLines={1} style={styles.cardTitle}>
+        {hasTitle ? (
+          <>
+            <View style={styles.cardRow1}>
+              <Text selectable numberOfLines={1} style={[styles.cardTitle, styles.cardTitleFlex]}>
                 {schedule.title}
               </Text>
-            </>
-          ) : (
+              {badge}
+            </View>
+            {/* Kategori digugus dengan baris meta: jarak judul→kategori (card gap) lebih besar dari kategori→meta (xs). */}
+            <View style={styles.categoryMetaGroup}>
+              <Text selectable numberOfLines={1} style={styles.cardCategory}>
+                {formatCareCategory(schedule.category)}
+              </Text>
+              {metaRow}
+            </View>
+          </>
+        ) : (
+          <>
             <View style={styles.cardRow1}>
               <Text selectable numberOfLines={1} style={[styles.cardTitle, styles.cardTitleFlex]}>
                 {formatCareCategory(schedule.category)}
               </Text>
               {badge}
             </View>
-          )}
-        </View>
-
-        <View style={styles.cardMeta1}>
-          <CompactMetaItem icon="calendar" label={formatDate(schedule.scheduledDate)} />
-          <CompactMetaItem icon="target" label={formatCareTarget(schedule)} />
-          {taskCount > 1 ? (
-            <Text selectable numberOfLines={1} style={styles.cardProgress}>
-              {getScheduleProgress(detail)}
-            </Text>
-          ) : null}
-        </View>
+            {metaRow}
+          </>
+        )}
 
         {showAttributes ? (
           <View style={styles.cardAttributes}>
@@ -472,7 +494,6 @@ function ScheduleFilterSheet({
   onApply,
   onClose,
   onDraftChange,
-  resultCount,
   visible,
   workerOptions,
 }: {
@@ -480,7 +501,6 @@ function ScheduleFilterSheet({
   onApply: () => void;
   onClose: () => void;
   onDraftChange: (next: SheetCriteria) => void;
-  resultCount: number;
   visible: boolean;
   workerOptions: Array<{ label: string; value: string }>;
 }) {
@@ -577,7 +597,7 @@ function ScheduleFilterSheet({
           </FilterChipsRow>
         </View>
 
-        <Button title={`Terapkan · ${resultCount} jadwal`} variant="primary" onPress={onApply} />
+        <Button title="Terapkan" variant="primary" onPress={onApply} />
       </View>
     </BottomSheet>
   );
@@ -745,14 +765,14 @@ const styles = StyleSheet.create({
   list: { gap: tokens.space.md },
 
   card: { gap: tokens.space.sm },
-  headerGroup: { gap: tokens.space.xs },
+  categoryMetaGroup: { gap: tokens.space.xs },
   cardRow1: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: tokens.space.sm,
     justifyContent: 'space-between',
   },
-  cardCategory: { ...tokens.type.meta, color: tokens.color.text.tertiary, flex: 1 },
+  cardCategory: { ...tokens.type.meta, color: tokens.color.text.tertiary },
   cardTitle: { ...tokens.type.subheading, color: tokens.color.text.primary },
   cardTitleFlex: { flex: 1 },
   cardMeta1: {
