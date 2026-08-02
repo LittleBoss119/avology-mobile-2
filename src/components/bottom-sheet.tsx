@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { tokens } from '../constants/theme';
@@ -146,6 +146,129 @@ export function PhotoSourceSheet({
     </BottomSheet>
   );
 }
+
+// Dialog konfirmasi terpusat (overlay, satu file dengan BottomSheet). Aksi
+// konfirmasi sengaja di ATAS supaya posisi paling gampang dijangkau jempol diisi
+// aksi konfirmasi; "Kembali" (aman) di bawah.
+export function ConfirmDialog({
+  confirmLabel,
+  loading = false,
+  message,
+  onCancel,
+  onConfirm,
+  title,
+  tone = 'default',
+  visible,
+}: {
+  confirmLabel: string;
+  loading?: boolean;
+  message: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  title: string;
+  tone?: 'danger' | 'default';
+  visible: boolean;
+}) {
+  const isDanger = tone === 'danger';
+  const iconName: IconName = isDanger ? 'alert-triangle' : 'check';
+  const iconBg = isDanger ? tokens.color.status.danger.bg : tokens.color.brand.soft;
+  const iconColor = isDanger ? tokens.color.status.danger.text : tokens.color.brand.base;
+  const confirmBg = isDanger ? tokens.color.status.danger.bg : tokens.color.brand.base;
+  const confirmBorder = isDanger ? tokens.color.status.danger.border : tokens.color.brand.base;
+  const confirmText = isDanger ? tokens.color.status.danger.text : tokens.color.brand.on;
+
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={loading ? undefined : onCancel}
+      statusBarTranslucent
+      transparent
+      visible={visible}
+    >
+      <View style={confirmStyles.root}>
+        <Pressable
+          accessibilityLabel="Tutup"
+          accessibilityRole="button"
+          disabled={loading}
+          onPress={onCancel}
+          style={confirmStyles.backdrop}
+        />
+        <View style={confirmStyles.card}>
+          <View style={[confirmStyles.iconBox, { backgroundColor: iconBg }]}>
+            <Icon name={iconName} size={tokens.icon.md} color={iconColor} />
+          </View>
+          <Text selectable style={confirmStyles.title}>
+            {title}
+          </Text>
+          <Text selectable style={confirmStyles.message}>
+            {message}
+          </Text>
+          <View style={confirmStyles.actions}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={loading}
+              onPress={onConfirm}
+              style={[confirmStyles.confirmButton, { backgroundColor: confirmBg, borderColor: confirmBorder }]}
+            >
+              {loading ? (
+                <ActivityIndicator color={confirmText} />
+              ) : (
+                <Text selectable={false} style={[confirmStyles.confirmText, { color: confirmText }]}>
+                  {confirmLabel}
+                </Text>
+              )}
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={loading}
+              onPress={onCancel}
+              style={confirmStyles.cancelButton}
+            >
+              <Text selectable={false} style={confirmStyles.cancelText}>
+                Kembali
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const confirmStyles = StyleSheet.create({
+  root: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: tokens.space.xl },
+  backdrop: {
+    backgroundColor: tokens.color.overlay.scrim,
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  card: {
+    backgroundColor: tokens.color.surface.card,
+    borderRadius: 16,
+    gap: tokens.space.md,
+    maxWidth: 360,
+    padding: 18,
+    width: '100%',
+  },
+  iconBox: { alignItems: 'center', borderRadius: 11, height: 38, justifyContent: 'center', width: 38 },
+  title: { ...tokens.type.bodyStrong, color: tokens.color.text.primary },
+  message: { color: tokens.color.text.secondary, fontSize: 12, lineHeight: 19 },
+  actions: { gap: tokens.space.sm },
+  confirmButton: {
+    alignItems: 'center',
+    borderCurve: 'continuous',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  confirmText: { fontSize: 16, fontWeight: '700' },
+  cancelButton: { alignItems: 'center', justifyContent: 'center', minHeight: 52 },
+  cancelText: { color: tokens.color.text.primary, fontSize: 16, fontWeight: '700' },
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },

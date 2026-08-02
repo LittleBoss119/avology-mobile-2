@@ -60,6 +60,7 @@ export function Screen({
   footer,
   header,
   contentStyle,
+  scrollRef,
   variant = 'default',
   stickyFooter,
 }: {
@@ -69,6 +70,7 @@ export function Screen({
   footer?: React.ReactNode;
   header?: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
+  scrollRef?: React.RefObject<ScrollView | null>;
   variant?: 'default' | 'soft' | 'surface';
   stickyFooter?: React.ReactNode;
 }) {
@@ -101,6 +103,7 @@ export function Screen({
         </View>
       ) : null}
       <ScrollView
+        ref={scrollRef}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         style={{ flex: 1, backgroundColor }}
@@ -207,22 +210,24 @@ export function TopAppBar({
       >
         {onBack ? (
           <Pressable
+            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
             onPress={onBack}
             style={{
               alignItems: 'center',
               backgroundColor: colors.surface,
               borderColor: colors.border,
-              borderRadius: radius.round,
+              borderCurve: 'continuous',
+              borderRadius: 11,
               borderWidth: 1,
-              height: 44,
+              height: 32,
               justifyContent: 'center',
-              width: 44,
+              width: 32,
             }}
           >
             <Icon name="chevron-left" size={20} color={colors.primary} />
           </Pressable>
         ) : titleAlign === 'center' ? (
-          <View style={{ height: 44, width: 44 }} />
+          <View style={{ height: 32, width: 32 }} />
         ) : null}
         <View
           style={{
@@ -265,7 +270,7 @@ export function TopAppBar({
             </Text>
           )}
         </View>
-        {right ?? (titleAlign === 'center' ? <View style={{ height: 44, width: 44 }} /> : null)}
+        {right ?? (titleAlign === 'center' ? <View style={{ height: 32, width: 32 }} /> : null)}
       </View>
       {subtitle ? (
         <Text
@@ -295,17 +300,18 @@ export function ProfileIconButton({
     <Pressable
       accessibilityLabel={label}
       accessibilityRole="button"
+      hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: 'center',
         backgroundColor: pressed ? colors.primarySoft : colors.surface,
         borderColor: colors.border,
         borderCurve: 'continuous',
-        borderRadius: radius.round,
+        borderRadius: 11,
         borderWidth: 1,
-        height: 42,
+        height: 32,
         justifyContent: 'center',
-        width: 42,
+        width: 32,
       })}
     >
       <Icon name="user" size={20} color={colors.primary} />

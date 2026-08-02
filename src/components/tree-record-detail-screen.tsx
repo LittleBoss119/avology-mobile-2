@@ -350,7 +350,7 @@ async function loadRecordDetail(
 
     // Status hanya informatif untuk terjadwal (inisiatif selalu completed).
     if (care.asal === 'terjadwal') {
-      rows.push({ label: 'Status', value: care.status === 'completed' ? 'Selesai' : 'Tertunda' });
+      rows.push({ label: 'Status', value: care.status === 'completed' ? 'Selesai' : 'Ditunda' });
     }
 
     return {

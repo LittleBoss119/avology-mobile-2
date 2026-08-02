@@ -746,6 +746,9 @@ export type UpdateLatestTaskRealizationInput = {
   activityId?: UUID;
   status: ActivityStatus;
   note?: string | null;
+  // Opsional: bila undefined kolom produk tidak disentuh (perilaku lama). Bila
+  // dikirim (string atau null), kolom produk pada baris care_activities diperbarui.
+  produk?: string | null;
   proofPhoto?: TaskRealizationProofPhotoInput | null;
   removeExistingProof?: boolean;
 };

@@ -1,17 +1,22 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { View } from 'react-native';
+import { ScrollView, View, type LayoutChangeEvent } from 'react-native';
 
 import {
   ManualScheduleForm,
+  clearResolvedScheduleFormErrors,
+  hasScheduleFormErrors,
+  scheduleFormFieldOrder,
+  validateScheduleForm,
   type ManualScheduleFormValues,
+  type ScheduleFormErrors,
 } from '../../../../src/components/care-schedule-components';
 import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { createManualSchedule } from '../../../../src/services/careScheduleService';
 import { getActiveWorkers } from '../../../../src/services/memberService';
 import { getTrees } from '../../../../src/services/treeService';
-import type { CareCategory, TargetType, Tree, WorkerMembership } from '../../../../src/types/domain';
+import type { CareCategory, Tree, WorkerMembership } from '../../../../src/types/domain';
 
 const initialValues: ManualScheduleFormValues = {
   assignedWorkerId: '',
@@ -30,11 +35,16 @@ const initialValues: ManualScheduleFormValues = {
 export default function CreateManualScheduleScreen() {
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
+  const [errors, setErrors] = React.useState<ScheduleFormErrors>({});
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
   const [trees, setTrees] = React.useState<Tree[]>([]);
   const [values, setValues] = React.useState<ManualScheduleFormValues>(initialValues);
   const [workers, setWorkers] = React.useState<WorkerMembership[]>([]);
+
+  const scrollRef = React.useRef<ScrollView>(null);
+  const formTop = React.useRef(0);
+  const fieldOffsets = React.useRef<Record<string, number>>({});
 
   const farmId = currentFarm?.farmId;
 
@@ -86,16 +96,35 @@ export default function CreateManualScheduleScreen() {
     };
   }, [farmId]);
 
-  async function handleSubmit() {
-    if (!farmId) {
-      setError('Data kebun aktif tidak ditemukan.');
+  function handleValuesChange(next: ManualScheduleFormValues) {
+    setValues(next);
+    setErrors((prev) => clearResolvedScheduleFormErrors(prev, next));
+  }
+
+  function scrollToFirstError(nextErrors: ScheduleFormErrors) {
+    const firstKey = scheduleFormFieldOrder.find((key) => nextErrors[key]);
+
+    if (!firstKey) {
       return;
     }
 
-    const validation = validateValues(values);
+    const y = Math.max(0, formTop.current + (fieldOffsets.current[firstKey] ?? 0) - 12);
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y, animated: true }));
+  }
 
-    if (validation instanceof Error) {
-      setError(validation.message);
+  async function handleSubmit() {
+    const nextErrors = validateScheduleForm(values);
+
+    if (hasScheduleFormErrors(nextErrors)) {
+      setErrors(nextErrors);
+      scrollToFirstError(nextErrors);
+      return;
+    }
+
+    setErrors({});
+
+    if (!farmId) {
+      setError('Data kebun aktif tidak ditemukan.');
       return;
     }
 
@@ -104,7 +133,8 @@ export default function CreateManualScheduleScreen() {
 
     const result = await createManualSchedule({
       assignedWorkerId: values.assignedWorkerId,
-      category: validation.category,
+      // Aman: validateScheduleForm memastikan kategori sudah dipilih.
+      category: values.category as CareCategory,
       customTargetNote: values.targetType === 'custom' ? values.customTargetNote : null,
       farmId,
       instruction: values.instruction,
@@ -133,59 +163,25 @@ export default function CreateManualScheduleScreen() {
 
   return (
     <Screen
-      footer={
-        <View style={{ gap: 10 }}>
-          <Button title="Simpan Jadwal" loading={submitting} onPress={handleSubmit} />
-          <Button title="Batal" variant="secondary" onPress={() => router.back()} />
-        </View>
-      }
+      header={<TopAppBar title="Buat Jadwal" onBack={() => router.back()} />}
+      scrollRef={scrollRef}
+      stickyFooter={<Button title="Simpan jadwal" loading={submitting} onPress={handleSubmit} />}
     >
-      <TopAppBar title="Buat Jadwal" onBack={() => router.back()} />
       <ErrorBanner message={error} />
-      <ManualScheduleForm values={values} trees={trees} workers={workers} onChange={setValues} />
+      <View onLayout={(event: LayoutChangeEvent) => (formTop.current = event.nativeEvent.layout.y)}>
+        <ManualScheduleForm
+          errors={errors}
+          onChange={handleValuesChange}
+          onFieldLayout={(key, y) => {
+            fieldOffsets.current[key] = y;
+          }}
+          trees={trees}
+          values={values}
+          workers={workers}
+        />
+      </View>
     </Screen>
   );
-}
-
-function validateValues(
-  values: ManualScheduleFormValues
-): { category: CareCategory; targetType: TargetType } | Error {
-  if (!values.title.trim()) {
-    return new Error('Judul jadwal wajib diisi.');
-  }
-
-  if (!values.category) {
-    return new Error('Ups, pilih kategori dulu.');
-  }
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(values.scheduledDate.trim())) {
-    return new Error('Ups, tanggal jadwal belum dipilih.');
-  }
-
-  if (!values.assignedWorkerId.trim()) {
-    return new Error('Ups, pilih worker dulu.');
-  }
-
-  if (values.targetType === 'row' && !values.targetRow.trim()) {
-    return new Error('Baris target wajib diisi.');
-  }
-
-  if (values.targetType === 'column' && !values.targetColumn.trim()) {
-    return new Error('Kolom target wajib diisi.');
-  }
-
-  if (values.targetType === 'tree' && !values.targetTreeId.trim()) {
-    return new Error('Pohon target wajib dipilih.');
-  }
-
-  if (values.targetType === 'custom' && !values.customTargetNote.trim()) {
-    return new Error('Catatan target khusus wajib diisi.');
-  }
-
-  return {
-    category: values.category,
-    targetType: values.targetType,
-  };
 }
 
 function getTodayIsoDate(): string {

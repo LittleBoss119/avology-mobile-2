@@ -26,7 +26,7 @@ const statusFilters: Array<{ label: string; value: TaskStatusFilter }> = [
   { label: 'Hari ini', value: 'today' },
   { label: 'Belum selesai', value: 'pending' },
   { label: 'Selesai', value: 'completed' },
-  { label: 'Tertunda', value: 'postponed' },
+  { label: 'Ditunda', value: 'postponed' },
 ];
 
 export default function OwnerTaskListScreen() {
@@ -157,7 +157,7 @@ function TaskSummary({ tasks }: { tasks: CareTask[] }) {
       <SummaryPill label="Hari ini" value={tasks.filter((task) => task.dueDate === getTodayIsoDate()).length} />
       <SummaryPill label="Belum" value={countTasksByStatus(tasks, 'pending')} />
       <SummaryPill label="Selesai" value={countTasksByStatus(tasks, 'completed')} />
-      <SummaryPill label="Tertunda" value={countTasksByStatus(tasks, 'postponed')} />
+      <SummaryPill label="Ditunda" value={countTasksByStatus(tasks, 'postponed')} />
     </View>
   );
 }

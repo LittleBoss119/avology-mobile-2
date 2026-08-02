@@ -57,7 +57,7 @@ const timeFilters: Array<{ label: string; value: TimeFilter }> = [
 
 const statusOptions: Array<{ label: string; value: ScheduleVisualStatus }> = [
   { label: 'Belum', value: 'unfinished' },
-  { label: 'Tertunda', value: 'postponed' },
+  { label: 'Ditunda', value: 'postponed' },
   { label: 'Selesai', value: 'completed' },
   { label: 'Dibatalkan', value: 'cancelled' },
 ];
@@ -678,7 +678,7 @@ function formatScheduleStatusLabel(status: ScheduleVisualStatus): string {
   }
 
   if (status === 'postponed') {
-    return 'Tertunda';
+    return 'Ditunda';
   }
 
   return 'Belum';
@@ -697,7 +697,7 @@ function getScheduleStatusTone(status: ScheduleVisualStatus): 'danger' | 'muted'
     return 'warning';
   }
 
-  // 'warning' khusus untuk 'Tertunda'; 'Belum' (unfinished) pakai 'muted' (seragam dgn layar pekerja).
+  // 'warning' khusus untuk 'Ditunda'; 'Belum' (unfinished) pakai 'muted' (seragam dgn layar pekerja).
   return 'muted';
 }
 
@@ -721,7 +721,7 @@ function getScheduleProgress(detail?: CareScheduleDetail): string {
 
   const completed = detail.tasks.filter((task) => task.status === 'completed').length;
   const postponed = detail.tasks.filter((task) => task.status === 'postponed').length;
-  const suffix = postponed > 0 ? `, ${postponed} tertunda` : '';
+  const suffix = postponed > 0 ? `, ${postponed} ditunda` : '';
 
   return `${completed}/${detail.tasks.length} selesai${suffix}`;
 }

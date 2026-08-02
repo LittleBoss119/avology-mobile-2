@@ -21,6 +21,8 @@ export type IconName =
   | 'dots'
   | 'x'
   | 'check'
+  | 'clock'
+  | 'pencil'
   | 'calendar'
   | 'target'
   | 'user'
@@ -78,6 +80,14 @@ const ICON_PATHS: Record<IconName, string[]> = {
   ],
   x: ['M18 6l-12 12', 'M6 6l12 12'],
   check: ['M5 12l5 5l10 -10'],
+  clock: [
+    'M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0',
+    'M12 7v5l3 3',
+  ],
+  pencil: [
+    'M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4',
+    'M13.5 6.5l4 4',
+  ],
   calendar: [
     'M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12',
     'M16 3v4',

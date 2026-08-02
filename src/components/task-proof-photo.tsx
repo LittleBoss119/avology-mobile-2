@@ -23,8 +23,8 @@ export function TaskProofPhotoPicker({
   return (
     <PhotoPickerCard
       choosePhotoLabel="Galeri"
-      description={required ? 'Wajib untuk menyelesaikan tugas.' : 'Opsional untuk bukti realisasi.'}
-      emptyLabel="Tambah bukti foto"
+      description={required ? 'Wajib untuk menyelesaikan tugas.' : 'Opsional untuk bukti kerja.'}
+      emptyLabel="Tambah foto"
       imageUri={photo?.uri}
       loading={disabled}
       removeLabel="Hapus bukti foto"
@@ -38,9 +38,11 @@ export function TaskProofPhotoPicker({
 }
 
 export function TaskProofPhotoPreview({
+  borderRadius = radius.lg,
   emptyText,
   photo,
 }: {
+  borderRadius?: number;
   emptyText?: string;
   photo?: TaskProofPhoto | null;
 }) {
@@ -93,7 +95,7 @@ export function TaskProofPhotoPreview({
           source={{ uri: photo.signedUrl }}
           onError={() => setImageFailed(true)}
           style={{
-            borderRadius: radius.lg,
+            borderRadius,
             height: 118,
             width: '100%',
           }}

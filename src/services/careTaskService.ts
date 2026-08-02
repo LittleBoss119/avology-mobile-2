@@ -558,14 +558,27 @@ export async function updateLatestTaskRealization(
   }
 
   const nextNote = normalizeOptionalText(input.note);
+  const produkProvided = input.produk !== undefined;
+  const nextProduk = produkProvided ? normalizeOptionalText(input.produk) : undefined;
 
-  if (latestActivity.status !== input.status || latestActivity.note !== nextNote) {
+  const noteChanged = latestActivity.note !== nextNote;
+  const statusChanged = latestActivity.status !== input.status;
+  const produkChanged = produkProvided && latestActivity.produk !== nextProduk;
+
+  if (statusChanged || noteChanged || produkChanged) {
+    const activityUpdate: { note: string | null; status: ActivityStatus; produk?: string | null } = {
+      note: nextNote,
+      status: input.status,
+    };
+
+    // Kolom produk hanya disentuh bila pemanggil mengirimnya (perilaku lama dijaga).
+    if (produkProvided) {
+      activityUpdate.produk = nextProduk;
+    }
+
     const updateActivityResult = await supabase
       .from('care_activities')
-      .update({
-        note: nextNote,
-        status: input.status,
-      })
+      .update(activityUpdate)
       .eq('id', latestActivity.id);
 
     if (updateActivityResult.error) {

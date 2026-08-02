@@ -1,4 +1,5 @@
 import type {
+  ActivityStatus,
   CareCategory,
   CareSOPDefaultTargetType,
   GrowthPhase,
@@ -114,7 +115,16 @@ export function formatCareCategory(category: CareCategory): string {
 export function formatTaskStatus(status: TaskStatus): string {
   const labels: Record<TaskStatus, string> = {
     completed: 'Selesai',
-    pending: 'Menunggu',
+    pending: 'Belum',
+    postponed: 'Ditunda',
+  };
+
+  return labels[status];
+}
+
+export function formatActivityStatus(status: ActivityStatus): string {
+  const labels: Record<ActivityStatus, string> = {
+    completed: 'Selesai',
     postponed: 'Ditunda',
   };
 

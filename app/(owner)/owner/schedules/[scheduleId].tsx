@@ -1,26 +1,27 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
+import { BottomSheet, ConfirmDialog } from '../../../../src/components/bottom-sheet';
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
+import { Icon, type IconName } from '../../../../src/components/icons';
 import { TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
 import {
   Badge,
-  Button,
   CameraGlyph,
   Card,
-  CompactMetaItem,
   EmptyState,
   ErrorBanner,
   LoadingState,
   MetaRow,
   Screen,
-  SectionHeader,
+  SuccessBanner,
   TopAppBar,
 } from '../../../../src/components/ui';
-import { colors, spacing, typography } from '../../../../src/constants/theme';
+import { colors, radius, spacing, statusColors, typography } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
+import { consumePendingFeedback } from '../../../../src/lib/pendingFeedback';
 import { cancelCareSchedule, getCareScheduleDetail } from '../../../../src/services/careScheduleService';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
@@ -29,21 +30,24 @@ import type {
   ActivityStatus,
   CareActivity,
   CareScheduleDetail,
-  CareTask,
   CareTaskDetail,
   FarmMemberBasicProfile,
-  TaskStatus,
 } from '../../../../src/types/domain';
-import type { TaskProofPhotoMap } from '../../../../src/types/media';
+import type { TaskProofPhoto, TaskProofPhotoMap } from '../../../../src/types/media';
+import { formatActivityStatus } from '../../../../src/utils/displayFormat';
+import { scheduleDueDatePill, type DueDatePill } from '../../../../src/utils/taskDueDate';
 
 export default function CareScheduleDetailScreen() {
   const { currentFarm } = useAuth();
   const { scheduleId } = useLocalSearchParams<{ scheduleId: string }>();
   const [error, setError] = React.useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const [manageOpen, setManageOpen] = React.useState(false);
   const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [schedule, setSchedule] = React.useState<CareScheduleDetail | null>(null);
+  const [success, setSuccess] = React.useState<string | null>(null);
   const [taskDetailMap, setTaskDetailMap] = React.useState<Record<string, CareTaskDetail>>({});
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
 
@@ -132,6 +136,11 @@ export default function CareScheduleDetailScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
+      // Konfirmasi setelah simpan dari layar Edit Jadwal: baca-sekaligus-hapus
+      // penanda, tampilkan SuccessBanner sekali. Fokus tanpa penanda membersihkan
+      // banner lama (mis. kembali tanpa menyimpan).
+      const feedback = consumePendingFeedback();
+      setSuccess(feedback === 'schedule_updated' ? 'Perubahan tersimpan.' : null);
       setLoading(true);
       loadDetail().finally(() => setLoading(false));
     }, [loadDetail])
@@ -143,160 +152,376 @@ export default function CareScheduleDetailScreen() {
 
   if (!schedule) {
     return (
-      <Screen>
-        <TopAppBar title="Detail Jadwal" onBack={() => router.back()} />
+      <Screen header={<TopAppBar title="Detail Jadwal" onBack={() => router.back()} />}>
         <ErrorBanner message={error} />
         <EmptyState title="Jadwal tidak ditemukan" subtitle="Jadwal mungkin tidak tersedia atau akses ditolak." />
       </Screen>
     );
   }
 
-  const hasRealization = scheduleHasRealization(schedule, taskDetailMap);
+  const activeSchedule = schedule;
+  const hasRealization = scheduleHasRealization(activeSchedule, taskDetailMap);
+  const isLocked = activeSchedule.isCancelled === true || hasRealization;
+  const lockMessage = activeSchedule.isCancelled
+    ? 'Jadwal ini sudah dibatalkan.'
+    : 'Jadwal sudah punya hasil kerja dan tidak bisa diubah lagi.';
 
-  function handleCancelSchedule() {
-    Alert.alert(
-      'Batalkan jadwal?',
-      'Tugas dari jadwal ini tidak akan ditampilkan sebagai pekerjaan aktif.',
-      [
-        {
-          text: 'Kembali',
-          style: 'cancel',
-        },
-        {
-          text: 'Batalkan jadwal',
-          style: 'destructive',
-          onPress: () => {
-            runCancelSchedule();
-          },
-        },
-      ]
-    );
+  const pill: DueDatePill = activeSchedule.isCancelled
+    ? { tone: 'neutral', label: 'Jadwal dibatalkan' }
+    : scheduleDueDatePill(activeSchedule, activeSchedule.tasks, getTodayIsoDate());
+
+  function handleRequestCancel() {
+    // §5.4: sheet "Kelola jadwal" ditutup dulu (pemanggil memanggil onClose),
+    // beri jeda agar animasi tutupnya selesai sebelum ConfirmDialog muncul —
+    // supaya tidak ada dua overlay bertumpuk sekaligus.
+    setTimeout(() => setConfirmOpen(true), 260);
   }
 
   async function runCancelSchedule() {
-    if (!schedule) {
-      return;
-    }
-
     setCancelLoading(true);
     setError(null);
 
     const result = await cancelCareSchedule({
-      scheduleId: schedule.id,
+      scheduleId: activeSchedule.id,
     });
 
     if (result.error) {
       setError(result.error.message);
       setCancelLoading(false);
+      setConfirmOpen(false);
       return;
     }
 
     await loadDetail();
     setCancelLoading(false);
+    setConfirmOpen(false);
   }
 
-  return (
-    <Screen>
-      <TopAppBar title="Detail Jadwal" onBack={() => router.back()} />
-      <ErrorBanner message={error} />
+  const showWorkerHeadings = activeSchedule.tasks.length > 1;
 
-      <Card variant="softGreen">
-        <View style={{ gap: 8 }}>
+  return (
+    <Screen
+      header={
+        <TopAppBar
+          title="Detail Jadwal"
+          onBack={() => router.back()}
+          right={
+            <Pressable
+              accessibilityLabel="Kelola jadwal"
+              accessibilityRole="button"
+              hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
+              onPress={() => setManageOpen(true)}
+              style={{
+                alignItems: 'center',
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                borderCurve: 'continuous',
+                borderRadius: 11,
+                borderWidth: 1,
+                height: 32,
+                justifyContent: 'center',
+                width: 32,
+              }}
+            >
+              <Icon name="dots" size={20} color={colors.primary} />
+            </Pressable>
+          }
+        />
+      }
+    >
+      <ManageScheduleSheet
+        cancelDisabled={cancelLoading}
+        locked={isLocked}
+        lockMessage={lockMessage}
+        visible={manageOpen}
+        onClose={() => setManageOpen(false)}
+        onCancelSchedule={handleRequestCancel}
+        onEditSchedule={() => router.push(`/owner/schedules/${activeSchedule.id}/edit`)}
+      />
+
+      <ConfirmDialog
+        confirmLabel="Batalkan jadwal"
+        loading={cancelLoading}
+        message={`Tugas dari jadwal ini tidak lagi muncul sebagai pekerjaan aktif untuk ${formatScheduleWorkers(activeSchedule, workerNames)}. Tindakan ini tidak bisa dibatalkan.`}
+        title="Batalkan jadwal?"
+        tone="danger"
+        visible={confirmOpen}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={runCancelSchedule}
+      />
+
+      <ErrorBanner message={error} />
+      <SuccessBanner message={success} />
+
+      <View style={{ gap: spacing.sm }}>
+        <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
           <Text
             selectable
             style={{
-              color: colors.text,
+              color: colors.primaryDark,
+              flex: 1,
               fontSize: typography.h2.fontSize,
-              fontWeight: typography.h2.fontWeight,
+              fontWeight: '600',
               lineHeight: typography.h2.lineHeight,
             }}
           >
-            {schedule.title}
+            {activeSchedule.title}
           </Text>
-          <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Badge label={formatScheduleStatus(schedule)} tone={getScheduleTone(schedule)} />
-            {schedule.careSopId ? <Badge label="SOP" tone="warning" /> : null}
-            <Badge label={formatCareCategory(schedule.category)} maxWidth={140} tone="success" />
-            {schedule.requiresPhoto ? <ProofPhotoIndicator /> : null}
+          <View style={{ alignItems: 'center', flexDirection: 'row', flexShrink: 0, gap: spacing.sm }}>
+            <Badge label={formatScheduleStatus(activeSchedule)} tone={getScheduleTone(activeSchedule)} />
+            {activeSchedule.requiresPhoto ? <ProofPhotoIndicator /> : null}
           </View>
         </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-          <CompactMetaItem icon="calendar" label={formatDate(schedule.scheduledDate)} />
-          <CompactMetaItem icon="target" label={formatCareTarget(schedule)} />
-          <CompactMetaItem icon="user" label={formatScheduleWorkers(schedule, workerNames)} />
+        <Text selectable style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
+          {`${formatCareCategory(activeSchedule.category)} · ${formatCareTarget(activeSchedule)}`}
+        </Text>
+      </View>
+
+      <View style={{ gap: spacing.xs }}>
+        <DueDatePillView pill={pill} />
+        {activeSchedule.isCancelled && activeSchedule.cancelReason ? (
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+            {`Alasan: ${activeSchedule.cancelReason}`}
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={{ flexDirection: 'row', gap: spacing.md }}>
+        <View style={{ flex: 1 }}>
+          <MetaRow label="Tanggal" value={formatDate(activeSchedule.scheduledDate)} />
         </View>
-      </Card>
+        <View style={{ flex: 1 }}>
+          <MetaRow label="Pekerja" value={formatScheduleWorkers(activeSchedule, workerNames)} />
+        </View>
+      </View>
 
-      {schedule.isCancelled ? (
-        <Card variant="danger">
-          <Badge label="Jadwal dibatalkan" maxWidth={160} tone="danger" />
-          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Tugas dari jadwal ini tidak ditampilkan sebagai pekerjaan aktif untuk pekerja.
-          </Text>
-          {schedule.cancelledAt ? <MetaRow label="Waktu batal" value={formatDateTime(schedule.cancelledAt)} /> : null}
-          {schedule.cancelReason ? <MetaRow label="Alasan" value={schedule.cancelReason} /> : null}
-        </Card>
-      ) : hasRealization ? (
-        <Card variant="warning">
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
-            Jadwal tidak dapat diubah
-          </Text>
-          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Jadwal sudah memiliki realisasi tugas dari pekerja, jadi tidak bisa diedit atau dibatalkan.
-          </Text>
-        </Card>
-      ) : (
-        <Card>
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
-            Pengaturan Jadwal
-          </Text>
-          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Ubah jadwal sebelum ada realisasi, atau batalkan jika pekerjaan ini tidak perlu ditampilkan sebagai pekerjaan aktif.
-          </Text>
-          <Button
-            title="Edit jadwal"
-            disabled={cancelLoading}
-            onPress={() => router.push(`/owner/schedules/${schedule.id}/edit`)}
-          />
-          <Button
-            title="Batalkan jadwal"
-            variant="danger"
-            loading={cancelLoading}
-            disabled={cancelLoading}
-            onPress={handleCancelSchedule}
-          />
-        </Card>
-      )}
-
-      <Card>
-        <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
+      <View style={{ gap: spacing.xs }}>
+        <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
           Instruksi
         </Text>
         <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-          {schedule.instruction || 'Belum ada instruksi tambahan.'}
+          {activeSchedule.instruction || 'Belum ada instruksi tambahan.'}
         </Text>
-      </Card>
+      </View>
 
-      <SectionHeader title="Tugas Pekerja" description="Tugas yang dibuat dari jadwal ini." />
-      {schedule.tasks.length === 0 ? (
-        <EmptyState title="Belum ada tugas" subtitle="Tugas dari jadwal ini belum tersedia." />
-      ) : (
-        <View style={{ gap: 12 }}>
-          {schedule.tasks.map((task) => (
-            <OwnerScheduleTaskCard
-              key={task.id}
-              task={task}
-              assignedWorkerName={workerNames[task.assignedTo]}
-              proofPhotoMap={proofPhotoMap}
-              taskDetail={taskDetailMap[task.id]}
-              workerNames={workerNames}
-              onPress={() => router.push(`/owner/tasks/${task.id}`)}
-            />
-          ))}
-        </View>
-      )}
+      <View style={{ gap: spacing.md }}>
+        <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700', lineHeight: typography.h3.lineHeight }}>
+          Hasil kerja
+        </Text>
+        {activeSchedule.tasks.map((task) => {
+          const activities = taskDetailMap[task.id]?.activities ?? [];
+          const workerName = workerNames[task.assignedTo];
+
+          return (
+            <View key={task.id} style={{ gap: spacing.sm }}>
+              {showWorkerHeadings ? (
+                <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
+                  {workerName ?? 'Pekerja tidak tersedia'}
+                </Text>
+              ) : null}
+              {activities.length === 0 ? (
+                <EmptyState
+                  title="Belum ada hasil kerja"
+                  subtitle={`${workerName ?? 'Pekerja'} belum menyelesaikan atau menunda tugas ini.`}
+                />
+              ) : (
+                activities.map((activity) => (
+                  <WorkResultCard key={activity.id} activity={activity} proof={proofPhotoMap[activity.id]} />
+                ))
+              )}
+            </View>
+          );
+        })}
+      </View>
     </Screen>
   );
+}
+
+function ManageScheduleSheet({
+  cancelDisabled,
+  locked,
+  lockMessage,
+  onCancelSchedule,
+  onClose,
+  onEditSchedule,
+  visible,
+}: {
+  cancelDisabled: boolean;
+  locked: boolean;
+  lockMessage: string;
+  onCancelSchedule: () => void;
+  onClose: () => void;
+  onEditSchedule: () => void;
+  visible: boolean;
+}) {
+  return (
+    <BottomSheet title="Kelola jadwal" visible={visible} onClose={onClose}>
+      <View style={{ gap: spacing.sm }}>
+        {locked ? (
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+            {lockMessage}
+          </Text>
+        ) : null}
+        <ManageScheduleRow
+          disabled={locked}
+          icon="calendar"
+          label="Edit jadwal"
+          onPress={() => {
+            onClose();
+            onEditSchedule();
+          }}
+        />
+        <ManageScheduleRow
+          disabled={locked || cancelDisabled}
+          icon="x"
+          label="Batalkan jadwal"
+          tone="danger"
+          onPress={() => {
+            onClose();
+            onCancelSchedule();
+          }}
+        />
+      </View>
+    </BottomSheet>
+  );
+}
+
+function ManageScheduleRow({
+  disabled,
+  icon,
+  label,
+  onPress,
+  tone = 'default',
+}: {
+  disabled: boolean;
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  tone?: 'default' | 'danger';
+}) {
+  const textColor = disabled ? colors.textSoft : tone === 'danger' ? colors.danger : colors.text;
+  const iconColor = disabled ? colors.textSoft : tone === 'danger' ? colors.danger : colors.primary;
+  const circleColor = disabled ? colors.surfaceMuted : tone === 'danger' ? colors.dangerBg : colors.primarySoft;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={{
+        alignItems: 'center',
+        backgroundColor: colors.surface,
+        borderColor: colors.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        flexDirection: 'row',
+        gap: spacing.md,
+        padding: spacing.md,
+      }}
+    >
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: circleColor,
+          borderRadius: radius.round,
+          height: 38,
+          justifyContent: 'center',
+          width: 38,
+        }}
+      >
+        <Icon name={icon} size={20} color={iconColor} />
+      </View>
+      <Text selectable style={{ color: textColor, flex: 1, fontSize: 16, fontWeight: '700' }}>
+        {label}
+      </Text>
+      {disabled ? null : <Icon name="chevron-right" size={20} color={colors.textSoft} />}
+    </Pressable>
+  );
+}
+
+function WorkResultCard({ activity, proof }: { activity: CareActivity; proof?: TaskProofPhoto }) {
+  return (
+    <Card>
+      <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
+        <Badge label={formatActivityStatus(activity.status)} tone={getActivityTone(activity.status)} />
+        <Text selectable style={{ color: colors.textMuted, fontSize: 12 }}>
+          {formatDateTime(activity.performedAt)}
+        </Text>
+      </View>
+      {activity.note ? (
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+          {activity.note}
+        </Text>
+      ) : null}
+      {activity.produk ? (
+        <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
+          <Icon name="basket" size={14} color={colors.textMuted} />
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+            {activity.produk}
+          </Text>
+        </View>
+      ) : null}
+      {proof ? <TaskProofPhotoPreview borderRadius={8} photo={proof} /> : null}
+    </Card>
+  );
+}
+
+function DueDatePillView({ pill }: { pill: DueDatePill }) {
+  const palette =
+    pill.tone === 'warning'
+      ? statusColors.warning
+      : pill.tone === 'success'
+        ? statusColors.success
+        : statusColors.neutral;
+
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        backgroundColor: palette.background,
+        borderColor: palette.border,
+        borderCurve: 'continuous',
+        borderRadius: 10,
+        borderWidth: 1,
+        flexDirection: 'row',
+        gap: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+      }}
+    >
+      <Icon name="calendar" size={14} color={palette.text} />
+      <Text selectable style={{ color: palette.text, fontSize: 13, fontWeight: '700' }}>
+        {pill.label}
+      </Text>
+    </View>
+  );
+}
+
+function ProofPhotoIndicator() {
+  return (
+    <View
+      accessibilityLabel="Perlu bukti foto"
+      style={{
+        alignItems: 'center',
+        backgroundColor: colors.warningBg,
+        borderColor: colors.warningBorder,
+        borderCurve: 'continuous',
+        borderRadius: 999,
+        borderWidth: 1,
+        height: 26,
+        justifyContent: 'center',
+        width: 26,
+      }}
+    >
+      <CameraGlyph color={colors.warning} />
+    </View>
+  );
+}
+
+function getActivityTone(status: ActivityStatus): 'success' | 'warning' {
+  return status === 'completed' ? 'success' : 'warning';
 }
 
 function formatScheduleStatus(schedule: CareScheduleDetail): string {
@@ -313,7 +538,7 @@ function formatScheduleStatus(schedule: CareScheduleDetail): string {
   }
 
   if (schedule.tasks.some((task) => task.status === 'postponed')) {
-    return 'Tertunda';
+    return 'Ditunda';
   }
 
   return 'Belum';
@@ -357,156 +582,12 @@ function formatScheduleWorkers(
   return names.length > 0 ? names.join(', ') : 'Belum ada pekerja';
 }
 
-function OwnerScheduleTaskCard({
-  assignedWorkerName,
-  onPress,
-  proofPhotoMap,
-  task,
-  taskDetail,
-  workerNames,
-}: {
-  assignedWorkerName?: string;
-  onPress: () => void;
-  proofPhotoMap: TaskProofPhotoMap;
-  task: CareTask;
-  taskDetail?: CareTaskDetail;
-  workerNames: Record<string, string>;
-}) {
-  const latestActivity = taskDetail?.activities[0] ?? null;
-  const latestProof = latestActivity ? proofPhotoMap[latestActivity.id] : undefined;
-
-  return (
-    <Pressable onPress={onPress}>
-      <Card>
-        <View style={{ gap: spacing.sm }}>
-          <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
-            <Text
-              selectable
-              ellipsizeMode="tail"
-              numberOfLines={1}
-              style={{
-                color: colors.primary,
-                flex: 1,
-                fontSize: 17,
-                fontWeight: '700',
-                lineHeight: 23,
-              }}
-            >
-              {task.title}
-            </Text>
-            <Badge label={formatTaskStatusForOwner(task.status)} maxWidth={100} tone={getTaskTone(task.status)} />
-          </View>
-
-          <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {task.category ? (
-              <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>
-                {formatCareCategory(task.category)}
-              </Text>
-            ) : null}
-            {task.requiresPhoto ? <ProofPhotoIndicator /> : null}
-          </View>
-
-          {task.instruction ? (
-            <Text
-              selectable
-              ellipsizeMode="tail"
-              numberOfLines={2}
-              style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}
-            >
-              {task.instruction}
-            </Text>
-          ) : null}
-
-          <View style={{ gap: spacing.xs }}>
-            <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md }}>
-              <CompactMetaItem icon="calendar" label={formatDate(task.dueDate)} />
-              <CompactMetaItem icon="target" label={formatCareTarget(task)} />
-            </View>
-            <CompactMetaItem icon="user" label={assignedWorkerName ?? 'Pekerja belum tersedia'} />
-          </View>
-
-          {latestActivity ? (
-            <View
-              style={{
-                backgroundColor: colors.surfaceMuted,
-                borderColor: colors.border,
-                borderRadius: 12,
-                borderWidth: 1,
-                gap: spacing.xs,
-                padding: spacing.md,
-              }}
-            >
-              <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                <Badge label={`Realisasi: ${formatActivityStatus(latestActivity.status)}`} tone={getActivityTone(latestActivity.status)} />
-                {latestProof ? <ProofPhotoIndicator /> : null}
-              </View>
-              <CompactMetaItem icon="user" label={workerNames[latestActivity.performedBy] ?? assignedWorkerName ?? 'Pekerja tidak tersedia'} />
-              <CompactMetaItem icon="calendar" label={formatDateTime(latestActivity.performedAt)} />
-              {latestActivity.note ? <MetaRow label="Catatan realisasi" value={latestActivity.note} /> : null}
-              {latestProof ? <TaskProofPhotoPreview photo={latestProof} /> : null}
-            </View>
-          ) : (
-            <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-              Belum ada realisasi dari pekerja.
-            </Text>
-          )}
-        </View>
-      </Card>
-    </Pressable>
-  );
-}
-
-function ProofPhotoIndicator() {
-  return (
-    <View
-      accessibilityLabel="Perlu bukti foto"
-      style={{
-        alignItems: 'center',
-        backgroundColor: colors.warningBg,
-        borderColor: colors.warningBorder,
-        borderCurve: 'continuous',
-        borderRadius: 999,
-        borderWidth: 1,
-        height: 26,
-        justifyContent: 'center',
-        width: 26,
-      }}
-    >
-      <CameraGlyph color={colors.warning} />
-    </View>
-  );
-}
-
-function formatActivityStatus(status: ActivityStatus): string {
-  return status === 'completed' ? 'Selesai' : 'Tertunda';
-}
-
-function getActivityTone(status: ActivityStatus): 'success' | 'warning' {
-  return status === 'completed' ? 'success' : 'warning';
-}
-
-function formatTaskStatusForOwner(status: TaskStatus): string {
-  if (status === 'completed') {
-    return 'Selesai';
-  }
-
-  if (status === 'postponed') {
-    return 'Tertunda';
-  }
-
-  return 'Belum';
-}
-
-function getTaskTone(status: TaskStatus): 'muted' | 'success' | 'warning' {
-  if (status === 'completed') {
-    return 'success';
-  }
-
-  if (status === 'postponed') {
-    return 'warning';
-  }
-
-  return 'muted';
+function getTodayIsoDate(): string {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatDate(value: string): string {

@@ -24,7 +24,7 @@ import { statusColors, tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getWorkerTasks } from '../../../../src/services/careTaskService';
 import type { CareTask, TargetType, TaskStatus } from '../../../../src/types/domain';
-import { formatTargetType } from '../../../../src/utils/displayFormat';
+import { formatTargetType, formatTaskStatus } from '../../../../src/utils/displayFormat';
 import { taskTimeBucket, type TimeBucket } from '../../../../src/utils/taskDueDate';
 
 type TimeFilter = 'all' | 'today' | 'overdue' | 'upcoming';
@@ -51,7 +51,7 @@ const timeFilters: Array<{ label: string; value: TimeFilter }> = [
 
 const statusOptions: Array<{ label: string; value: TaskStatus }> = [
   { label: 'Belum', value: 'pending' },
-  { label: 'Tertunda', value: 'postponed' },
+  { label: 'Ditunda', value: 'postponed' },
   { label: 'Selesai', value: 'completed' },
 ];
 
@@ -282,7 +282,7 @@ function WorkerTaskCard({
     bucket === 'overdue' ? (
       <Badge label="Terlambat" maxWidth={100} tone="danger" />
     ) : (
-      <Badge label={formatTaskStatusLabel(task.status)} maxWidth={100} tone={getTaskTone(task.status)} />
+      <Badge label={formatTaskStatus(task.status)} maxWidth={100} tone={getTaskTone(task.status)} />
     );
 
   const metaRow = (
@@ -427,18 +427,6 @@ function StatusChip({
       </Text>
     </Pressable>
   );
-}
-
-function formatTaskStatusLabel(status: TaskStatus): string {
-  if (status === 'completed') {
-    return 'Selesai';
-  }
-
-  if (status === 'postponed') {
-    return 'Tertunda';
-  }
-
-  return 'Belum';
 }
 
 function getTaskTone(status: TaskStatus): 'muted' | 'success' | 'warning' {

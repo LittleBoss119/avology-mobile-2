@@ -113,6 +113,106 @@ export function taskTimeBucket(
   return 'upcoming';
 }
 
+// Deskriptor pill tenggat (display-layer, pure). ADITIF — tidak mengubah
+// taskDueMarker / scheduleDueMarker / bucket. Sama seperti util lain: bandingkan
+// tanggal saja (STRING-COMPARE 'YYYY-MM-DD' terhadap todayIso lokal), abaikan jam.
+export type DueDatePillTone = 'warning' | 'success' | 'neutral';
+export type DueDatePill = { tone: DueDatePillTone; label: string };
+
+const MONTHS_ID_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+];
+
+function parseIsoDateParts(iso: string): { day: number; month: number; year: number } | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return null;
+  }
+
+  const [year, month, day] = iso.split('-').map(Number);
+  return { day, month, year };
+}
+
+// "06 Jun"
+function formatShortDate(iso: string): string {
+  const parts = parseIsoDateParts(iso);
+
+  if (!parts) {
+    return iso;
+  }
+
+  return `${`${parts.day}`.padStart(2, '0')} ${MONTHS_ID_SHORT[parts.month - 1]}`;
+}
+
+// "27 Jun 2026"
+function formatFullDate(iso: string): string {
+  const parts = parseIsoDateParts(iso);
+
+  if (!parts) {
+    return iso;
+  }
+
+  return `${`${parts.day}`.padStart(2, '0')} ${MONTHS_ID_SHORT[parts.month - 1]} ${parts.year}`;
+}
+
+// Selisih hari bulat dari fromIso ke toIso pada tengah malam lokal.
+function dayDifference(fromIso: string, toIso: string): number {
+  const from = parseIsoDateParts(fromIso);
+  const to = parseIsoDateParts(toIso);
+
+  if (!from || !to) {
+    return 0;
+  }
+
+  const fromMs = new Date(from.year, from.month - 1, from.day).getTime();
+  const toMs = new Date(to.year, to.month - 1, to.day).getTime();
+  return Math.round((toMs - fromMs) / 86_400_000);
+}
+
+// Varian task: pakai dueDate + status tugas.
+export function dueDatePill(
+  task: { status: TaskStatus; dueDate: string },
+  todayIso: string
+): DueDatePill {
+  const isActive = task.status === 'pending' || task.status === 'postponed';
+
+  if (isActive && task.dueDate < todayIso) {
+    const overdueDays = dayDifference(task.dueDate, todayIso);
+    return {
+      tone: 'warning',
+      label: `Terlambat ${overdueDays} hari · ${formatShortDate(task.dueDate)}`,
+    };
+  }
+
+  if (isActive && task.dueDate === todayIso) {
+    return {
+      tone: 'success',
+      label: `Jatuh tempo hari ini · ${formatShortDate(task.dueDate)}`,
+    };
+  }
+
+  return {
+    tone: 'neutral',
+    label: formatFullDate(task.dueDate),
+  };
+}
+
+// Varian jadwal: pakai scheduledDate + status turunan dari tugas-tugasnya.
+// Jadwal dianggap "selesai" (→ neutral) hanya jika ada tugas dan semuanya
+// completed; selain itu diperlakukan aktif (pending/postponed sama saja untuk
+// pill). Pembatalan jadwal ditangani oleh pemanggil, bukan di sini.
+export function scheduleDueDatePill(
+  schedule: { scheduledDate: string },
+  tasks: { status: TaskStatus }[],
+  todayIso: string
+): DueDatePill {
+  const derivedStatus: TaskStatus =
+    tasks.length > 0 && tasks.every((task) => task.status === 'completed')
+      ? 'completed'
+      : 'pending';
+
+  return dueDatePill({ status: derivedStatus, dueDate: schedule.scheduledDate }, todayIso);
+}
+
 // Agregasi ember waktu level-jadwal, meniru pola prioritas scheduleDueMarker
 // (overdue menang, lalu today, lalu upcoming, selain itu inactive).
 export function scheduleTimeBucket(

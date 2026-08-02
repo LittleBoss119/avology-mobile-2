@@ -446,7 +446,7 @@ function FormError({ message }: { message?: string }) {
   }
 
   return (
-    <Text selectable style={{ color: colors.danger, fontSize: 11, lineHeight: 15 }}>
+    <Text selectable style={{ color: colors.danger, fontSize: 13, lineHeight: 18 }}>
       {message}
     </Text>
   );

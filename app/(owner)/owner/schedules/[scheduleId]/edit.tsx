@@ -1,14 +1,20 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Alert, Text, View } from 'react-native';
+import { ScrollView, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import {
   ManualScheduleForm,
+  clearResolvedScheduleFormErrors,
+  hasScheduleFormErrors,
+  scheduleFormFieldOrder,
+  validateScheduleForm,
   type ManualScheduleFormValues,
+  type ScheduleFormErrors,
 } from '../../../../../src/components/care-schedule-components';
 import { Button, Card, EmptyState, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../../src/components/ui';
 import { colors } from '../../../../../src/constants/theme';
 import { useAuth } from '../../../../../src/context/auth-context';
+import { setPendingFeedback } from '../../../../../src/lib/pendingFeedback';
 import {
   getCareScheduleDetail,
   getScheduleEditEligibility,
@@ -16,25 +22,24 @@ import {
 } from '../../../../../src/services/careScheduleService';
 import { getActiveWorkers } from '../../../../../src/services/memberService';
 import { getTrees } from '../../../../../src/services/treeService';
-import type {
-  CareCategory,
-  CareScheduleDetail,
-  TargetType,
-  Tree,
-  WorkerMembership,
-} from '../../../../../src/types/domain';
+import type { CareCategory, CareScheduleDetail, Tree, WorkerMembership } from '../../../../../src/types/domain';
 
 export default function EditCareScheduleScreen() {
   const { currentFarm } = useAuth();
   const { scheduleId } = useLocalSearchParams<{ scheduleId: string }>();
   const [blockedReason, setBlockedReason] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [errors, setErrors] = React.useState<ScheduleFormErrors>({});
   const [loading, setLoading] = React.useState(true);
   const [schedule, setSchedule] = React.useState<CareScheduleDetail | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [trees, setTrees] = React.useState<Tree[]>([]);
   const [values, setValues] = React.useState<ManualScheduleFormValues | null>(null);
   const [workers, setWorkers] = React.useState<WorkerMembership[]>([]);
+
+  const scrollRef = React.useRef<ScrollView>(null);
+  const formTop = React.useRef(0);
+  const fieldOffsets = React.useRef<Record<string, number>>({});
 
   const farmId = currentFarm?.farmId;
 
@@ -112,6 +117,22 @@ export default function EditCareScheduleScreen() {
     };
   }, [farmId, scheduleId]);
 
+  function handleValuesChange(next: ManualScheduleFormValues) {
+    setValues(next);
+    setErrors((prev) => clearResolvedScheduleFormErrors(prev, next));
+  }
+
+  function scrollToFirstError(nextErrors: ScheduleFormErrors) {
+    const firstKey = scheduleFormFieldOrder.find((key) => nextErrors[key]);
+
+    if (!firstKey) {
+      return;
+    }
+
+    const y = Math.max(0, formTop.current + (fieldOffsets.current[firstKey] ?? 0) - 12);
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y, animated: true }));
+  }
+
   async function handleSubmit() {
     if (!schedule || !values) {
       setError('Data jadwal tidak ditemukan.');
@@ -123,19 +144,22 @@ export default function EditCareScheduleScreen() {
       return;
     }
 
-    const validation = validateValues(values);
+    const nextErrors = validateScheduleForm(values);
 
-    if (validation instanceof Error) {
-      setError(validation.message);
+    if (hasScheduleFormErrors(nextErrors)) {
+      setErrors(nextErrors);
+      scrollToFirstError(nextErrors);
       return;
     }
 
+    setErrors({});
     setSubmitting(true);
     setError(null);
 
     const result = await updateCareSchedule({
       assignedWorkerId: values.assignedWorkerId,
-      category: validation.category,
+      // Aman: validateScheduleForm memastikan kategori sudah dipilih.
+      category: values.category as CareCategory,
       customTargetNote: values.targetType === 'custom' ? values.customTargetNote : null,
       instruction: values.instruction,
       requiresPhoto: values.requiresPhoto,
@@ -155,12 +179,11 @@ export default function EditCareScheduleScreen() {
     }
 
     setSubmitting(false);
-    Alert.alert('Jadwal berhasil diperbarui', '', [
-      {
-        text: 'OK',
-        onPress: () => router.replace(`/owner/schedules/${schedule.id}`),
-      },
-    ]);
+    // Konfirmasi ditampilkan sebagai SuccessBanner di detail jadwal saat fokus,
+    // mengikuti pola record.tsx → detail tugas worker. router.back() menjaga
+    // back-stack tetap bersih (list → detail).
+    setPendingFeedback('schedule_updated');
+    router.back();
   }
 
   if (loading) {
@@ -169,8 +192,7 @@ export default function EditCareScheduleScreen() {
 
   if (!schedule || !values) {
     return (
-      <Screen>
-        <TopAppBar title="Edit jadwal" onBack={() => router.back()} />
+      <Screen header={<TopAppBar title="Edit jadwal" onBack={() => router.back()} />}>
         <ErrorBanner message={error} />
         <EmptyState title="Jadwal tidak ditemukan" subtitle="Jadwal mungkin tidak tersedia atau akses ditolak." />
       </Screen>
@@ -179,8 +201,7 @@ export default function EditCareScheduleScreen() {
 
   if (blockedReason) {
     return (
-      <Screen>
-        <TopAppBar title="Edit jadwal" onBack={() => router.back()} />
+      <Screen header={<TopAppBar title="Edit jadwal" onBack={() => router.back()} />}>
         <ErrorBanner message={error} />
         <Card variant="warning">
           <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
@@ -196,16 +217,23 @@ export default function EditCareScheduleScreen() {
 
   return (
     <Screen
-      footer={
-        <View style={{ gap: 10 }}>
-          <Button title="Simpan perubahan" loading={submitting} onPress={handleSubmit} />
-          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
-        </View>
-      }
+      header={<TopAppBar title="Edit jadwal" onBack={() => router.back()} />}
+      scrollRef={scrollRef}
+      stickyFooter={<Button title="Simpan perubahan" loading={submitting} onPress={handleSubmit} />}
     >
-      <TopAppBar title="Edit jadwal" onBack={() => router.back()} />
       <ErrorBanner message={error} />
-      <ManualScheduleForm values={values} trees={trees} workers={workers} onChange={setValues} />
+      <View onLayout={(event: LayoutChangeEvent) => (formTop.current = event.nativeEvent.layout.y)}>
+        <ManualScheduleForm
+          errors={errors}
+          onChange={handleValuesChange}
+          onFieldLayout={(key, y) => {
+            fieldOffsets.current[key] = y;
+          }}
+          trees={trees}
+          values={values}
+          workers={workers}
+        />
+      </View>
     </Screen>
   );
 }
@@ -225,46 +253,5 @@ function buildInitialValues(schedule: CareScheduleDetail): ManualScheduleFormVal
     targetTreeId: schedule.targetTreeId ?? '',
     targetType: schedule.targetType,
     title: schedule.title,
-  };
-}
-
-function validateValues(
-  values: ManualScheduleFormValues
-): { category: CareCategory; targetType: TargetType } | Error {
-  if (!values.title.trim()) {
-    return new Error('Judul jadwal wajib diisi.');
-  }
-
-  if (!values.category) {
-    return new Error('Kategori jadwal wajib dipilih.');
-  }
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(values.scheduledDate.trim())) {
-    return new Error('Tanggal jadwal harus memakai format YYYY-MM-DD.');
-  }
-
-  if (!values.assignedWorkerId.trim()) {
-    return new Error('Pilih pekerja aktif.');
-  }
-
-  if (values.targetType === 'row' && !values.targetRow.trim()) {
-    return new Error('Baris target wajib diisi.');
-  }
-
-  if (values.targetType === 'column' && !values.targetColumn.trim()) {
-    return new Error('Kolom target wajib diisi.');
-  }
-
-  if (values.targetType === 'tree' && !values.targetTreeId.trim()) {
-    return new Error('Pohon target wajib dipilih.');
-  }
-
-  if (values.targetType === 'custom' && !values.customTargetNote.trim()) {
-    return new Error('Catatan target khusus wajib diisi.');
-  }
-
-  return {
-    category: values.category,
-    targetType: values.targetType,
   };
 }

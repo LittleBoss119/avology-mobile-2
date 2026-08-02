@@ -425,16 +425,18 @@ function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuP
   const right =
     mode === 'owner' ? (
       <Pressable
+        hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
         onPress={onMenuPress}
         style={{
           alignItems: 'center',
           backgroundColor: tokens.color.surface.card,
           borderColor: colors.border,
-          borderRadius: 999,
+          borderCurve: 'continuous',
+          borderRadius: 11,
           borderWidth: 1,
-          height: 44,
+          height: 32,
           justifyContent: 'center',
-          width: 44,
+          width: 32,
         }}
       >
         <Icon name="dots" size={20} color={tokens.color.brand.base} />

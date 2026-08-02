@@ -21,20 +21,18 @@ import {
   Button,
 } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
-import { getCareScheduleDetail } from '../../../../src/services/careScheduleService';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
 import { getOperationalReportDetail } from '../../../../src/services/operationalReportService';
 import { listTaskProofPhotosForActivities } from '../../../../src/services/photoAttachmentService';
 import type {
-  ActivityStatus,
-  CareScheduleDetail,
   CareTaskDetail,
   FarmMemberBasicProfile,
   OperationalReport,
 } from '../../../../src/types/domain';
 import type { TaskProofPhotoMap } from '../../../../src/types/media';
 import {
+  formatActivityStatus,
   formatOperationalReportCategory,
   formatOperationalReportStatus,
 } from '../../../../src/utils/displayFormat';
@@ -46,7 +44,6 @@ export default function OwnerTaskDetailScreen() {
   const [loading, setLoading] = React.useState(true);
   const [report, setReport] = React.useState<OperationalReport | null>(null);
   const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
-  const [schedule, setSchedule] = React.useState<CareScheduleDetail | null>(null);
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
 
@@ -60,7 +57,6 @@ export default function OwnerTaskDetailScreen() {
       setReport(null);
       setProofPhotoMap({});
       setTask(null);
-      setSchedule(null);
       setWorkerNames({});
       return;
     }
@@ -70,14 +66,12 @@ export default function OwnerTaskDetailScreen() {
       setReport(null);
       setProofPhotoMap({});
       setTask(null);
-      setSchedule(null);
       setWorkerNames({});
       return;
     }
 
     setError(null);
     setReport(null);
-    setSchedule(null);
 
     const [taskResult, workersResult] = await Promise.all([
       getTaskDetail({ taskId: normalizedTaskId }),
@@ -100,16 +94,6 @@ export default function OwnerTaskDetailScreen() {
         setProofPhotoMap({});
       } else {
         setProofPhotoMap(proofResult.data);
-      }
-
-      if (taskResult.data.careScheduleId) {
-        const scheduleResult = await getCareScheduleDetail({
-          scheduleId: taskResult.data.careScheduleId,
-        });
-
-        if (!scheduleResult.error) {
-          setSchedule(scheduleResult.data);
-        }
       }
 
       if (taskResult.data.operationalReportId) {
@@ -147,8 +131,7 @@ export default function OwnerTaskDetailScreen() {
 
   if (!task) {
     return (
-      <Screen>
-        <TopAppBar title="Detail Tugas" onBack={() => router.back()} />
+      <Screen header={<TopAppBar title="Detail Tugas" onBack={() => router.back()} />}>
         <ErrorBanner message={error} />
         <EmptyState title="Tugas tidak ditemukan" subtitle="Tugas mungkin tidak tersedia atau akses ditolak." />
       </Screen>
@@ -156,8 +139,7 @@ export default function OwnerTaskDetailScreen() {
   }
 
   return (
-    <Screen>
-      <TopAppBar title="Detail Tugas" onBack={() => router.back()} />
+    <Screen header={<TopAppBar title="Detail Tugas" onBack={() => router.back()} />}>
       <ErrorBanner message={error} />
 
       <Card variant="highlight">
@@ -187,47 +169,39 @@ export default function OwnerTaskDetailScreen() {
         </Text>
       </Card>
 
-      <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-          Sumber Tugas
-        </Text>
-        {task.careScheduleId ? (
-          <>
-            <MetaRow label="Sumber tugas" value="Jadwal perawatan" />
-            <MetaRow label="Judul jadwal" value={schedule?.title ?? 'Jadwal terkait'} />
-            <MetaRow label="Tanggal jadwal" value={schedule?.scheduledDate} />
-            <Button
-              title="Buka Jadwal"
-              variant="secondary"
-              onPress={() => router.push(`/owner/schedules/${task.careScheduleId}`)}
-            />
-          </>
-        ) : task.operationalReportId ? (
-          <>
-            <MetaRow label="Sumber tugas" value="Laporan operasional" />
-            <MetaRow label="Kategori laporan" value={report ? formatOperationalReportCategory(report.category) : 'Laporan terkait'} />
-            <MetaRow label="Lokasi laporan" value={report?.locationNote ?? '-'} />
-            <MetaRow label="Pelapor" value={report ? workerNames[report.reportedBy] ?? 'Pelapor tidak tersedia' : 'Pelapor tidak tersedia'} />
-            <MetaRow label="Status laporan" value={report ? formatOperationalReportStatus(report.status) : '-'} />
-            <Button
-              title="Buka Laporan"
-              variant="secondary"
-              onPress={() => router.push(`/owner/reports/${task.operationalReportId}`)}
-            />
-          </>
-        ) : (
+      {task.operationalReportId ? (
+        <Card>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+            Sumber Tugas
+          </Text>
+          <MetaRow label="Sumber tugas" value="Laporan operasional" />
+          <MetaRow label="Kategori laporan" value={report ? formatOperationalReportCategory(report.category) : 'Laporan terkait'} />
+          <MetaRow label="Lokasi laporan" value={report?.locationNote ?? '-'} />
+          <MetaRow label="Pelapor" value={report ? workerNames[report.reportedBy] ?? 'Pelapor tidak tersedia' : 'Pelapor tidak tersedia'} />
+          <MetaRow label="Status laporan" value={report ? formatOperationalReportStatus(report.status) : '-'} />
+          <Button
+            title="Buka Laporan"
+            variant="secondary"
+            onPress={() => router.push(`/owner/reports/${task.operationalReportId}`)}
+          />
+        </Card>
+      ) : task.careScheduleId ? null : (
+        <Card>
+          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+            Sumber Tugas
+          </Text>
           <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
             Tugas tidak terhubung ke jadwal atau laporan.
           </Text>
-        )}
-      </Card>
+        </Card>
+      )}
 
       <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
-        Realisasi
+        Hasil kerja
       </Text>
       {task.activities.length === 0 ? (
         <EmptyState
-          title="Belum ada realisasi"
+          title="Belum ada hasil kerja"
           subtitle={task.requiresPhoto ? 'Menunggu bukti foto dari pekerja.' : 'Pekerja belum menyelesaikan atau menunda tugas ini.'}
         />
       ) : (
@@ -241,7 +215,7 @@ export default function OwnerTaskDetailScreen() {
               {activity.status === 'completed' ? (
                 <>
                   <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '700' }}>
-                    Bukti Realisasi
+                    Bukti foto
                   </Text>
                   <TaskProofPhotoPreview
                     emptyText={task.requiresPhoto ? 'Menunggu bukti foto dari pekerja.' : undefined}
@@ -281,15 +255,6 @@ function formatDate(value: string): string {
     month: 'short',
     year: 'numeric',
   });
-}
-
-function formatActivityStatus(status: ActivityStatus): string {
-  const labels: Record<ActivityStatus, string> = {
-    completed: 'Selesai',
-    postponed: 'Ditunda',
-  };
-
-  return labels[status];
 }
 
 function formatDateTime(value: string): string {
