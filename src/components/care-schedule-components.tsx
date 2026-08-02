@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
+import { Platform, Pressable, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
 
 import type {
   CareSchedule,
@@ -17,7 +18,8 @@ import {
 } from '../utils/displayFormat';
 import { formatTreeDisplayCode } from '../utils/treeFormat';
 import { colors, radius, spacing } from '../constants/theme';
-import { appTheme, Badge, Button, Card, ChipButton, CompactMetaItem, DateField, EmptyState, Field, FormSection, MetaRow } from './ui';
+import { appTheme, Badge, Card, CompactMetaItem, MetaRow } from './ui';
+import { Icon } from './icons';
 import { careCategoryOptions } from './care-sop-components';
 
 export type ManualScheduleFormValues = {
@@ -145,13 +147,40 @@ export function CareTaskSummaryCard({
   return <Pressable onPress={onPress}>{content}</Pressable>;
 }
 
+export type ScheduleFormErrors = {
+  title?: string;
+  category?: string;
+  scheduledDate?: string;
+  assignedWorkerId?: string;
+  targetType?: string;
+  targetDetail?: string;
+};
+
+// Urutan field untuk "scroll ke error pertama" (RF §3.6).
+export const scheduleFormFieldOrder = [
+  'title',
+  'category',
+  'scheduledDate',
+  'assignedWorkerId',
+  'targetType',
+  'targetDetail',
+] as const;
+
+// Form datar (tanpa judul section), gaya mengikuti Tambah Pohon. Validasi inline
+// per-field (border/ label merah + pesan 11px); ErrorBanner hanya untuk error
+// jaringan (ditangani layar pemanggil). `onFieldLayout` melaporkan posisi Y tiap
+// field ke pemanggil supaya bisa auto-scroll ke error pertama.
 export function ManualScheduleForm({
+  errors,
   onChange,
+  onFieldLayout,
   trees,
   values,
   workers,
 }: {
+  errors?: ScheduleFormErrors;
   onChange: (values: ManualScheduleFormValues) => void;
+  onFieldLayout?: (key: string, y: number) => void;
   trees: Tree[];
   values: ManualScheduleFormValues;
   workers: WorkerMembership[];
@@ -174,73 +203,459 @@ export function ManualScheduleForm({
     });
   }
 
-  function updateRequiresPhoto() {
-    onChange({
-      ...values,
-      requiresPhoto: !values.requiresPhoto,
-    });
+  function reportLayout(key: string) {
+    return (event: LayoutChangeEvent) => onFieldLayout?.(key, event.nativeEvent.layout.y);
   }
+
+  const showTargetDetail =
+    values.targetType === 'row' ||
+    values.targetType === 'column' ||
+    values.targetType === 'tree' ||
+    values.targetType === 'custom';
 
   return (
     <View style={{ gap: spacing['2xl'] }}>
-      <ScheduleFormSection title="Rencana Perawatan">
-        <Field
+      <View onLayout={reportLayout('title')}>
+        <FormTextField
+          error={errors?.title}
           label="Judul *"
           onChangeText={(value) => updateValue('title', value)}
-          placeholder="Contoh: Penyiraman area barat"
+          placeholder="Contoh: Pemupukan blok A"
           value={values.title}
         />
+      </View>
 
-        <OptionGroup
+      <View onLayout={reportLayout('category')}>
+        <FormChipGroup
+          error={errors?.category}
           label="Kategori *"
-          options={careCategoryOptions.map((category) => ({
-            label: formatCareCategory(category),
-            value: category,
-          }))}
+          options={careCategoryOptions.map((category) => ({ label: formatCareCategory(category), value: category }))}
           selectedValue={values.category}
           onSelect={(value) => updateValue('category', value)}
         />
+      </View>
 
-        <DateField
+      <View onLayout={reportLayout('scheduledDate')}>
+        <FormDateField
+          error={errors?.scheduledDate}
           label="Tanggal *"
-          onChangeDate={(value) => updateValue('scheduledDate', value)}
-          placeholder="Pilih tanggal jadwal"
           value={values.scheduledDate}
+          onChangeDate={(value) => updateValue('scheduledDate', value)}
         />
-      </ScheduleFormSection>
+      </View>
 
-      <ScheduleFormSection title="Pekerja">
-        <WorkerPicker
-          selectedWorkerId={values.assignedWorkerId}
-          workers={workers}
-          onSelect={(workerId) => updateValue('assignedWorkerId', workerId)}
+      <View onLayout={reportLayout('assignedWorkerId')}>
+        <FormChipGroup
+          emptyText="Belum ada pekerja aktif. Setujui pekerja dulu sebelum membuat tugas."
+          error={errors?.assignedWorkerId}
+          label="Pekerja *"
+          options={workers.map((worker) => ({ label: worker.fullName, value: worker.userId }))}
+          selectedValue={values.assignedWorkerId}
+          onSelect={(value) => updateValue('assignedWorkerId', value)}
         />
-      </ScheduleFormSection>
+      </View>
 
-      <ScheduleFormSection title="Target">
-        <TargetPicker
-          onTargetTypeChange={updateTargetType}
-          onValueChange={updateValue}
-          trees={trees}
-          values={values}
+      <View onLayout={reportLayout('targetType')}>
+        <FormChipGroup
+          error={errors?.targetType}
+          label="Target *"
+          options={careScheduleTargetOptions.map((targetType) => ({ label: formatTargetType(targetType), value: targetType }))}
+          selectedValue={values.targetType}
+          onSelect={(value) => updateTargetType(value as TargetType)}
         />
-      </ScheduleFormSection>
+      </View>
 
-      <ScheduleFormSection title="Instruksi">
-        <TextArea
-          label="Instruksi"
+      {showTargetDetail ? (
+        <View onLayout={reportLayout('targetDetail')}>
+          {values.targetType === 'row' ? (
+            <FormTextField
+              error={errors?.targetDetail}
+              label="Baris *"
+              onChangeText={(value) => updateValue('targetRow', value)}
+              placeholder="Contoh: A"
+              value={values.targetRow}
+            />
+          ) : null}
+          {values.targetType === 'column' ? (
+            <FormTextField
+              error={errors?.targetDetail}
+              label="Kolom *"
+              onChangeText={(value) => updateValue('targetColumn', value)}
+              placeholder="Contoh: 1"
+              value={values.targetColumn}
+            />
+          ) : null}
+          {values.targetType === 'tree' ? (
+            <FormChipGroup
+              emptyText="Belum ada pohon aktif. Tambahkan pohon dulu."
+              error={errors?.targetDetail}
+              label="Pohon *"
+              options={trees.map((tree) => ({ label: formatTreeDisplayCode(tree), value: tree.id }))}
+              selectedValue={values.targetTreeId}
+              onSelect={(value) => updateValue('targetTreeId', value)}
+            />
+          ) : null}
+          {values.targetType === 'custom' ? (
+            <FormTextField
+              error={errors?.targetDetail}
+              label="Target khusus *"
+              multiline
+              onChangeText={(value) => updateValue('customTargetNote', value)}
+              placeholder="Contoh: Area dekat gudang pupuk"
+              value={values.customTargetNote}
+            />
+          ) : null}
+        </View>
+      ) : null}
+
+      <View onLayout={reportLayout('instruction')}>
+        <FormTextField
+          label="Instruksi · opsional"
+          multiline
           onChangeText={(value) => updateValue('instruction', value)}
-          placeholder="Instruksi kerja untuk pekerja"
+          placeholder="Contoh: Pupuk merata di sekitar tajuk"
           value={values.instruction}
         />
-      </ScheduleFormSection>
+      </View>
 
-      <ProofRequirementToggle
-        enabled={values.requiresPhoto}
-        onToggle={updateRequiresPhoto}
-      />
+      <View onLayout={reportLayout('requiresPhoto')}>
+        <FormChipGroup
+          label="Bukti foto"
+          options={[
+            { label: 'Tidak wajib', value: 'no' },
+            { label: 'Wajib', value: 'yes' },
+          ]}
+          selectedValue={values.requiresPhoto ? 'yes' : 'no'}
+          onSelect={(value) => onChange({ ...values, requiresPhoto: value === 'yes' })}
+        />
+      </View>
     </View>
   );
+}
+
+// Validasi bersama Buat & Edit: tandai semua field wajib yang belum valid sekaligus.
+export function validateScheduleForm(values: ManualScheduleFormValues): ScheduleFormErrors {
+  const errors: ScheduleFormErrors = {};
+
+  if (!values.title.trim()) {
+    errors.title = 'Judul wajib diisi.';
+  }
+
+  if (!values.category) {
+    errors.category = 'Pilih kategori.';
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(values.scheduledDate.trim())) {
+    errors.scheduledDate = 'Pilih tanggal.';
+  }
+
+  if (!values.assignedWorkerId.trim()) {
+    errors.assignedWorkerId = 'Pilih satu pekerja.';
+  }
+
+  if (!values.targetType) {
+    errors.targetType = 'Pilih target.';
+  }
+
+  if (values.targetType === 'row' && !values.targetRow.trim()) {
+    errors.targetDetail = 'Baris wajib diisi.';
+  } else if (values.targetType === 'column' && !values.targetColumn.trim()) {
+    errors.targetDetail = 'Kolom wajib diisi.';
+  } else if (values.targetType === 'tree' && !values.targetTreeId.trim()) {
+    errors.targetDetail = 'Pohon wajib dipilih.';
+  } else if (values.targetType === 'custom' && !values.customTargetNote.trim()) {
+    errors.targetDetail = 'Target khusus wajib diisi.';
+  }
+
+  return errors;
+}
+
+export function hasScheduleFormErrors(errors: ScheduleFormErrors): boolean {
+  return Boolean(
+    errors.title ||
+      errors.category ||
+      errors.scheduledDate ||
+      errors.assignedWorkerId ||
+      errors.targetType ||
+      errors.targetDetail
+  );
+}
+
+// Hapus error field yang sudah terisi (dipakai saat nilai berubah); tak pernah
+// menambah error baru supaya pesan tidak muncul sambil mengetik.
+export function clearResolvedScheduleFormErrors(
+  errors: ScheduleFormErrors,
+  values: ManualScheduleFormValues
+): ScheduleFormErrors {
+  if (!hasScheduleFormErrors(errors)) {
+    return errors;
+  }
+
+  return {
+    title: values.title.trim() ? undefined : errors.title,
+    category: values.category ? undefined : errors.category,
+    scheduledDate: /^\d{4}-\d{2}-\d{2}$/.test(values.scheduledDate.trim()) ? undefined : errors.scheduledDate,
+    assignedWorkerId: values.assignedWorkerId.trim() ? undefined : errors.assignedWorkerId,
+    targetType: values.targetType ? undefined : errors.targetType,
+    targetDetail: isTargetDetailValid(values) ? undefined : errors.targetDetail,
+  };
+}
+
+function isTargetDetailValid(values: ManualScheduleFormValues): boolean {
+  if (values.targetType === 'row') {
+    return Boolean(values.targetRow.trim());
+  }
+
+  if (values.targetType === 'column') {
+    return Boolean(values.targetColumn.trim());
+  }
+
+  if (values.targetType === 'tree') {
+    return Boolean(values.targetTreeId.trim());
+  }
+
+  if (values.targetType === 'custom') {
+    return Boolean(values.customTargetNote.trim());
+  }
+
+  return true;
+}
+
+// ---- Primitive field datar (label "*" merah, error inline 11px) ----
+function FormLabel({ error = false, text }: { error?: boolean; text: string }) {
+  const required = text.endsWith(' *');
+  const optional = text.endsWith(' · opsional');
+  const base = required
+    ? text.slice(0, -2)
+    : optional
+      ? text.slice(0, -' · opsional'.length)
+      : text;
+
+  return (
+    <Text selectable style={{ color: error ? colors.danger : colors.text, fontSize: 14, fontWeight: '700' }}>
+      {base}
+      {required ? <Text style={{ color: colors.danger }}> *</Text> : null}
+      {optional ? <Text style={{ color: colors.textMuted, fontWeight: '400' }}> · opsional</Text> : null}
+    </Text>
+  );
+}
+
+function FormError({ message }: { message?: string }) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <Text selectable style={{ color: colors.danger, fontSize: 11, lineHeight: 15 }}>
+      {message}
+    </Text>
+  );
+}
+
+function FormTextField({
+  error,
+  label,
+  multiline = false,
+  onChangeText,
+  placeholder,
+  value,
+}: {
+  error?: string;
+  label: string;
+  multiline?: boolean;
+  onChangeText: (value: string) => void;
+  placeholder?: string;
+  value: string;
+}) {
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <FormLabel text={label} />
+      <TextInput
+        multiline={multiline}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textSoft}
+        style={{
+          backgroundColor: colors.surface,
+          borderColor: error ? colors.danger : colors.border,
+          borderCurve: 'continuous',
+          borderRadius: radius.md,
+          borderWidth: 1,
+          color: colors.text,
+          fontSize: 16,
+          minHeight: multiline ? 104 : 54,
+          paddingHorizontal: spacing.lg,
+          ...(multiline ? { paddingTop: spacing.md, textAlignVertical: 'top' } : null),
+        }}
+        value={value}
+      />
+      <FormError message={error} />
+    </View>
+  );
+}
+
+function FormChipGroup({
+  emptyText,
+  error,
+  label,
+  onSelect,
+  options,
+  selectedValue,
+}: {
+  emptyText?: string;
+  error?: string;
+  label: string;
+  onSelect: (value: string) => void;
+  options: Array<{ label: string; value: string }>;
+  selectedValue: string;
+}) {
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <FormLabel error={Boolean(error)} text={label} />
+      {options.length === 0 && emptyText ? (
+        <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+          {emptyText}
+        </Text>
+      ) : (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+          {options.map((option) => (
+            <FormChip
+              key={option.value}
+              active={selectedValue === option.value}
+              error={Boolean(error)}
+              label={option.label}
+              onPress={() => onSelect(option.value)}
+            />
+          ))}
+        </View>
+      )}
+      <FormError message={error} />
+    </View>
+  );
+}
+
+function FormChip({
+  active,
+  error = false,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  error?: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  const borderColor = active ? colors.primary : error ? colors.danger : colors.border;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={{
+        backgroundColor: active ? colors.primary : colors.surface,
+        borderColor,
+        borderCurve: 'continuous',
+        borderRadius: radius.round,
+        borderWidth: 1,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm + 1,
+      }}
+    >
+      <Text selectable={false} style={{ color: active ? '#FFFFFF' : colors.text, fontSize: 14, fontWeight: '700' }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function FormDateField({
+  error,
+  label,
+  onChangeDate,
+  value,
+}: {
+  error?: string;
+  label: string;
+  onChangeDate: (value: string) => void;
+  value: string;
+}) {
+  const [showPicker, setShowPicker] = React.useState(false);
+  const selectedDate = parseIsoDate(value) ?? new Date();
+
+  function handleValueChange(_event: DateTimePickerChangeEvent, date: Date) {
+    if (Platform.OS !== 'ios') {
+      setShowPicker(false);
+    }
+
+    onChangeDate(formatIsoDate(date));
+  }
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <FormLabel text={label} />
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setShowPicker(true)}
+        style={{
+          alignItems: 'center',
+          backgroundColor: colors.surface,
+          borderColor: error ? colors.danger : colors.border,
+          borderCurve: 'continuous',
+          borderRadius: radius.md,
+          borderWidth: 1,
+          flexDirection: 'row',
+          gap: spacing.md,
+          justifyContent: 'center',
+          minHeight: 54,
+          paddingHorizontal: spacing.lg,
+        }}
+      >
+        <Icon name="calendar" size={20} color={colors.primary} />
+        <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
+          {formatFriendlyDate(value)}
+        </Text>
+      </Pressable>
+      <FormError message={error} />
+      {showPicker ? (
+        <DateTimePicker
+          display="default"
+          mode="date"
+          onDismiss={() => setShowPicker(false)}
+          onNeutralButtonPress={() => setShowPicker(false)}
+          onValueChange={handleValueChange}
+          value={selectedDate}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function parseIsoDate(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatFriendlyDate(value: string, placeholder = 'Pilih tanggal'): string {
+  const date = parseIsoDate(value);
+
+  if (!date) {
+    return placeholder;
+  }
+
+  return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export function ProofRequirementToggle({
@@ -344,183 +759,6 @@ export function formatCareTarget(input: {
   }
 
   return input.customTargetNote ?? 'Target khusus belum diisi';
-}
-
-function WorkerPicker({
-  onSelect,
-  selectedWorkerId,
-  workers,
-}: {
-  onSelect: (workerId: string) => void;
-  selectedWorkerId: string;
-  workers: WorkerMembership[];
-}) {
-  return (
-    <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-        Pekerja Aktif *
-      </Text>
-      {workers.length === 0 ? (
-        <EmptyState title="Belum ada pekerja aktif" subtitle="Setujui pekerja terlebih dahulu sebelum membuat tugas." />
-      ) : (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          {workers.map((worker) => (
-            <ChipButton
-              key={worker.userId}
-              active={selectedWorkerId === worker.userId}
-              label={worker.fullName}
-              onPress={() => onSelect(worker.userId)}
-            />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-function TargetPicker({
-  onTargetTypeChange,
-  onValueChange,
-  trees,
-  values,
-}: {
-  onTargetTypeChange: (targetType: TargetType) => void;
-  onValueChange: (field: keyof ManualScheduleFormValues, value: string) => void;
-  trees: Tree[];
-  values: ManualScheduleFormValues;
-}) {
-  return (
-    <View style={{ gap: 12 }}>
-      <OptionGroup
-        label="Target Jadwal *"
-        options={careScheduleTargetOptions.map((targetType) => ({
-          label: formatTargetType(targetType),
-          value: targetType,
-        }))}
-        selectedValue={values.targetType}
-        onSelect={onTargetTypeChange}
-      />
-
-      {values.targetType === 'row' ? (
-        <Field
-          label="Baris target *"
-          onChangeText={(value) => onValueChange('targetRow', value)}
-          placeholder="Contoh: A"
-          value={values.targetRow}
-        />
-      ) : null}
-
-      {values.targetType === 'column' ? (
-        <Field
-          label="Kolom target *"
-          onChangeText={(value) => onValueChange('targetColumn', value)}
-          placeholder="Contoh: 1"
-          value={values.targetColumn}
-        />
-      ) : null}
-
-      {values.targetType === 'tree' ? (
-        <View style={{ gap: 8 }}>
-          <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-            Pohon target *
-          </Text>
-          {trees.length === 0 ? (
-            <EmptyState title="Belum ada pohon aktif" subtitle="Tambahkan pohon sebelum membuat jadwal per pohon." />
-          ) : (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-              {trees.map((tree) => (
-                <ChipButton
-                  key={tree.id}
-                  active={values.targetTreeId === tree.id}
-                  label={formatTreeDisplayCode(tree)}
-                  onPress={() => onValueChange('targetTreeId', tree.id)}
-                />
-              ))}
-            </View>
-          )}
-        </View>
-      ) : null}
-
-      {values.targetType === 'custom' ? (
-        <TextArea
-          label="Catatan target khusus *"
-          onChangeText={(value) => onValueChange('customTargetNote', value)}
-          placeholder="Contoh: Area dekat gudang pupuk"
-          value={values.customTargetNote}
-        />
-      ) : null}
-    </View>
-  );
-}
-
-function OptionGroup<TValue extends string>({
-  label,
-  onSelect,
-  options,
-  selectedValue,
-}: {
-  label: string;
-  onSelect: (value: TValue) => void;
-  options: Array<{ label: string; value: TValue }>;
-  selectedValue: TValue | '';
-}) {
-  return (
-    <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-        {label}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-        {options.map((option) => (
-          <ChipButton
-            key={option.value}
-            active={selectedValue === option.value}
-            label={option.label}
-            onPress={() => onSelect(option.value)}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function TextArea({
-  label,
-  onChangeText,
-  placeholder,
-  value,
-}: {
-  label: string;
-  onChangeText: (value: string) => void;
-  placeholder?: string;
-  value: string;
-}) {
-  return (
-    <View style={{ gap: 7 }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-        {label}
-      </Text>
-      <TextInput
-        multiline
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textSoft}
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderCurve: 'continuous',
-          borderRadius: radius.md,
-          borderWidth: 1,
-          color: colors.text,
-          fontSize: 16,
-          minHeight: 104,
-          paddingHorizontal: spacing.lg,
-          paddingTop: spacing.md,
-          textAlignVertical: 'top',
-        }}
-        value={value}
-      />
-    </View>
-  );
 }
 
 function formatDate(value: string): string {
