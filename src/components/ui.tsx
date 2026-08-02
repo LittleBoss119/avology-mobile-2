@@ -1097,6 +1097,34 @@ export function Button({
   );
 }
 
+export function FloatingActionButton({
+  icon = 'plus',
+  label,
+  onPress,
+}: {
+  icon?: IconName;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={{
+        alignItems: 'center',
+        backgroundColor: tokens.color.brand.base,
+        borderRadius: tokens.radius.cardInner,
+        height: tokens.layout.controlHeight,
+        justifyContent: 'center',
+        width: tokens.layout.controlHeight,
+      }}
+    >
+      <Icon name={icon} size={24} color="#FFFFFF" />
+    </Pressable>
+  );
+}
+
 export function ErrorBanner({ message }: { message?: string | null }) {
   const safeMessage = sanitizeUserFacingMessage(message);
 

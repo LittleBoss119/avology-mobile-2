@@ -15,6 +15,7 @@ import {
   EmptyState,
   ErrorBanner,
   FilterChipsRow,
+  FloatingActionButton,
   LoadingState,
   MainTabHeader,
   Screen,
@@ -265,7 +266,7 @@ export default function CareScheduleListScreen() {
 
   return (
     <Screen
-      floatingAction={<AddScheduleFab onPress={() => setAddSheetOpen(true)} />}
+      floatingAction={<FloatingActionButton label="Tambah jadwal" onPress={() => setAddSheetOpen(true)} />}
       header={
         <MainTabHeader
           title="Jadwal"
@@ -449,14 +450,6 @@ function CompactScheduleCard({
           <CompactMetaItem icon="user" label={formatWorkerSummary(workers)} />
         </View>
       </Card>
-    </Pressable>
-  );
-}
-
-function AddScheduleFab({ onPress }: { onPress: () => void }) {
-  return (
-    <Pressable accessibilityLabel="Tambah jadwal" accessibilityRole="button" onPress={onPress} style={styles.fab}>
-      <Icon name="plus" size={24} color={tokens.color.brand.on} />
     </Pressable>
   );
 }
@@ -815,15 +808,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   sopPillText: { ...tokens.type.caption, color: tokens.color.text.tertiary },
-
-  fab: {
-    alignItems: 'center',
-    backgroundColor: tokens.color.brand.base,
-    borderRadius: tokens.radius.cardInner,
-    height: tokens.layout.controlHeight,
-    justifyContent: 'center',
-    width: tokens.layout.controlHeight,
-  },
 
   sheetRows: { gap: tokens.space.sm },
   filterSheetBody: { gap: tokens.space.md },
