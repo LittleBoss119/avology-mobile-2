@@ -24,12 +24,14 @@ const OPERATIONAL_REPORT_SELECT =
   'id, farm_id, reported_by, category, location_note, description, status, owner_response_note, responded_by, responded_at, created_at, updated_at';
 
 const operationalReportCategories: OperationalReportCategory[] = [
+  'pest',
+  'disease',
   'land_damage',
   'broken_tool',
-  'out_of_stock',
-  'area_pest_disease',
-  'disaster_weather',
   'worker_need',
+  'weather',
+  'disaster',
+  'out_of_stock',
   'other',
 ];
 

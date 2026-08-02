@@ -37,6 +37,7 @@ import type {
 import type {
   TaskProofPhotoMap,
 } from '../types/media';
+import { BottomSheet } from './bottom-sheet';
 import {
   formatCareTarget,
   ProofRequirementToggle,
@@ -45,7 +46,9 @@ import {
 import { formatCareCategory } from './care-sop-components';
 import { TaskProofPhotoPreview } from './task-proof-photo';
 import {
+  formatDateOnly,
   formatOperationalReportCategory,
+  formatOperationalReportStatus,
   formatTargetType,
 } from '../utils/displayFormat';
 import { formatTreeLocation } from '../utils/treeFormat';
@@ -62,8 +65,10 @@ import {
   ErrorBanner,
   Field,
   FilterChipsRow,
+  FloatingActionButton,
   FormSection,
   LoadingState,
+  MainTabHeader,
   MetaRow,
   Screen,
   SearchFilterRow,
@@ -73,12 +78,14 @@ import {
 } from './ui';
 
 const operationalReportCategoryOptions: OperationalReportCategory[] = [
+  'pest',
+  'disease',
   'land_damage',
   'broken_tool',
-  'out_of_stock',
-  'area_pest_disease',
-  'disaster_weather',
   'worker_need',
+  'weather',
+  'disaster',
+  'out_of_stock',
   'other',
 ];
 
@@ -90,7 +97,6 @@ const operationalReportStatusOptions: OperationalReportStatus[] = [
 ];
 
 type OperationalReportStatusFilter = 'all' | OperationalReportStatus;
-type OperationalReportCategoryFilter = 'all' | OperationalReportCategory;
 
 function canCreateTaskFromReportStatus(status: OperationalReportStatus): boolean {
   return status !== 'resolved' && status !== 'rejected';
@@ -218,51 +224,98 @@ export function WorkerCreateOperationalReportScreen() {
 }
 
 type OperationalReportListScreenProps = {
-  header?: React.ReactNode;
-  showHeader?: boolean;
+  role: 'owner' | 'worker';
+  onProfilePress: () => void;
 };
 
-export function WorkerOperationalReportListScreen({
-  header,
-  showHeader = true,
-}: OperationalReportListScreenProps = {}) {
+// Kriteria filter yang tinggal di bottom sheet: kategori (multi) + pelapor (owner saja).
+// Status TIDAK di sini — dia chip yang selalu terlihat di atas daftar.
+type ReportSheetCriteria = {
+  categories: OperationalReportCategory[];
+  reporter: string; // 'all' | userId
+};
+
+const DEFAULT_REPORT_CRITERIA: ReportSheetCriteria = {
+  categories: [],
+  reporter: 'all',
+};
+
+const reportStatusFilterOptions: OperationalReportStatusFilter[] = ['all', ...operationalReportStatusOptions];
+
+export function OperationalReportListScreen({ role, onProfilePress }: OperationalReportListScreenProps) {
+  const isOwner = role === 'owner';
   const { currentFarm } = useAuth();
+  const [criteria, setCriteria] = React.useState<ReportSheetCriteria>(DEFAULT_REPORT_CRITERIA);
+  const [draft, setDraft] = React.useState<ReportSheetCriteria>(DEFAULT_REPORT_CRITERIA);
   const [error, setError] = React.useState<string | null>(null);
+  const [filterSheetOpen, setFilterSheetOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [reports, setReports] = React.useState<OperationalReport[]>([]);
+  const [searchQuery, setSearchQuery] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState<OperationalReportStatusFilter>('all');
+  const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
 
   const farmId = currentFarm?.farmId;
-  const filteredReports = React.useMemo(() => {
-    if (statusFilter === 'all') {
-      return reports;
-    }
 
-    return reports.filter((report) => report.status === statusFilter);
-  }, [reports, statusFilter]);
+  const filteredReports = React.useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    return reports.filter((report) => {
+      const reporterName = workerNames[report.reportedBy] ?? '';
+      const searchableParts = [
+        formatOperationalReportCategory(report.category),
+        report.description,
+        report.locationNote,
+      ];
+
+      if (isOwner) {
+        searchableParts.push(reporterName);
+      }
+
+      const searchableText = searchableParts.filter(Boolean).join(' ').toLowerCase();
+
+      const matchesSearch = !normalizedQuery || searchableText.includes(normalizedQuery);
+      const matchesStatus = statusFilter === 'all' || report.status === statusFilter;
+      const matchesCategory =
+        criteria.categories.length === 0 || criteria.categories.includes(report.category);
+      const matchesReporter = criteria.reporter === 'all' || report.reportedBy === criteria.reporter;
+
+      return matchesSearch && matchesStatus && matchesCategory && matchesReporter;
+    });
+  }, [criteria.categories, criteria.reporter, isOwner, reports, searchQuery, statusFilter, workerNames]);
 
   const loadReports = React.useCallback(async () => {
-    if (!farmId || currentFarm?.role !== 'worker' || currentFarm.status !== 'active') {
-      setError('Hanya pekerja aktif yang dapat melihat laporan operasional.');
+    if (!farmId || !currentFarm || currentFarm.role !== role || currentFarm.status !== 'active') {
+      setError('Hanya anggota kebun aktif yang dapat melihat laporan operasional.');
       setReports([]);
+      setWorkerNames({});
       return;
     }
 
     setError(null);
 
-    const result = await getOperationalReports({
-      farmId,
-      reportedBy: currentFarm.userId,
-    });
+    const [reportsResult, workersResult] = await Promise.all([
+      getOperationalReports(isOwner ? { farmId } : { farmId, reportedBy: currentFarm.userId }),
+      getFarmMemberBasicProfiles(farmId),
+    ]);
 
-    if (result.error) {
-      setError(result.error.message);
+    if (reportsResult.error) {
+      setError(reportsResult.error.message);
       setReports([]);
-      return;
+    } else {
+      setReports(reportsResult.data);
     }
 
-    setReports(result.data);
-  }, [currentFarm?.role, currentFarm?.status, currentFarm?.userId, farmId]);
+    if (workersResult.error) {
+      setWorkerNames({});
+    } else {
+      setWorkerNames(
+        Object.fromEntries(
+          workersResult.data.map((worker: FarmMemberBasicProfile) => [worker.userId, worker.fullName])
+        )
+      );
+    }
+  }, [currentFarm, farmId, isOwner, role]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -275,44 +328,197 @@ export function WorkerOperationalReportListScreen({
     return <LoadingState message="Memuat laporan operasional..." />;
   }
 
+  const activeFilterCount = criteria.categories.length + (criteria.reporter !== 'all' ? 1 : 0);
+  const hasActiveFilters =
+    statusFilter !== 'all' || activeFilterCount > 0 || searchQuery.trim().length > 0;
+  const hasNoData = reports.length === 0;
+
+  const reporterOptions: Array<{ label: string; value: string }> = [
+    { label: 'Semua', value: 'all' },
+    ...Object.entries(workerNames)
+      .map(([userId, name]) => ({ label: name, value: userId }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  ];
+
+  function openFilterSheet() {
+    setDraft(criteria);
+    setFilterSheetOpen(true);
+  }
+
+  function applyDraft() {
+    setCriteria(draft);
+    setFilterSheetOpen(false);
+  }
+
   return (
     <Screen
-      stickyFooter={
-        <Button title="Buat Laporan" onPress={() => router.push('/worker/reports/create')} />
+      floatingAction={
+        role === 'worker' ? (
+          <FloatingActionButton label="Buat laporan" onPress={() => router.push('/worker/reports/create')} />
+        ) : undefined
+      }
+      header={
+        <MainTabHeader
+          title="Laporan"
+          roleLabel={isOwner ? 'Pemilik' : 'Pekerja'}
+          onProfilePress={onProfilePress}
+        />
       }
     >
-      {header ??
-        (showHeader ? (
-          <ReportRootHeader
-            roleLabel="Pekerja"
-            title="Laporan"
-            subtitle="Buat dan pantau laporan operasional kamu."
-          />
-        ) : null)}
       <ErrorBanner message={error} />
 
-      <ReportSummary title="Laporan Saya" reports={reports} />
-
-      <ReportStatusFilter selectedStatus={statusFilter} onSelect={setStatusFilter} />
-
-      {filteredReports.length === 0 ? (
+      {error ? null : hasNoData ? (
         <EmptyState
-          title={reports.length === 0 ? 'Belum ada laporan' : 'Tidak ada laporan pada filter ini'}
-          subtitle={reports.length === 0 ? 'Buat Laporan jika ada kondisi lapangan.' : undefined}
+          title="Belum ada laporan"
+          subtitle={
+            isOwner
+              ? 'Laporan dari pekerja akan muncul di sini.'
+              : 'Buat laporan jika ada kondisi lapangan.'
+          }
         />
       ) : (
-        <View style={{ gap: 12 }}>
-          {filteredReports.map((report) => (
-            <OperationalReportCard
-              key={report.id}
-              compactStatus
-              report={report}
-              onPress={() => router.push(`/worker/reports/${report.id}`)}
-            />
-          ))}
-        </View>
+        <>
+          <SearchFilterRow
+            filterActive={activeFilterCount > 0}
+            filterCount={activeFilterCount}
+            onChangeText={setSearchQuery}
+            onFilterPress={openFilterSheet}
+            placeholder={isOwner ? 'Cari isi, lokasi, atau pelapor' : 'Cari isi atau lokasi'}
+            value={searchQuery}
+          />
+
+          <FilterChipsRow>
+            {reportStatusFilterOptions.map((status) => (
+              <ChipButton
+                key={status}
+                active={statusFilter === status}
+                label={status === 'all' ? 'Semua' : formatOperationalReportStatus(status)}
+                onPress={() => setStatusFilter(status)}
+              />
+            ))}
+          </FilterChipsRow>
+
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+            {hasActiveFilters
+              ? `Menampilkan ${filteredReports.length} dari ${reports.length} laporan`
+              : `Menampilkan ${filteredReports.length} laporan`}
+          </Text>
+
+          {filteredReports.length === 0 ? (
+            <EmptyState title="Tidak ada laporan pada filter ini" />
+          ) : (
+            <View style={{ gap: 12 }}>
+              {filteredReports.map((report) => (
+                <OperationalReportCard
+                  key={report.id}
+                  report={report}
+                  reporterName={workerNames[report.reportedBy]}
+                  showReporter={isOwner}
+                  onPress={() =>
+                    router.push(isOwner ? `/owner/reports/${report.id}` : `/worker/reports/${report.id}`)
+                  }
+                />
+              ))}
+            </View>
+          )}
+        </>
       )}
+
+      <ReportFilterSheet
+        draft={draft}
+        isOwner={isOwner}
+        onApply={applyDraft}
+        onClose={() => setFilterSheetOpen(false)}
+        onDraftChange={setDraft}
+        reporterOptions={reporterOptions}
+        visible={filterSheetOpen}
+      />
     </Screen>
+  );
+}
+
+function ReportFilterSheet({
+  draft,
+  isOwner,
+  onApply,
+  onClose,
+  onDraftChange,
+  reporterOptions,
+  visible,
+}: {
+  draft: ReportSheetCriteria;
+  isOwner: boolean;
+  onApply: () => void;
+  onClose: () => void;
+  onDraftChange: (next: ReportSheetCriteria) => void;
+  reporterOptions: Array<{ label: string; value: string }>;
+  visible: boolean;
+}) {
+  const isDefault = draft.categories.length === 0 && draft.reporter === 'all';
+
+  function toggleCategory(value: OperationalReportCategory) {
+    const nextCategories = draft.categories.includes(value)
+      ? draft.categories.filter((category) => category !== value)
+      : [...draft.categories, value];
+    onDraftChange({ ...draft, categories: nextCategories });
+  }
+
+  return (
+    <BottomSheet onClose={onClose} title="Filter laporan" visible={visible}>
+      <View style={{ gap: spacing.md }}>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={isDefault}
+            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
+            onPress={() => onDraftChange(DEFAULT_REPORT_CRITERIA)}
+          >
+            <Text
+              selectable={false}
+              style={{ color: isDefault ? colors.textMuted : colors.primary, fontSize: 14, fontWeight: '700' }}
+            >
+              Atur ulang
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={{ gap: spacing.sm }}>
+          <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
+            Kategori
+          </Text>
+          <FilterChipsRow>
+            {operationalReportCategoryOptions.map((category) => (
+              <ChipButton
+                key={category}
+                active={draft.categories.includes(category)}
+                label={formatOperationalReportCategory(category)}
+                onPress={() => toggleCategory(category)}
+              />
+            ))}
+          </FilterChipsRow>
+        </View>
+
+        {isOwner ? (
+          <View style={{ gap: spacing.sm }}>
+            <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
+              Pelapor
+            </Text>
+            <FilterChipsRow>
+              {reporterOptions.map((option) => (
+                <ChipButton
+                  key={option.value}
+                  active={draft.reporter === option.value}
+                  label={option.label}
+                  onPress={() => onDraftChange({ ...draft, reporter: option.value })}
+                />
+              ))}
+            </FilterChipsRow>
+          </View>
+        ) : null}
+
+        <Button title="Terapkan" variant="primary" onPress={onApply} />
+      </View>
+    </BottomSheet>
   );
 }
 
@@ -656,140 +862,6 @@ export function WorkerEditOperationalReportScreen({ reportId }: { reportId?: str
         />
       </FormSection>
 
-    </Screen>
-  );
-}
-
-export function OwnerOperationalReportListScreen({
-  header,
-  showHeader = true,
-}: OperationalReportListScreenProps = {}) {
-  const { currentFarm } = useAuth();
-  const [error, setError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [categoryFilter, setCategoryFilter] = React.useState<OperationalReportCategoryFilter>('all');
-  const [reports, setReports] = React.useState<OperationalReport[]>([]);
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [statusFilter, setStatusFilter] = React.useState<OperationalReportStatusFilter>('all');
-  const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
-
-  const farmId = currentFarm?.farmId;
-  const filteredReports = React.useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-
-    return reports.filter((report) => {
-      const reporterName = workerNames[report.reportedBy] ?? '';
-      const searchableText = [
-        formatOperationalReportCategory(report.category),
-        report.description,
-        report.locationNote,
-        reporterName,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-
-      const matchesSearch = !normalizedQuery || searchableText.includes(normalizedQuery);
-      const matchesStatus = statusFilter === 'all' || report.status === statusFilter;
-      const matchesCategory = categoryFilter === 'all' || report.category === categoryFilter;
-
-      return matchesSearch && matchesStatus && matchesCategory;
-    });
-  }, [categoryFilter, reports, searchQuery, statusFilter, workerNames]);
-
-  const loadReports = React.useCallback(async () => {
-    if (!farmId || currentFarm?.role !== 'owner' || currentFarm.status !== 'active') {
-      setError('Hanya pemilik aktif yang dapat melihat laporan operasional.');
-      setReports([]);
-      setWorkerNames({});
-      return;
-    }
-
-    setError(null);
-
-    const [reportsResult, workersResult] = await Promise.all([
-      getOperationalReports({ farmId }),
-      getFarmMemberBasicProfiles(farmId),
-    ]);
-
-    if (reportsResult.error) {
-      setError(reportsResult.error.message);
-      setReports([]);
-    } else {
-      setReports(reportsResult.data);
-    }
-
-    if (workersResult.error) {
-      setWorkerNames({});
-    } else {
-      setWorkerNames(
-        Object.fromEntries(
-          workersResult.data.map((worker: FarmMemberBasicProfile) => [worker.userId, worker.fullName])
-        )
-      );
-    }
-  }, [currentFarm?.role, currentFarm?.status, farmId]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      setLoading(true);
-      loadReports().finally(() => setLoading(false));
-    }, [loadReports])
-  );
-
-  if (loading) {
-    return <LoadingState message="Memuat laporan operasional..." />;
-  }
-
-  return (
-    <Screen>
-      {header ??
-        (showHeader ? (
-          <ReportRootHeader
-            roleLabel="Pemilik"
-            title="Laporan Operasional"
-            subtitle="Tinjau laporan lapangan dari pekerja."
-          />
-        ) : null)}
-      <ErrorBanner message={error} />
-
-      <ReportSummary title="Laporan Masuk" reports={reports} />
-
-      <ReportSearchFilterRow
-        categoryFilter={categoryFilter}
-        onReset={() => {
-          setStatusFilter('all');
-          setCategoryFilter('all');
-        }}
-        onSelectCategory={setCategoryFilter}
-        onSelectStatus={setStatusFilter}
-        onSearchChange={setSearchQuery}
-        searchQuery={searchQuery}
-        statusFilter={statusFilter}
-      />
-
-      <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-        {`Menampilkan ${filteredReports.length} dari ${reports.length} laporan`}
-      </Text>
-
-      {filteredReports.length === 0 ? (
-        <EmptyState
-          title={reports.length === 0 ? 'Belum ada laporan' : 'Tidak ada laporan pada filter ini'}
-          subtitle={reports.length === 0 ? 'Laporan dari pekerja akan muncul di sini.' : undefined}
-        />
-      ) : (
-        <View style={{ gap: 12 }}>
-          {filteredReports.map((report) => (
-            <OperationalReportCard
-              key={report.id}
-              compactStatus
-              report={report}
-              reporterName={workerNames[report.reportedBy]}
-              onPress={() => router.push(`/owner/reports/${report.id}`)}
-            />
-          ))}
-        </View>
-      )}
     </Screen>
   );
 }
@@ -1144,7 +1216,7 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
             description="Gunakan konteks laporan ini untuk membuat tugas tindak lanjut."
           />
           <MetaRow label="Kategori laporan" value={formatOperationalReportCategory(report.category)} />
-          <MetaRow label="Status laporan" value={formatReportStatusDisplay(report.status)} />
+          <MetaRow label="Status laporan" value={formatOperationalReportStatus(report.status)} />
           <MetaRow label="Tanggal laporan" value={formatDateTime(report.createdAt)} />
           <MetaRow label="Target/Lokasi" value={report.locationNote} />
           <MetaRow label="Deskripsi" value={report.description || 'Deskripsi belum diisi'} />
@@ -1206,113 +1278,6 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
   );
 }
 
-function ReportSearchFilterRow({
-  categoryFilter,
-  onReset,
-  onSelectCategory,
-  onSelectStatus,
-  onSearchChange,
-  searchQuery,
-  statusFilter,
-}: {
-  categoryFilter: OperationalReportCategoryFilter;
-  onReset: () => void;
-  onSelectCategory: (category: OperationalReportCategoryFilter) => void;
-  onSelectStatus: (status: OperationalReportStatusFilter) => void;
-  onSearchChange: (value: string) => void;
-  searchQuery: string;
-  statusFilter: OperationalReportStatusFilter;
-}) {
-  const activeFilterCount = Number(statusFilter !== 'all') + Number(categoryFilter !== 'all');
-
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <SearchFilterRow
-        onChangeText={onSearchChange}
-        placeholder="Cari kategori, lokasi, atau pelapor"
-        value={searchQuery}
-      />
-      <ReportFilterChips
-        categoryFilter={categoryFilter}
-        hasActiveFilters={activeFilterCount > 0}
-        onReset={onReset}
-        onSelectCategory={onSelectCategory}
-        onSelectStatus={onSelectStatus}
-        statusFilter={statusFilter}
-      />
-    </View>
-  );
-}
-
-function ReportRootHeader({
-  roleLabel,
-  subtitle,
-  title,
-}: {
-  roleLabel: 'Pekerja' | 'Pemilik';
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
-      <Badge label={roleLabel} tone={roleLabel === 'Pemilik' ? 'info' : 'neutral'} />
-      <Text
-        selectable
-        style={{
-          color: colors.text,
-          fontSize: typography.h1.fontSize,
-          fontWeight: typography.h1.fontWeight,
-          lineHeight: typography.h1.lineHeight,
-        }}
-      >
-        {title}
-      </Text>
-      <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
-        {subtitle}
-      </Text>
-    </View>
-  );
-}
-
-function ReportFilterChips({
-  categoryFilter,
-  hasActiveFilters,
-  onReset,
-  onSelectCategory,
-  onSelectStatus,
-  statusFilter,
-}: {
-  categoryFilter: OperationalReportCategoryFilter;
-  hasActiveFilters: boolean;
-  onReset: () => void;
-  onSelectCategory: (category: OperationalReportCategoryFilter) => void;
-  onSelectStatus: (status: OperationalReportStatusFilter) => void;
-  statusFilter: OperationalReportStatusFilter;
-}) {
-  return (
-    <View style={{ gap: spacing.xs }}>
-      <FilterChipsRow hasActiveFilters={hasActiveFilters} onClear={onReset}>
-        {(['all', ...operationalReportStatusOptions] as OperationalReportStatusFilter[]).map((status) => (
-          <ChipButton
-            key={status}
-            active={statusFilter === status}
-            label={status === 'all' ? 'Semua' : formatReportStatusDisplay(status, true)}
-            onPress={() => onSelectStatus(status)}
-          />
-        ))}
-        {(['all', ...operationalReportCategoryOptions] as OperationalReportCategoryFilter[]).map((category) => (
-          <ChipButton
-            key={category}
-            active={categoryFilter === category}
-            label={category === 'all' ? 'Kategori' : formatOperationalReportCategory(category)}
-            onPress={() => onSelectCategory(category)}
-          />
-        ))}
-      </FilterChipsRow>
-    </View>
-  );
-}
-
 function ReportDetailSummaryCard({
   report,
   reporterName,
@@ -1332,7 +1297,7 @@ function ReportDetailSummaryCard({
               {report.locationNote || 'Target belum diisi'}
             </Text>
           </View>
-          <Badge label={formatReportStatusDisplay(report.status)} tone={getReportStatusTone(report.status)} />
+          <Badge label={formatOperationalReportStatus(report.status)} tone={getReportStatusTone(report.status)} />
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
           <Badge label={formatOperationalReportCategory(report.category)} tone="info" />
@@ -1567,7 +1532,7 @@ function OwnerReportDecisionSection({
     <Card>
       <SectionHeader title="Tindak Lanjut" />
       <Badge
-        label={formatReportStatusDisplay(reportStatus)}
+        label={formatOperationalReportStatus(reportStatus)}
         tone={getReportStatusTone(reportStatus)}
       />
       <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
@@ -1578,16 +1543,22 @@ function OwnerReportDecisionSection({
 }
 
 function OperationalReportCard({
-  compactStatus = false,
   onPress,
   report,
   reporterName,
+  showReporter,
 }: {
-  compactStatus?: boolean;
   onPress?: () => void;
   report: OperationalReport;
   reporterName?: string;
+  showReporter: boolean;
 }) {
+  const description = report.description?.trim();
+  const hasDescription = Boolean(description);
+  // Deskripsi jadi judul; kalau kosong, label kategori naik jadi judul dan baris
+  // kategori di bawahnya disembunyikan supaya tidak dobel.
+  const title = hasDescription ? description : formatOperationalReportCategory(report.category);
+
   const content = (
     <Card padding={spacing.md}>
       <View style={{ gap: spacing.sm }}>
@@ -1596,27 +1567,27 @@ function OperationalReportCard({
             selectable
             ellipsizeMode="tail"
             numberOfLines={2}
-            style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '700', lineHeight: 22 }}
+            style={{ color: colors.text, flex: 1, fontSize: 15, fontWeight: '500', lineHeight: 21 }}
           >
-            {`Laporan ${formatOperationalReportCategory(report.category)}`}
+            {title}
           </Text>
-          <Badge
-            label={compactStatus ? formatReportStatusDisplay(report.status, true) : formatReportStatusDisplay(report.status)}
-            maxWidth={compactStatus ? 118 : 150}
-            tone={getReportStatusTone(report.status)}
-          />
+          <Badge label={formatOperationalReportStatus(report.status)} tone={getReportStatusTone(report.status)} />
         </View>
-        <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          <Badge label={formatOperationalReportCategory(report.category)} tone="info" />
-        </View>
-        <Text selectable ellipsizeMode="tail" numberOfLines={1} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-          {formatReportSummary(report)}
-        </Text>
-        <View style={{ gap: spacing.xs }}>
-          <CompactMetaItem icon="calendar" label={formatDateTime(report.createdAt)} />
+
+        {hasDescription ? (
+          <Text selectable style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 18 }}>
+            {formatOperationalReportCategory(report.category)}
+          </Text>
+        ) : null}
+
+        <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+          <CompactMetaItem icon="calendar" label={formatDateOnly(report.createdAt)} />
           {report.locationNote ? <CompactMetaItem icon="target" label={report.locationNote} /> : null}
-          {reporterName ? <CompactMetaItem icon="user" label={reporterName} /> : null}
         </View>
+
+        {showReporter ? (
+          <CompactMetaItem icon="user" label={reporterName ?? 'Pelapor tidak tersedia'} />
+        ) : null}
       </View>
     </Card>
   );
@@ -1644,76 +1615,6 @@ function PhotoIndicator() {
     >
       <CameraGlyph color={colors.success} />
     </View>
-  );
-}
-
-function ReportStatusFilter({
-  onSelect,
-  selectedStatus,
-}: {
-  onSelect: (status: OperationalReportStatusFilter) => void;
-  selectedStatus: OperationalReportStatusFilter;
-}) {
-  const filters: OperationalReportStatusFilter[] = ['all', ...operationalReportStatusOptions];
-
-  return (
-    <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
-        Status
-      </Text>
-      <FilterChipsRow>
-        {filters.map((status) => (
-          <ChipButton
-            key={status}
-            active={selectedStatus === status}
-            label={status === 'all' ? 'Semua' : formatReportStatusDisplay(status, true)}
-            onPress={() => onSelect(status)}
-          />
-        ))}
-      </FilterChipsRow>
-    </View>
-  );
-}
-
-function ReportSummary({ reports, title }: { reports: OperationalReport[]; title: string }) {
-  const items: Array<{ label: string; tone: 'danger' | 'info' | 'success' | 'warning'; value: number }> = [
-    { label: 'Baru', tone: 'warning', value: countReportsByStatus(reports, 'new') },
-    { label: 'Tindak Lanjut', tone: 'info', value: countReportsByStatus(reports, 'in_progress') },
-    { label: 'Selesai', tone: 'success', value: countReportsByStatus(reports, 'resolved') },
-    { label: 'Ditolak', tone: 'danger', value: countReportsByStatus(reports, 'rejected') },
-  ];
-
-  return (
-    <Card>
-      <SectionHeader title={title} />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-        {items.map((item) => (
-          <View
-            key={item.label}
-            style={{
-              backgroundColor: colors.surfaceMuted,
-              borderColor: colors.border,
-              borderCurve: 'continuous',
-              borderRadius: radius.md,
-              borderWidth: 1,
-              flexBasis: '22%',
-              flexGrow: 1,
-              gap: spacing.xs,
-              minHeight: 58,
-              minWidth: 72,
-              padding: spacing.sm,
-            }}
-          >
-            <Text selectable numberOfLines={2} style={{ color: colors.textMuted, fontSize: 11, fontWeight: '700', lineHeight: 15 }}>
-              {item.label}
-            </Text>
-            <Text selectable style={{ color: getSummaryToneColor(item.tone), fontSize: 20, fontVariant: ['tabular-nums'], fontWeight: '700' }}>
-              {item.value}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </Card>
   );
 }
 
@@ -1965,16 +1866,6 @@ function TaskTargetPicker({
   );
 }
 
-function formatReportSummary(report: OperationalReport): string {
-  const summary = report.description ?? report.locationNote;
-
-  if (!summary) {
-    return 'Tanpa keterangan';
-  }
-
-  return summary.length > 96 ? `${summary.slice(0, 93)}...` : summary;
-}
-
 function formatDate(value: string): string {
   const date = new Date(value);
 
@@ -2011,32 +1902,6 @@ function getTodayIsoDate(): string {
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-function countReportsByStatus(reports: OperationalReport[], status: OperationalReportStatus): number {
-  return reports.filter((report) => report.status === status).length;
-}
-
-function formatReportStatusDisplay(status: OperationalReportStatus, compact = false): string {
-  const labels: Record<OperationalReportStatus, string> = {
-    in_progress: 'Diproses',
-    new: 'Baru',
-    rejected: 'Ditolak',
-    resolved: 'Selesai',
-  };
-
-  return labels[status];
-}
-
-function getSummaryToneColor(tone: 'danger' | 'info' | 'success' | 'warning'): string {
-  const toneColors = {
-    danger: colors.danger,
-    info: colors.info,
-    success: colors.success,
-    warning: colors.warning,
-  };
-
-  return toneColors[tone];
 }
 
 function getWorkerOwnerStatusMessage(

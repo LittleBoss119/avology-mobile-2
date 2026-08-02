@@ -1,18 +1,9 @@
 import { router } from 'expo-router';
 
-import { WorkerOperationalReportListScreen } from '../../../../src/components/operational-report-screen';
-import { MainTabHeader } from '../../../../src/components/ui';
+import { OperationalReportListScreen } from '../../../../src/components/operational-report-screen';
 
 export default function WorkerReportsTabScreen() {
   return (
-    <WorkerOperationalReportListScreen
-      showHeader={false}
-      header={
-        <MainTabHeader
-          title="Laporan"
-          onProfilePress={() => router.push('/worker/profile')}
-        />
-      }
-    />
+    <OperationalReportListScreen role="worker" onProfilePress={() => router.push('/worker/profile')} />
   );
 }

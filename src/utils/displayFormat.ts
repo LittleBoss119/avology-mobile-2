@@ -66,19 +66,8 @@ export function formatGrowthPhase(phase?: GrowthPhase | null): string {
 
 export function formatOperationalReportStatus(status: OperationalReportStatus): string {
   const labels: Record<OperationalReportStatus, string> = {
-    in_progress: 'Dalam tindak lanjut',
-    new: 'Belum direspons',
-    rejected: 'Ditolak',
-    resolved: 'Selesai',
-  };
-
-  return labels[status];
-}
-
-export function formatOperationalReportStatusShort(status: OperationalReportStatus): string {
-  const labels: Record<OperationalReportStatus, string> = {
-    in_progress: 'Tindak lanjut',
-    new: 'Belum respons',
+    in_progress: 'Diproses',
+    new: 'Menunggu',
     rejected: 'Ditolak',
     resolved: 'Selesai',
   };
@@ -88,13 +77,15 @@ export function formatOperationalReportStatusShort(status: OperationalReportStat
 
 export function formatOperationalReportCategory(category: OperationalReportCategory): string {
   const labels: Record<OperationalReportCategory, string> = {
-    area_pest_disease: 'Hama/Penyakit Area',
-    broken_tool: 'Alat Rusak',
-    disaster_weather: 'Cuaca/Bencana',
-    land_damage: 'Kerusakan Lahan',
+    broken_tool: 'Alat rusak',
+    disaster: 'Bencana alam',
+    disease: 'Penyakit tanaman',
+    land_damage: 'Kerusakan lahan',
     other: 'Lainnya',
-    out_of_stock: 'Stok Habis',
-    worker_need: 'Kebutuhan Pekerja',
+    out_of_stock: 'Stok habis',
+    pest: 'Hama tanaman',
+    weather: 'Cuaca ekstrem',
+    worker_need: 'Kebutuhan pekerja',
   };
 
   return labels[category];
@@ -129,6 +120,20 @@ export function formatActivityStatus(status: ActivityStatus): string {
   };
 
   return labels[status];
+}
+
+export function formatDateOnly(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 export function formatTargetType(targetType: TargetType | CareSOPDefaultTargetType): string {
