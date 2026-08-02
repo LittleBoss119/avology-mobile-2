@@ -21,10 +21,11 @@ import { formatCareCategory, formatPersonDisplayName } from '../utils/displayFor
 import {
   buildTreeDisplayCode,
   formatGrowthPhase,
+  formatTreeAge,
   formatTreeDisplayCode,
 } from '../utils/treeFormat';
-import { appTheme, Badge, Button, Card, DateField, EmptyState, Field, MetaRow, PhotoPickerCard } from './ui';
-import { AlertTriangleIcon, BasketIcon, ChevronRightIcon, FlowerIcon, SprayIcon } from './icons';
+import { Badge, Button, Card, DateField, EmptyState, Field, MetaRow, PhotoPickerCard } from './ui';
+import { AlertTriangleIcon, BasketIcon, ChevronRightIcon, FlowerIcon, Icon, SprayIcon } from './icons';
 
 export type TreeFormValues = {
   rowPosition: string;
@@ -104,6 +105,10 @@ export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest' | 'ca
 
 export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
+  const isInactive = tree.isArchived || tree.currentCondition === 'dead';
+  const phaseText = tree.currentGrowthPhase ? formatGrowthPhase(tree.currentGrowthPhase) : 'Fase -';
+  const ageText = tree.plantedAt ? formatTreeAge(tree.plantedAt) : null;
+  const metaText = ageText ? `${phaseText} · ${ageText}` : phaseText;
 
   const content = (
     <View
@@ -113,31 +118,29 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
         borderCurve: 'continuous',
         borderRadius: radius.xl,
         borderWidth: 1,
-        gap: spacing.sm,
-        minHeight: 206,
+        opacity: isInactive ? 0.62 : 1,
         overflow: 'hidden',
-        padding: spacing.sm,
       }}
     >
-      <TreeVisualPlaceholder condition={tree.currentCondition} photoUrl={photoUrl} size="compact">
-        {tree.isArchived ? <Badge label="Arsip" tone="muted" /> : <ConditionStatusBadge status={tree.currentCondition} />}
-      </TreeVisualPlaceholder>
-
-      <View style={{ gap: spacing.xs, paddingHorizontal: spacing.xs, paddingBottom: spacing.xs }}>
-        <Text selectable numberOfLines={1} style={{ color: colors.primary, fontSize: 22, fontWeight: '700' }}>
-          {displayCode}
-        </Text>
-        <View style={{ alignItems: 'flex-start', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
-          {tree.currentGrowthPhase ? <GrowthPhaseBadge phase={tree.currentGrowthPhase} /> : <Badge label="Fase -" tone="neutral" />}
+      <View style={{ aspectRatio: 4 / 3, width: '100%' }}>
+        <TreeVisualPlaceholder inactive={isInactive} photoUrl={photoUrl} />
+        <View style={{ left: 8, position: 'absolute', top: 8 }}>
+          {tree.isArchived ? <Badge label="Arsip" tone="muted" /> : <ConditionStatusBadge status={tree.currentCondition} />}
         </View>
-        {tree.variety ? (
-          <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 17 }}>
-            {tree.variety}
-          </Text>
-        ) : null}
       </View>
 
-      {children}
+      <View style={{ gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 1 }}>
+        <Text selectable numberOfLines={1} style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
+          {displayCode}
+        </Text>
+        <Text selectable numberOfLines={1} style={{ color: colors.text, fontSize: 13 }}>
+          {tree.variety ?? '—'}
+        </Text>
+        <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12 }}>
+          {metaText}
+        </Text>
+        {children}
+      </View>
     </View>
   );
 
@@ -149,18 +152,12 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
 }
 
 export function TreeVisualPlaceholder({
-  children,
-  condition,
+  inactive = false,
   photoUrl,
-  size = 'regular',
 }: {
-  children?: React.ReactNode;
-  condition?: TreeConditionStatus;
+  inactive?: boolean;
   photoUrl?: string | null;
-  size?: 'compact' | 'regular';
 }) {
-  const accent = getVisualAccent(condition);
-  const isCompact = size === 'compact';
   const [imageFailed, setImageFailed] = React.useState(false);
   const shouldShowImage = Boolean(photoUrl && !imageFailed);
 
@@ -168,86 +165,28 @@ export function TreeVisualPlaceholder({
     setImageFailed(false);
   }, [photoUrl]);
 
+  if (shouldShowImage) {
+    return (
+      <Image
+        onError={() => setImageFailed(true)}
+        resizeMode="cover"
+        source={{ uri: photoUrl ?? undefined }}
+        style={{ height: '100%', opacity: inactive ? 0.85 : 1, width: '100%' }}
+      />
+    );
+  }
+
   return (
     <View
       style={{
-        backgroundColor: accent.background,
-        borderColor: accent.border,
-        borderCurve: 'continuous',
-        borderRadius: isCompact ? radius.lg : radius.xl,
-        borderWidth: 1,
-        minHeight: isCompact ? 118 : 220,
-        overflow: 'hidden',
-        padding: isCompact ? spacing.sm : spacing.lg,
+        alignItems: 'center',
+        backgroundColor: colors.photoPlaceholder,
+        height: '100%',
+        justifyContent: 'center',
+        width: '100%',
       }}
     >
-      {shouldShowImage ? (
-        <Image
-          onError={() => setImageFailed(true)}
-          resizeMode="cover"
-          source={{ uri: photoUrl ?? undefined }}
-          style={{
-            bottom: 0,
-            left: 0,
-            position: 'absolute',
-            right: 0,
-            top: 0,
-          }}
-        />
-      ) : (
-        <>
-          <View
-            style={{
-              backgroundColor: accent.haze,
-              borderRadius: 999,
-              height: isCompact ? 86 : 180,
-              position: 'absolute',
-              right: isCompact ? -18 : -30,
-              top: isCompact ? -20 : -26,
-              width: isCompact ? 118 : 220,
-            }}
-          />
-          <View
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.34)',
-              borderRadius: 999,
-              bottom: isCompact ? -16 : -34,
-              height: isCompact ? 58 : 112,
-              left: isCompact ? -22 : -30,
-              position: 'absolute',
-              width: isCompact ? 86 : 160,
-            }}
-          />
-        </>
-      )}
-      <View style={{ alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' }}>
-        {shouldShowImage ? (
-          <View style={{ flex: 1 }} />
-        ) : (
-          <View style={{ gap: isCompact ? 4 : 8, paddingTop: isCompact ? 16 : 42 }}>
-            <View
-              style={{
-                backgroundColor: accent.leaf,
-                borderRadius: 999,
-                height: isCompact ? 34 : 52,
-                transform: [{ rotate: '-22deg' }],
-                width: isCompact ? 72 : 112,
-              }}
-            />
-            <View
-              style={{
-                backgroundColor: accent.fruit,
-                borderRadius: 999,
-                height: isCompact ? 42 : 64,
-                marginLeft: isCompact ? 44 : 72,
-                marginTop: isCompact ? -8 : -12,
-                width: isCompact ? 32 : 50,
-              }}
-            />
-          </View>
-        )}
-        <View style={{ alignItems: 'flex-end', gap: 6, zIndex: 1 }}>{children}</View>
-      </View>
+      <Icon name="tree" size={28} color={colors.textMuted} />
     </View>
   );
 }
@@ -734,32 +673,6 @@ function PhotoThumbnail({ photoUrl }: { photoUrl: string }) {
       </Modal>
     </>
   );
-}
-
-function getVisualAccent(status?: TreeConditionStatus): {
-  background: string;
-  border: string;
-  fruit: string;
-  haze: string;
-  leaf: string;
-} {
-  if (status && status !== 'healthy') {
-    return {
-      background: '#FFF8E8',
-      border: '#F6D77A',
-      fruit: '#C49A25',
-      haze: '#F6D77A',
-      leaf: '#8A9A31',
-    };
-  }
-
-  return {
-    background: '#DCEFE3',
-    border: '#B8D8BF',
-    fruit: '#5C8A45',
-    haze: '#B8D8BF',
-    leaf: appTheme.primary,
-  };
 }
 
 function getTimelineDotColor(type: TreeHistoryType): string {

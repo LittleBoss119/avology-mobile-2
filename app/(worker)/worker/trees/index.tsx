@@ -1,25 +1,62 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BottomSheet } from '../../../../src/components/bottom-sheet';
 import { TreeCard } from '../../../../src/components/tree-components';
-import { EmptyState, ErrorBanner, FilterChipsRow, LoadingState, MainTabHeader, SearchFilterRow, Screen } from '../../../../src/components/ui';
+import {
+  Button,
+  ChipButton,
+  EmptyState,
+  ErrorBanner,
+  FilterChipsRow,
+  LoadingState,
+  MainTabHeader,
+  SearchFilterRow,
+  Screen,
+} from '../../../../src/components/ui';
 import { colors, spacing, tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { listTreeMainPhotosForFarm } from '../../../../src/services/photoAttachmentService';
 import { getTrees } from '../../../../src/services/treeService';
 import type { GrowthPhase, Tree, TreeConditionStatus } from '../../../../src/types/domain';
 import type { TreeMainPhotoMap } from '../../../../src/types/media';
-import {
-  formatGrowthPhase,
-  formatTreeConditionStatus,
-  formatTreeDisplayCode,
-} from '../../../../src/utils/treeFormat';
+import { formatTreeDisplayCode } from '../../../../src/utils/treeFormat';
 
-type AgeRangeFilter = 'all' | 'lt_1' | '1_3' | 'gt_3';
+type TreeAgeRange = 'lt_1' | '1_3' | 'gt_3';
 
-const conditionFilterOptions: Array<{ label: string; value: TreeConditionStatus }> = [
+type TreeFilterCriteria = {
+  ageRanges: TreeAgeRange[];
+  archived: boolean; // owner saja
+  conditions: TreeConditionStatus[];
+  phases: GrowthPhase[];
+};
+
+const DEFAULT_CRITERIA: TreeFilterCriteria = {
+  ageRanges: [],
+  archived: false,
+  conditions: [],
+  phases: [],
+};
+
+// Chip triase kondisi: 'Bermasalah' menyatukan empat kondisi non-mati; 'dead'
+// sengaja tidak masuk chip mana pun.
+const PROBLEM_CONDITIONS: TreeConditionStatus[] = [
+  'needs_attention',
+  'pest_attacked',
+  'disease_indicated',
+  'damaged',
+];
+
+type TriageKey = 'all' | 'problem' | 'healthy';
+
+const triageChips: Array<{ conditions: TreeConditionStatus[]; key: TriageKey; label: string }> = [
+  { conditions: [], key: 'all', label: 'Semua' },
+  { conditions: PROBLEM_CONDITIONS, key: 'problem', label: 'Bermasalah' },
+  { conditions: ['healthy'], key: 'healthy', label: 'Sehat' },
+];
+
+const conditionOptions: Array<{ label: string; value: TreeConditionStatus }> = [
   { label: 'Sehat', value: 'healthy' },
   { label: 'Perhatian', value: 'needs_attention' },
   { label: 'Hama', value: 'pest_attacked' },
@@ -28,7 +65,7 @@ const conditionFilterOptions: Array<{ label: string; value: TreeConditionStatus 
   { label: 'Mati', value: 'dead' },
 ];
 
-const phaseFilterOptions: Array<{ label: string; value: GrowthPhase }> = [
+const phaseOptions: Array<{ label: string; value: GrowthPhase }> = [
   { label: 'Awal', value: 'initial_planting' },
   { label: 'Vegetatif', value: 'vegetative' },
   { label: 'Berbunga', value: 'flowering' },
@@ -36,8 +73,7 @@ const phaseFilterOptions: Array<{ label: string; value: GrowthPhase }> = [
   { label: 'Panen', value: 'harvesting' },
 ];
 
-const ageRangeFilters: Array<{ label: string; value: AgeRangeFilter }> = [
-  { label: 'Semua', value: 'all' },
+const ageRangeOptions: Array<{ label: string; value: TreeAgeRange }> = [
   { label: '<1 tahun', value: 'lt_1' },
   { label: '1-3 tahun', value: '1_3' },
   { label: '>3 tahun', value: 'gt_3' },
@@ -45,13 +81,12 @@ const ageRangeFilters: Array<{ label: string; value: AgeRangeFilter }> = [
 
 export default function WorkerTreeListScreen() {
   const { currentFarm } = useAuth();
-  const [ageRange, setAgeRange] = React.useState<AgeRangeFilter>('all');
-  const [conditionFilters, setConditionFilters] = React.useState<TreeConditionStatus[]>([]);
+  const [criteria, setCriteria] = React.useState<TreeFilterCriteria>(DEFAULT_CRITERIA);
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
+  const [draft, setDraft] = React.useState<TreeFilterCriteria>(DEFAULT_CRITERIA);
   const [error, setError] = React.useState<string | null>(null);
-  const [filterOpen, setFilterOpen] = React.useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
-  const [phaseFilters, setPhaseFilters] = React.useState<GrowthPhase[]>([]);
   const [photoMap, setPhotoMap] = React.useState<TreeMainPhotoMap>({});
   const [search, setSearch] = React.useState('');
   const [trees, setTrees] = React.useState<Tree[]>([]);
@@ -69,7 +104,7 @@ export default function WorkerTreeListScreen() {
     setError(null);
 
     const result = await getTrees({
-      archived: false,
+      archived: criteria.archived,
       farmId,
     });
 
@@ -90,7 +125,7 @@ export default function WorkerTreeListScreen() {
     }
 
     setPhotoMap(photoResult.data);
-  }, [farmId]);
+  }, [criteria.archived, farmId]);
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -108,28 +143,31 @@ export default function WorkerTreeListScreen() {
     () =>
       sortTreesByCode(
         filterTrees(trees, {
-          ageRange,
-          conditionFilters,
-          phaseFilters,
+          ageRanges: criteria.ageRanges,
+          conditions: criteria.conditions,
+          phases: criteria.phases,
           search: debouncedSearch,
         })
       ),
-    [ageRange, conditionFilters, debouncedSearch, phaseFilters, trees]
+    [criteria.ageRanges, criteria.conditions, criteria.phases, debouncedSearch, trees]
   );
 
-  function toggleConditionFilter(condition: TreeConditionStatus) {
-    setConditionFilters((current) => toggleArrayValue(current, condition));
+  const problemCount = trees.filter((tree) => PROBLEM_CONDITIONS.includes(tree.currentCondition)).length;
+
+  const activeGroupCount =
+    (criteria.conditions.length > 0 ? 1 : 0) +
+    (criteria.phases.length > 0 ? 1 : 0) +
+    (criteria.ageRanges.length > 0 ? 1 : 0) +
+    (criteria.archived ? 1 : 0);
+
+  function openFilterSheet() {
+    setDraft(criteria);
+    setFilterSheetOpen(true);
   }
 
-  function togglePhaseFilter(phase: GrowthPhase) {
-    setPhaseFilters((current) => toggleArrayValue(current, phase));
-  }
-
-  function clearFilters() {
-    setAgeRange('all');
-    setConditionFilters([]);
-    setPhaseFilters([]);
-    setSearch('');
+  function applyDraft() {
+    setCriteria(draft);
+    setFilterSheetOpen(false);
   }
 
   if (loading) {
@@ -147,38 +185,52 @@ export default function WorkerTreeListScreen() {
       }
     >
       <ErrorBanner message={error} />
-      <SearchFilterBar
-        onSearchChange={setSearch}
-        search={search}
+
+      <SearchFilterRow
+        filterCount={activeGroupCount}
+        onChangeText={setSearch}
+        onFilterPress={openFilterSheet}
+        placeholder="Cari kode atau varietas"
+        value={search}
       />
-      <WorkerFilterControls
-        ageRange={ageRange}
-        conditionFilters={conditionFilters}
-        hasActiveFilters={conditionFilters.length > 0 || phaseFilters.length > 0 || ageRange !== 'all'}
-        onClear={clearFilters}
-        onOpenFilters={() => setFilterOpen(true)}
-        phaseFilters={phaseFilters}
-      />
+
+      <FilterChipsRow>
+        {triageChips.map((chip) => (
+          <ChipButton
+            key={chip.key}
+            active={sameConditionSet(criteria.conditions, chip.conditions)}
+            count={chip.key === 'problem' && problemCount > 0 ? problemCount : undefined}
+            label={chip.label}
+            onPress={() => setCriteria((current) => ({ ...current, conditions: chip.conditions }))}
+          />
+        ))}
+      </FilterChipsRow>
+
       <ResultCount count={displayedTrees.length} />
 
-      <WorkerFilterPanel
-        ageRange={ageRange}
-        conditionFilters={conditionFilters}
-        onAgeRangeChange={setAgeRange}
-        onClose={() => setFilterOpen(false)}
-        onConditionToggle={toggleConditionFilter}
-        onPhaseToggle={togglePhaseFilter}
-        phaseFilters={phaseFilters}
-        visible={filterOpen}
+      <TreeFilterSheet
+        draft={draft}
+        includeStatus={false}
+        onApply={applyDraft}
+        onClose={() => setFilterSheetOpen(false)}
+        onDraftChange={setDraft}
+        visible={filterSheetOpen}
       />
 
       {displayedTrees.length === 0 ? (
         trees.length === 0 ? (
-          <EmptyState title="Belum ada pohon" subtitle="Data pohon akan muncul setelah pemilik menambahkannya." />
+          <EmptyState
+            icon="tree"
+            subtitle="Data pohon akan muncul setelah pemilik menambahkannya."
+            title="Belum ada pohon"
+            variant="plain"
+          />
         ) : (
           <EmptyState
+            icon="tree"
+            subtitle="Coba longgarkan filternya."
             title="Tidak ada pohon yang cocok"
-            subtitle="Ubah atau atur ulang filter untuk melihat pohon lain."
+            variant="plain"
           />
         )
       ) : (
@@ -198,22 +250,6 @@ export default function WorkerTreeListScreen() {
   );
 }
 
-function SearchFilterBar({
-  onSearchChange,
-  search,
-}: {
-  onSearchChange: (value: string) => void;
-  search: string;
-}) {
-  return (
-    <SearchFilterRow
-      onChangeText={onSearchChange}
-      placeholder="Cari kode atau varietas"
-      value={search}
-    />
-  );
-}
-
 function ResultCount({ count }: { count: number }) {
   return (
     <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700', marginTop: -6 }}>
@@ -222,210 +258,143 @@ function ResultCount({ count }: { count: number }) {
   );
 }
 
-function WorkerFilterControls({
-  ageRange,
-  conditionFilters,
-  hasActiveFilters,
-  onClear,
-  onOpenFilters,
-  phaseFilters,
-}: {
-  ageRange: AgeRangeFilter;
-  conditionFilters: TreeConditionStatus[];
-  hasActiveFilters: boolean;
-  onClear: () => void;
-  onOpenFilters: () => void;
-  phaseFilters: GrowthPhase[];
-}) {
-  return (
-    <FilterChipsRow
-      hasActiveFilters={hasActiveFilters}
-      onClear={onClear}
-      chips={[
-        {
-          active: conditionFilters.length > 0,
-          key: 'condition',
-          label: 'Kondisi',
-          onPress: onOpenFilters,
-          valueLabel: conditionFilters.length === 1 ? getConditionFilterLabel(conditionFilters[0]) : conditionFilters.length > 0 ? `${conditionFilters.length}` : undefined,
-        },
-        {
-          active: phaseFilters.length > 0,
-          key: 'phase',
-          label: 'Fase',
-          onPress: onOpenFilters,
-          valueLabel: phaseFilters.length === 1 ? getPhaseFilterLabel(phaseFilters[0]) : phaseFilters.length > 0 ? `${phaseFilters.length}` : undefined,
-        },
-        {
-          active: ageRange !== 'all',
-          key: 'age',
-          label: 'Umur',
-          onPress: onOpenFilters,
-          valueLabel: ageRange !== 'all' ? getAgeRangeLabel(ageRange) : undefined,
-        },
-      ]}
-    />
-  );
-}
-
-function WorkerFilterPanel({
-  ageRange,
-  conditionFilters,
-  onAgeRangeChange,
+function TreeFilterSheet({
+  draft,
+  includeStatus,
+  onApply,
   onClose,
-  onConditionToggle,
-  onPhaseToggle,
-  phaseFilters,
+  onDraftChange,
   visible,
 }: {
-  ageRange: AgeRangeFilter;
-  conditionFilters: TreeConditionStatus[];
-  onAgeRangeChange: (ageRange: AgeRangeFilter) => void;
+  draft: TreeFilterCriteria;
+  includeStatus: boolean;
+  onApply: () => void;
   onClose: () => void;
-  onConditionToggle: (condition: TreeConditionStatus) => void;
-  onPhaseToggle: (phase: GrowthPhase) => void;
-  phaseFilters: GrowthPhase[];
+  onDraftChange: (next: TreeFilterCriteria) => void;
   visible: boolean;
 }) {
+  const isDefault =
+    draft.ageRanges.length === 0 &&
+    draft.archived === false &&
+    draft.conditions.length === 0 &&
+    draft.phases.length === 0;
+
+  function toggleCondition(value: TreeConditionStatus) {
+    onDraftChange({ ...draft, conditions: toggleArrayValue(draft.conditions, value) });
+  }
+
+  function togglePhase(value: GrowthPhase) {
+    onDraftChange({ ...draft, phases: toggleArrayValue(draft.phases, value) });
+  }
+
+  function toggleAgeRange(value: TreeAgeRange) {
+    onDraftChange({ ...draft, ageRanges: toggleArrayValue(draft.ageRanges, value) });
+  }
+
   return (
-    <BottomSheet
-      onClose={onClose}
-      subtitle="Pilih kondisi, fase, dan umur pohon aktif."
-      title="Filter Pohon"
-      visible={visible}
-    >
-      <View style={{ gap: tokens.space.xl }}>
-        <FilterSection title="Kondisi">
-          <ChipRow>
-            {conditionFilterOptions.map((filter) => (
-              <FilterChip
-                key={filter.value}
-                active={conditionFilters.includes(filter.value)}
-                label={filter.label}
-                onPress={() => onConditionToggle(filter.value)}
+    <BottomSheet onClose={onClose} title="Filter pohon" visible={visible}>
+      <View style={styles.filterSheetBody}>
+        <View style={styles.sheetResetRow}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={isDefault}
+            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
+            onPress={() => onDraftChange(DEFAULT_CRITERIA)}
+          >
+            <Text selectable={false} style={[styles.resetText, isDefault ? styles.resetTextDisabled : null]}>
+              Atur ulang
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.filterGroup}>
+          <Text selectable style={styles.filterLabel}>
+            Kondisi
+          </Text>
+          <FilterChipsRow>
+            {conditionOptions.map((option) => (
+              <ChipButton
+                key={option.value}
+                active={draft.conditions.includes(option.value)}
+                label={option.label}
+                onPress={() => toggleCondition(option.value)}
               />
             ))}
-          </ChipRow>
-        </FilterSection>
+          </FilterChipsRow>
+        </View>
 
-        <FilterSection title="Fase tumbuh">
-          <ChipRow>
-            {phaseFilterOptions.map((filter) => (
-              <FilterChip
-                key={filter.value}
-                active={phaseFilters.includes(filter.value)}
-                label={filter.label}
-                onPress={() => onPhaseToggle(filter.value)}
+        <View style={styles.filterGroup}>
+          <Text selectable style={styles.filterLabel}>
+            Fase tumbuh
+          </Text>
+          <FilterChipsRow>
+            {phaseOptions.map((option) => (
+              <ChipButton
+                key={option.value}
+                active={draft.phases.includes(option.value)}
+                label={option.label}
+                onPress={() => togglePhase(option.value)}
               />
             ))}
-          </ChipRow>
-        </FilterSection>
+          </FilterChipsRow>
+        </View>
 
-        <FilterSection title="Umur">
-          <ChipRow>
-            {ageRangeFilters.map((filter) => (
-              <FilterChip
-                key={filter.value}
-                active={ageRange === filter.value}
-                label={filter.label}
-                onPress={() => onAgeRangeChange(filter.value)}
+        <View style={styles.filterGroup}>
+          <Text selectable style={styles.filterLabel}>
+            Umur
+          </Text>
+          <FilterChipsRow>
+            {ageRangeOptions.map((option) => (
+              <ChipButton
+                key={option.value}
+                active={draft.ageRanges.includes(option.value)}
+                label={option.label}
+                onPress={() => toggleAgeRange(option.value)}
               />
             ))}
-          </ChipRow>
-        </FilterSection>
+          </FilterChipsRow>
+        </View>
 
-        <SheetDoneButton onPress={onClose} />
+        {includeStatus ? (
+          <View style={styles.filterGroup}>
+            <Text selectable style={styles.filterLabel}>
+              Status pohon
+            </Text>
+            <FilterChipsRow>
+              <ChipButton active={!draft.archived} label="Aktif" onPress={() => onDraftChange({ ...draft, archived: false })} />
+              <ChipButton active={draft.archived} label="Diarsipkan" onPress={() => onDraftChange({ ...draft, archived: true })} />
+            </FilterChipsRow>
+          </View>
+        ) : null}
+
+        <Button title="Terapkan" variant="primary" onPress={onApply} />
       </View>
     </BottomSheet>
-  );
-}
-
-function SheetDoneButton({ onPress }: { onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        alignItems: 'center',
-        backgroundColor: colors.primarySoft,
-        borderColor: colors.primaryBorder,
-        borderRadius: 999,
-        borderWidth: 1,
-        paddingHorizontal: 15,
-        paddingVertical: 9,
-      }}
-    >
-      <Text selectable style={{ color: colors.primary, fontSize: 14, fontWeight: '700' }}>
-        Selesai
-      </Text>
-    </Pressable>
-  );
-}
-
-function FilterSection({ children, title }: { children: React.ReactNode; title: string }) {
-  return (
-    <View style={{ gap: 9 }}>
-      <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
-        {title}
-      </Text>
-      {children}
-    </View>
-  );
-}
-
-function ChipRow({ children }: { children: React.ReactNode }) {
-  return <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{children}</View>;
-}
-
-function FilterChip({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        backgroundColor: active ? colors.primary : colors.surface,
-        borderColor: active ? colors.primary : colors.border,
-        borderRadius: 999,
-        borderWidth: 1,
-        paddingHorizontal: 14,
-        paddingVertical: 9,
-      }}
-    >
-      <Text selectable style={{ color: active ? colors.white : colors.text, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
 function filterTrees(
   trees: Tree[],
   filters: {
-    ageRange: AgeRangeFilter;
-    conditionFilters: TreeConditionStatus[];
-    phaseFilters: GrowthPhase[];
+    ageRanges: TreeAgeRange[];
+    conditions: TreeConditionStatus[];
+    phases: GrowthPhase[];
     search: string;
   }
 ): Tree[] {
   return trees.filter((tree) => {
-    if (filters.conditionFilters.length > 0 && !filters.conditionFilters.includes(tree.currentCondition)) {
+    if (filters.conditions.length > 0 && !filters.conditions.includes(tree.currentCondition)) {
       return false;
     }
 
     if (
-      filters.phaseFilters.length > 0 &&
-      (!tree.currentGrowthPhase || !filters.phaseFilters.includes(tree.currentGrowthPhase))
+      filters.phases.length > 0 &&
+      (!tree.currentGrowthPhase || !filters.phases.includes(tree.currentGrowthPhase))
     ) {
       return false;
     }
 
-    if (!matchesAgeRange(tree, filters.ageRange)) {
+    if (!matchesAgeRanges(tree, filters.ageRanges)) {
       return false;
     }
 
@@ -448,8 +417,8 @@ function filterTrees(
   });
 }
 
-function matchesAgeRange(tree: Tree, ageRange: AgeRangeFilter): boolean {
-  if (ageRange === 'all') {
+function matchesAgeRanges(tree: Tree, ageRanges: TreeAgeRange[]): boolean {
+  if (ageRanges.length === 0) {
     return true;
   }
 
@@ -459,15 +428,28 @@ function matchesAgeRange(tree: Tree, ageRange: AgeRangeFilter): boolean {
     return false;
   }
 
-  if (ageRange === 'lt_1') {
+  return ageRanges.some((range) => matchesSingleAgeRange(ageYears, range));
+}
+
+function matchesSingleAgeRange(ageYears: number, range: TreeAgeRange): boolean {
+  if (range === 'lt_1') {
     return ageYears < 1;
   }
 
-  if (ageRange === '1_3') {
+  if (range === '1_3') {
     return ageYears >= 1 && ageYears <= 3;
   }
 
   return ageYears > 3;
+}
+
+function sameConditionSet(a: TreeConditionStatus[], b: TreeConditionStatus[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  const setB = new Set(b);
+  return a.every((value) => setB.has(value));
 }
 
 function sortTreesByCode(trees: Tree[]): Tree[] {
@@ -494,14 +476,11 @@ function toggleArrayValue<T>(values: T[], value: T): T[] {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 }
 
-function getConditionFilterLabel(condition: TreeConditionStatus): string {
-  return conditionFilterOptions.find((filter) => filter.value === condition)?.label ?? formatTreeConditionStatus(condition);
-}
-
-function getPhaseFilterLabel(phase: GrowthPhase): string {
-  return phaseFilterOptions.find((filter) => filter.value === phase)?.label ?? formatGrowthPhase(phase);
-}
-
-function getAgeRangeLabel(ageRange: AgeRangeFilter): string {
-  return ageRangeFilters.find((filter) => filter.value === ageRange)?.label ?? 'Semua umur';
-}
+const styles = StyleSheet.create({
+  filterSheetBody: { gap: tokens.space.md },
+  filterGroup: { gap: tokens.space.sm },
+  filterLabel: { ...tokens.type.label, color: tokens.color.text.primary },
+  sheetResetRow: { alignItems: 'flex-end' },
+  resetText: { ...tokens.type.label, color: tokens.color.brand.base },
+  resetTextDisabled: { color: tokens.color.text.tertiary },
+});
