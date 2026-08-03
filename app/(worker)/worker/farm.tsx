@@ -1,223 +1,256 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import { Badge, Button, Card, ErrorBanner, MainTabHeader, MetaRow, Screen, SectionHeader } from '../../../src/components/ui';
-import { colors, radius, spacing } from '../../../src/constants/theme';
+import { ConfirmDialog } from '../../../src/components/bottom-sheet';
+import { MemberRow } from '../../../src/components/member-row';
+import { useSnackbar } from '../../../src/components/snackbar';
+import { Button, Card, ErrorBanner, LoadingState, MainTabHeader, Screen } from '../../../src/components/ui';
+import { colors, spacing, typography } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
+import { getFarmDetail } from '../../../src/services/farmService';
 import { getFarmActorDisplayProfiles, leaveCurrentFarm } from '../../../src/services/memberService';
-import { getTrees } from '../../../src/services/treeService';
-import type { FarmActorDisplayProfile } from '../../../src/types/domain';
-import { formatMemberStatus, formatRole } from '../../../src/utils/displayFormat';
-
-type WorkerFarmHubData = {
-  actors: FarmActorDisplayProfile[];
-  totalTrees: number | null;
-};
+import type { Farm, FarmActorDisplayProfile } from '../../../src/types/domain';
 
 export default function WorkerFarmHubScreen() {
   const { currentFarm, refresh } = useAuth();
+  const showSnackbar = useSnackbar();
+  const [farm, setFarm] = React.useState<Farm | null>(currentFarm?.farm ?? null);
+  const [actors, setActors] = React.useState<FarmActorDisplayProfile[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [hubData, setHubData] = React.useState<WorkerFarmHubData>({
-    actors: [],
-    totalTrees: null,
-  });
-  const [leavingFarm, setLeavingFarm] = React.useState(false);
-  const farm = currentFarm?.farm;
+  const [busy, setBusy] = React.useState(false);
+  const [confirmLeave, setConfirmLeave] = React.useState(false);
+
   const farmId = currentFarm?.farmId;
-  const ownerName = findOwnerName(hubData.actors);
-  const activeWorkers = hubData.actors.filter((actor) => actor.role === 'worker' && actor.status === 'active');
-  const canLeaveFarm = currentFarm?.role === 'worker' && currentFarm.status === 'active' && Boolean(farmId);
+  const currentUserId = currentFarm?.userId;
+
+  const activeMembers = actors
+    .filter((actor) => actor.status === 'active')
+    .sort((first, second) => roleOrder(first.role) - roleOrder(second.role));
+
+  const load = React.useCallback(async () => {
+    if (!farmId) {
+      setError('Data kebun aktif tidak ditemukan.');
+      setFarm(null);
+      setActors([]);
+      return;
+    }
+
+    setError(null);
+
+    const [farmResult, actorsResult] = await Promise.all([
+      getFarmDetail(farmId),
+      getFarmActorDisplayProfiles(farmId),
+    ]);
+
+    if (farmResult.error) {
+      setError(farmResult.error.message);
+      setFarm(null);
+      setActors([]);
+      return;
+    }
+
+    setFarm(farmResult.data);
+
+    if (actorsResult.error) {
+      setError(actorsResult.error.message);
+      setActors([]);
+      return;
+    }
+
+    setActors(actorsResult.data);
+  }, [farmId]);
 
   useFocusEffect(
     React.useCallback(() => {
-      let isActive = true;
-
-      async function loadHubData() {
-        if (!farmId) {
-          return;
-        }
-
-        const [actorsResult, treesResult] = await Promise.all([
-          getFarmActorDisplayProfiles(farmId),
-          getTrees({ archived: false, farmId }),
-        ]);
-
-        if (!isActive) {
-          return;
-        }
-
-        setHubData({
-          actors: actorsResult.data ?? [],
-          totalTrees: treesResult.data?.length ?? null,
-        });
-
-        logOptionalHubError('anggota kebun', actorsResult.error?.message);
-        logOptionalHubError('jumlah pohon', treesResult.error?.message);
-      }
-
-      loadHubData();
-
-      return () => {
-        isActive = false;
-      };
-    }, [farmId])
+      setLoading(true);
+      load().finally(() => setLoading(false));
+    }, [load])
   );
 
-  function handleLeaveFarmPress() {
-    Alert.alert(
-      'Keluar dari kebun?',
-      'Akses kamu ke kebun ini akan dinonaktifkan. Riwayat tugas dan laporan tetap tersimpan.',
-      [
-        { style: 'cancel', text: 'Batal' },
-        {
-          onPress: () => {
-            void handleConfirmLeaveFarm();
-          },
-          style: 'destructive',
-          text: 'Keluar dari kebun',
-        },
-      ]
-    );
+  function handleRetry() {
+    setLoading(true);
+    load().finally(() => setLoading(false));
   }
 
-  async function handleConfirmLeaveFarm() {
-    if (!farmId || leavingFarm) {
+  async function handleLeaveFarm() {
+    if (!farmId) {
       return;
     }
 
-    setLeavingFarm(true);
-    setError(null);
-
+    setBusy(true);
     const result = await leaveCurrentFarm({ farmId });
+    setBusy(false);
 
     if (result.error) {
-      setError(result.error.message);
-      setLeavingFarm(false);
+      setConfirmLeave(false);
+      showSnackbar(result.error.message);
       return;
     }
 
+    setConfirmLeave(false);
     await refresh();
-    setLeavingFarm(false);
     router.replace('/removed-access');
   }
 
+  const header = (
+    <MainTabHeader title="Kebun" roleLabel="Pekerja" onProfilePress={() => router.push('/worker/profile')} />
+  );
+
+  if (loading) {
+    return <LoadingState message="Memuat kebun..." />;
+  }
+
+  if (!farm) {
+    return (
+      <Screen header={header}>
+        <ErrorBanner message={error} />
+        <Card>
+          <Text style={{ color: colors.textMuted, lineHeight: 21 }}>Data kebun gagal dimuat.</Text>
+          <Button title="Coba lagi" onPress={handleRetry} />
+        </Card>
+      </Screen>
+    );
+  }
+
+  const metaLine = buildFarmMetaLine(farm);
+
   return (
-    <Screen
-      header={<MainTabHeader title="Kebun" onProfilePress={() => router.push('/worker/profile')} />}
-    >
+    <Screen header={header}>
       <ErrorBanner message={error} />
 
-      <Card variant="highlight">
-        <SectionHeader title="Data Kebun" />
-        <MetaRow label="Nama kebun" value={farm?.name} />
-        <MetaRow label="Lokasi" value={farm?.location} />
-        <MetaRow label="Luas" value={formatArea(farm?.areaSize)} />
-        <MetaRow label="Total pohon aktif" value={formatCount(hubData.totalTrees, 'pohon')} />
-      </Card>
-
       <Card>
-        <SectionHeader title="Anggota Kebun" />
-        <MetaRow label="Pemilik" value={ownerName ?? 'Belum tersedia'} />
-        {activeWorkers.length > 0 ? (
-          <View style={{ gap: spacing.sm }}>
-            {activeWorkers.slice(0, 4).map((actor) => (
-              <MemberRow key={actor.userId} actor={actor} />
-            ))}
-          </View>
-        ) : (
-          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Data pekerja aktif belum tersedia.
+        <View style={{ gap: spacing.xs }}>
+          <Text
+            style={{
+              color: colors.text,
+              fontSize: typography.h2.fontSize,
+              fontWeight: '700',
+              lineHeight: typography.h2.lineHeight,
+            }}
+          >
+            {farm.name}
           </Text>
-        )}
-      </Card>
-
-      <Card>
-        <SectionHeader title="Akses Saya" />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          <Badge label={formatRole(currentFarm?.role)} tone="info" />
-          <Badge label={formatMemberStatus(currentFarm?.status)} tone={currentFarm?.status === 'active' ? 'success' : 'warning'} />
+          {metaLine ? (
+            <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>{metaLine}</Text>
+          ) : null}
         </View>
-        <MetaRow label="Peran" value={formatRole(currentFarm?.role)} />
-        <MetaRow label="Status" value={formatMemberStatus(currentFarm?.status)} />
-        <MetaRow label="Bergabung sejak" value={formatDate(currentFarm?.joinedAt)} />
       </Card>
 
-      {canLeaveFarm ? (
-        <Card>
-          <SectionHeader title="Akses Kebun" />
-          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-            Keluar hanya jika kamu tidak lagi bekerja di kebun ini.
-          </Text>
-          <Button
-            size="small"
-            title="Keluar dari kebun"
-            loading={leavingFarm}
-            variant="danger"
-            onPress={handleLeaveFarmPress}
-          />
-        </Card>
-      ) : null}
+      <SectionLabel
+        title="Anggota"
+        trailing={<Text style={{ color: colors.textMuted, fontSize: 14 }}>{activeMembers.length} orang</Text>}
+      />
+      <Card>
+        <View>
+          {activeMembers.map((actor, index) => (
+            <View
+              key={actor.userId}
+              style={index > 0 ? { borderTopColor: colors.divider, borderTopWidth: 1 } : undefined}
+            >
+              <MemberRow
+                name={actor.fullName}
+                meta={buildMemberMeta(actor, currentUserId)}
+                tone={actor.role === 'owner' ? 'accent' : 'neutral'}
+              />
+            </View>
+          ))}
+        </View>
+      </Card>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setConfirmLeave(true)}
+        style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingVertical: spacing.md })}
+      >
+        <Text
+          style={{
+            color: colors.danger,
+            fontSize: typography.bodyStrong.fontSize,
+            fontWeight: '700',
+            textAlign: 'center',
+          }}
+        >
+          Keluar dari kebun
+        </Text>
+      </Pressable>
+
+      <ConfirmDialog
+        cancelLabel="Batal"
+        confirmLabel="Keluar"
+        loading={busy}
+        message="Kamu perlu kode bergabung untuk masuk lagi."
+        onCancel={() => {
+          if (!busy) {
+            setConfirmLeave(false);
+          }
+        }}
+        onConfirm={() => void handleLeaveFarm()}
+        title="Keluar dari kebun?"
+        tone="danger"
+        visible={confirmLeave}
+      />
     </Screen>
   );
 }
 
-function MemberRow({ actor }: { actor: FarmActorDisplayProfile }) {
+function SectionLabel({ title, trailing }: { title: string; trailing?: React.ReactNode }) {
   return (
     <View
       style={{
-        borderColor: colors.border,
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        gap: spacing.xs,
-        padding: spacing.md,
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.md,
+        justifyContent: 'space-between',
+        paddingTop: spacing.xs,
       }}
     >
-      <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
-        {actor.fullName}
+      <Text
+        style={{
+          color: colors.text,
+          fontSize: typography.h3.fontSize,
+          fontWeight: '700',
+          lineHeight: typography.h3.lineHeight,
+        }}
+      >
+        {title}
       </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-        <Badge label={formatRole(actor.role)} tone={actor.role === 'owner' ? 'info' : 'neutral'} />
-        <Badge label={formatMemberStatus(actor.status)} tone={actor.status === 'active' ? 'success' : 'warning'} />
-      </View>
+      {trailing}
     </View>
   );
 }
 
-function findOwnerName(actors: FarmActorDisplayProfile[]): string | null {
-  return actors.find((actor) => actor.role === 'owner' && actor.status === 'active')?.fullName ?? null;
+function roleOrder(role: FarmActorDisplayProfile['role']): number {
+  return role === 'owner' ? 0 : 1;
 }
 
-function formatArea(value?: number | null): string {
-  if (value === null || value === undefined) {
-    return 'Belum tersedia';
+function buildMemberMeta(actor: FarmActorDisplayProfile, currentUserId?: string): string {
+  const roleLabel = actor.role === 'owner' ? 'Pemilik' : 'Pekerja';
+  return actor.userId === currentUserId ? `${roleLabel} · kamu` : roleLabel;
+}
+
+function buildFarmMetaLine(farm: Farm): string {
+  const parts: string[] = [];
+  const location = farm.location?.trim();
+
+  if (location) {
+    parts.push(location);
   }
 
-  return `${new Intl.NumberFormat('id-ID').format(value)} m²`;
-}
+  const area = formatArea(farm.areaSize);
 
-function formatCount(value: number | null | undefined, unit: string): string {
-  if (value === null || value === undefined) {
-    return 'Belum tersedia';
+  if (area) {
+    parts.push(area);
   }
 
-  return `${new Intl.NumberFormat('id-ID').format(value)} ${unit}`;
+  return parts.join(' · ');
 }
 
-function formatDate(value?: string | null): string | null {
-  if (!value) {
+function formatArea(value?: number | null): string | null {
+  if (value === null || value === undefined) {
     return null;
   }
 
-  return new Date(value).toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-function logOptionalHubError(label: string, message?: string | null) {
-  if (typeof __DEV__ !== 'undefined' && __DEV__ && message) {
-    console.debug('[worker-farm] Optional data unavailable', { label, message });
-  }
+  return `${new Intl.NumberFormat('id-ID').format(value)} m²`;
 }

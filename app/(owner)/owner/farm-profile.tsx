@@ -236,11 +236,3 @@ function parseAreaSize(value: string): number | null | Error {
 
   return parsed;
 }
-
-function formatArea(value?: number | null): string | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  return `${new Intl.NumberFormat('id-ID').format(value)} meter persegi`;
-}
