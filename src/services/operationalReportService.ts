@@ -1,55 +1,51 @@
+import {
+  isOperationalReportCategory,
+  isOperationalReportResolution,
+  normalizeOperationalReportCategory,
+} from '../constants/operationalReport';
 import { supabase } from '../lib/supabase';
 import type {
+  CloseReportInput,
   CreateOperationalReportData,
   CreateOperationalReportInput,
+  DeleteOwnOperationalReportInput,
   GetOperationalReportEditEligibilityInput,
   GetOperationalReportDetailInput,
   GetOperationalReportsInput,
+  HandleReportMyselfInput,
+  MarkReportAlreadyResolvedInput,
   MemberRole,
   MemberStatus,
   OperationalReport,
   OperationalReportCategory,
   OperationalReportEditEligibility,
+  OperationalReportResolution,
   OperationalReportStatus,
+  RejectReportInput,
   ServiceResult,
   SuccessData,
   UpdateOwnOperationalReportData,
   UpdateOwnOperationalReportInput,
-  UpdateOperationalReportStatusInput,
   UUID,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
+import { deleteOperationalReportPhotoObjects } from './photoAttachmentService';
+
+export { resolveReportWithTask } from './careTaskService';
 
 const OPERATIONAL_REPORT_SELECT =
-  'id, farm_id, reported_by, category, location_note, description, status, owner_response_note, responded_by, responded_at, created_at, updated_at';
-
-const operationalReportCategories: OperationalReportCategory[] = [
-  'pest',
-  'disease',
-  'land_damage',
-  'broken_tool',
-  'worker_need',
-  'weather',
-  'disaster',
-  'out_of_stock',
-  'other',
-];
-
-const operationalReportStatuses: OperationalReportStatus[] = [
-  'new',
-  'in_progress',
-  'resolved',
-  'rejected',
-];
+  'id, farm_id, reported_by, category, location_note, description, status, resolution, resolved_at, owner_response_note, responded_by, responded_at, created_at, updated_at';
 
 type OperationalReportRow = {
   id: string;
   farm_id: string;
   reported_by: string;
-  category: OperationalReportCategory;
+  category: string;
   location_note: string | null;
   description: string | null;
   status: OperationalReportStatus;
+  resolution?: string | null;
+  resolved_at?: string | null;
   owner_response_note?: string | null;
   responded_by?: string | null;
   responded_at?: string | null;
@@ -75,12 +71,13 @@ export async function createOperationalReport(
     return fail(category);
   }
 
-  const locationNote = normalizeOptionalText(input.locationNote);
   const description = normalizeOptionalText(input.description);
 
-  if (!locationNote && !description) {
-    return fail(new Error('Isi lokasi atau deskripsi laporan operasional.'));
+  if (!description) {
+    return fail(new Error('Deskripsi laporan wajib diisi.'));
   }
+
+  const locationNote = normalizeOptionalText(input.locationNote);
 
   const accessResult = await ensureActiveWorker(input.farmId);
 
@@ -124,31 +121,11 @@ export async function getOperationalReports(
     return fail(accessResult.error);
   }
 
-  const status = normalizeStatusFilter(input.status);
-
-  if (status instanceof Error) {
-    return fail(status);
-  }
-
-  const category = normalizeCategoryFilter(input.category);
-
-  if (category instanceof Error) {
-    return fail(category);
-  }
-
   let query = supabase
     .from('operational_reports')
     .select(OPERATIONAL_REPORT_SELECT)
     .eq('farm_id', input.farmId)
     .order('created_at', { ascending: false });
-
-  if (status) {
-    query = query.eq('status', status);
-  }
-
-  if (category) {
-    query = query.eq('category', category);
-  }
 
   if (input.reportedBy) {
     query = query.eq('reported_by', input.reportedBy);
@@ -198,9 +175,91 @@ export async function getOperationalReportDetail(
   return ok(mapOperationalReport(data));
 }
 
-export async function updateOperationalReportStatus(
-  input: UpdateOperationalReportStatusInput
+// ---------------------------------------------------------------------------
+// Keputusan owner
+// ---------------------------------------------------------------------------
+// Empat aksi berbasis NIAT, bukan berbasis status. Semua guard transisi
+// (laporan sudah tertutup, tidak boleh balik ke 'new', reject hanya dari 'new'
+// dan hanya kalau belum ada tugas, catatan wajib untuk self_handled/reject,
+// resolution 'task' hanya sah kalau tugasnya ada) DITEGAKKAN RPC — sengaja
+// tidak diduplikasi di sini, cukup dipetakan pesan errornya.
+//
+// Keputusan "buat tugas" TIDAK ada di sini: itu resolveReportWithTask, yang
+// di-re-export dari careTaskService karena RPC-nya sekaligus meng-insert tugas.
+
+// Owner mengurus sendiri -> in_progress + self_handled. Catatan wajib.
+export async function handleReportMyself(
+  input: HandleReportMyselfInput
 ): Promise<ServiceResult<SuccessData>> {
+  const note = normalizeOptionalText(input.note);
+
+  // Dicegah di client: bisa diketahui tanpa round-trip, dan pesannya lebih
+  // spesifik daripada balasan RPC. Sama perlakuannya dengan rejectReport.
+  if (!note) {
+    return fail(new Error('Catatan wajib diisi kalau Anda mengurus laporan ini sendiri.'));
+  }
+
+  return callUpdateOperationalReportStatus({
+    operationalReportId: input.operationalReportId,
+    ownerResponseNote: note,
+    resolution: 'self_handled',
+    status: 'in_progress',
+  });
+}
+
+// Kondisi ternyata sudah beres -> langsung resolved + already_ok.
+export async function markReportAlreadyResolved(
+  input: MarkReportAlreadyResolvedInput
+): Promise<ServiceResult<SuccessData>> {
+  return callUpdateOperationalReportStatus({
+    operationalReportId: input.operationalReportId,
+    ownerResponseNote: toOwnerNoteInstruction(input.note),
+    resolution: 'already_ok',
+    status: 'resolved',
+  });
+}
+
+// Tolak laporan -> rejected, resolution tetap null. Alasan wajib.
+export async function rejectReport(
+  input: RejectReportInput
+): Promise<ServiceResult<SuccessData>> {
+  const reason = normalizeOptionalText(input.reason);
+
+  // Satu-satunya validasi client di alur keputusan: bisa dicegah tanpa
+  // round-trip, dan pesannya lebih spesifik daripada balasan RPC.
+  if (!reason) {
+    return fail(new Error('Alasan penolakan wajib diisi.'));
+  }
+
+  return callUpdateOperationalReportStatus({
+    operationalReportId: input.operationalReportId,
+    ownerResponseNote: reason,
+    resolution: null,
+    status: 'rejected',
+  });
+}
+
+// Tutup laporan yang sudah in_progress -> resolved, resolution DIPERTAHANKAN
+// (RPC memakai resolution lama saat p_resolution null).
+export async function closeReport(
+  input: CloseReportInput
+): Promise<ServiceResult<SuccessData>> {
+  return callUpdateOperationalReportStatus({
+    operationalReportId: input.operationalReportId,
+    ownerResponseNote: toOwnerNoteInstruction(input.note),
+    resolution: null,
+    status: 'resolved',
+  });
+}
+
+async function callUpdateOperationalReportStatus(input: {
+  operationalReportId: UUID;
+  // null = pertahankan catatan lama, '' = HAPUS catatan, teks = ganti catatan.
+  ownerResponseNote: string | null;
+  // null = pertahankan resolution lama.
+  resolution: OperationalReportResolution | null;
+  status: OperationalReportStatus;
+}): Promise<ServiceResult<SuccessData>> {
   const reportId = normalizeRequiredText(
     input.operationalReportId,
     'Laporan operasional tidak ditemukan.'
@@ -210,34 +269,23 @@ export async function updateOperationalReportStatus(
     return fail(reportId);
   }
 
-  const status = validateOperationalReportStatus(input.status);
-
-  if (status instanceof Error) {
-    return fail(status);
-  }
-
-  const reportResult = await getOperationalReportDetail({
-    operationalReportId: reportId,
-  });
-
-  if (reportResult.error) {
-    return fail(reportResult.error);
-  }
-
-  const accessResult = await ensureActiveOwner(reportResult.data.farmId);
-
-  if (accessResult.error) {
-    return fail(accessResult.error);
-  }
-
   const { error } = await supabase.rpc('update_operational_report_status', {
     p_operational_report_id: reportId,
-    p_owner_response_note: normalizeOptionalText(input.ownerResponseNote),
-    p_status: status,
+    p_owner_response_note: input.ownerResponseNote,
+    p_resolution: input.resolution,
+    p_status: input.status,
   });
 
   if (error) {
-    return fail(new Error(mapOwnerOperationalReportActionError(error)));
+    return fail(
+      new Error(
+        mapOperationalReportActionError(
+          error,
+          'Fitur respons laporan belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.',
+          'Perubahan status laporan gagal disimpan. Coba lagi.'
+        )
+      )
+    );
   }
 
   return ok({
@@ -271,42 +319,25 @@ export async function updateOwnOperationalReport(
     return fail(reportId);
   }
 
-  const reportResult = await getOperationalReportDetail({
-    operationalReportId: reportId,
-  });
-
-  if (reportResult.error) {
-    return fail(reportResult.error);
-  }
-
-  const eligibilityResult = await getOperationalReportEditEligibilityFromReport(reportResult.data);
-
-  if (eligibilityResult.error) {
-    return fail(eligibilityResult.error);
-  }
-
-  if (!eligibilityResult.data.canEdit) {
-    return fail(new Error(eligibilityResult.data.reason ?? 'Laporan ini tidak bisa diedit.'));
-  }
-
   const category = validateOperationalReportCategory(input.category);
 
   if (category instanceof Error) {
     return fail(category);
   }
 
-  const locationNote = normalizeOptionalText(input.locationNote);
   const description = normalizeOptionalText(input.description);
 
-  if (!locationNote && !description) {
-    return fail(new Error('Isi lokasi atau deskripsi laporan operasional.'));
+  if (!description) {
+    return fail(new Error('Deskripsi laporan wajib diisi.'));
   }
+
+  const locationNote = normalizeOptionalText(input.locationNote);
 
   const { error } = await supabase.rpc('update_own_operational_report', {
     p_category: category,
     p_description: description,
     p_location_note: locationNote,
-    p_report_id: reportResult.data.id,
+    p_report_id: reportId,
   });
 
   if (error) {
@@ -318,26 +349,85 @@ export async function updateOwnOperationalReport(
       );
     }
 
-    return fail(new Error(mapUpdateOwnOperationalReportError(error)));
+    return fail(
+      new Error(
+        mapOperationalReportActionError(
+          error,
+          'Fitur edit laporan belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.',
+          'Perubahan laporan gagal disimpan. Coba lagi.'
+        )
+      )
+    );
   }
 
   return ok({
-    reportId: reportResult.data.id,
+    reportId,
   });
 }
 
+// Hapus laporan sendiri, beserta foto lampirannya.
+//
+// URUTAN WAJIB — objek storage dulu, RPC belakangan.
+// Policy DELETE di storage.objects memakai baris photo_attachments sebagai
+// bukti kepemilikan (`pa.uploaded_by = auth.uid()`), dan jalur cadangannya
+// memanggil can_upload_operational_report_photo() yang butuh baris laporan
+// masih ada. RPC delete_own_operational_report menghapus KEDUANYA, jadi kalau
+// RPC jalan duluan, file storage jadi yatim dan tidak bisa dihapus siapa pun
+// selain owner aktif.
+export async function deleteOwnOperationalReport(
+  input: DeleteOwnOperationalReportInput
+): Promise<ServiceResult<SuccessData>> {
+  const reportId = normalizeRequiredText(
+    input.operationalReportId,
+    'Laporan operasional tidak ditemukan.'
+  );
+
+  if (reportId instanceof Error) {
+    return fail(reportId);
+  }
+
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  // Gagal sebagian di sini tidak boleh membatalkan penghapusan laporan:
+  // laporan yang tertinggal lebih mengganggu daripada file sisa.
+  await deleteOperationalReportPhotoObjects({
+    farmId,
+    operationalReportId: reportId,
+  });
+
+  const { error } = await supabase.rpc('delete_own_operational_report', {
+    p_report_id: reportId,
+  });
+
+  if (error) {
+    return fail(
+      new Error(
+        mapOperationalReportActionError(
+          error,
+          'Fitur hapus laporan belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.',
+          'Laporan gagal dihapus. Coba lagi.'
+        )
+      )
+    );
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
+// Dipakai untuk menyembunyikan tombol edit/hapus SEBELUM round-trip. Bukan
+// pengganti guard RPC update_own_operational_report / delete_own_operational_report
+// — keduanya menegakkan aturan yang sama di sisi database. Di sini sengaja
+// hanya dua sumber data: sesi lokal (siapa saya) + satu query tugas tindak
+// lanjut. Sisanya sudah ada di baris laporan yang dipegang pemanggil.
 async function getOperationalReportEditEligibilityFromReport(
   report: OperationalReport
 ): Promise<ServiceResult<OperationalReportEditEligibility>> {
-  const accessResult = await ensureActiveWorker(report.farmId);
-
-  if (accessResult.error) {
-    return ok({
-      canEdit: false,
-      reason: 'Akses worker tidak aktif.',
-    });
-  }
-
   const userIdResult = await getCurrentUserId();
 
   if (userIdResult.error) {
@@ -399,72 +489,84 @@ async function getOperationalReportFollowUpTaskExists(
   return ok((data ?? []).length > 0);
 }
 
-function mapUpdateOwnOperationalReportError(error: { code?: string; message?: string }): string {
-  if (error.code === 'PGRST202') {
-    return 'Fitur edit laporan belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.';
-  }
+// Semua pesan `raise exception` dari RPC laporan (status, edit, hapus) dipetakan
+// di satu tabel supaya tidak ada cabang yang diam-diam jatuh ke fallback generik.
+const operationalReportErrorMessages: Array<[string, string]> = [
+  // --- akses & keberadaan ---
+  ['operational report not found', 'Laporan tidak ditemukan atau akses tidak aktif.'],
+  ['only active owners', 'Hanya owner aktif yang dapat mengubah status laporan.'],
+  ['worker access is inactive', 'Akses pekerja tidak aktif.'],
+  ['authentication required', 'Silakan login terlebih dahulu.'],
 
+  // --- guard transisi status (migration 034) ---
+  [
+    'operational report is already closed',
+    'Laporan ini sudah ditutup dan tidak bisa diubah lagi.',
+  ],
+  [
+    'operational report cannot be moved back to new',
+    'Laporan yang sudah direspons tidak bisa dikembalikan ke status menunggu.',
+  ],
+  [
+    'only untouched operational reports can be rejected',
+    'Hanya laporan yang belum ditindaklanjuti yang bisa ditolak.',
+  ],
+  [
+    'operational report with follow up task cannot be rejected',
+    'Laporan yang sudah punya tugas tindak lanjut tidak bisa ditolak.',
+  ],
+  ['rejection reason is required', 'Alasan penolakan wajib diisi.'],
+  [
+    'operational report resolution is required',
+    'Pilih dulu tindak lanjut untuk laporan ini.',
+  ],
+  [
+    'owner note is required when handling the report directly',
+    'Catatan wajib diisi kalau Anda mengurus laporan ini sendiri.',
+  ],
+  [
+    'operational report has no follow up task',
+    'Laporan ini belum punya tugas tindak lanjut.',
+  ],
+  [
+    'operational report already has an open follow up task',
+    'Laporan ini masih punya tugas tindak lanjut yang berjalan.',
+  ],
+
+  // --- edit & hapus laporan sendiri ---
+  ['only report creator can delete', 'Hanya pembuat laporan yang bisa menghapus laporan ini.'],
+  ['only report creator', 'Hanya pembuat laporan yang bisa mengedit laporan ini.'],
+  [
+    'already been responded',
+    'Laporan ini sudah ditindaklanjuti owner dan tidak bisa diubah.',
+  ],
+  [
+    'already has follow up task',
+    'Laporan ini sudah memiliki tugas tindak lanjut dan tidak bisa diubah.',
+  ],
+  ['location or description', 'Deskripsi laporan wajib diisi.'],
+
+  // --- validasi nilai ---
+  ['operational_report_category', 'Kategori laporan tidak valid.'],
+  ['operational_report_status', 'Status laporan tidak valid.'],
+  ['operational_reports_resolution', 'Tindak lanjut laporan tidak valid.'],
+  ['invalid input value', 'Nilai yang dikirim tidak valid.'],
+];
+
+function mapOperationalReportActionError(
+  error: { code?: string; message?: string },
+  missingFunctionMessage: string,
+  fallbackMessage: string
+): string {
   const message = error.message?.toLowerCase() ?? '';
 
-  if (message.includes('could not find the function')) {
-    return 'Fitur edit laporan belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.';
+  if (error.code === 'PGRST202' || message.includes('could not find the function')) {
+    return missingFunctionMessage;
   }
 
-  if (message.includes('location or description')) {
-    return 'Isi lokasi atau deskripsi laporan operasional.';
-  }
+  const match = operationalReportErrorMessages.find(([raw]) => message.includes(raw));
 
-  if (message.includes('worker access is inactive')) {
-    return 'Akses worker tidak aktif.';
-  }
-
-  if (message.includes('only report creator')) {
-    return 'Hanya pembuat laporan yang bisa mengedit laporan ini.';
-  }
-
-  if (message.includes('already been responded')) {
-    return 'Laporan ini sudah ditindaklanjuti owner dan tidak bisa diedit.';
-  }
-
-  if (message.includes('follow up task')) {
-    return 'Laporan ini sudah memiliki tugas tindak lanjut dan tidak bisa diedit.';
-  }
-
-  if (message.includes('not found')) {
-    return 'Laporan tidak ditemukan atau akses tidak aktif.';
-  }
-
-  if (message.includes('invalid input value') || message.includes('operational_report_category')) {
-    return 'Kategori laporan tidak valid.';
-  }
-
-  return 'Perubahan laporan gagal disimpan. Coba lagi.';
-}
-
-function mapOwnerOperationalReportActionError(error: { code?: string; message?: string }): string {
-  if (error.code === 'PGRST202') {
-    return 'Fitur respons laporan belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.';
-  }
-
-  const message = error.message?.toLowerCase() ?? '';
-
-  if (message.includes('could not find the function')) {
-    return 'Fitur respons laporan belum tersambung ke database. Jalankan pembaruan database lalu coba lagi.';
-  }
-
-  if (message.includes('only active owners')) {
-    return 'Hanya owner aktif yang dapat mengubah status laporan.';
-  }
-
-  if (message.includes('not found')) {
-    return 'Laporan tidak ditemukan atau akses tidak aktif.';
-  }
-
-  if (message.includes('invalid input value') || message.includes('operational_report_status')) {
-    return 'Status laporan tidak valid.';
-  }
-
-  return 'Perubahan status laporan gagal disimpan. Coba lagi.';
+  return match ? match[1] : fallbackMessage;
 }
 
 async function ensureActiveFarmMember(farmId: UUID): Promise<ServiceResult<SuccessData>> {
@@ -476,22 +578,6 @@ async function ensureActiveFarmMember(farmId: UUID): Promise<ServiceResult<Succe
 
   if (membershipResult.data?.status !== 'active') {
     return fail(new Error('Hanya anggota kebun aktif yang dapat mengakses laporan operasional.'));
-  }
-
-  return ok({
-    success: true,
-  });
-}
-
-async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessData>> {
-  const membershipResult = await getCurrentUserMembership(farmId);
-
-  if (membershipResult.error) {
-    return fail(membershipResult.error);
-  }
-
-  if (membershipResult.data?.role !== 'owner' || membershipResult.data.status !== 'active') {
-    return fail(new Error('Hanya pemilik aktif yang dapat mengubah laporan operasional.'));
   }
 
   return ok({
@@ -565,50 +651,16 @@ function validateOperationalReportCategory(
     return new Error('Kategori laporan operasional wajib dipilih.');
   }
 
-  if (!operationalReportCategories.includes(category)) {
+  if (!isOperationalReportCategory(category)) {
     return new Error('Kategori laporan operasional tidak valid.');
   }
 
   return category;
 }
 
-function validateOperationalReportStatus(
-  status: OperationalReportStatus | undefined | null
-): OperationalReportStatus | Error {
-  if (!status) {
-    return new Error('Status laporan operasional wajib dipilih.');
-  }
-
-  if (!operationalReportStatuses.includes(status)) {
-    return new Error('Status laporan operasional tidak valid.');
-  }
-
-  return status;
-}
-
-function normalizeStatusFilter(
-  status: OperationalReportStatus | 'all' | undefined
-): OperationalReportStatus | null | Error {
-  if (!status || status === 'all') {
-    return null;
-  }
-
-  return validateOperationalReportStatus(status);
-}
-
-function normalizeCategoryFilter(
-  category: OperationalReportCategory | 'all' | undefined
-): OperationalReportCategory | null | Error {
-  if (!category || category === 'all') {
-    return null;
-  }
-
-  return validateOperationalReportCategory(category);
-}
-
 function mapOperationalReport(row: OperationalReportRow): OperationalReport {
   return {
-    category: row.category,
+    category: normalizeOperationalReportCategory(row.category),
     createdAt: row.created_at,
     description: row.description,
     farmId: row.farm_id,
@@ -616,6 +668,8 @@ function mapOperationalReport(row: OperationalReportRow): OperationalReport {
     locationNote: row.location_note,
     ownerResponseNote: row.owner_response_note,
     reportedBy: row.reported_by,
+    resolution: isOperationalReportResolution(row.resolution) ? row.resolution : null,
+    resolvedAt: row.resolved_at ?? null,
     respondedAt: row.responded_at,
     respondedBy: row.responded_by,
     status: row.status,
@@ -631,6 +685,18 @@ function normalizeRequiredText(value: string, message: string): string | Error {
 function normalizeOptionalText(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+// Beda dari normalizeOptionalText: string kosong DIPERTAHANKAN sebagai ''.
+// Bagi RPC, '' berarti "hapus catatan" sedangkan null berarti "biarkan apa
+// adanya" — dua hal yang berbeda, dan itulah yang memperbaiki bug lama di mana
+// owner_response_note tidak pernah bisa dikosongkan.
+function toOwnerNoteInstruction(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return value.trim();
 }
 
 function isMissingSessionError(error: { message?: string; name?: string }): boolean {

@@ -1,3 +1,7 @@
+import {
+  canCreateTaskFromReportStatus,
+  getClosedReportTaskMessage,
+} from '../constants/operationalReport';
 import { supabase } from '../lib/supabase';
 import type {
   ActivityStatus,
@@ -6,8 +10,8 @@ import type {
   CareCategory,
   CareTask,
   CareTaskDetail,
-  CreateTaskFromOperationalReportData,
-  CreateTaskFromOperationalReportInput,
+  ResolveReportWithTaskData,
+  ResolveReportWithTaskInput,
   CompleteTaskData,
   CompleteTaskInput,
   GetFarmTasksInput,
@@ -279,9 +283,15 @@ export async function getOperationalReportFollowUpTasks(
   );
 }
 
-export async function createTaskFromOperationalReport(
-  input: CreateTaskFromOperationalReportInput
-): Promise<ServiceResult<CreateTaskFromOperationalReportData>> {
+// Keputusan owner "buat tugas tindak lanjut".
+//
+// RPC create_task_from_operational_report (migration 034) meng-insert tugas
+// DAN menyetel status='in_progress' + resolution='task' pada laporan dalam satu
+// transaksi. JANGAN memanggil aksi status apa pun setelah ini — laporan sudah
+// berada di keadaan akhir yang benar.
+export async function resolveReportWithTask(
+  input: ResolveReportWithTaskInput
+): Promise<ServiceResult<ResolveReportWithTaskData>> {
   const reportId = normalizeRequiredText(
     input.operationalReportId,
     'Laporan operasional tidak ditemukan.'
@@ -357,10 +367,16 @@ export async function createTaskFromOperationalReport(
 
   const { data, error } = await supabase.rpc('create_task_from_operational_report', {
     p_assigned_worker_id: workerId,
+    p_category: input.category ?? null,
     p_custom_target_note: target.customTargetNote,
     p_due_date: dueDate,
     p_instruction: normalizeOptionalText(input.instruction),
     p_operational_report_id: reportId,
+    // null = pertahankan catatan lama, '' = hapus catatan, teks = ganti catatan.
+    p_owner_response_note:
+      input.ownerResponseNote === null || input.ownerResponseNote === undefined
+        ? null
+        : input.ownerResponseNote.trim(),
     p_requires_photo: input.requiresPhoto ?? false,
     p_target_column: target.targetColumn,
     p_target_row: target.targetRow,
@@ -720,18 +736,6 @@ async function getAccessibleOperationalReportSource(
   }
 
   return ok(data);
-}
-
-function canCreateTaskFromReportStatus(status: OperationalReportStatus): boolean {
-  return status !== 'resolved' && status !== 'rejected';
-}
-
-function getClosedReportTaskMessage(status: OperationalReportStatus): string {
-  if (status === 'resolved') {
-    return 'Laporan yang sudah selesai tidak dapat dibuatkan tugas tindak lanjut.';
-  }
-
-  return 'Laporan yang ditolak tidak dapat dibuatkan tugas tindak lanjut.';
 }
 
 async function getExistingActiveFollowUpTask(
