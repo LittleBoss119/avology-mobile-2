@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Alert, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 
 import {
   Button,
@@ -8,13 +8,11 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
-  MetaRow,
-  PageIntro,
   Screen,
-  SectionHeader,
-  SuccessBanner,
+  TopAppBar,
 } from '../../../src/components/ui';
-import { colors, radius, spacing } from '../../../src/constants/theme';
+import { useSnackbar } from '../../../src/components/snackbar';
+import { colors, radius, spacing, tokens } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
 import { getFarmDetail, updateFarmProfile } from '../../../src/services/farmService';
 import type { Farm } from '../../../src/types/domain';
@@ -22,23 +20,23 @@ import { isOwnerActive } from '../../../src/utils/routeGuard';
 
 export default function OwnerFarmProfileScreen() {
   const { currentFarm, error: authError, refresh } = useAuth();
+  const showSnackbar = useSnackbar();
   const [areaSize, setAreaSize] = React.useState('');
-  const [editMode, setEditMode] = React.useState(false);
-  const [farm, setFarm] = React.useState<Farm | null>(currentFarm?.farm ?? null);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [location, setLocation] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [name, setName] = React.useState('');
   const [saving, setSaving] = React.useState(false);
-  const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
+  const [submitted, setSubmitted] = React.useState(false);
 
   const farmId = currentFarm?.farmId;
+  const fieldErrors = submitted ? computeFieldErrors(name, areaSize) : {};
 
-  function syncForm(nextFarm: Farm) {
+  const syncForm = React.useCallback((nextFarm: Farm) => {
     setName(nextFarm.name);
     setLocation(nextFarm.location ?? '');
     setAreaSize(nextFarm.areaSize === null || nextFarm.areaSize === undefined ? '' : String(nextFarm.areaSize));
-  }
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -61,9 +59,10 @@ export default function OwnerFarmProfileScreen() {
 
         if (result.error) {
           setFormError(result.error.message);
-          setFarm(currentFarm?.farm ?? null);
+          if (currentFarm?.farm) {
+            syncForm(currentFarm.farm);
+          }
         } else {
-          setFarm(result.data);
           syncForm(result.data);
         }
 
@@ -75,27 +74,8 @@ export default function OwnerFarmProfileScreen() {
       return () => {
         isActive = false;
       };
-    }, [currentFarm, farmId])
+    }, [currentFarm, farmId, syncForm])
   );
-
-  function handleStartEdit() {
-    if (farm) {
-      syncForm(farm);
-    }
-
-    setFormError(null);
-    setSuccessMessage(null);
-    setEditMode(true);
-  }
-
-  function handleCancelEdit() {
-    if (farm) {
-      syncForm(farm);
-    }
-
-    setFormError(null);
-    setEditMode(false);
-  }
 
   async function handleSave() {
     if (!farmId) {
@@ -103,16 +83,22 @@ export default function OwnerFarmProfileScreen() {
       return;
     }
 
+    setSubmitted(true);
+
+    const errors = computeFieldErrors(name, areaSize);
+
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
+
     const parsedAreaSize = parseAreaSize(areaSize);
 
     if (parsedAreaSize instanceof Error) {
-      setFormError(parsedAreaSize.message);
       return;
     }
 
     setSaving(true);
     setFormError(null);
-    setSuccessMessage(null);
 
     const result = await updateFarmProfile({
       areaSize: parsedAreaSize,
@@ -127,113 +113,62 @@ export default function OwnerFarmProfileScreen() {
       return;
     }
 
-    const detailResult = await getFarmDetail(farmId);
-
-    if (detailResult.error) {
-      setFormError(detailResult.error.message);
-      setSaving(false);
-      return;
-    }
-
-    setFarm(detailResult.data);
-    syncForm(detailResult.data);
-    setEditMode(false);
-    setSuccessMessage('Data kebun berhasil diperbarui');
     await refresh();
     setSaving(false);
-  }
-
-  function handleCopyFallback() {
-    Alert.alert('Salin kode', 'Tekan lama kode bergabung untuk menyalin secara manual.');
+    showSnackbar('Perubahan disimpan');
+    router.back();
   }
 
   if (!isOwnerActive(currentFarm)) {
     return (
       <Screen>
-        <PageIntro title="Profil Kebun" subtitle="Profil kebun dan akses operasional." />
-        <EmptyState title="Akses tidak tersedia" subtitle="Profil Kebun hanya tersedia untuk pemilik aktif." />
+        <TopAppBar title="Edit kebun" onBack={() => router.back()} />
+        <EmptyState title="Akses tidak tersedia" subtitle="Edit kebun hanya tersedia untuk pemilik aktif." />
       </Screen>
     );
   }
 
   if (loading) {
-    return <LoadingState message="Memuat profil kebun..." />;
+    return <LoadingState message="Memuat kebun..." />;
   }
 
   return (
     <Screen>
-      <PageIntro title={editMode ? 'Edit kebun' : 'Profil Kebun'} subtitle="Data kebun, kode bergabung, dan akses operasional." />
+      <TopAppBar title="Edit kebun" onBack={() => router.back()} />
       <ErrorBanner message={formError ?? authError?.message} />
-      <SuccessBanner message={successMessage} />
 
-      {!farm ? (
-        <EmptyState title="Data kebun tidak tersedia" subtitle="Coba buka kembali halaman ini beberapa saat lagi." />
-      ) : editMode ? (
-        <Card variant="highlight">
-          <SectionHeader title="Edit kebun" description="Ubah data dasar kebun tanpa mengubah kode bergabung." />
-          <FarmTextField label="Nama kebun" value={name} onChangeText={setName} placeholder="Nama kebun" />
-          <FarmTextField label="Lokasi" value={location} onChangeText={setLocation} placeholder="Lokasi kebun" />
-          <FarmTextField
-            keyboardType="decimal-pad"
-            label="Luas kebun"
-            value={areaSize}
-            onChangeText={setAreaSize}
-            placeholder="Contoh: 1200"
-          />
-          <View style={{ gap: spacing.sm }}>
-            <Button title="Simpan perubahan" loading={saving} onPress={handleSave} />
-            <Button title="Batal" disabled={saving} variant="secondary" onPress={handleCancelEdit} />
-          </View>
-        </Card>
-      ) : (
-        <>
-          <Card variant="highlight">
-            <SectionHeader title="Data Kebun" description="Profil kebun terpisah dari profil akun pribadi." />
-            <MetaRow label="Nama kebun" value={farm.name} />
-            <MetaRow label="Lokasi" value={farm.location} />
-            <MetaRow label="Luas kebun" value={formatArea(farm.areaSize)} />
-            <Button title="Edit kebun" onPress={handleStartEdit} />
-          </Card>
-
-          <Card>
-            <SectionHeader title="Kode bergabung" description="Bagikan kode ini kepada pekerja yang perlu mengajukan akses." />
-            <View
-              style={{
-                backgroundColor: colors.surfaceMuted,
-                borderColor: colors.border,
-                borderRadius: radius.lg,
-                borderWidth: 1,
-                padding: spacing.lg,
-              }}
-            >
-              <Text selectable style={{ color: colors.text, fontSize: 24, fontWeight: '700', letterSpacing: 0 }}>
-                {farm.joinCode}
-              </Text>
-            </View>
-            <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-              Tekan lama kode untuk menyalin secara manual.
-            </Text>
-            <Button title="Salin kode" variant="secondary" onPress={handleCopyFallback} />
-          </Card>
-
-          <Card>
-            <SectionHeader title="Pengelolaan" description="Akses cepat untuk pengaturan operasional kebun." />
-            <Button title="Manajemen Pekerja" variant="secondary" onPress={() => router.push('/owner/workers')} />
-            <Button title="SOP Perawatan" variant="secondary" onPress={() => router.push('/owner/sops')} />
-          </Card>
-        </>
-      )}
+      <Card>
+        <FarmTextField
+          error={fieldErrors.name}
+          label="Nama kebun"
+          value={name}
+          onChangeText={setName}
+          placeholder="Nama kebun"
+        />
+        <FarmTextField label="Lokasi" value={location} onChangeText={setLocation} placeholder="Lokasi kebun" />
+        <FarmTextField
+          error={fieldErrors.areaSize}
+          keyboardType="decimal-pad"
+          label="Luas kebun"
+          value={areaSize}
+          onChangeText={setAreaSize}
+          placeholder="Contoh: 1200"
+        />
+        <Button title="Simpan perubahan" loading={saving} onPress={handleSave} />
+      </Card>
     </Screen>
   );
 }
 
 function FarmTextField({
+  error,
   keyboardType,
   label,
   onChangeText,
   placeholder,
   value,
 }: {
+  error?: string;
   keyboardType?: 'default' | 'decimal-pad';
   label: string;
   onChangeText: (value: string) => void;
@@ -242,9 +177,7 @@ function FarmTextField({
 }) {
   return (
     <View style={{ gap: spacing.sm }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-        {label}
-      </Text>
+      <Text style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>{label}</Text>
       <TextInput
         autoCorrect={false}
         keyboardType={keyboardType}
@@ -253,7 +186,7 @@ function FarmTextField({
         placeholderTextColor={colors.textSoft}
         style={{
           backgroundColor: colors.surface,
-          borderColor: colors.border,
+          borderColor: error ? tokens.color.status.danger.text : colors.border,
           borderRadius: radius.lg,
           borderWidth: 1,
           color: colors.text,
@@ -263,8 +196,29 @@ function FarmTextField({
         }}
         value={value}
       />
+      {error ? (
+        <Text style={{ color: tokens.color.status.danger.text, fontSize: tokens.type.meta.fontSize, lineHeight: tokens.type.meta.lineHeight }}>
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
+}
+
+function computeFieldErrors(name: string, areaSize: string): { areaSize?: string; name?: string } {
+  const errors: { areaSize?: string; name?: string } = {};
+
+  if (!name.trim()) {
+    errors.name = 'Nama kebun wajib diisi.';
+  }
+
+  const parsedAreaSize = parseAreaSize(areaSize);
+
+  if (parsedAreaSize instanceof Error) {
+    errors.areaSize = parsedAreaSize.message;
+  }
+
+  return errors;
 }
 
 function parseAreaSize(value: string): number | null | Error {

@@ -101,10 +101,10 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/reports/[reportId]" options={{ headerShown: false, title: 'Detail Laporan' }} />
           <Stack.Screen name="owner/reports/[reportId]/task" options={{ headerShown: false, title: 'Buat Tugas' }} />
           <Stack.Screen name="owner/farm" options={{ headerShown: false, title: 'Kebun' }} />
-          <Stack.Screen name="owner/workers" options={{ title: 'Manajemen Pekerja' }} />
+          <Stack.Screen name="owner/workers" options={{ title: 'Riwayat akses' }} />
           <Stack.Screen name="owner/profile" options={{ headerShown: false, title: 'Profil Akun' }} />
           <Stack.Screen name="owner/profile-password" options={{ headerShown: false, title: 'Ubah Password' }} />
-          <Stack.Screen name="owner/farm-profile" options={{ title: 'Kebun Saya' }} />
+          <Stack.Screen name="owner/farm-profile" options={{ headerShown: false, title: 'Edit kebun' }} />
         </Stack>
       </View>
       <RoleBottomNavigation role="owner" />

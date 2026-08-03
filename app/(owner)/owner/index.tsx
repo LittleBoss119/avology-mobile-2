@@ -244,7 +244,7 @@ function buildActionRows(summary: OwnerDashboardSummary): ActionRowItem[] {
       title: 'Pengajuan pekerja',
       value: summary.pendingWorkers,
       valueColor: tokens.color.status.warning.text,
-      route: '/owner/workers',
+      route: '/owner/farm',
     });
   }
 

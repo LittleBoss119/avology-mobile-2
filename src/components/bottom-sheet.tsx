@@ -151,6 +151,7 @@ export function PhotoSourceSheet({
 // konfirmasi sengaja di ATAS supaya posisi paling gampang dijangkau jempol diisi
 // aksi konfirmasi; "Kembali" (aman) di bawah.
 export function ConfirmDialog({
+  cancelLabel = 'Kembali',
   confirmLabel,
   loading = false,
   message,
@@ -160,6 +161,7 @@ export function ConfirmDialog({
   tone = 'default',
   visible,
 }: {
+  cancelLabel?: string;
   confirmLabel: string;
   loading?: boolean;
   message: string;
@@ -225,7 +227,7 @@ export function ConfirmDialog({
               style={confirmStyles.cancelButton}
             >
               <Text selectable={false} style={confirmStyles.cancelText}>
-                Kembali
+                {cancelLabel}
               </Text>
             </Pressable>
           </View>

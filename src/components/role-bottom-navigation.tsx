@@ -188,8 +188,6 @@ const ownerTopLevelPaths = [
   '/owner/reports',
   '/owner/farm',
   '/owner/profile',
-  '/owner/farm-profile',
-  '/owner/workers',
   '/owner/sops',
 ];
 
