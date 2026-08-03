@@ -48,6 +48,11 @@ const friendlyMessages: Array<[string, string]> = [
   ['Only active workers can create operational reports', 'Hanya pekerja aktif yang dapat membuat laporan operasional.'],
   ['Only active owners can update operational report status', 'Hanya pemilik aktif yang dapat mengubah status laporan operasional.'],
   ['Only active owners can create task from operational report', 'Hanya pemilik aktif yang dapat membuat tindak lanjut laporan operasional.'],
+  // Dua guard dari migration 034 yang bisa muncul lewat
+  // create_task_from_operational_report. Jalur itu memakai fail() biasa, bukan
+  // mapper di operationalReportService, jadi padanannya harus ada di sini juga.
+  ['Operational report is already closed', 'Laporan ini sudah ditutup dan tidak bisa diubah lagi.'],
+  ['Operational report already has an open follow up task', 'Laporan ini masih punya tugas tindak lanjut yang berjalan.'],
   ['Report follow-up tasks can only be assigned to active workers', 'Tugas tindak lanjut hanya dapat diberikan kepada pekerja aktif.'],
   ['Care task operational report must belong to the same farm', 'Laporan operasional tidak terdaftar pada kebun tugas.'],
   ['Task not found', 'Tugas tidak ditemukan atau tidak dapat diakses.'],

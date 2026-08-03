@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tokens } from '../constants/theme';
 import { Icon, type IconName } from './icons';
 
-export type SheetIconTone = 'condition' | 'phase' | 'harvest' | 'care' | 'brand' | 'neutral';
+export type SheetIconTone = 'condition' | 'phase' | 'harvest' | 'care' | 'brand' | 'neutral' | 'danger';
 
 // Wadah bottom sheet bersama: hanya tahu chrome (backdrop, grabber, judul,
 // safe-area, scroll), tak tahu isinya. Pakai RN Modal (tanpa dependency).
@@ -328,6 +328,7 @@ const styles = StyleSheet.create({
   iconCircleCare: { backgroundColor: tokens.color.record.care.bg },
   iconCircleBrand: { backgroundColor: tokens.color.brand.soft },
   iconCircleNeutral: { backgroundColor: tokens.color.surface.subtle },
+  iconCircleDanger: { backgroundColor: tokens.color.status.danger.bg },
   rowMain: { flex: 1 },
   rowTitle: { ...tokens.type.bodyStrong, color: tokens.color.text.primary },
   rowDescription: { ...tokens.type.meta, color: tokens.color.text.secondary },
@@ -340,6 +341,7 @@ const toneCircle = {
   care: styles.iconCircleCare,
   brand: styles.iconCircleBrand,
   neutral: styles.iconCircleNeutral,
+  danger: styles.iconCircleDanger,
 };
 
 const toneIconColor: Record<SheetIconTone, string> = {
@@ -349,4 +351,5 @@ const toneIconColor: Record<SheetIconTone, string> = {
   care: tokens.color.record.care.text,
   brand: tokens.color.brand.base,
   neutral: tokens.color.text.secondary,
+  danger: tokens.color.status.danger.text,
 };

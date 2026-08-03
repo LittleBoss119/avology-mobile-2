@@ -799,4 +799,4 @@ function getTaskTone(status: TaskStatus): 'danger' | 'muted' | 'success' | 'warn
   return 'muted';
 }
 
-export { formatTaskSource, formatTaskStatus };
+export { formatTaskSource, formatTaskStatus, getTaskTone };

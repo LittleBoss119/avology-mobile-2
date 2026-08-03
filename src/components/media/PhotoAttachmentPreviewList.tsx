@@ -21,6 +21,18 @@ export function PhotoAttachmentPreviewList({
   photos,
 }: PhotoAttachmentPreviewListProps) {
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  // Signed URL foto hanya berumur 10 menit. Layar yang dibuka lama akan
+  // menampilkan gambar rusak, jadi kegagalan muat ditangkap per foto dan
+  // diganti placeholder — bukan ikon gambar pecah bawaan platform.
+  const [failedUrls, setFailedUrls] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    setFailedUrls([]);
+  }, [photos]);
+
+  function markFailed(url: string) {
+    setFailedUrls((current) => (current.includes(url) ? current : [...current, url]));
+  }
 
   if (loading) {
     return (
@@ -63,13 +75,41 @@ export function PhotoAttachmentPreviewList({
             }}
           >
             <View>
-              <Pressable accessibilityRole="imagebutton" onPress={() => setPreviewUrl(photo.url)}>
-                <Image
-                  resizeMode="cover"
-                  source={{ uri: photo.url }}
-                  style={{ borderRadius: radius.md, height: 156, width: '100%' }}
-                />
-              </Pressable>
+              {failedUrls.includes(photo.url) ? (
+                <View
+                  style={{
+                    alignItems: 'center',
+                    backgroundColor: colors.photoPlaceholder,
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    borderWidth: 1,
+                    height: 156,
+                    justifyContent: 'center',
+                    padding: spacing.md,
+                    width: '100%',
+                  }}
+                >
+                  <Text
+                    selectable
+                    style={{
+                      color: colors.textMuted,
+                      lineHeight: typography.small.lineHeight,
+                      textAlign: 'center',
+                    }}
+                  >
+                    Foto belum dapat dimuat.
+                  </Text>
+                </View>
+              ) : (
+                <Pressable accessibilityRole="imagebutton" onPress={() => setPreviewUrl(photo.url)}>
+                  <Image
+                    resizeMode="cover"
+                    source={{ uri: photo.url }}
+                    onError={() => markFailed(photo.url)}
+                    style={{ borderRadius: radius.md, height: 156, width: '100%' }}
+                  />
+                </Pressable>
+              )}
               {onDeletePhoto ? (
                 <Pressable
                   accessibilityLabel="Hapus Foto"
