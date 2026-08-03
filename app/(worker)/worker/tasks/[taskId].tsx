@@ -5,6 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import { Icon } from '../../../../src/components/icons';
+import { ReportSourceRow } from '../../../../src/components/operational-report-source-row';
 import { TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
 import {
   Badge,
@@ -21,8 +22,14 @@ import {
 import { colors, spacing, statusColors, typography } from '../../../../src/constants/theme';
 import { consumePendingFeedback } from '../../../../src/lib/pendingFeedback';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
+import { getOperationalReportDetail } from '../../../../src/services/operationalReportService';
 import { listTaskProofPhotosForActivities } from '../../../../src/services/photoAttachmentService';
-import type { ActivityStatus, CareActivity, CareTaskDetail } from '../../../../src/types/domain';
+import type {
+  ActivityStatus,
+  CareActivity,
+  CareTaskDetail,
+  OperationalReport,
+} from '../../../../src/types/domain';
 import type { TaskProofPhoto, TaskProofPhotoMap } from '../../../../src/types/media';
 import { formatActivityStatus, formatTaskStatus } from '../../../../src/utils/displayFormat';
 import { dueDatePill, type DueDatePill } from '../../../../src/utils/taskDueDate';
@@ -32,6 +39,7 @@ export default function WorkerTaskDetailScreen() {
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
+  const [sourceReport, setSourceReport] = React.useState<OperationalReport | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
 
@@ -41,6 +49,7 @@ export default function WorkerTaskDetailScreen() {
     if (!normalizedTaskId) {
       setError('Data tugas tidak ditemukan.');
       setProofPhotoMap({});
+      setSourceReport(null);
       setTask(null);
       return;
     }
@@ -52,11 +61,25 @@ export default function WorkerTaskDetailScreen() {
     if (result.error) {
       setError(result.error.message);
       setProofPhotoMap({});
+      setSourceReport(null);
       setTask(null);
       return;
     }
 
     setTask(result.data);
+
+    // Policy operational_reports: pekerja hanya bisa membaca laporan yang dia
+    // buat sendiri. Jadi kalau fetch ini berhasil, laporan itu PASTI miliknya —
+    // hasilnya sekaligus jadi penentu boleh-tidaknya baris ini di-tap.
+    if (result.data.operationalReportId) {
+      const reportResult = await getOperationalReportDetail({
+        operationalReportId: result.data.operationalReportId,
+      });
+
+      setSourceReport(reportResult.error ? null : reportResult.data);
+    } else {
+      setSourceReport(null);
+    }
 
     const proofResult = await listTaskProofPhotosForActivities({
       activityIds: result.data.activities.map((activity) => activity.id),
@@ -143,6 +166,17 @@ export default function WorkerTaskDetailScreen() {
       </View>
 
       <DueDatePillView pill={pill} />
+
+      {activeTask.operationalReportId ? (
+        <ReportSourceRow
+          description={sourceReport?.description}
+          onPress={
+            sourceReport
+              ? () => router.push(`/worker/reports/${sourceReport.id}`)
+              : undefined
+          }
+        />
+      ) : null}
 
       {isCancelledByOwner ? (
         <Card variant="danger">

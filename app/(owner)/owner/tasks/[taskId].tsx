@@ -8,6 +8,7 @@ import {
   formatTaskStatus,
 } from '../../../../src/components/care-schedule-components';
 import { formatCareCategory } from '../../../../src/components/care-sop-components';
+import { ReportSourceRow } from '../../../../src/components/operational-report-source-row';
 import { TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
 import {
   Badge,
@@ -18,8 +19,8 @@ import {
   MetaRow,
   Screen,
   TopAppBar,
-  Button,
 } from '../../../../src/components/ui';
+import { colors } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
@@ -31,11 +32,7 @@ import type {
   OperationalReport,
 } from '../../../../src/types/domain';
 import type { TaskProofPhotoMap } from '../../../../src/types/media';
-import {
-  formatActivityStatus,
-  formatOperationalReportCategory,
-  formatOperationalReportStatus,
-} from '../../../../src/utils/displayFormat';
+import { formatActivityStatus } from '../../../../src/utils/displayFormat';
 
 export default function OwnerTaskDetailScreen() {
   const { currentFarm } = useAuth();
@@ -170,27 +167,19 @@ export default function OwnerTaskDetailScreen() {
       </Card>
 
       {task.operationalReportId ? (
-        <Card>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
-            Sumber Tugas
-          </Text>
-          <MetaRow label="Sumber tugas" value="Laporan operasional" />
-          <MetaRow label="Kategori laporan" value={report ? formatOperationalReportCategory(report.category) : 'Laporan terkait'} />
-          <MetaRow label="Lokasi laporan" value={report?.locationNote ?? '-'} />
-          <MetaRow label="Pelapor" value={report ? workerNames[report.reportedBy] ?? 'Pelapor tidak tersedia' : 'Pelapor tidak tersedia'} />
-          <MetaRow label="Status laporan" value={report ? formatOperationalReportStatus(report.status) : '-'} />
-          <Button
-            title="Buka Laporan"
-            variant="secondary"
-            onPress={() => router.push(`/owner/reports/${task.operationalReportId}`)}
-          />
-        </Card>
+        // Satu baris saja: kategori, lokasi, pelapor, dan status laporan semuanya
+        // ada di layar tujuan — menyalinnya ke sini cuma menambah tempat yang
+        // harus dijaga sinkron.
+        <ReportSourceRow
+          description={report?.description}
+          onPress={() => router.push(`/owner/reports/${task.operationalReportId}`)}
+        />
       ) : task.careScheduleId ? null : (
         <Card>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
             Sumber Tugas
           </Text>
-          <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+          <Text selectable style={{ color: colors.textSecondary, lineHeight: 21 }}>
             Tugas tidak terhubung ke jadwal atau laporan.
           </Text>
         </Card>

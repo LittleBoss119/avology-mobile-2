@@ -1,3 +1,3 @@
-import { WorkerCreateOperationalReportScreen } from '../../../../src/components/operational-report-screen';
+import { WorkerCreateOperationalReportScreen } from '../../../../src/components/operational-report-worker-screen';
 
 export default WorkerCreateOperationalReportScreen;

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 
-import { OperationalReportListScreen } from '../../../../src/components/operational-report-screen';
+import { OperationalReportListScreen } from '../../../../src/components/operational-report-list-screen';
 
 export default function WorkerReportsTabScreen() {
   return (
