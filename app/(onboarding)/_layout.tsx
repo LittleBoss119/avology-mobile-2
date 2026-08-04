@@ -80,6 +80,13 @@ export default function OnboardingLayout() {
       <Stack.Screen name="create-farm" options={{ headerShown: false, title: 'Buat Kebun' }} />
       <Stack.Screen name="join-farm" options={{ headerShown: false, title: 'Gabung Kebun' }} />
       <Stack.Screen name="profile" options={{ headerShown: false, title: 'Profil Akun' }} />
+      {/* gestureEnabled:false disengaja — swipe-back iOS tidak bisa dicegat lewat
+          API publik expo-router, jadi dimatikan supaya perubahan yang belum
+          disimpan tidak bisa hilang lewat gestur. Back tetap ada di chevron. */}
+      <Stack.Screen
+        name="profile-edit"
+        options={{ gestureEnabled: false, headerShown: false, title: 'Edit Profil' }}
+      />
       <Stack.Screen name="password" options={{ headerShown: false, title: 'Ubah Password' }} />
       <Stack.Screen name="pending-approval" options={{ headerShown: false, title: 'Menunggu Persetujuan' }} />
       <Stack.Screen name="rejected" options={{ headerShown: false, title: 'Akses Ditolak' }} />

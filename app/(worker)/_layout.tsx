@@ -92,6 +92,13 @@ export default function WorkerLayout() {
           <Stack.Screen name="worker/reports/[reportId]/edit" options={{ headerShown: false, title: 'Edit laporan' }} />
           <Stack.Screen name="worker/farm" options={{ headerShown: false, title: 'Kebun' }} />
           <Stack.Screen name="worker/profile" options={{ headerShown: false, title: 'Profil Akun' }} />
+          {/* gestureEnabled:false disengaja — swipe-back iOS tidak bisa dicegat lewat
+              API publik expo-router, jadi dimatikan supaya perubahan yang belum
+              disimpan tidak bisa hilang lewat gestur. Back tetap ada di chevron. */}
+          <Stack.Screen
+            name="worker/profile-edit"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Edit Profil' }}
+          />
           <Stack.Screen name="worker/profile-password" options={{ headerShown: false, title: 'Ubah Password' }} />
         </Stack>
       </View>

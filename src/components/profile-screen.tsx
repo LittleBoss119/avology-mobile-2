@@ -1,72 +1,52 @@
-import { router } from 'expo-router';
+import Constants from 'expo-constants';
+import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
-import { colors, radius, spacing, typography } from '../constants/theme';
+import { tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
-import { updateCurrentProfile } from '../services/authService';
+import { consumePendingFeedback } from '../lib/pendingFeedback';
 import type { CurrentUserFarm } from '../types/domain';
-import { showConfirmDialog } from './feedback';
-import { formatPersonDisplayName } from '../utils/displayFormat';
+import { formatPersonDisplayName, formatRole, sanitizeDisplayValue } from '../utils/displayFormat';
 import { isOwnerActive, isWorkerActive } from '../utils/routeGuard';
+import { ConfirmDialog } from './bottom-sheet';
+import { useSnackbar } from './snackbar';
 import {
-  Button,
+  Badge,
   Card,
   EmptyState,
   ErrorBanner,
-  Field,
-  FormSection,
-  MetaRow,
+  MenuRow,
+  MenuRowGroup,
   Screen,
-  SuccessBanner,
   TopAppBar,
 } from './ui';
 
+const PENDING_FEEDBACK_MESSAGES: Record<string, string | undefined> = {
+  password_updated: 'Password diperbarui',
+  profile_updated: 'Profil akun diperbarui',
+};
+
 export function ProfileScreen() {
-  const { currentFarm, error, profile, refresh, signOut } = useAuth();
-  const [isEditing, setIsEditing] = React.useState(false);
-  const [fullName, setFullName] = React.useState(profile?.fullName ?? '');
-  const [phone, setPhone] = React.useState(profile?.phone ?? '');
-  const [saving, setSaving] = React.useState(false);
+  const { currentFarm, error, profile, signOut } = useAuth();
+  const showSnackbar = useSnackbar();
+  const [confirmLogout, setConfirmLogout] = React.useState(false);
   const [loggingOut, setLoggingOut] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (!isEditing) {
-      setFullName(profile?.fullName ?? '');
-      setPhone(profile?.phone ?? '');
-    }
-  }, [isEditing, profile?.fullName, profile?.phone]);
+  useFocusEffect(
+    React.useCallback(() => {
+      // Konfirmasi setelah simpan dari layar Edit Profil / Ubah Password:
+      // baca-sekaligus-hapus penanda, lalu tampilkan snackbar global sekali.
+      // Kembali tanpa menyimpan tidak meninggalkan penanda, jadi tidak ada
+      // snackbar yang muncul.
+      const message = PENDING_FEEDBACK_MESSAGES[consumePendingFeedback() ?? ''];
 
-  async function handleSave() {
-    const nextFullName = fullName.trim();
-
-    if (!nextFullName) {
-      setFormError('Nama lengkap wajib diisi.');
-      return;
-    }
-
-    setSaving(true);
-    setFormError(null);
-    setSuccessMessage(null);
-
-    const result = await updateCurrentProfile({
-      fullName: nextFullName,
-      phone,
-    });
-
-    if (result.error) {
-      setFormError(result.error.message);
-      setSaving(false);
-      return;
-    }
-
-    await refresh();
-    setSaving(false);
-    setIsEditing(false);
-    setSuccessMessage('Profil akun berhasil diperbarui.');
-  }
+      if (message) {
+        showSnackbar(message);
+      }
+    }, [showSnackbar])
+  );
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -77,141 +57,169 @@ export function ProfileScreen() {
     if (result) {
       setFormError(result.message);
       setLoggingOut(false);
+      setConfirmLogout(false);
       return;
     }
 
     setLoggingOut(false);
+    setConfirmLogout(false);
     router.replace('/get-started');
-  }
-
-  function handleCancelEdit() {
-    setIsEditing(false);
-    setFormError(null);
-    setFullName(profile?.fullName ?? '');
-    setPhone(profile?.phone ?? '');
   }
 
   const farmHubRoute = getFarmHubRoute(currentFarm);
   const passwordRoute = getPasswordRoute(currentFarm);
+  const profileEditRoute = getProfileEditRoute(currentFarm);
   const displayName = formatPersonDisplayName(profile?.fullName, 'Pengguna Avology');
-  const initial = getProfileInitial(displayName);
+  const farmName = currentFarm?.farm?.name ?? null;
+  // Chip role + nama kebun hanya bermakna untuk anggota kebun AKTIF. Di konteks
+  // onboarding (belum punya kebun, pending, ditolak, dinonaktifkan) keduanya
+  // tidak dirender sama sekali — bukan chip kosong, bukan placeholder, bukan "-".
+  const showMembershipMeta =
+    (isOwnerActive(currentFarm) || isWorkerActive(currentFarm)) && Boolean(farmName);
+  // expoConfig bisa null di runtime tertentu (mis. konteks tanpa manifest). Baris
+  // versi disembunyikan seluruhnya dalam kasus itu — lebih baik tidak ada daripada
+  // memajang penanda kosong yang tidak berarti apa-apa bagi pengguna.
+  const appVersion = Constants.expoConfig?.version ?? null;
 
   return (
-    <Screen>
-      <TopAppBar
-        title={isEditing ? 'Edit Profil' : 'Profil Akun'}
-        onBack={farmHubRoute ? () => router.replace(farmHubRoute) : undefined}
-      />
+    <Screen
+      header={
+        <TopAppBar
+          title="Profil Akun"
+          onBack={farmHubRoute ? () => router.replace(farmHubRoute) : undefined}
+        />
+      }
+    >
       <ErrorBanner message={formError ?? error?.message} />
-      <SuccessBanner message={successMessage} />
 
       {!profile ? (
         <EmptyState title="Profil tidak tersedia" subtitle="Masuk ulang jika data akun belum muncul." />
-      ) : isEditing ? (
-        <FormSection title="Data Pribadi">
-          <Field label="Nama lengkap" value={fullName} onChangeText={setFullName} placeholder="Nama lengkap" />
-          <Field
-            label="Nomor HP"
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="Nomor HP"
-            keyboardType="phone-pad"
-          />
-          {profile.email ? <MetaRow label="Email login" value={profile.email} /> : null}
-          <Button title="Simpan Profil" loading={saving} disabled={loggingOut} onPress={handleSave} />
-          <Button
-            title="Batal"
-            variant="secondary"
-            disabled={saving || loggingOut}
-            onPress={handleCancelEdit}
-          />
-        </FormSection>
       ) : (
         <>
-          <Card variant="highlight">
-            <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md }}>
+          <View style={{ gap: tokens.space.sm }}>
+            <Text
+              selectable
+              style={{
+                color: tokens.color.text.primary,
+                fontSize: tokens.type.title.fontSize,
+                fontWeight: tokens.type.title.fontWeight,
+                lineHeight: tokens.type.title.lineHeight,
+              }}
+            >
+              {displayName}
+            </Text>
+            {showMembershipMeta ? (
               <View
                 style={{
                   alignItems: 'center',
-                  backgroundColor: colors.primarySoft,
-                  borderColor: colors.primaryBorder,
-                  borderRadius: radius.round,
-                  borderWidth: 1,
-                  height: 58,
-                  justifyContent: 'center',
-                  width: 58,
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  gap: tokens.space.sm,
                 }}
               >
-                <Text selectable style={{ color: colors.primary, fontSize: 24, fontWeight: '700' }}>
-                  {initial}
+                <Badge label={formatRole(currentFarm?.role)} tone="neutral" />
+                <Text
+                  selectable
+                  numberOfLines={1}
+                  style={{
+                    color: tokens.color.text.secondary,
+                    flexShrink: 1,
+                    fontSize: tokens.type.bodySmall.fontSize,
+                    lineHeight: tokens.type.bodySmall.lineHeight,
+                  }}
+                >
+                  {farmName}
                 </Text>
               </View>
-              <View style={{ flex: 1, gap: spacing.xs }}>
-                <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700', lineHeight: typography.h3.lineHeight }}>
-                  {displayName}
-                </Text>
-                <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
-                  Profil Akun
-                </Text>
-              </View>
-            </View>
+            ) : null}
+          </View>
+
+          <Card>
+            <AccountRow label="Nama lengkap" value={profile.fullName} />
+            <AccountRow label="Nomor HP" value={profile.phone} />
+            <AccountRow label="Email login" value={profile.email} />
           </Card>
 
           <Card>
-            <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
-              Data Pribadi
-            </Text>
-            <View style={{ gap: spacing.md }}>
-              <MetaRow label="Nama lengkap" value={profile.fullName} />
-              <MetaRow label="Nomor HP" value={profile.phone} />
-              {profile.email ? <MetaRow label="Email login" value={profile.email} /> : null}
-            </View>
+            <MenuRowGroup>
+              <MenuRow
+                icon="user-edit"
+                label="Edit profil"
+                onPress={() => router.push(profileEditRoute)}
+              />
+              <MenuRow icon="lock" label="Ubah password" onPress={() => router.push(passwordRoute)} />
+            </MenuRowGroup>
           </Card>
 
           <Card>
-            <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
-              Pengaturan Akun
-            </Text>
-            <Button
-              title="Edit Profil"
-              variant="secondary"
-              disabled={loggingOut}
-              onPress={() => setIsEditing(true)}
-            />
-            <Button
-              title="Ubah password"
-              variant="secondary"
-              disabled={loggingOut}
-              onPress={() => router.push(passwordRoute)}
-            />
+            <MenuRow danger icon="logout" label="Keluar akun" onPress={() => setConfirmLogout(true)} />
           </Card>
 
-          <Card>
-            <Text selectable style={{ color: colors.danger, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
-              Keluar Akun
+          {appVersion ? (
+            <Text
+              selectable={false}
+              style={{
+                color: tokens.color.text.tertiary,
+                fontSize: tokens.type.meta.fontSize,
+                lineHeight: tokens.type.meta.lineHeight,
+                textAlign: 'center',
+              }}
+            >
+              Versi {appVersion}
             </Text>
-            <Button
-              title="Keluar"
-              variant="danger"
-              loading={loggingOut}
-              disabled={saving}
-              onPress={confirmLogout}
-            />
-          </Card>
+          ) : null}
         </>
       )}
+
+      <ConfirmDialog
+        cancelLabel="Batal"
+        confirmLabel="Keluar"
+        loading={loggingOut}
+        message="Kamu perlu masuk lagi untuk membuka Avology."
+        onCancel={() => {
+          if (!loggingOut) {
+            setConfirmLogout(false);
+          }
+        }}
+        onConfirm={() => void handleLogout()}
+        title="Keluar akun?"
+        tone="danger"
+        visible={confirmLogout}
+      />
     </Screen>
   );
+}
 
-  function confirmLogout() {
-    showConfirmDialog({
-      title: 'Keluar akun?',
-      message: 'Kamu perlu masuk lagi untuk membuka Avology.',
-      confirmLabel: 'Keluar',
-      danger: true,
-      onConfirm: handleLogout,
-    });
-  }
+// Baris data akun: label kecil di atas nilai. Nilai kosong tampil "Belum diisi"
+// dengan warna muted, bukan "-", supaya terbaca sebagai ajakan mengisi.
+function AccountRow({ label, value }: { label: string; value?: string | null }) {
+  const safeValue = sanitizeDisplayValue(value);
+
+  return (
+    <View style={{ gap: tokens.space.xs }}>
+      <Text
+        selectable
+        style={{
+          color: tokens.color.text.tertiary,
+          fontSize: tokens.type.meta.fontSize,
+          lineHeight: tokens.type.meta.lineHeight,
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        selectable
+        style={{
+          color: safeValue ? tokens.color.text.primary : tokens.color.text.tertiary,
+          fontSize: tokens.type.bodyStrong.fontSize,
+          fontWeight: tokens.type.bodyStrong.fontWeight,
+          lineHeight: tokens.type.bodyStrong.lineHeight,
+        }}
+      >
+        {safeValue ?? 'Belum diisi'}
+      </Text>
+    </View>
+  );
 }
 
 function getFarmHubRoute(currentFarm: CurrentUserFarm | null): '/owner/farm' | '/worker/farm' | null {
@@ -238,6 +246,16 @@ function getPasswordRoute(currentFarm: CurrentUserFarm | null): '/owner/profile-
   return '/password';
 }
 
-function getProfileInitial(name: string): string {
-  return name.trim().charAt(0).toUpperCase() || 'A';
+function getProfileEditRoute(
+  currentFarm: CurrentUserFarm | null
+): '/owner/profile-edit' | '/profile-edit' | '/worker/profile-edit' {
+  if (isOwnerActive(currentFarm)) {
+    return '/owner/profile-edit';
+  }
+
+  if (isWorkerActive(currentFarm)) {
+    return '/worker/profile-edit';
+  }
+
+  return '/profile-edit';
 }

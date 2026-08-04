@@ -842,6 +842,7 @@ export type UpdateProfileInput = {
 };
 
 export type UpdatePasswordInput = {
+  currentPassword: string;
   newPassword: string;
 };
 

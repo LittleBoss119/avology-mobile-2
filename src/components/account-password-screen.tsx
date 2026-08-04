@@ -1,96 +1,202 @@
 import { router } from 'expo-router';
 import React from 'react';
+import { Pressable } from 'react-native';
 
-import { updatePassword } from '../services/authService';
+import { tokens } from '../constants/theme';
+import { setPendingFeedback } from '../lib/pendingFeedback';
 import {
-  Button,
-  ErrorBanner,
-  Field,
-  FormSection,
-  Screen,
-  SuccessBanner,
-  TopAppBar,
-} from './ui';
+  INVALID_CURRENT_PASSWORD_CODE,
+  PASSWORD_VERIFY_RATE_LIMITED_CODE,
+  updatePassword,
+} from '../services/authService';
+import { Icon } from './icons';
+import { Button, Card, ErrorBanner, Field, Screen, TopAppBar } from './ui';
+
+type PasswordFieldErrors = {
+  confirmPassword?: string;
+  currentPassword?: string;
+  newPassword?: string;
+};
+
+const MIN_PASSWORD_LENGTH = 6;
 
 export function AccountPasswordScreen() {
-  const [confirmPassword, setConfirmPassword] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [serverErrors, setServerErrors] = React.useState<PasswordFieldErrors>({});
+  const [formError, setFormError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
-  const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
+  const [submitted, setSubmitted] = React.useState(false);
+
+  // Pola submitted + computeFieldErrors mengikuti owner/farm-profile.tsx: error
+  // baru muncul setelah percobaan simpan pertama, lalu hilang sendiri begitu
+  // field-nya dibetulkan. Error dari server ditumpuk di atasnya dan dibersihkan
+  // saat field yang bersangkutan diketik ulang.
+  const fieldErrors = submitted
+    ? { ...computeFieldErrors(currentPassword, newPassword, confirmPassword), ...serverErrors }
+    : serverErrors;
+
+  function handleCurrentPasswordChange(value: string) {
+    setCurrentPassword(value);
+    setServerErrors((previous) => ({ ...previous, currentPassword: undefined }));
+    setFormError(null);
+  }
 
   async function handleSubmit() {
-    const validation = validatePasswords(newPassword, confirmPassword);
+    setSubmitted(true);
+    setServerErrors({});
+    setFormError(null);
 
-    if (validation) {
-      setError(validation);
-      setSuccessMessage(null);
+    const errors = computeFieldErrors(currentPassword, newPassword, confirmPassword);
+
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
     setSaving(true);
-    setError(null);
-    setSuccessMessage(null);
 
     const result = await updatePassword({
+      currentPassword,
       newPassword,
     });
 
     if (result.error) {
-      setError(result.error.message);
       setSaving(false);
+
+      // Password lama salah dan rate limit sama-sama menempel di field "Password
+      // saat ini" — keduanya soal input itu, bukan soal password baru.
+      if (
+        result.error.code === INVALID_CURRENT_PASSWORD_CODE ||
+        result.error.code === PASSWORD_VERIFY_RATE_LIMITED_CODE
+      ) {
+        setServerErrors({ currentPassword: result.error.message });
+        return;
+      }
+
+      setFormError(result.error.message);
       return;
     }
 
-    setNewPassword('');
-    setConfirmPassword('');
     setSaving(false);
+    setPendingFeedback('password_updated');
     router.back();
   }
 
   return (
-    <Screen>
-      <TopAppBar title="Ubah password" onBack={() => router.back()} />
-      <ErrorBanner message={error} />
-      <SuccessBanner message={successMessage} />
+    <Screen
+      header={<TopAppBar title="Ubah password" onBack={() => router.back()} />}
+      stickyFooter={<Button title="Simpan password" loading={saving} onPress={handleSubmit} />}
+    >
+      <ErrorBanner message={formError} />
 
-      <FormSection title="Ubah password" description="Gunakan password baru untuk login berikutnya.">
-        <Field
+      <Card>
+        <PasswordField
+          error={fieldErrors.currentPassword}
+          label="Password saat ini"
+          placeholder="Password yang dipakai sekarang"
+          value={currentPassword}
+          onChangeText={handleCurrentPasswordChange}
+        />
+        <PasswordField
+          error={fieldErrors.newPassword}
+          helperText={`Minimal ${MIN_PASSWORD_LENGTH} karakter.`}
           label="Password baru"
+          placeholder="Password baru"
           value={newPassword}
           onChangeText={setNewPassword}
-          placeholder="Minimal 6 karakter"
-          secureTextEntry
         />
-        <Field
-          label="Konfirmasi password baru"
+        <PasswordField
+          error={fieldErrors.confirmPassword}
+          label="Ulangi password baru"
+          placeholder="Ulangi password baru"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
-          placeholder="Ulangi password baru"
-          secureTextEntry
         />
-        <Button title="Simpan password" loading={saving} onPress={handleSubmit} />
-      </FormSection>
+      </Card>
     </Screen>
   );
 }
 
-function validatePasswords(newPassword: string, confirmPassword: string): string | null {
-  if (!newPassword) {
-    return 'Password baru wajib diisi.';
+// Tiap field memegang state show/hide-nya sendiri — membuka satu field tidak
+// ikut membuka dua lainnya.
+function PasswordField({
+  error,
+  helperText,
+  label,
+  onChangeText,
+  placeholder,
+  value,
+}: {
+  error?: string;
+  helperText?: string;
+  label: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  value: string;
+}) {
+  const [visible, setVisible] = React.useState(false);
+
+  return (
+    <Field
+      error={error}
+      helperText={helperText}
+      label={label}
+      placeholder={placeholder}
+      secureTextEntry={!visible}
+      value={value}
+      onChangeText={onChangeText}
+      trailing={
+        <Pressable
+          accessibilityLabel={
+            visible ? `Sembunyikan ${label.toLowerCase()}` : `Tampilkan ${label.toLowerCase()}`
+          }
+          accessibilityRole="button"
+          accessibilityState={{ selected: visible }}
+          onPress={() => setVisible((previous) => !previous)}
+          // Meregang mengisi slot 44x44 milik Field, bukan sekadar seukuran ikon
+          // dan bukan hitSlop — hitSlop akan meluber ke TextInput di sebelahnya.
+          style={({ pressed }) => ({
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: tokens.layout.tapTarget,
+            minWidth: tokens.layout.tapTarget,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Icon
+            name={visible ? 'eye-off' : 'eye'}
+            size={tokens.icon.md}
+            color={tokens.color.text.tertiary}
+          />
+        </Pressable>
+      }
+    />
+  );
+}
+
+function computeFieldErrors(
+  currentPassword: string,
+  newPassword: string,
+  confirmPassword: string
+): PasswordFieldErrors {
+  const errors: PasswordFieldErrors = {};
+
+  if (!currentPassword) {
+    errors.currentPassword = 'Password saat ini wajib diisi.';
   }
 
-  if (newPassword.length < 6) {
-    return 'Password minimal 6 karakter.';
+  if (!newPassword) {
+    errors.newPassword = 'Password baru wajib diisi.';
+  } else if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    errors.newPassword = `Password minimal ${MIN_PASSWORD_LENGTH} karakter.`;
   }
 
   if (!confirmPassword) {
-    return 'Konfirmasi password baru wajib diisi.';
+    errors.confirmPassword = 'Konfirmasi password baru wajib diisi.';
+  } else if (newPassword !== confirmPassword) {
+    errors.confirmPassword = 'Konfirmasi password baru tidak sama.';
   }
 
-  if (newPassword !== confirmPassword) {
-    return 'Konfirmasi password baru tidak sama.';
-  }
-
-  return null;
+  return errors;
 }

@@ -1,8 +1,12 @@
 import type { CurrentUserFarm, Profile } from '../types/domain';
 
-const accountProfileRoutes = new Set(['/profile', '/password']);
-const onboardingFlowRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile', '/password']);
-const inactiveAccessRecoveryRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile', '/password']);
+// '/profile-edit' berdiri sejajar dengan '/password': sama-sama layar akun yang
+// boleh dibuka di luar kebun aktif (belum punya kebun, menunggu persetujuan,
+// ditolak, atau dinonaktifkan). Tanpa entri ini, layar edit profil versi
+// onboarding langsung dipental balik oleh shouldRedirectAccess().
+const accountProfileRoutes = new Set(['/profile', '/profile-edit', '/password']);
+const onboardingFlowRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile', '/profile-edit', '/password']);
+const inactiveAccessRecoveryRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile', '/profile-edit', '/password']);
 const authFlowRoutes = new Set(['/get-started', '/login', '/register']);
 
 type ResolveAccessRouteInput = {

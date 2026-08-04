@@ -103,6 +103,13 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/farm" options={{ headerShown: false, title: 'Kebun' }} />
           <Stack.Screen name="owner/workers" options={{ title: 'Riwayat akses' }} />
           <Stack.Screen name="owner/profile" options={{ headerShown: false, title: 'Profil Akun' }} />
+          {/* gestureEnabled:false disengaja — swipe-back iOS tidak bisa dicegat lewat
+              API publik expo-router, jadi dimatikan supaya perubahan yang belum
+              disimpan tidak bisa hilang lewat gestur. Back tetap ada di chevron. */}
+          <Stack.Screen
+            name="owner/profile-edit"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Edit Profil' }}
+          />
           <Stack.Screen name="owner/profile-password" options={{ headerShown: false, title: 'Ubah Password' }} />
           <Stack.Screen name="owner/farm-profile" options={{ headerShown: false, title: 'Edit kebun' }} />
         </Stack>

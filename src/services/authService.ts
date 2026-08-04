@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { supabasePasswordVerifier } from '../lib/supabasePasswordVerifier';
 import { getCurrentUserFarm } from './farmService';
 import type {
   LoginUserData,
@@ -197,9 +198,18 @@ export async function updateCurrentProfile(
   return ok(mapProfile(data, userResult.data.user.email ?? null));
 }
 
+// Kode error yang bisa dibedakan UI, supaya "password saat ini salah" tidak
+// tenggelam jadi pesan generik "Password gagal diperbarui".
+export const INVALID_CURRENT_PASSWORD_CODE = 'invalid_current_password';
+export const PASSWORD_VERIFY_RATE_LIMITED_CODE = 'password_verify_rate_limited';
+
 export async function updatePassword(
   input: UpdatePasswordInput
 ): Promise<ServiceResult<SuccessData>> {
+  if (!input.currentPassword) {
+    return fail(new Error('Password saat ini wajib diisi.'));
+  }
+
   if (!input.newPassword) {
     return fail(new Error('Password baru wajib diisi.'));
   }
@@ -214,6 +224,18 @@ export async function updatePassword(
     return fail(new Error('Sesi login tidak ditemukan. Silakan login ulang.'));
   }
 
+  const email = userResult.data.user.email;
+
+  if (!email) {
+    return fail(new Error('Akun ini tidak memiliki email login, password tidak dapat diubah dari aplikasi.'));
+  }
+
+  const verificationError = await verifyCurrentPassword(email, input.currentPassword);
+
+  if (verificationError) {
+    return fail(verificationError);
+  }
+
   const { error } = await supabase.auth.updateUser({
     password: input.newPassword,
   });
@@ -225,6 +247,43 @@ export async function updatePassword(
   return ok({
     success: true,
   });
+}
+
+// Membuktikan pemegang HP tahu password sekarang, lewat client kedua supaya sesi
+// utama tidak tersentuh. Sesi bayangan hasil login ini TIDAK dipakai untuk apa pun
+// dan langsung dibuang; perubahan password tetap berjalan di client utama.
+async function verifyCurrentPassword(
+  email: string,
+  currentPassword: string
+): Promise<{ code: string; message: string } | null> {
+  const { error } = await supabasePasswordVerifier.auth.signInWithPassword({
+    email,
+    password: currentPassword,
+  });
+
+  // scope 'local' — hanya membersihkan sesi bayangan di memori client kedua.
+  // JANGAN 'global': itu akan mencabut semua sesi user, termasuk sesi utama.
+  await supabasePasswordVerifier.auth.signOut({ scope: 'local' }).catch(() => undefined);
+
+  if (!error) {
+    return null;
+  }
+
+  if (isRateLimitError(error)) {
+    return {
+      code: PASSWORD_VERIFY_RATE_LIMITED_CODE,
+      message: 'Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi.',
+    };
+  }
+
+  return {
+    code: INVALID_CURRENT_PASSWORD_CODE,
+    message: 'Password saat ini salah.',
+  };
+}
+
+function isRateLimitError(error: { code?: string; status?: number }): boolean {
+  return error.code === 'over_request_rate_limit' || error.status === 429;
 }
 
 function mapProfile(row: ProfileRow, email?: string | null): Profile {
