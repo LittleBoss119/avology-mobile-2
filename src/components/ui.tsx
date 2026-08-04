@@ -58,6 +58,7 @@ export const appTheme = {
 };
 
 export function Screen({
+  applyTopInset = false,
   children,
   floatingAction,
   floatingActionBottom = 24,
@@ -68,6 +69,16 @@ export function Screen({
   variant = 'default',
   stickyFooter,
 }: {
+  // Safe-area atas normalnya diterapkan TopAppBar, bukan Screen (lihat komentar
+  // pada slot `header` di bawah). Layar yang TIDAK punya TopAppBar sama sekali —
+  // baik lewat slot `header` maupun sebagai children — jadi tidak punya siapa pun
+  // yang menerapkannya, dan konten paling atasnya menabrak status bar. Prop ini
+  // untuk kasus itu.
+  //
+  // SENGAJA opt-in, default false. Kalau otomatis menyala saat `header` kosong,
+  // layar yang menaruh TopAppBar sebagai children akan kena inset DUA KALI —
+  // sekali dari sini, sekali dari TopAppBar-nya sendiri.
+  applyTopInset?: boolean;
   children: React.ReactNode;
   floatingAction?: React.ReactNode;
   floatingActionBottom?: number;
@@ -144,7 +155,10 @@ export function Screen({
           {
             flexGrow: 1,
             paddingHorizontal: spacing.screenHorizontal,
-            paddingTop: spacing.xl,
+            // insets.top mentah, bukan Math.max(...): saat inset 0 hasilnya kembali
+            // persis ke nilai lama, jadi prop ini tidak pernah menggeser apa pun
+            // di perangkat tanpa status bar yang mengintip.
+            paddingTop: spacing.xl + (applyTopInset ? insets.top : 0),
             gap: spacing.sectionGap,
             paddingBottom: overlayBottomPadding,
           },
@@ -274,7 +288,12 @@ export function TopAppBar({
   badge?: React.ReactNode;
   right?: React.ReactNode;
   subtitle?: string;
-  title: string;
+  // Opsional supaya layar bisa memakai bar ini murni sebagai baris tombol back,
+  // dengan judul ditangani PageIntro di badan layar (pola layar auth). Tinggi bar
+  // TIDAK bergantung pada judul — baris di bawah sudah punya minHeight 56 eksplisit
+  // yang selalu lebih besar dari lineHeight judul (26) maupun tombol back (32) —
+  // jadi menghilangkan judul tidak membuat bar menyusut.
+  title?: string;
   onBack?: () => void;
   variant?: 'main' | 'detail' | 'plain';
 }) {
@@ -323,23 +342,25 @@ export function TopAppBar({
         >
           {badge ? (
             <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, maxWidth: '100%' }}>
-              <Text
-                selectable
-                numberOfLines={1}
-                style={{
-                  color: colors.text,
-                  flexShrink: 1,
-                  fontSize: resolvedVariant === 'main' ? typography.screenTitle.fontSize : 20,
-                  fontWeight: resolvedVariant === 'main' ? typography.screenTitle.fontWeight : '700',
-                  lineHeight: typography.screenTitle.lineHeight,
-                  textAlign: titleAlign,
-                }}
-              >
-                {title}
-              </Text>
+              {title === undefined ? null : (
+                <Text
+                  selectable
+                  numberOfLines={1}
+                  style={{
+                    color: colors.text,
+                    flexShrink: 1,
+                    fontSize: resolvedVariant === 'main' ? typography.screenTitle.fontSize : 20,
+                    fontWeight: resolvedVariant === 'main' ? typography.screenTitle.fontWeight : '700',
+                    lineHeight: typography.screenTitle.lineHeight,
+                    textAlign: titleAlign,
+                  }}
+                >
+                  {title}
+                </Text>
+              )}
               <View style={{ flexShrink: 0 }}>{badge}</View>
             </View>
-          ) : (
+          ) : title === undefined ? null : (
             <Text
               selectable
               numberOfLines={1}
@@ -425,9 +446,26 @@ export function MainTabHeader({
   );
 }
 
-export function BrandMark({ compact = false }: { compact?: boolean }) {
+// showWordmark=false menyisakan kotak logo saja. Dipakai layar yang judulnya
+// sudah ditangani <PageIntro> di badan layar, supaya "Avology" tidak tercetak
+// dua kali dengan dua tagline berbeda. Default true — bentuk lama utuh.
+// `align` sengaja TIDAK punya nilai default sendiri: kalau tidak diisi, perataan
+// jatuh kembali ke aturan lama (compact = kiri, selain itu tengah), jadi arti
+// `compact` yang sudah ada tidak bergeser. Mengisi `align` memisahkan perataan
+// dari ukuran, sehingga bisa dapat kotak ukuran penuh yang rata kiri.
+export function BrandMark({
+  align,
+  compact = false,
+  showWordmark = true,
+}: {
+  align?: 'left' | 'center';
+  compact?: boolean;
+  showWordmark?: boolean;
+}) {
+  const alignItems = (align ?? (compact ? 'left' : 'center')) === 'left' ? 'flex-start' : 'center';
+
   return (
-    <View style={{ alignItems: compact ? 'flex-start' : 'center', gap: spacing.md }}>
+    <View style={{ alignItems, gap: spacing.md }}>
       <View
         style={{
           alignItems: 'center',
@@ -445,14 +483,16 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
           A
         </Text>
       </View>
-      <View style={{ alignItems: compact ? 'flex-start' : 'center', gap: spacing.xs }}>
-        <Text selectable style={{ color: colors.text, fontSize: compact ? 20 : 24, fontWeight: '700' }}>
-          Avology
-        </Text>
-        <Text selectable style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>
-          Operasional kebun alpukat
-        </Text>
-      </View>
+      {showWordmark ? (
+        <View style={{ alignItems, gap: spacing.xs }}>
+          <Text selectable style={{ color: colors.text, fontSize: compact ? 20 : 24, fontWeight: '700' }}>
+            Avology
+          </Text>
+          <Text selectable style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>
+            Operasional kebun alpukat
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -830,6 +870,11 @@ const FIELD_MULTILINE_MIN_HEIGHT = 96;
 
 type FieldBaseProps = {
   autoCapitalize?: TextInputProps['autoCapitalize'];
+  // autoComplete & textContentType sengaja hanya diteruskan, tanpa nilai default:
+  // dibiarkan undefined, TextInput berperilaku persis seperti sebelum prop ini ada,
+  // jadi pemakaian Field yang sudah ada tidak berubah sama sekali. Keduanya dipakai
+  // layar auth supaya password manager & saran email keyboard mau menyala.
+  autoComplete?: TextInputProps['autoComplete'];
   error?: string;
   helperText?: string;
   label: string;
@@ -839,6 +884,7 @@ type FieldBaseProps = {
   keyboardType?: KeyboardTypeOptions;
   multiline?: boolean;
   numberOfLines?: number;
+  textContentType?: TextInputProps['textContentType'];
   trailing?: React.ReactNode;
 };
 
@@ -851,6 +897,7 @@ export type FieldProps =
 
 export function Field({
   autoCapitalize = 'none',
+  autoComplete,
   error,
   helperText,
   label,
@@ -862,6 +909,7 @@ export function Field({
   keyboardType,
   multiline,
   numberOfLines,
+  textContentType,
   trailing,
 }: FieldProps) {
   // Dua jalur render yang sengaja dipisah. Jalur "polos" (di bawah, cabang
@@ -908,6 +956,7 @@ export function Field({
           ) : null}
           <TextInput
             autoCapitalize={autoCapitalize}
+            autoComplete={autoComplete}
             autoCorrect={false}
             editable={!locked}
             keyboardType={keyboardType}
@@ -928,6 +977,7 @@ export function Field({
               paddingVertical: 0,
             }}
             textAlignVertical={multiline ? 'top' : undefined}
+            textContentType={textContentType}
             value={value}
           />
           {trailing ? (
@@ -950,6 +1000,7 @@ export function Field({
       ) : (
         <TextInput
           autoCapitalize={autoCapitalize}
+          autoComplete={autoComplete}
           autoCorrect={false}
           keyboardType={keyboardType}
           multiline={multiline}
@@ -977,6 +1028,7 @@ export function Field({
               : null),
           }}
           textAlignVertical={multiline ? 'top' : undefined}
+          textContentType={textContentType}
           value={value}
         />
       )}
@@ -1004,6 +1056,112 @@ export function Field({
           {helperMessage}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+// Password + tombol mata, dibangun di atas <Field> lewat slot `trailing` — bukan
+// menggambar border sendiri, supaya tingginya, radiusnya, dan tampilan error-nya
+// otomatis ikut Field dan tidak bisa melenceng sendiri.
+//
+// Diangkat dari definisi lokal di account-password-screen.tsx; definisi lokal di
+// sana SENGAJA dibiarkan utuh untuk sementara agar layar "Ubah password" tidak
+// ikut bergerak di batch ini.
+//
+// Tiap instance memegang state show/hide-nya sendiri — membuka satu field tidak
+// ikut membuka field password lain di layar yang sama.
+export function PasswordField({
+  error,
+  helperText,
+  label,
+  onChangeText,
+  textContentType,
+  value,
+}: {
+  error?: string;
+  helperText?: string;
+  label: string;
+  onChangeText: (value: string) => void;
+  textContentType?: TextInputProps['textContentType'];
+  value: string;
+}) {
+  const [visible, setVisible] = React.useState(false);
+
+  return (
+    <Field
+      error={error}
+      helperText={helperText}
+      label={label}
+      secureTextEntry={!visible}
+      textContentType={textContentType}
+      value={value}
+      onChangeText={onChangeText}
+      trailing={
+        <Pressable
+          accessibilityLabel={
+            visible ? `Sembunyikan ${label.toLowerCase()}` : `Tampilkan ${label.toLowerCase()}`
+          }
+          accessibilityRole="button"
+          accessibilityState={{ selected: visible }}
+          onPress={() => setVisible((previous) => !previous)}
+          // Meregang mengisi slot 44x44 milik Field, bukan sekadar seukuran ikon
+          // dan bukan hitSlop — hitSlop akan meluber ke TextInput di sebelahnya
+          // dan mencuri tap yang seharusnya menaruh kursor di teks.
+          style={({ pressed }) => ({
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: tokens.layout.tapTarget,
+            minWidth: tokens.layout.tapTarget,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Icon
+            name={visible ? 'eye-off' : 'eye'}
+            size={tokens.icon.md}
+            color={tokens.color.text.tertiary}
+          />
+        </Pressable>
+      }
+    />
+  );
+}
+
+// Tautan silang antar layar auth: "Belum punya akun? Daftar". Diangkat dari
+// definisi lokal yang tersalin identik di login.tsx dan register.tsx; kedua
+// salinan itu dibersihkan saat layarnya dirombak, bukan di sini.
+export function InlineAuthLink({
+  actionLabel,
+  onPress,
+  prefix,
+}: {
+  actionLabel: string;
+  onPress: () => void;
+  prefix: string;
+}) {
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: tokens.space.xs,
+        justifyContent: 'center',
+      }}
+    >
+      <Text selectable style={{ color: tokens.color.text.tertiary }}>
+        {prefix}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.6 : 1,
+          paddingVertical: tokens.space.sm,
+        })}
+      >
+        <Text selectable={false} style={{ color: tokens.color.brand.base, fontWeight: '700' }}>
+          {actionLabel}
+        </Text>
+      </Pressable>
     </View>
   );
 }
