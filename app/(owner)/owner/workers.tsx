@@ -51,7 +51,7 @@ export default function WorkerAccessHistoryScreen() {
   }
 
   return (
-    <Screen>
+    <Screen applyTopInset>
       <ErrorBanner message={error} />
       {history.length === 0 ? (
         <EmptyState title="Belum ada riwayat akses." />

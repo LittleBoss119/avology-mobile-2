@@ -46,7 +46,7 @@ export default function IndexRoute() {
 
   if (hasBlockingError) {
     return (
-      <Screen>
+      <Screen applyTopInset>
         <ErrorBanner message={errorMessage} />
       </Screen>
     );

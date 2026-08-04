@@ -53,7 +53,7 @@ export function OwnerGrowthMonitoringScreen() {
   const fruitingTrees = trees.filter((tree) => tree.currentGrowthPhase === 'fruiting');
 
   return (
-    <Screen>
+    <Screen applyTopInset>
       <PageIntro
         title="Monitoring Fase"
         subtitle="Pantau pohon yang sedang berbunga dan berbuah berdasarkan fase terbaru."

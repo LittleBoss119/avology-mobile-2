@@ -56,6 +56,7 @@ export function AccessStatusScreen({
 
   return (
     <Screen
+      applyTopInset
       footer={
         <>
           {canManuallyCheckStatus ? (

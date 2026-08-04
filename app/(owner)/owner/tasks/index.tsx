@@ -96,7 +96,7 @@ export default function OwnerTaskListScreen() {
   }
 
   return (
-    <Screen>
+    <Screen applyTopInset>
       <PageIntro title="Tugas Lapangan" subtitle="Lihat semua tugas perawatan dalam kebun aktif." />
       <ErrorBanner message={error} />
 
