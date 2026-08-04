@@ -150,9 +150,17 @@ export function PhotoSourceSheet({
 // Dialog konfirmasi terpusat (overlay, satu file dengan BottomSheet). Aksi
 // konfirmasi sengaja di ATAS supaya posisi paling gampang dijangkau jempol diisi
 // aksi konfirmasi; "Kembali" (aman) di bawah.
+// `cancelTone` dan `icon` sengaja opsional dengan default = perilaku lama persis,
+// jadi empat pemakai yang sudah ada tidak berubah sedikit pun. Keduanya ada untuk
+// kasus di mana aksi AMAN yang pantas duduk di atas (mis. "Lanjut isi" pada dialog
+// perubahan belum disimpan), sementara aksi destruktifnya ada di tombol bawah dan
+// tetap harus terbaca merah — pewarnaan tombol dan pilihan ikon jadi tidak lagi
+// terikat mati pada satu prop `tone`.
 export function ConfirmDialog({
   cancelLabel = 'Kembali',
+  cancelTone = 'default',
   confirmLabel,
+  icon,
   loading = false,
   message,
   onCancel,
@@ -162,7 +170,9 @@ export function ConfirmDialog({
   visible,
 }: {
   cancelLabel?: string;
+  cancelTone?: 'danger' | 'default';
   confirmLabel: string;
+  icon?: IconName;
   loading?: boolean;
   message: string;
   onCancel: () => void;
@@ -172,12 +182,14 @@ export function ConfirmDialog({
   visible: boolean;
 }) {
   const isDanger = tone === 'danger';
-  const iconName: IconName = isDanger ? 'alert-triangle' : 'check';
+  const iconName: IconName = icon ?? (isDanger ? 'alert-triangle' : 'check');
   const iconBg = isDanger ? tokens.color.status.danger.bg : tokens.color.brand.soft;
   const iconColor = isDanger ? tokens.color.status.danger.text : tokens.color.brand.base;
   const confirmBg = isDanger ? tokens.color.status.danger.bg : tokens.color.brand.base;
   const confirmBorder = isDanger ? tokens.color.status.danger.border : tokens.color.brand.base;
   const confirmText = isDanger ? tokens.color.status.danger.text : tokens.color.brand.on;
+  const cancelTextColor =
+    cancelTone === 'danger' ? tokens.color.status.danger.text : tokens.color.text.primary;
 
   return (
     <Modal
@@ -226,7 +238,7 @@ export function ConfirmDialog({
               onPress={onCancel}
               style={confirmStyles.cancelButton}
             >
-              <Text selectable={false} style={confirmStyles.cancelText}>
+              <Text selectable={false} style={[confirmStyles.cancelText, { color: cancelTextColor }]}>
                 {cancelLabel}
               </Text>
             </Pressable>

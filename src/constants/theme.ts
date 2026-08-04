@@ -180,6 +180,11 @@ export const tokens = {
   layout: {
     screenX: 16, screenTop: 20, sectionGap: 24, cardPadding: 16,
     listGap: 12, rowMinHeight: 48, controlHeight: 56, tapTarget: 44,
+    // fieldHeight (54) adalah promosi literal lama di <Field>, nilainya sengaja
+    // TIDAK diubah supaya pemakaian Field yang ada tidak bergeser. Selisih 54 vs
+    // controlHeight 56 kemungkinan tidak disengaja; rekonsiliasinya dijadwalkan
+    // sebagai pass tersendiri dengan verifikasi visual, bukan di sini.
+    fieldHeight: 54,
   },
   radius: { control: 14, tile: 12, cardInner: 16, card: 20, sheet: 28, pill: 999 },
   type: {

@@ -4,15 +4,19 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import {
   ActivityIndicator,
+  Dimensions,
   Image,
+  Keyboard,
   Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
+  type KeyboardEvent,
   type KeyboardTypeOptions,
   type StyleProp,
+  type TextInputProps,
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -75,13 +79,42 @@ export function Screen({
   stickyFooter?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const hasStickyFooter = Boolean(stickyFooter);
+  const keyboard = useKeyboardMetrics(hasStickyFooter);
   const backgroundColor =
     variant === 'surface' ? colors.surface : variant === 'soft' ? colors.backgroundDeep : colors.background;
-  const overlayBottomPadding = stickyFooter
-    ? 128 + insets.bottom
-    : floatingAction
-      ? 132
-      : tokens.space.xxxl;
+
+  // Window tidak menyusut saat keyboard naik (adjustResize tidak berlaku di Android
+  // edge-to-edge), jadi stickyFooter yang position:absolute harus diangkat manual.
+  //
+  // Dipakai `screenY`, BUKAN `height`. Di ReactRootView.java (checkForKeyboardEvents,
+  // API >= 30) `height = imeInsets.bottom - barInsets.bottom` — RN sudah mengurangi
+  // system bar, jadi angkanya lebih kecil dari keyboard yang digambar. `screenY`
+  // (= mVisibleViewArea.bottom, koordinat display) tidak kena pengurangan itu, maka
+  // pasangannya tinggi 'screen', bukan 'window' yang juga memotong system bar.
+  //
+  // ASUMSI: sisi bawah root view berimpit dengan sisi bawah display. Berlaku di
+  // edge-to-edge. UJI ULANG saat pertama kali pindah dari Expo Go ke dev build atau
+  // APK rilis: kalau ternyata berjalan tanpa edge-to-edge, root berhenti di atas nav
+  // bar dan rumus lama (ime - navBar, yaitu `height`) yang benar.
+  const screenHeight = Dimensions.get('screen').height;
+  const keyboardVisible = keyboard.height > 0;
+  // screenY 0/absen berarti data tidak bisa dipakai — jangan menebak, kembali ke
+  // perilaku lama apa adanya.
+  const screenYBasisActive = keyboardVisible && keyboard.screenY > 0;
+  const keyboardLift = !hasStickyFooter
+    ? 0
+    : screenYBasisActive
+      ? Math.max(0, screenHeight - keyboard.screenY)
+      : keyboardVisible
+        ? Math.max(0, keyboard.height - insets.bottom)
+        : 0;
+  // Overlap sudah dihitung sampai dasar display, jadi insets.bottom TIDAK dikurangi
+  // lagi di sini — nav bar tertutup keyboard, ruang untuknya tidak relevan. Saat
+  // keyboard tertutup (atau saat fallback aktif) padding kembali ke rumus lama persis.
+  const footerPaddingBottom = screenYBasisActive ? spacing.md : Math.max(insets.bottom, spacing.md);
+  const overlayBottomPadding =
+    (stickyFooter ? 128 + insets.bottom : floatingAction ? 132 : tokens.space.xxxl) + keyboardLift;
 
   return (
     <View style={{ flex: 1, backgroundColor }}>
@@ -127,9 +160,9 @@ export function Screen({
             backgroundColor,
             borderTopColor: colors.border,
             borderTopWidth: 1,
-            bottom: 0,
+            bottom: keyboardLift,
             left: 0,
-            paddingBottom: Math.max(insets.bottom, spacing.md),
+            paddingBottom: footerPaddingBottom,
             paddingHorizontal: spacing.screenHorizontal,
             paddingTop: spacing.md,
             position: 'absolute',
@@ -146,6 +179,58 @@ export function Screen({
       ) : null}
     </View>
   );
+}
+
+type KeyboardMetrics = {
+  height: number;
+  screenY: number;
+};
+
+const CLOSED_KEYBOARD: KeyboardMetrics = { height: 0, screenY: 0 };
+
+// Tinggi keyboard dari React Native core (tanpa dependensi tambahan, aman di
+// Expo Go). Android hanya mengirim pasangan did-show/did-hide — will-* tidak
+// pernah dikirim di sana. iOS memakai will-show/will-hide supaya pergeseran
+// footer berjalan bersamaan dengan animasi keyboard, bukan setelahnya.
+// Listener hanya dipasang untuk layar yang benar-benar punya stickyFooter, jadi
+// layar lain tidak ikut me-render ulang saat keyboard buka/tutup.
+function useKeyboardMetrics(enabled: boolean): KeyboardMetrics {
+  const [metrics, setMetrics] = React.useState<KeyboardMetrics>(CLOSED_KEYBOARD);
+
+  React.useEffect(() => {
+    if (!enabled) {
+      setMetrics(CLOSED_KEYBOARD);
+      return;
+    }
+
+    function handleShow(event: KeyboardEvent) {
+      setMetrics({
+        height: event.endCoordinates?.height ?? 0,
+        screenY: event.endCoordinates?.screenY ?? 0,
+      });
+    }
+
+    function handleHide() {
+      setMetrics(CLOSED_KEYBOARD);
+    }
+
+    const subscriptions =
+      Platform.OS === 'ios'
+        ? [
+            Keyboard.addListener('keyboardWillShow', handleShow),
+            Keyboard.addListener('keyboardWillHide', handleHide),
+          ]
+        : [
+            Keyboard.addListener('keyboardDidShow', handleShow),
+            Keyboard.addListener('keyboardDidHide', handleHide),
+          ];
+
+    return () => {
+      subscriptions.forEach((subscription) => subscription.remove());
+    };
+  }, [enabled]);
+
+  return metrics;
 }
 
 export function PageIntro({
@@ -738,9 +823,38 @@ export function SectionTitle({ subtitle, title }: { subtitle?: string; title: st
   );
 }
 
+// Tinggi minimum area teks multiline. Satu sumber untuk kedua jalur render di
+// bawah; nilainya sengaja dipertahankan dari versi lama Field. Belum ada token
+// yang sepadan (tokens.layout hanya punya fieldHeight/rowMinHeight/controlHeight).
+const FIELD_MULTILINE_MIN_HEIGHT = 96;
+
+type FieldBaseProps = {
+  autoCapitalize?: TextInputProps['autoCapitalize'];
+  error?: string;
+  helperText?: string;
+  label: string;
+  value: string;
+  placeholder?: string;
+  secureTextEntry?: boolean;
+  keyboardType?: KeyboardTypeOptions;
+  multiline?: boolean;
+  numberOfLines?: number;
+  trailing?: React.ReactNode;
+};
+
+// onChangeText ditegakkan tipe, bukan konvensi: hanya field terkunci yang boleh
+// tidak punya handler (nilainya memang tidak bisa berubah). Field biasa yang
+// lupa mengoper handler gagal saat kompilasi, tidak diam-diam jadi read-only.
+export type FieldProps =
+  | (FieldBaseProps & { locked: true; onChangeText?: (value: string) => void })
+  | (FieldBaseProps & { locked?: false; onChangeText: (value: string) => void });
+
 export function Field({
+  autoCapitalize = 'none',
   error,
+  helperText,
   label,
+  locked = false,
   value,
   onChangeText,
   placeholder,
@@ -748,53 +862,124 @@ export function Field({
   keyboardType,
   multiline,
   numberOfLines,
-}: {
-  error?: string;
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  placeholder?: string;
-  secureTextEntry?: boolean;
-  keyboardType?: KeyboardTypeOptions;
-  multiline?: boolean;
-  numberOfLines?: number;
-}) {
+  trailing,
+}: FieldProps) {
+  // Dua jalur render yang sengaja dipisah. Jalur "polos" (di bawah, cabang
+  // else) adalah kode lama apa adanya: border digambar oleh TextInput sendiri.
+  // Jalur "baris" hanya aktif kalau `locked` atau `trailing` diisi — border
+  // pindah ke container supaya ikon gembok / tombol mata bisa duduk di dalam
+  // border yang sama. Pemisahan ini disengaja: pemakaian Field yang sudah ada
+  // tidak menyentuh jalur baru sama sekali, jadi tidak ada pergeseran piksel.
+  const useRowLayout = locked || Boolean(trailing);
+  // Error mengalahkan helperText; keduanya tidak pernah tampil bersamaan.
+  const helperMessage = error ? null : helperText;
+  const borderColor = error
+    ? tokens.color.status.danger.text
+    : locked
+      ? tokens.color.line.hairline
+      : tokens.color.line.card;
+
   return (
     <View style={{ gap: spacing.sm }}>
       <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
-      <TextInput
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType={keyboardType}
-        multiline={multiline}
-        numberOfLines={multiline ? numberOfLines ?? 4 : undefined}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textSoft}
-        secureTextEntry={secureTextEntry}
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: error ? tokens.color.status.danger.text : colors.border,
-          borderCurve: 'continuous',
-          borderRadius: 14,
-          borderWidth: 1,
-          color: colors.text,
-          fontSize: 16,
-          minHeight: 54,
-          paddingHorizontal: spacing.lg,
-          ...(multiline
-            ? {
-                // literal 96 disengaja, sejalan dgn minHeight 54 / borderRadius 14 / fontSize 16 di atas; disapu saat migrasi Field ke tokens
-                minHeight: 96,
-                paddingVertical: tokens.space.md,
-              }
-            : null),
-        }}
-        textAlignVertical={multiline ? 'top' : undefined}
-        value={value}
-      />
+      {useRowLayout ? (
+        <View
+          style={{
+            alignItems: multiline ? 'flex-start' : 'center',
+            backgroundColor: locked ? tokens.color.surface.subtle : tokens.color.surface.card,
+            borderColor,
+            borderCurve: 'continuous',
+            borderRadius: tokens.radius.control,
+            borderWidth: 1,
+            flexDirection: 'row',
+            gap: tokens.space.sm,
+            minHeight: multiline ? FIELD_MULTILINE_MIN_HEIGHT : tokens.layout.fieldHeight,
+            paddingLeft: tokens.space.lg,
+            // Sisi kanan dirapatkan saat ada trailing supaya slot 44 tidak
+            // mendorong ikon terlalu jauh ke dalam.
+            paddingRight: trailing ? tokens.space.xs : tokens.space.lg,
+            paddingVertical: multiline ? tokens.space.md : 0,
+          }}
+        >
+          {locked ? (
+            <Icon name="lock" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+          ) : null}
+          <TextInput
+            autoCapitalize={autoCapitalize}
+            autoCorrect={false}
+            editable={!locked}
+            keyboardType={keyboardType}
+            multiline={multiline}
+            numberOfLines={multiline ? numberOfLines ?? 4 : undefined}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            placeholderTextColor={tokens.color.text.tertiary}
+            secureTextEntry={secureTextEntry}
+            style={{
+              // Terkunci dibedakan lewat warna teks sekunder + permukaan redup +
+              // gembok, bukan lewat opacity: targetnya terbaca "memang tidak bisa
+              // diubah", bukan "sedang dinonaktifkan sementara".
+              color: locked ? tokens.color.text.secondary : tokens.color.text.primary,
+              flex: 1,
+              fontSize: tokens.type.body.fontSize,
+              minHeight: multiline ? FIELD_MULTILINE_MIN_HEIGHT - tokens.space.md * 2 : undefined,
+              paddingVertical: 0,
+            }}
+            textAlignVertical={multiline ? 'top' : undefined}
+            value={value}
+          />
+          {trailing ? (
+            // Slot sentuh 44x44 (tokens.layout.tapTarget). Kontraknya: elemen yang
+            // dititipkan pemanggil HARUS Pressable yang meregang mengisi slot ini.
+            // Sengaja BUKAN hitSlop — hitSlop akan meluber ke atas TextInput di
+            // sebelahnya dan mencuri tap yang seharusnya menaruh kursor di teks.
+            <View
+              style={{
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: tokens.layout.tapTarget,
+                minWidth: tokens.layout.tapTarget,
+              }}
+            >
+              {trailing}
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <TextInput
+          autoCapitalize={autoCapitalize}
+          autoCorrect={false}
+          keyboardType={keyboardType}
+          multiline={multiline}
+          numberOfLines={multiline ? numberOfLines ?? 4 : undefined}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textSoft}
+          secureTextEntry={secureTextEntry}
+          style={{
+            backgroundColor: colors.surface,
+            borderColor: error ? tokens.color.status.danger.text : colors.border,
+            borderCurve: 'continuous',
+            borderRadius: 14,
+            borderWidth: 1,
+            color: colors.text,
+            fontSize: 16,
+            minHeight: tokens.layout.fieldHeight,
+            paddingHorizontal: spacing.lg,
+            ...(multiline
+              ? {
+                  // literal borderRadius 14 / fontSize 16 di atas masih disengaja, sejalan dgn FIELD_MULTILINE_MIN_HEIGHT; disapu saat migrasi Field ke tokens
+                  minHeight: FIELD_MULTILINE_MIN_HEIGHT,
+                  paddingVertical: tokens.space.md,
+                }
+              : null),
+          }}
+          textAlignVertical={multiline ? 'top' : undefined}
+          value={value}
+        />
+      )}
       {error ? (
         <Text
           selectable
@@ -805,6 +990,18 @@ export function Field({
           }}
         >
           {error}
+        </Text>
+      ) : null}
+      {helperMessage ? (
+        <Text
+          selectable
+          style={{
+            color: tokens.color.text.tertiary,
+            fontSize: tokens.type.meta.fontSize,
+            lineHeight: tokens.type.meta.lineHeight,
+          }}
+        >
+          {helperMessage}
         </Text>
       ) : null}
     </View>
@@ -1249,6 +1446,81 @@ export function MetaRow({ label, value }: { label: string; value?: string | null
       <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>
         {safeValue || '-'}
       </Text>
+    </View>
+  );
+}
+
+// Baris menu bernavigasi: ikon kiri + label + chevron kanan. Bentuknya mengikuti
+// pola inline yang sudah dipakai di tab Kebun (app/(owner)/owner/farm.tsx, baris
+// SOP perawatan), tapi tanpa lingkaran latar ikon karena baris menu profil hanya
+// perlu ikon + label. Pemakaian inline lama SENGAJA belum dimigrasikan ke sini.
+export function MenuRow({
+  danger = false,
+  icon,
+  label,
+  onPress,
+}: {
+  danger?: boolean;
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+}) {
+  const contentColor = danger ? tokens.color.status.danger.text : tokens.color.text.primary;
+  const iconColor = danger ? tokens.color.status.danger.text : tokens.color.brand.base;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: tokens.space.md,
+        minHeight: tokens.layout.controlHeight,
+        opacity: pressed ? 0.6 : 1,
+      })}
+    >
+      <Icon name={icon} size={tokens.icon.md} color={iconColor} />
+      <Text
+        selectable={false}
+        numberOfLines={1}
+        style={{
+          color: contentColor,
+          flex: 1,
+          fontSize: tokens.type.bodyStrong.fontSize,
+          fontWeight: tokens.type.bodyStrong.fontWeight,
+          lineHeight: tokens.type.bodyStrong.lineHeight,
+        }}
+      >
+        {label}
+      </Text>
+      {/* Varian danger tidak bernavigasi ke halaman lain, jadi tanpa chevron. */}
+      {danger ? null : <Icon name="chevron-right" size={tokens.icon.md} color={tokens.color.text.tertiary} />}
+    </Pressable>
+  );
+}
+
+// Container deret baris menu. Pemisah hairline diurus di sini, BUKAN di MenuRow,
+// supaya aturan "tidak ada pemisah di baris terakhir" tidak bergantung pada
+// kedisiplinan pemanggil. Pola yang sama dipakai member-row.tsx (baris tidak
+// menggambar border sendiri). Dipakai sebagai anak tunggal <Card>.
+export function MenuRowGroup({ children }: { children: React.ReactNode }) {
+  const rows = React.Children.toArray(children);
+
+  return (
+    <View>
+      {rows.map((row, index) => (
+        <View
+          key={index}
+          style={
+            index < rows.length - 1
+              ? { borderBottomColor: tokens.color.line.hairline, borderBottomWidth: 1 }
+              : undefined
+          }
+        >
+          {row}
+        </View>
+      ))}
     </View>
   );
 }
