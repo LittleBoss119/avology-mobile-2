@@ -165,7 +165,16 @@ export function Screen({
           contentStyle,
         ]}
       >
-        <View style={{ flex: 1, gap: spacing.sectionGap }}>{children}</View>
+        {/* flexGrow, BUKAN flex. `flex: 1` di RN berarti flexBasis: 0, sehingga
+            pembungkus ini menyumbang NOL ke tinggi natural content container dan
+            tingginya selalu jadi sisa ruang — konten tidak pernah bisa melampaui
+            viewport, jadi ScrollView tidak punya apa pun untuk digulung. Yoga juga
+            tidak punya `min-height: auto` seperti browser, jadi tidak ada jaring
+            pengaman yang memaksa overflow. Dengan flexGrow: 1 (flexBasis auto
+            bawaan) pembungkus tetap memenuhi layar saat konten pendek — itu yang
+            menjaga justifyContent 'center' tetap bekerja — tapi boleh tumbuh
+            melewati viewport saat konten panjang, dan barulah bisa di-scroll. */}
+        <View style={{ flexGrow: 1, gap: spacing.sectionGap }}>{children}</View>
         {footer ? <View style={{ gap: spacing.md, paddingBottom: spacing.lg }}>{footer}</View> : null}
       </ScrollView>
       {stickyFooter ? (
@@ -479,9 +488,17 @@ export function BrandMark({
           width: compact ? 52 : 72,
         }}
       >
-        <Text selectable style={{ color: '#FFFFFF', fontSize: compact ? 24 : 34, fontWeight: '700' }}>
-          A
-        </Text>
+        <Image
+          // icon.png sudah membawa latar hijaunya sendiri, jadi backgroundColor
+          // kotak di atas tinggal berfungsi sebagai fallback kalau aset gagal
+          // dimuat — dalam keadaan normal ia tertutup penuh oleh gambar.
+          source={require('../../assets/icon.png')}
+          style={{
+            borderRadius: compact ? radius.lg : radius['2xl'],
+            height: '100%',
+            width: '100%',
+          }}
+        />
       </View>
       {showWordmark ? (
         <View style={{ alignItems, gap: spacing.xs }}>
