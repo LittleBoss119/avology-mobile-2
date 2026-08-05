@@ -91,7 +91,7 @@ export function Screen({
 }) {
   const insets = useSafeAreaInsets();
   const hasStickyFooter = Boolean(stickyFooter);
-  const keyboard = useKeyboardMetrics(hasStickyFooter);
+  const keyboard = useKeyboardMetrics();
   const backgroundColor =
     variant === 'surface' ? colors.surface : variant === 'soft' ? colors.backgroundDeep : colors.background;
 
@@ -113,19 +113,27 @@ export function Screen({
   // screenY 0/absen berarti data tidak bisa dipakai — jangan menebak, kembali ke
   // perilaku lama apa adanya.
   const screenYBasisActive = keyboardVisible && keyboard.screenY > 0;
-  const keyboardLift = !hasStickyFooter
-    ? 0
-    : screenYBasisActive
-      ? Math.max(0, screenHeight - keyboard.screenY)
-      : keyboardVisible
-        ? Math.max(0, keyboard.height - insets.bottom)
-        : 0;
+  // Satu-satunya rumus pengukuran overlap keyboard, dipakai bersama oleh jalur
+  // stickyFooter dan jalur non-sticky. SENGAJA tidak ada cara pengukuran kedua.
+  const keyboardOverlap = screenYBasisActive
+    ? Math.max(0, screenHeight - keyboard.screenY)
+    : keyboardVisible
+      ? Math.max(0, keyboard.height - insets.bottom)
+      : 0;
+  // Hanya stickyFooter yang perlu DIANGKAT (position:absolute). Nilainya identik
+  // dengan sebelum keyboardOverlap dipisah: saat hasStickyFooter benar, ekspresi
+  // lama persis sama dengan keyboardOverlap; saat salah, sama-sama 0.
+  const keyboardLift = hasStickyFooter ? keyboardOverlap : 0;
   // Overlap sudah dihitung sampai dasar display, jadi insets.bottom TIDAK dikurangi
   // lagi di sini — nav bar tertutup keyboard, ruang untuknya tidak relevan. Saat
   // keyboard tertutup (atau saat fallback aktif) padding kembali ke rumus lama persis.
   const footerPaddingBottom = screenYBasisActive ? spacing.md : Math.max(insets.bottom, spacing.md);
+  // keyboardOverlap, bukan keyboardLift: jalur non-sticky juga perlu ruang bawah
+  // supaya field yang tertutup keyboard bisa digulung naik. Untuk layar ber-sticky
+  // nilainya tidak berubah — di sana keyboardLift memang sama dengan
+  // keyboardOverlap, jadi hasil penjumlahannya identik dengan sebelumnya.
   const overlayBottomPadding =
-    (stickyFooter ? 128 + insets.bottom : floatingAction ? 132 : tokens.space.xxxl) + keyboardLift;
+    (stickyFooter ? 128 + insets.bottom : floatingAction ? 132 : tokens.space.xxxl) + keyboardOverlap;
 
   return (
     <View style={{ flex: 1, backgroundColor }}>
@@ -215,17 +223,16 @@ const CLOSED_KEYBOARD: KeyboardMetrics = { height: 0, screenY: 0 };
 // Expo Go). Android hanya mengirim pasangan did-show/did-hide — will-* tidak
 // pernah dikirim di sana. iOS memakai will-show/will-hide supaya pergeseran
 // footer berjalan bersamaan dengan animasi keyboard, bukan setelahnya.
-// Listener hanya dipasang untuk layar yang benar-benar punya stickyFooter, jadi
-// layar lain tidak ikut me-render ulang saat keyboard buka/tutup.
-function useKeyboardMetrics(enabled: boolean): KeyboardMetrics {
+//
+// Listener dipasang untuk SEMUA layar, bukan hanya yang punya stickyFooter:
+// jalur non-sticky juga butuh angkanya untuk mencadangkan ruang bawah. Ongkosnya
+// satu render ulang per Screen saat keyboard buka/tutup — layar tanpa TextInput
+// membayarnya percuma, tapi itu jauh lebih murah daripada menebak-nebak layar
+// mana yang butuh dan salah menebak.
+function useKeyboardMetrics(): KeyboardMetrics {
   const [metrics, setMetrics] = React.useState<KeyboardMetrics>(CLOSED_KEYBOARD);
 
   React.useEffect(() => {
-    if (!enabled) {
-      setMetrics(CLOSED_KEYBOARD);
-      return;
-    }
-
     function handleShow(event: KeyboardEvent) {
       setMetrics({
         height: event.endCoordinates?.height ?? 0,
@@ -251,7 +258,7 @@ function useKeyboardMetrics(enabled: boolean): KeyboardMetrics {
     return () => {
       subscriptions.forEach((subscription) => subscription.remove());
     };
-  }, [enabled]);
+  }, []);
 
   return metrics;
 }
