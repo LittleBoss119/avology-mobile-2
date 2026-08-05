@@ -20,38 +20,43 @@ export default function GetStartedScreen() {
       applyTopInset
       footer={
         <>
-          {/* marginBottom menumpuk di atas gap 12 milik pembungkus footer Screen,
-              jadi jarak ke tombol pertama jadi 24 — dua kali jarak antar baris,
-              supaya value prop terbaca sebagai grup terpisah dari tombol. */}
-          <View style={{ gap: tokens.space.md, marginBottom: tokens.space.md }}>
-            {VALUE_PROPS.map((valueProp) => (
-              <View
-                key={valueProp.icon}
-                style={{ alignItems: 'center', flexDirection: 'row', gap: tokens.space.md }}
-              >
-                <Icon name={valueProp.icon} size={tokens.icon.md} color={tokens.color.brand.base} />
-                <Text
-                  selectable
-                  style={{
-                    color: tokens.color.text.primary,
-                    flex: 1,
-                    fontSize: tokens.type.body.fontSize,
-                    lineHeight: tokens.type.body.lineHeight,
-                  }}
-                >
-                  {valueProp.label}
-                </Text>
-              </View>
-            ))}
-          </View>
           <Button title="Buat akun baru" onPress={() => router.push('/register')} />
           <Button title="Masuk" variant="secondary" onPress={() => router.push('/login')} />
         </>
       }
     >
-      {/* Judul dipegang PageIntro, jadi BrandMark hanya menyumbang kotak logo. */}
-      <BrandMark showWordmark={false} align="left" />
-      <PageIntro title="Avology" subtitle="Kelola kebun alpukat dengan lebih rapi." />
+      {/* Satu-satunya anak Screen: flex:1 memakan seluruh ruang di atas footer dan
+          justifyContent mendudukkan isinya sebagai SATU blok di tengah ruang itu.
+          Hanya sumbu vertikal yang di-center; horizontal tetap rata kiri karena
+          alignItems dibiarkan 'stretch' bawaan. gap xl (20) memisahkan brand,
+          judul, dan daftar sebagai sub-grup — lebih longgar dari 12 antar baris
+          daftar, jadi keduanya masih terbaca sebagai kelompok yang berbeda. */}
+      <View style={{ flex: 1, gap: tokens.space.xl, justifyContent: 'center' }}>
+        {/* Judul dipegang PageIntro, jadi BrandMark hanya menyumbang kotak logo. */}
+        <BrandMark showWordmark={false} align="left" />
+        <PageIntro title="Avology" subtitle="Kelola kebun alpukat dengan lebih rapi." />
+        <View style={{ gap: tokens.space.md }}>
+          {VALUE_PROPS.map((valueProp) => (
+            <View
+              key={valueProp.icon}
+              style={{ alignItems: 'center', flexDirection: 'row', gap: tokens.space.md }}
+            >
+              <Icon name={valueProp.icon} size={tokens.icon.md} color={tokens.color.brand.base} />
+              <Text
+                selectable
+                style={{
+                  color: tokens.color.text.primary,
+                  flex: 1,
+                  fontSize: tokens.type.body.fontSize,
+                  lineHeight: tokens.type.body.lineHeight,
+                }}
+              >
+                {valueProp.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
     </Screen>
   );
 }

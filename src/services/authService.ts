@@ -41,6 +41,14 @@ export async function registerUser(
     return fail(new Error('Nama lengkap wajib diisi.'));
   }
 
+  // Nomor HP wajib saat pendaftaran, meski tipenya tetap opsional di
+  // RegisterUserInput — kolom profiles.phone memang nullable dan
+  // updateCurrentProfile masih boleh mengosongkannya. Yang ditegakkan di sini
+  // hanya aturan pendaftaran, bukan bentuk datanya.
+  if (!phone) {
+    return fail(new Error('Nomor HP wajib diisi.'));
+  }
+
   const signUpResult = await supabase.auth.signUp({
     email,
     password: input.password,

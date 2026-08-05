@@ -57,8 +57,18 @@ export const appTheme = {
   warningSurface: designColors.warningBg,
 };
 
+// Disediakan HANYA oleh Screen yang opt-in lewat autoScrollOnFocus. Nilai null
+// (bawaan, dan yang dikirim Screen non-opt-in) berarti Field tidak melakukan
+// apa pun saat difokus — persis seperti sebelum mekanisme ini ada.
+type AutoScrollContextValue = {
+  requestScrollIntoView: (node: React.ComponentRef<typeof View> | null) => void;
+};
+
+const AutoScrollContext = React.createContext<AutoScrollContextValue | null>(null);
+
 export function Screen({
   applyTopInset = false,
+  autoScrollOnFocus = false,
   children,
   floatingAction,
   floatingActionBottom = 24,
@@ -79,6 +89,10 @@ export function Screen({
   // layar yang menaruh TopAppBar sebagai children akan kena inset DUA KALI —
   // sekali dari sini, sekali dari TopAppBar-nya sendiri.
   applyTopInset?: boolean;
+  // Saat true, Screen menyediakan AutoScrollContext sehingga Field yang difokus
+  // digulung ke dalam pandangan kalau tertutup keyboard. SENGAJA opt-in: default
+  // false berarti context bernilai null dan Field tidak berubah perilakunya.
+  autoScrollOnFocus?: boolean;
   children: React.ReactNode;
   floatingAction?: React.ReactNode;
   floatingActionBottom?: number;
@@ -135,7 +149,67 @@ export function Screen({
   const overlayBottomPadding =
     (stickyFooter ? 128 + insets.bottom : floatingAction ? 132 : tokens.space.xxxl) + keyboardOverlap;
 
-  return (
+  // Ref internal dipakai kalau pemanggil tidak mengoper scrollRef sendiri, supaya
+  // auto-scroll tetap punya pegangan ke ScrollView. Untuk layar yang mengoper
+  // scrollRef, objeknya sama persis seperti sebelumnya.
+  const internalScrollRef = React.useRef<ScrollView | null>(null);
+  const resolvedScrollRef = scrollRef ?? internalScrollRef;
+  const scrollOffsetRef = React.useRef(0);
+  const focusedNodeRef = React.useRef<React.ComponentRef<typeof View> | null>(null);
+
+  const scrollFocusedNodeIntoView = React.useCallback(() => {
+    const node = focusedNodeRef.current;
+    const scrollView = resolvedScrollRef.current;
+
+    if (!node || !scrollView || keyboardOverlap <= 0) {
+      return;
+    }
+
+    node.measureInWindow((_x, y, _width, height) => {
+      const keyboardTop = screenHeight - keyboardOverlap;
+      const hiddenAmount = y + height - keyboardTop;
+
+      // Field sudah terlihat penuh → JANGAN bergerak sama sekali. Penjaga ini
+      // wajib, bukan optimasi: di dev build window bisa benar-benar menyusut
+      // dan auto-scroll bawaan ReactScrollView ikut menyala. Tanpa penjaga,
+      // dua mekanisme menggulung layar yang sama dan hasilnya loncat dobel.
+      if (hiddenAmount <= 0) {
+        return;
+      }
+
+      scrollView.scrollTo({
+        animated: true,
+        y: scrollOffsetRef.current + hiddenAmount + tokens.space.lg,
+      });
+    });
+  }, [keyboardOverlap, resolvedScrollRef, screenHeight]);
+
+  // requestAnimationFrame, bukan setTimeout dengan angka tebakan: paddingBottom
+  // baru saja tumbuh sebesar keyboardOverlap, jadi mengukur di frame yang sama
+  // masih membaca layout lama. Satu frame adalah penundaan terkecil yang cukup.
+  React.useEffect(() => {
+    if (!autoScrollOnFocus || keyboardOverlap <= 0) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(scrollFocusedNodeIntoView);
+
+    return () => cancelAnimationFrame(frame);
+  }, [autoScrollOnFocus, keyboardOverlap, scrollFocusedNodeIntoView]);
+
+  const autoScrollValue = React.useMemo<AutoScrollContextValue>(
+    () => ({
+      requestScrollIntoView: (node) => {
+        focusedNodeRef.current = node;
+        // Fokus saat keyboard SUDAH terbuka tidak memicu effect di atas
+        // (keyboardOverlap tidak berubah), jadi percobaan langsung tetap perlu.
+        requestAnimationFrame(scrollFocusedNodeIntoView);
+      },
+    }),
+    [scrollFocusedNodeIntoView]
+  );
+
+  const screenBody = (
     <View style={{ flex: 1, backgroundColor }}>
       {header ? (
         // Header fixed (tidak menggulung): sibling di atas ScrollView, di dalam
@@ -155,9 +229,19 @@ export function Screen({
         </View>
       ) : null}
       <ScrollView
-        ref={scrollRef}
+        ref={resolvedScrollRef}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
+        // onScroll hanya dipasang untuk layar opt-in; layar lain tetap tanpa
+        // handler scroll sama sekali, seperti sebelumnya.
+        onScroll={
+          autoScrollOnFocus
+            ? (event) => {
+                scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+              }
+            : undefined
+        }
+        scrollEventThrottle={autoScrollOnFocus ? 16 : undefined}
         style={{ flex: 1, backgroundColor }}
         contentContainerStyle={[
           {
@@ -209,6 +293,16 @@ export function Screen({
         </View>
       ) : null}
     </View>
+  );
+
+  // Layar non-opt-in tidak dibungkus provider sama sekali, jadi Field di
+  // dalamnya membaca context bawaan (null) dan tidak berperilaku beda sedikit
+  // pun. Provider sendiri tidak merender host view, jadi tata letak yang opt-in
+  // juga tidak bergeser.
+  return autoScrollOnFocus ? (
+    <AutoScrollContext.Provider value={autoScrollValue}>{screenBody}</AutoScrollContext.Provider>
+  ) : (
+    screenBody
   );
 }
 
@@ -945,6 +1039,13 @@ export function Field({
   const useRowLayout = locked || Boolean(trailing);
   // Error mengalahkan helperText; keduanya tidak pernah tampil bersamaan.
   const helperMessage = error ? null : helperText;
+  // null di layar yang tidak opt-in. Saat null, handleFocus ikut undefined dan
+  // TextInput tidak menerima prop onFocus sama sekali — identik dengan sebelumnya.
+  const autoScroll = React.use(AutoScrollContext);
+  const containerRef = React.useRef<React.ComponentRef<typeof View> | null>(null);
+  const handleFocus = autoScroll
+    ? () => autoScroll.requestScrollIntoView(containerRef.current)
+    : undefined;
   const borderColor = error
     ? tokens.color.status.danger.text
     : locked
@@ -952,7 +1053,7 @@ export function Field({
       : tokens.color.line.card;
 
   return (
-    <View style={{ gap: spacing.sm }}>
+    <View ref={containerRef} style={{ gap: spacing.sm }}>
       <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
@@ -987,6 +1088,7 @@ export function Field({
             multiline={multiline}
             numberOfLines={multiline ? numberOfLines ?? 4 : undefined}
             onChangeText={onChangeText}
+            onFocus={handleFocus}
             placeholder={placeholder}
             placeholderTextColor={tokens.color.text.tertiary}
             secureTextEntry={secureTextEntry}
@@ -1030,6 +1132,7 @@ export function Field({
           multiline={multiline}
           numberOfLines={multiline ? numberOfLines ?? 4 : undefined}
           onChangeText={onChangeText}
+          onFocus={handleFocus}
           placeholder={placeholder}
           placeholderTextColor={colors.textSoft}
           secureTextEntry={secureTextEntry}

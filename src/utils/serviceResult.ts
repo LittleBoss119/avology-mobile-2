@@ -15,6 +15,12 @@ const friendlyMessages: Array<[string, string]> = [
   ['Invalid login credentials', 'Email atau password tidak sesuai.'],
   ['Email not confirmed', 'Email belum dikonfirmasi. Periksa inbox Anda terlebih dahulu.'],
   ['User already registered', 'Email ini sudah terdaftar. Silakan login.'],
+  ['Password should be at least 6 characters', 'Password minimal 6 karakter.'],
+  // Hanya kegagalan PARSING format yang dipetakan. email_address_invalid
+  // ("Email address ... is invalid") sengaja TIDAK dipetakan ke sini: itu muncul
+  // saat GoTrue menolak alamatnya (domain, disposable), bukan saat formatnya
+  // salah — menyuruh user membetulkan format alamat yang formatnya sudah benar.
+  ['Unable to validate email address', 'Format email belum benar.'],
   ['User is not authenticated', 'Silakan login terlebih dahulu.'],
   ['Profile must exist before creating a farm', 'Profil pengguna belum lengkap. Silakan lengkapi profil terlebih dahulu.'],
   ['Profile must exist before joining a farm', 'Profil pengguna belum lengkap. Silakan lengkapi profil terlebih dahulu.'],
