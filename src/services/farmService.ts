@@ -22,20 +22,6 @@ type FarmRow = {
   updated_at?: string | null;
 };
 
-type CurrentUserFarmRow = {
-  id: string;
-  farm_id: string;
-  user_id: string;
-  role: CurrentUserFarm['role'];
-  status: CurrentUserFarm['status'];
-  joined_at: string | null;
-  created_at?: string;
-  updated_at?: string | null;
-  removed_at?: string | null;
-  removed_by?: string | null;
-  removed_reason?: string | null;
-};
-
 type CurrentUserAccessRow = {
   membership_id: string;
   farm_id: string;
@@ -84,50 +70,28 @@ export async function getCurrentUserFarm(): Promise<ServiceResult<CurrentUserFar
     return fail(userResult.error, 'Gagal memuat pengguna saat ini.');
   }
 
-  const userId = userResult.data.user?.id;
-
-  if (!userId) {
+  if (!userResult.data.user?.id) {
     return ok(null);
   }
 
+  // SATU jalur saja, sengaja tanpa cadangan. Dulu ada jalur cadangan yang
+  // membaca farm_members langsung kalau RPC-nya tidak ditemukan
+  // (PGRST202/PGRST205 — praktisnya cache skema PostgREST yang basi sesaat
+  // setelah db push). Jalur itu memilih baris dengan urutan waktu MURNI, tanpa
+  // prioritas status yang ditambahkan migration 036 ke get_current_user_access.
+  // Artinya kalau ia sampai menyala, ia menghidupkan lagi bug yang diperbaiki
+  // di sana: baris rejected yang lebih baru mengalahkan relasi active, dan user
+  // terlempar ke layar penolakan untuk kebun yang sudah tidak ada urusannya.
+  //
+  // Galat yang terlihat dan hilang saat dicoba lagi lebih baik daripada routing
+  // yang salah secara diam-diam.
   const accessResult = await getCurrentUserAccessFromRpc();
 
-  if (accessResult.error && !isMissingRpcError(accessResult.error)) {
+  if (accessResult.error) {
     return fail(accessResult.error, 'Gagal memuat data akses pengguna.');
   }
 
-  if (!accessResult.error) {
-    return mapCurrentUserAccessResult(accessResult.data);
-  }
-
-  const { data, error } = await supabase
-    .from('farm_members')
-    .select('id, farm_id, user_id, role, status, joined_at, created_at, updated_at, removed_at, removed_by, removed_reason')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .returns<CurrentUserFarmRow[]>();
-
-  if (error) {
-    return fail(error, 'Gagal memuat data kebun pengguna.');
-  }
-
-  const currentMembership = chooseMostRecentMembership(data ?? []);
-
-  if (!currentMembership) {
-    return ok(null);
-  }
-
-  if (currentMembership.status !== 'active') {
-    return ok(mapCurrentUserFarm(currentMembership));
-  }
-
-  const farmResult = await getFarmDetail(currentMembership.farm_id);
-
-  if (farmResult.error) {
-    return fail(farmResult.error);
-  }
-
-  return ok(mapCurrentUserFarm(currentMembership, farmResult.data));
+  return mapCurrentUserAccessResult(accessResult.data);
 }
 
 async function getCurrentUserAccessFromRpc(): Promise<ServiceResult<CurrentUserAccessRow | null>> {
@@ -149,22 +113,30 @@ async function mapCurrentUserAccessResult(
     return ok(null);
   }
 
-  const membership = mapCurrentUserFarm({
-    id: row.membership_id,
-    farm_id: row.farm_id,
-    user_id: row.user_id,
+  const membership: CurrentUserFarm = {
+    membershipId: row.membership_id,
+    farmId: row.farm_id,
+    userId: row.user_id,
     role: row.role,
     status: row.status,
-    joined_at: row.joined_at,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    removed_at: row.removed_at,
-    removed_by: row.removed_by,
-    removed_reason: row.removed_reason,
-  });
+    joinedAt: row.joined_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    removedAt: row.removed_at,
+    removedBy: row.removed_by,
+    removedReason: row.removed_reason,
+  };
 
+  // Status non-aktif (pending/rejected/removed) tidak boleh membaca tabel `farms`
+  // — policy "Active members can view farm" (migration 007) menutupnya. Tapi RPC
+  // get_current_user_access sudah ikut mengembalikan `farm_name` justru untuk
+  // kasus ini, dan sebelumnya kolom itu tidak pernah dibaca sehingga layar
+  // tunggu/ditolak/dinonaktifkan selalu menulis "Belum tersedia" (temuan R-04).
   if (membership.status !== 'active') {
-    return ok(membership);
+    return ok({
+      ...membership,
+      farm: mapFarmNameOnly(membership.farmId, row.farm_name),
+    });
   }
 
   const farmResult = await getFarmDetail(membership.farmId);
@@ -222,30 +194,17 @@ export async function updateFarmProfile(
   });
 }
 
-function mapCurrentUserFarm(row: CurrentUserFarmRow, farm?: Farm): CurrentUserFarm {
+// Kebun versi "cuma nama", untuk relasi yang belum/tidak aktif. Satu-satunya
+// field yang benar-benar diketahui adalah namanya; sisanya memang tidak terbaca
+// oleh non-anggota, bukan hilang. joinCode sengaja TIDAK diisi sama sekali —
+// bukan string kosong yang menyamar sebagai kode.
+function mapFarmNameOnly(farmId: UUID, farmName?: string | null): Farm {
   return {
-    membershipId: row.id,
-    farmId: row.farm_id,
-    userId: row.user_id,
-    role: row.role,
-    status: row.status,
-    joinedAt: row.joined_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    removedAt: row.removed_at,
-    removedBy: row.removed_by,
-    removedReason: row.removed_reason,
-    farm,
+    id: farmId,
+    name: farmName ?? '',
+    location: null,
+    areaSize: null,
   };
-}
-
-function chooseMostRecentMembership(rows: CurrentUserFarmRow[]): CurrentUserFarmRow | null {
-  return [...rows].sort((first, second) => {
-    const firstTime = new Date(first.updated_at ?? first.created_at ?? 0).getTime();
-    const secondTime = new Date(second.updated_at ?? second.created_at ?? 0).getTime();
-
-    return secondTime - firstTime;
-  })[0] ?? null;
 }
 
 function mapFarm(row: FarmRow): Farm {
@@ -270,19 +229,6 @@ function isMissingSessionError(error: { message?: string; name?: string }): bool
   return (
     error.name === 'AuthSessionMissingError' ||
     error.message?.toLowerCase().includes('auth session missing') === true
-  );
-}
-
-function isMissingRpcError(error: { code?: string; message?: string; rawMessage?: string }): boolean {
-  const message = `${error.message ?? ''} ${error.rawMessage ?? ''}`.toLowerCase();
-
-  return (
-    error.code === 'PGRST202' ||
-    error.code === 'PGRST205' ||
-    message.includes('get_current_user_access') &&
-      (message.includes('not found') ||
-        message.includes('schema cache') ||
-        message.includes('does not exist'))
   );
 }
 

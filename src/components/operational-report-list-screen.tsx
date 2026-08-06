@@ -13,6 +13,7 @@ import { getOperationalReports } from '../services/operationalReportService';
 import { countOperationalReportPhotos } from '../services/photoAttachmentService';
 import type {
   FarmMemberBasicProfile,
+  MemberRole,
   OperationalReport,
   OperationalReportCategory,
   OperationalReportStatus,
@@ -44,7 +45,7 @@ import {
 type OperationalReportStatusFilter = 'all' | OperationalReportStatus;
 
 type OperationalReportListScreenProps = {
-  role: 'owner' | 'worker';
+  role: MemberRole;
   onProfilePress: () => void;
 };
 

@@ -1,8 +1,12 @@
-import { router, Stack, useFocusEffect, useLocalSearchParams, usePathname } from 'expo-router';
+import { router, Stack, useFocusEffect, usePathname } from 'expo-router';
 import React from 'react';
 
 import { LoadingState } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
+import {
+  consumePendingAccessRoute,
+  peekPendingAccessRoute,
+} from '../../src/lib/pendingAccessRoute';
 import {
   logAccessGuardDecision,
   resolveAccessRoute,
@@ -11,12 +15,16 @@ import {
 
 export default function OnboardingLayout() {
   const { currentFarm, initializing, profile, refresh } = useAuth();
-  const { inactiveRecovery } = useLocalSearchParams<{ inactiveRecovery?: string }>();
   const [checkingAccess, setCheckingAccess] = React.useState(false);
   const pathname = usePathname();
   const loading = initializing || checkingAccess;
-  const allowInactiveAccessRecovery = inactiveRecovery === '1';
-  const targetRoute = resolveAccessRoute({ session: profile, membership: currentFarm });
+  const guardRoute = resolveAccessRoute({ session: profile, membership: currentFarm });
+  // Tujuan pemulihan dari layar pemberitahuan HANYA berlaku setelah relasinya
+  // benar-benar teramati null — yaitu setelah acknowledge_access_notice
+  // menghapus barisnya. Selama relasinya masih rejected/removed, niat ini
+  // diabaikan sepenuhnya, jadi ia tidak bisa dipakai menembus penguncian.
+  const recoveryRoute = currentFarm ? null : peekPendingAccessRoute();
+  const targetRoute = recoveryRoute ?? guardRoute;
   const sessionUserId = profile?.id ?? null;
   const membershipKey = currentFarm
     ? `${currentFarm.membershipId}:${currentFarm.role}:${currentFarm.status}`
@@ -44,9 +52,7 @@ export default function OnboardingLayout() {
       return;
     }
 
-    const shouldRedirect = shouldRedirectAccess(pathname, targetRoute, currentFarm, {
-      allowInactiveAccessRecovery,
-    });
+    const shouldRedirect = shouldRedirectAccess(pathname, targetRoute);
 
     logAccessGuardDecision({
       currentPathname: pathname,
@@ -57,9 +63,18 @@ export default function OnboardingLayout() {
     });
 
     if (shouldRedirect) {
+      // Dihapus sebelum berpindah: niat ini sekali pakai. Kalau pemulihannya
+      // gagal di tengah jalan dan guard mengarahkan ke tempat lain, niat lama
+      // tidak boleh ikut menempel ke perjalanan berikutnya.
+      consumePendingAccessRoute();
       router.replace(targetRoute);
+      return;
     }
-  }, [allowInactiveAccessRecovery, loading, membershipKey, pathname, sessionUserId, targetRoute]);
+
+    if (recoveryRoute) {
+      consumePendingAccessRoute();
+    }
+  }, [loading, membershipKey, pathname, recoveryRoute, sessionUserId, targetRoute]);
 
   if (loading) {
     return <LoadingState message="Memeriksa akses..." />;

@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { supabase } from '../lib/supabase';
-import type { ServiceResult, SuccessData, UUID } from '../types/domain';
+import type { MemberRole, MemberStatus, ServiceResult, SuccessData, UUID } from '../types/domain';
 import type {
   ConditionRecordPhoto,
   ConditionRecordPhotoMap,
@@ -76,8 +76,8 @@ type PhotoAttachmentRow = {
 };
 
 type MembershipRow = {
-  role: 'owner' | 'worker';
-  status: 'pending' | 'active' | 'rejected' | 'removed';
+  role: MemberRole;
+  status: MemberStatus;
 };
 
 type PhotoUploadDebugError = {

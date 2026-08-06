@@ -6,8 +6,24 @@ import type { CurrentUserFarm, Profile } from '../types/domain';
 // onboarding langsung dipental balik oleh shouldRedirectAccess().
 const accountProfileRoutes = new Set(['/profile', '/profile-edit', '/password']);
 const onboardingFlowRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile', '/profile-edit', '/password']);
-const inactiveAccessRecoveryRoutes = new Set(['/onboarding', '/create-farm', '/join-farm', '/profile', '/profile-edit', '/password']);
 const authFlowRoutes = new Set(['/get-started', '/login', '/register']);
+
+// CATATAN PERBAIKAN (bug Fase 3):
+// Dulu ada `inactiveAccessRecoveryRoutes` + `canStayInOnboardingFlow()` yang
+// membuat shouldRedirectAccess() mengembalikan false untuk user berstatus
+// rejected/removed yang sedang berada di /onboarding, /join-farm, atau
+// /create-farm. Itu mencampur dua pertanyaan yang berbeda: "boleh berada di
+// sini?" dan "harus diarahkan ke mana?". Akibatnya resolveAccessRoute() sudah
+// menghitung '/rejected' dengan benar, tapi tidak ada satu pun yang bertindak
+// atas nilai itu — user tersangkut di layar pilih akses, layar pemberitahuan
+// tidak pernah terjangkau, dan pengajuan ulang dari sana menimpa baris
+// penolakannya (temuan R-02 lewat pintu tampilan).
+//
+// Sekarang rejected/removed diperlakukan persis seperti pending: state
+// pemberitahuan yang WAJIB diarahkan, dan hanya rute akun (/profile,
+// /profile-edit, /password) yang boleh menyela. Jalan keluarnya satu-satunya
+// adalah tombol di layar pemberitahuan, yang memanggil acknowledge_access_notice
+// lebih dulu sehingga relasinya benar-benar hilang sebelum rute lain terbuka.
 
 type ResolveAccessRouteInput = {
   session: Profile | null;
@@ -50,37 +66,12 @@ export function resolveAccessRoute({ session, membership }: ResolveAccessRouteIn
   return '/worker';
 }
 
-export function getHomeRoute(profile: Profile | null, currentFarm: CurrentUserFarm | null): string {
-  return resolveAccessRoute({ session: profile, membership: currentFarm });
-}
-
 export function isOwnerActive(currentFarm: CurrentUserFarm | null): boolean {
   return currentFarm?.role === 'owner' && currentFarm.status === 'active';
 }
 
 export function isWorkerActive(currentFarm: CurrentUserFarm | null): boolean {
   return currentFarm?.role === 'worker' && currentFarm.status === 'active';
-}
-
-export function isAllowedOnboardingRoute(
-  pathname: string,
-  profile: Profile | null,
-  currentFarm: CurrentUserFarm | null,
-  options: { allowInactiveAccessRecovery?: boolean } = {}
-): boolean {
-  if (!profile) {
-    return false;
-  }
-
-  if (!currentFarm) {
-    return onboardingFlowRoutes.has(pathname);
-  }
-
-  if (canStayInOnboardingFlow(pathname, currentFarm, options)) {
-    return true;
-  }
-
-  return pathname === getHomeRoute(profile, currentFarm);
 }
 
 export function isAccessRouteSatisfied(pathname: string, targetRoute: string): boolean {
@@ -114,30 +105,11 @@ export function isAccessRouteSatisfied(pathname: string, targetRoute: string): b
   return currentPath === targetPath;
 }
 
-export function canStayInOnboardingFlow(
-  pathname: string,
-  membership: CurrentUserFarm | null,
-  _options: { allowInactiveAccessRecovery?: boolean } = {}
-): boolean {
-  const normalizedPath = normalizePath(pathname);
-
-  if (!membership || (membership.status !== 'rejected' && membership.status !== 'removed')) {
-    return false;
-  }
-
-  return inactiveAccessRecoveryRoutes.has(normalizedPath);
-}
-
-export function shouldRedirectAccess(
-  pathname: string,
-  targetRoute: string,
-  membership: CurrentUserFarm | null,
-  options: { allowInactiveAccessRecovery?: boolean } = {}
-): boolean {
-  if (canStayInOnboardingFlow(pathname, membership, options)) {
-    return false;
-  }
-
+// Satu pertanyaan saja: apakah rute sekarang sudah memenuhi tujuan yang dihitung
+// resolveAccessRoute()? Status relasi TIDAK dibaca di sini — itu sudah habis
+// dipakai saat menghitung `targetRoute`. Membacanya dua kali persis yang dulu
+// melahirkan cabang "boleh bertahan" dan membuat user tersangkut.
+export function shouldRedirectAccess(pathname: string, targetRoute: string): boolean {
   return !isAccessRouteSatisfied(pathname, targetRoute);
 }
 

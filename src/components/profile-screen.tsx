@@ -86,7 +86,16 @@ export function ProfileScreen() {
       header={
         <TopAppBar
           title="Profil Akun"
-          onBack={farmHubRoute ? () => router.replace(farmHubRoute) : undefined}
+          // Varian tanpa relasi kebun tidak punya hub untuk dituju, dan
+          // sebelumnya itu berarti TIDAK ADA tombol kembali sama sekali — user
+          // yang membukanya dari layar pilih akses terkurung sampai menutup
+          // aplikasi. Mundur satu langkah sudah cukup; '/' hanya cadangan kalau
+          // layar ini jadi entri pertama (mis. dibuka dari tautan).
+          onBack={
+            farmHubRoute
+              ? () => router.replace(farmHubRoute)
+              : () => (router.canGoBack() ? router.back() : router.replace('/'))
+          }
         />
       }
     >

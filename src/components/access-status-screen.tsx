@@ -1,139 +1,457 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 
-import { colors, spacing, typography } from '../constants/theme';
+import { tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
-import { formatMemberStatus, formatRole } from '../utils/displayFormat';
-import { Badge, Button, Card, ErrorBanner, LoadingState, MetaRow, Screen } from './ui';
+import { setPendingAccessRoute } from '../lib/pendingAccessRoute';
+import { getCurrentUserFarm } from '../services/farmService';
+import { acknowledgeAccessNotice, cancelJoinRequest } from '../services/memberService';
+import type { CurrentUserFarm } from '../types/domain';
+import { ConfirmDialog } from './bottom-sheet';
+import { Icon, type IconName } from './icons';
+import { Button, ErrorBanner, LoadingState, ProfileIconButton, Screen, TopAppBar } from './ui';
 
-export function AccessStatusScreen({
-  title,
-  subtitle,
-}: {
-  title: string;
-  subtitle: string;
-}) {
+// Layar ini melayani tiga state sekaligus: pending, rejected, removed.
+//
+// Versi lama menyampaikan status yang sama sampai TIGA kali — sebagai judul,
+// sebagai chip, dan sebagai baris "Status" di dalam kartu — lalu menambah kotak
+// biru berisi kalimat yang menerangkan cara kerja aplikasi. Sekarang statusnya
+// dinyatakan sekali: satu ikon, satu judul, nama kebun, tanggal.
+//
+// Badge peran juga dihapus. User yang pengajuannya masih menunggu belum menjadi
+// pekerja — melabelinya "Pekerja" itu tidak benar.
+
+// Pengganti tombol "Cek Status" yang dihapus. Tombol itu menyuruh user
+// mengerjakan tugas sistem, tapi menghapusnya begitu saja lebih buruk: satu-
+// satunya pemicu tersisa adalah on-focus, padahal user di layar tunggu justru
+// DIAM di layar itu — pengajuannya disetujui dan dia tidak pernah tahu.
+// Sengaja tanpa indikator berputar: user cukup menunggu, layarnya berubah
+// sendiri.
+const POLL_INTERVAL_MS = 15000;
+
+// Tanpa prop: judul dan tanggalnya diturunkan dari status + removedReason, yang
+// tidak diketahui pembungkusnya. Ketiga rute pembungkus (pending-approval,
+// rejected, removed-access) memang cuma menentukan rute mana yang dipakai guard.
+export function AccessStatusScreen() {
   const { currentFarm, error, profile, refresh } = useAuth();
-  const [refreshing, setRefreshing] = React.useState(false);
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [confirmCancel, setConfirmCancel] = React.useState(false);
+  const [joinedFarm, setJoinedFarm] = React.useState<{ name: string | null } | null>(null);
+
+  const isPending = currentFarm?.status === 'pending';
+  // Berhenti begitu modal muncul: relasinya sudah berubah, tidak ada lagi yang
+  // perlu ditunggu.
+  const shouldPoll = isPending && joinedFarm === null;
 
   useFocusEffect(
     React.useCallback(() => {
-      let isActive = true;
+      // Hanya state pending yang bisa berubah sendiri dari sisi server. Rejected
+      // dan removed menunggu aksi user, jadi tidak perlu dipoll.
+      if (!shouldPoll) {
+        return;
+      }
 
-      setRefreshing(true);
-      refresh().finally(() => {
-        if (isActive) {
-          setRefreshing(false);
-        }
-      });
+      let cancelled = false;
+
+      // Membaca relasi LANGSUNG, bukan lewat refresh() dari context. Kalau
+      // context yang diperbarui, guard di _layout.tsx langsung menendang user ke
+      // dashboard pekerja — antarmuka yang belum pernah dia lihat — tanpa satu
+      // kalimat pun. Dengan membaca langsung, context tetap 'pending' sampai
+      // user menekan "Mulai", jadi layar ini bertahan dan modalnya sempat
+      // terlihat.
+      const intervalId = setInterval(() => {
+        void (async () => {
+          const result = await getCurrentUserFarm();
+
+          if (cancelled || result.error || !result.data) {
+            return;
+          }
+
+          if (result.data.status === 'active') {
+            setJoinedFarm({ name: result.data.farm?.name?.trim() ?? null });
+            return;
+          }
+
+          // Ditolak atau dinonaktifkan tidak butuh modal: layar pemberitahuannya
+          // sendiri yang menyampaikan, dan itu sudah bekerja sejak Fase 3.
+          if (result.data.status === 'rejected' || result.data.status === 'removed') {
+            void refresh();
+          }
+        })();
+      }, POLL_INTERVAL_MS);
 
       return () => {
-        isActive = false;
+        cancelled = true;
+        clearInterval(intervalId);
       };
-    }, [refresh])
+    }, [refresh, shouldPoll])
   );
+
+  // refresh() saat fokus SENGAJA tidak dipanggil di sini. Pemanggilnya tinggal
+  // satu: useFocusEffect di app/(onboarding)/_layout.tsx — lihat catatan di
+  // laporan Fase 3.
 
   if (!currentFarm) {
     return <LoadingState message="Memuat status akses..." />;
   }
 
-  async function handleRefresh() {
-    setRefreshing(true);
+  async function handleCancelRequest() {
+    setBusy(true);
+    setActionError(null);
+
+    const result = await cancelJoinRequest();
+
+    if (result.error) {
+      setBusy(false);
+      setConfirmCancel(false);
+      setActionError(result.error.message);
+      return;
+    }
+
+    // Cukup satu panggilan: sejak migration 038 cancel_join_request sekalian
+    // menyapu baris stale, jadi acknowledgeAccessNotice TIDAK disusulkan.
+    //
+    // Tidak ada router.replace() di sini. Begitu relasinya null, guard di
+    // _layout.tsx sendiri yang memindahkan ke layar pilih akses — itu memang
+    // tujuan alaminya untuk user tanpa relasi.
     await refresh();
-    setRefreshing(false);
-    router.replace('/');
+    setBusy(false);
+    setConfirmCancel(false);
   }
 
-  const canReturnToAccessFlow = currentFarm.status === 'rejected' || currentFarm.status === 'removed';
-  const canManuallyCheckStatus = currentFarm.status === 'pending';
-  const inactiveRecoveryParams = { inactiveRecovery: '1' };
-  const displayName = profile?.fullName?.trim() || 'Pengguna Avology';
-  const statusTone = getStatusTone(currentFarm.status);
-  const statusCardVariant = currentFarm.status === 'pending' ? 'warning' : 'danger';
-  const noticeText = getNoticeText(currentFarm.status);
-  const statusTitle = currentFarm.status === 'pending' ? 'Status Pengajuan' : title;
+  async function handleRecovery(target: '/create-farm' | '/join-farm') {
+    setBusy(true);
+    setActionError(null);
+
+    const result = await acknowledgeAccessNotice();
+
+    if (result.error) {
+      setBusy(false);
+      setActionError(result.error.message);
+      return;
+    }
+
+    // MENYATAKAN tujuan, bukan menavigasi. Kalau layar ini memanggil
+    // router.replace() sendiri, ia berlomba dengan guard di _layout.tsx yang
+    // masih memegang relasi basi: guard memantulkan ke layar pemberitahuan,
+    // lalu memantulkan sekali lagi ke pilih akses setelah relasinya null.
+    // Dengan menyatakan tujuan, perpindahan baru terjadi di render yang benar-
+    // benar sudah melihat relasi null — satu kali, ke tempat yang diminta.
+    setPendingAccessRoute(target);
+    await refresh();
+    setBusy(false);
+  }
+
+  // Satu-satunya tempat relasi diperbarui setelah pengajuan disetujui. Sesudah
+  // ini guard yang memindahkan ke dashboard pekerja — tanpa navigasi imperatif.
+  async function handleStart() {
+    setBusy(true);
+    await refresh();
+  }
+
+  const view = resolveStatusView(currentFarm);
+  const farmName = currentFarm.farm?.name?.trim();
 
   return (
     <Screen
-      applyTopInset
+      header={
+        <TopAppBar
+          variant="main"
+          right={<ProfileIconButton onPress={() => router.push('/profile')} />}
+        />
+      }
       footer={
-        <>
-          {canManuallyCheckStatus ? (
-            <Button title="Cek Status" loading={refreshing} onPress={handleRefresh} />
-          ) : null}
-          {canReturnToAccessFlow ? (
-            <>
-              <Button
-                title="Kembali ke Pilih Akses"
-                variant="secondary"
-                onPress={() =>
-                  router.replace({
-                    pathname: '/onboarding',
-                    params: inactiveRecoveryParams,
-                  })
-                }
-              />
-              <Button
-                title="Gabung Kebun Lagi"
-                variant="secondary"
-                onPress={() =>
-                  router.replace({
-                    pathname: '/join-farm',
-                    params: inactiveRecoveryParams,
-                  })
-                }
-              />
-            </>
-          ) : null}
-          <Button title="Profil Akun" variant="secondary" size="small" onPress={() => router.push('/profile')} />
-        </>
+        isPending ? (
+          <TextAction
+            title="Batalkan pengajuan"
+            tone="danger"
+            disabled={busy}
+            onPress={() => setConfirmCancel(true)}
+          />
+        ) : (
+          <>
+            <Button
+              title="Coba kode lain"
+              loading={busy}
+              onPress={() => void handleRecovery('/join-farm')}
+            />
+            <TextAction
+              title="Buat kebun sendiri"
+              disabled={busy}
+              onPress={() => void handleRecovery('/create-farm')}
+            />
+          </>
+        )
       }
     >
-      <View style={{ gap: spacing.sm }}>
-        <View style={{ alignItems: 'flex-start' }}>
-          <Badge label={formatRole(currentFarm.role)} tone="info" />
+      <ErrorBanner message={actionError ?? (profile ? error?.message : undefined)} />
+
+      <View style={{ alignItems: 'center', gap: tokens.space.lg, paddingTop: tokens.space.xxxl }}>
+        <View
+          style={{
+            alignItems: 'center',
+            backgroundColor: view.iconBackground,
+            borderRadius: tokens.radius.pill,
+            height: 88,
+            justifyContent: 'center',
+            width: 88,
+          }}
+        >
+          <Icon name={view.icon} size={40} color={view.iconColor} />
         </View>
-        <Text selectable style={{ color: colors.text, fontSize: typography.h1.fontSize, fontWeight: '700', lineHeight: typography.h1.lineHeight }}>
-          Halo, {displayName}
+
+        <Text
+          selectable
+          style={{
+            color: tokens.color.text.primary,
+            fontSize: tokens.type.title.fontSize,
+            fontWeight: tokens.type.title.fontWeight,
+            lineHeight: tokens.type.title.lineHeight,
+            textAlign: 'center',
+          }}
+        >
+          {view.title}
         </Text>
-        <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
-          {subtitle}
-        </Text>
-      </View>
-      <ErrorBanner message={error?.message} />
-      <Card variant={statusCardVariant}>
-        <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' }}>
-          <Text selectable style={{ color: colors.text, flex: 1, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
-            {statusTitle}
+
+        {farmName ? (
+          <Text
+            selectable
+            style={{
+              color: tokens.color.text.secondary,
+              fontSize: tokens.type.body.fontSize,
+              lineHeight: tokens.type.body.lineHeight,
+              textAlign: 'center',
+            }}
+          >
+            {farmName}
           </Text>
-          <Badge label={formatMemberStatus(currentFarm.status)} tone={statusTone} />
-        </View>
-        <MetaRow label="Kebun tujuan" value={currentFarm.farm?.name ?? 'Belum tersedia'} />
-        <MetaRow label="Peran" value={formatRole(currentFarm.role)} />
-        <MetaRow label="Status" value={formatMemberStatus(currentFarm.status)} />
-      </Card>
-      <Card variant={currentFarm.status === 'pending' ? 'info' : 'danger'}>
-        <Text selectable style={{ color: currentFarm.status === 'pending' ? colors.info : colors.danger, fontWeight: '700', lineHeight: 21 }}>
-          {noticeText}
-        </Text>
-      </Card>
+        ) : null}
+
+        {view.dateLine ? (
+          <Text
+            selectable
+            style={{
+              color: tokens.color.text.tertiary,
+              fontSize: tokens.type.meta.fontSize,
+              lineHeight: tokens.type.meta.lineHeight,
+              textAlign: 'center',
+            }}
+          >
+            {view.dateLine}
+          </Text>
+        ) : null}
+      </View>
+
+      <JoinedFarmModal busy={busy} farmName={joinedFarm?.name ?? null} onStart={handleStart} visible={joinedFarm !== null} />
+
+      <ConfirmDialog
+        cancelLabel="Tetap tunggu"
+        confirmLabel="Batalkan pengajuan"
+        loading={busy}
+        message="Kamu bisa mengajukan lagi kapan saja."
+        onCancel={() => {
+          if (!busy) {
+            setConfirmCancel(false);
+          }
+        }}
+        onConfirm={() => void handleCancelRequest()}
+        title="Batalkan pengajuan?"
+        tone="danger"
+        visible={confirmCancel}
+      />
     </Screen>
   );
 }
 
-function getStatusTone(status: string): 'danger' | 'pending' {
-  return status === 'pending' ? 'pending' : 'danger';
+// Penyambut, bukan syarat. Kalau user menutup aplikasi sebelum menekan "Mulai",
+// saat dibuka lagi relasinya sudah aktif dan dia langsung mendarat di dashboard
+// tanpa modal — itu perilaku yang diterima.
+function JoinedFarmModal({
+  busy,
+  farmName,
+  onStart,
+  visible,
+}: {
+  busy: boolean;
+  farmName: string | null;
+  onStart: () => void;
+  visible: boolean;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      // Tanpa jalan keluar selain "Mulai": menutupnya hanya mengembalikan user ke
+      // layar tunggu yang isinya sudah tidak berlaku.
+      onRequestClose={() => undefined}
+      statusBarTranslucent
+      transparent
+      visible={visible}
+    >
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: tokens.color.overlay.scrim,
+          flex: 1,
+          justifyContent: 'center',
+          padding: tokens.space.xxl,
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: tokens.color.surface.card,
+            borderCurve: 'continuous',
+            borderRadius: tokens.radius.card,
+            gap: tokens.space.lg,
+            padding: tokens.space.xxl,
+            width: '100%',
+          }}
+        >
+          <View
+            style={{
+              alignItems: 'center',
+              alignSelf: 'center',
+              backgroundColor: tokens.color.brand.soft,
+              borderRadius: tokens.radius.pill,
+              height: 64,
+              justifyContent: 'center',
+              width: 64,
+            }}
+          >
+            <Icon name="check" size={32} color={tokens.color.brand.base} />
+          </View>
+
+          <Text
+            selectable
+            style={{
+              color: tokens.color.text.primary,
+              fontSize: tokens.type.heading.fontSize,
+              fontWeight: tokens.type.heading.fontWeight,
+              lineHeight: tokens.type.heading.lineHeight,
+              textAlign: 'center',
+            }}
+          >
+            {farmName ? `Kamu bergabung ke ${farmName}` : 'Kamu bergabung ke kebun'}
+          </Text>
+
+          <Text
+            selectable
+            style={{
+              color: tokens.color.text.secondary,
+              fontSize: tokens.type.body.fontSize,
+              lineHeight: tokens.type.body.lineHeight,
+              textAlign: 'center',
+            }}
+          >
+            Sekarang kamu bisa lihat tugas dan kirim laporan.
+          </Text>
+
+          <Button title="Mulai" loading={busy} onPress={onStart} />
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
-function getNoticeText(status: string): string {
-  if (status === 'pending') {
-    return 'Perbarui status setelah pemilik memproses pengajuan. Selama menunggu, data kebun belum dapat diakses.';
+// Tombol teks. <Button variant="ghost"> selalu memakai warna merek, sedangkan
+// aksi membatalkan butuh warna bahaya tanpa blok berwarna. ui.tsx tidak boleh
+// disentuh di fase ini, jadi versinya lokal.
+function TextAction({
+  disabled = false,
+  onPress,
+  title,
+  tone = 'brand',
+}: {
+  disabled?: boolean;
+  onPress: () => void;
+  title: string;
+  tone?: 'brand' | 'danger';
+}) {
+  const color = tone === 'danger' ? tokens.color.status.danger.text : tokens.color.brand.base;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: tokens.layout.tapTarget,
+        opacity: pressed || disabled ? 0.5 : 1,
+      })}
+    >
+      <Text selectable={false} style={{ color, fontSize: 16, fontWeight: '700' }}>
+        {title}
+      </Text>
+    </Pressable>
+  );
+}
+
+type StatusView = {
+  dateLine: string | null;
+  icon: IconName;
+  iconBackground: string;
+  iconColor: string;
+  title: string;
+};
+
+function resolveStatusView(membership: CurrentUserFarm): StatusView {
+  if (membership.status === 'pending') {
+    // updated_at hanya terisi kalau baris ini pernah ditimpa oleh pengajuan
+    // ulang (cabang on conflict di request_join_farm); pada pengajuan baru ia
+    // null dan tanggalnya jatuh ke created_at.
+    const requestedAt = formatDate(membership.updatedAt ?? membership.createdAt);
+
+    return {
+      dateLine: requestedAt ? `Diajukan ${requestedAt}` : null,
+      icon: 'clock',
+      iconBackground: tokens.color.status.warning.bg,
+      iconColor: tokens.color.status.warning.text,
+      title: 'Menunggu persetujuan',
+    };
   }
 
-  if (status === 'removed') {
-    return 'Akses kebun sudah dinonaktifkan. Kamu dapat kembali ke pilihan akses untuk membuat kebun sendiri atau mengajukan akses baru.';
+  // Judul sudah menyatakan peristiwanya, jadi barisnya cukup tanggal saja —
+  // "Ditolak · Ditolak 3 Maret" itu penyampaian ganda.
+  const endedAt = formatDate(membership.removedAt ?? membership.updatedAt ?? membership.createdAt);
+
+  return {
+    dateLine: endedAt,
+    icon: 'x',
+    iconBackground: tokens.color.status.danger.bg,
+    iconColor: tokens.color.status.danger.text,
+    title: resolveEndedTitle(membership),
+  };
+}
+
+function resolveEndedTitle(membership: CurrentUserFarm): string {
+  if (membership.status === 'rejected') {
+    return 'Pengajuan ditolak';
   }
 
-  return 'Pengajuan akses ditolak. Kamu dapat kembali ke pilihan akses atau menggunakan kode kebun lain jika tersedia.';
+  // Keluar sendiri dan dinonaktifkan pemilik adalah dua peristiwa berbeda yang
+  // selama ini tampil sama (temuan R-12). removed_reason sudah tersedia sejak
+  // migration 020; nilai null berarti data warisan yang tidak pernah dicatat,
+  // dan untuk itu kalimat netral lebih jujur daripada menebak.
+  if (membership.removedReason === 'left_by_worker') {
+    return 'Kamu sudah keluar dari kebun ini';
+  }
+
+  return 'Akses kebun dinonaktifkan';
+}
+
+function formatDate(value?: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 }

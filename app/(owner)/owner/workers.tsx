@@ -3,47 +3,58 @@ import React from 'react';
 import { View } from 'react-native';
 
 import { MemberRow } from '../../../src/components/member-row';
-import { Card, EmptyState, ErrorBanner, LoadingState, Screen } from '../../../src/components/ui';
+import { EmptyState, ErrorBanner, LoadingState, Screen } from '../../../src/components/ui';
+import {
+  FARM_ACCESS_EVENT_LABELS,
+  isFarmAccessEvent,
+} from '../../../src/constants/membership';
 import { colors } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
-import { getWorkerMemberships } from '../../../src/services/memberService';
-import type { WorkerMembership } from '../../../src/types/domain';
+import { getFarmAccessEvents } from '../../../src/services/memberService';
+import type { FarmAccessEventEntry } from '../../../src/types/domain';
+
+// Sumber datanya tabel append-only farm_access_events (migration 036), bukan
+// lagi filter status atas farm_members. Pergeseran ini harus mendahului tombol
+// pembatalan/penutupan pemberitahuan di Fase 3, karena tombol-tombol itu
+// menghapus baris farm_members — kalau layar ini masih membaca tabel tersebut,
+// pemilik akan kehilangan riwayat yang terlihat (temuan R-02).
+//
+// Konsekuensi yang disengaja: layar ini sekarang menampilkan SELURUH jenis
+// event, bukan cuma yang negatif. Namanya "Riwayat akses" — isinya akhirnya
+// jujur.
 
 export default function WorkerAccessHistoryScreen() {
   const { currentFarm } = useAuth();
-  const [workers, setWorkers] = React.useState<WorkerMembership[]>([]);
+  const [events, setEvents] = React.useState<FarmAccessEventEntry[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   const farmId = currentFarm?.farmId;
-  const history = workers
-    .filter((worker) => worker.status === 'rejected' || worker.status === 'removed')
-    .sort((first, second) => relevantTime(second) - relevantTime(first));
 
-  const loadWorkers = React.useCallback(async () => {
+  const loadEvents = React.useCallback(async () => {
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
-      setWorkers([]);
+      setEvents([]);
       return;
     }
 
     setError(null);
 
-    const result = await getWorkerMemberships(farmId);
+    const result = await getFarmAccessEvents(farmId);
 
     if (result.error) {
       setError(result.error.message);
-      setWorkers([]);
+      setEvents([]);
     } else {
-      setWorkers(result.data);
+      setEvents(result.data);
     }
   }, [farmId]);
 
   useFocusEffect(
     React.useCallback(() => {
       setLoading(true);
-      loadWorkers().finally(() => setLoading(false));
-    }, [loadWorkers])
+      loadEvents().finally(() => setLoading(false));
+    }, [loadEvents])
   );
 
   if (loading) {
@@ -53,48 +64,42 @@ export default function WorkerAccessHistoryScreen() {
   return (
     <Screen applyTopInset>
       <ErrorBanner message={error} />
-      {history.length === 0 ? (
+      {events.length === 0 ? (
         <EmptyState title="Belum ada riwayat akses." />
       ) : (
-        <Card>
-          <View>
-            {history.map((worker, index) => (
-              <View
-                key={worker.membershipId}
-                style={index > 0 ? { borderTopColor: colors.divider, borderTopWidth: 1 } : undefined}
-              >
-                <MemberRow name={worker.fullName} meta={buildHistoryMeta(worker)} tone="neutral" />
-              </View>
-            ))}
-          </View>
-        </Card>
+        // Tanpa kartu pembungkus: baris langsung di atas latar, dipisah garis
+        // tipis — sama seperti daftar anggota dan pengajuan di tab Kebun.
+        <View>
+          {events.map((entry, index) => (
+            <View
+              key={entry.id}
+              style={index > 0 ? { borderTopColor: colors.divider, borderTopWidth: 1 } : undefined}
+            >
+              <MemberRow name={entry.fullName} meta={buildEventMeta(entry)} tone="neutral" />
+            </View>
+          ))}
+        </View>
       )}
     </Screen>
   );
 }
 
-function buildHistoryMeta(worker: WorkerMembership): string {
-  const label = worker.status === 'rejected' ? 'Ditolak' : 'Dinonaktifkan';
-  return `${label} · ${formatDate(relevantDate(worker))}`;
+// Label diambil dari src/constants/membership.ts, bukan ditulis ulang di sini.
+// 'left' dan 'removed' sengaja punya label berbeda: selama ini keduanya tampil
+// sebagai "Dinonaktifkan", sehingga pemilik melihat pekerja yang keluar sendiri
+// seolah dia yang mengeluarkannya (temuan R-12).
+//
+// Nama pelaku TIDAK ditampilkan di baris ini. RPC-nya tetap mengembalikan
+// actor_name untuk dipakai fase berikutnya.
+function buildEventMeta(entry: FarmAccessEventEntry): string {
+  return `${resolveEventLabel(entry.event)} · ${formatDate(entry.createdAt)}`;
 }
 
-function relevantDate(worker: WorkerMembership): string | null {
-  if (worker.status === 'removed') {
-    return worker.removedAt ?? worker.updatedAt ?? worker.createdAt ?? null;
-  }
-
-  return worker.updatedAt ?? worker.createdAt ?? null;
-}
-
-function relevantTime(worker: WorkerMembership): number {
-  const value = relevantDate(worker);
-
-  if (!value) {
-    return 0;
-  }
-
-  const time = new Date(value).getTime();
-  return Number.isNaN(time) ? 0 : time;
+// Nilai event yang belum dikenal aplikasi tidak boleh membuat seluruh baris
+// tampil rusak — jatuhkan ke nilai mentahnya saja. Pola yang sama dipakai
+// normalizeOperationalReportCategory di src/constants/operationalReport.ts.
+function resolveEventLabel(event: string): string {
+  return isFarmAccessEvent(event) ? FARM_ACCESS_EVENT_LABELS[event] : event;
 }
 
 function formatDate(value: string | null): string {

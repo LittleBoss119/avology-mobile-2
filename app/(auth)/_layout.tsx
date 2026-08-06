@@ -23,7 +23,7 @@ export default function AuthLayout() {
       return;
     }
 
-    const shouldRedirect = shouldRedirectAccess(pathname, targetRoute, currentFarm);
+    const shouldRedirect = shouldRedirectAccess(pathname, targetRoute);
 
     logAccessGuardDecision({
       currentPathname: pathname,

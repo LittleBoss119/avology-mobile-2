@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius, spacing, tokens, typography } from '../constants/theme';
+import type { MemberRole } from '../types/domain';
 import { Icon, type IconName } from './icons';
 
 type NavigationItem = {
@@ -24,7 +25,7 @@ const NAV_ICON: Record<NavigationIconName, IconName> = {
   farm: 'building-warehouse',
 };
 
-export function RoleBottomNavigation({ role }: { role: 'owner' | 'worker' }) {
+export function RoleBottomNavigation({ role }: { role: MemberRole }) {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const items = role === 'owner' ? ownerNavigationItems : workerNavigationItems;
@@ -175,7 +176,7 @@ const workerNavigationItems: NavigationItem[] = [
   },
 ];
 
-function shouldShowBottomNavigation(pathname: string, role: 'owner' | 'worker'): boolean {
+function shouldShowBottomNavigation(pathname: string, role: MemberRole): boolean {
   const visiblePaths = role === 'owner' ? ownerTopLevelPaths : workerTopLevelPaths;
   return visiblePaths.includes(pathname);
 }

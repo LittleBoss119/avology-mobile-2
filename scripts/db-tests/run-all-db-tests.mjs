@@ -14,6 +14,7 @@ const stages = [
   '06-dashboard-query.test.mjs',
   '07-feature-foundation.test.mjs',
   '08-tree-record-edit-delete-foundation.test.mjs',
+  '09-farm-relation-lifecycle.test.mjs',
 ];
 
 const summary = {

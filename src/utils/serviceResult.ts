@@ -25,7 +25,15 @@ const friendlyMessages: Array<[string, string]> = [
   ['Profile must exist before creating a farm', 'Profil pengguna belum lengkap. Silakan lengkapi profil terlebih dahulu.'],
   ['Profile must exist before joining a farm', 'Profil pengguna belum lengkap. Silakan lengkapi profil terlebih dahulu.'],
   ['Join code is invalid', 'Kode kebun tidak ditemukan. Periksa kembali kode yang dimasukkan.'],
-  ['User already has a pending or active membership', 'Anda sudah memiliki pengajuan atau keanggotaan aktif di kebun ini.'],
+  // Guard di request_join_farm sudah GLOBAL sejak migration 036 — ia menolak
+  // pemanggil yang punya relasi pending/active di kebun MANA PUN, bukan cuma di
+  // kebun tujuan. preview_farm_by_join_code (migration 037) melempar pesan yang
+  // sama persis, jadi satu pemetaan ini melayani kedua jalur.
+  ['User already has a pending or active membership', 'Kamu masih terhubung ke kebun lain. Keluar dari kebun itu dulu sebelum mengajukan gabung.'],
+  ['Cannot join a farm you own', 'Ini kebun kamu sendiri.'],
+  ['Pending join request not found', 'Tidak ada pengajuan yang bisa dibatalkan.'],
+  ['Access notice not found', 'Tidak ada pemberitahuan akses yang perlu ditutup.'],
+  ['Only active owners can view farm access events', 'Hanya pemilik aktif yang dapat melihat riwayat akses kebun.'],
   ['Pending worker not found', 'Pengajuan pekerja tidak ditemukan atau sudah diproses.'],
   ['Active worker not found', 'Pekerja aktif tidak ditemukan.'],
   ['Only active owners can approve workers', 'Hanya pemilik aktif yang dapat menyetujui pekerja.'],
@@ -68,6 +76,13 @@ const friendlyMessages: Array<[string, string]> = [
   ['Only active workers can postpone tasks', 'Hanya pekerja aktif yang dapat menunda tugas.'],
   ['Postpone note is required', 'Catatan penundaan wajib diisi.'],
   ['duplicate key value violates unique constraint', 'Data dengan kode yang sama sudah ada.'],
+  // PGRST202/PGRST205: PostgREST belum memuat ulang cache skemanya, biasanya
+  // beberapa detik setelah migration di-push. Tanpa entri ini pesannya jatuh ke
+  // isTechnicalMessage dan berbunyi "Periksa input lalu coba lagi" — saran yang
+  // salah, karena tidak ada input yang bisa diperbaiki user. Dulu galat ini
+  // tidak pernah terlihat karena getCurrentUserFarm menelannya lewat jalur
+  // cadangan; jalur itu sudah dihapus, jadi sekarang ia sampai ke layar.
+  ['schema cache', 'Aplikasi belum tersambung penuh ke server. Tunggu sebentar lalu coba lagi.'],
   ['Failed to fetch', 'Gagal memuat data. Periksa koneksi internet Anda.'],
   ['Network request failed', 'Gagal memuat data. Periksa koneksi internet Anda.'],
 ];

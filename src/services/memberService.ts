@@ -1,11 +1,15 @@
 import { supabase } from '../lib/supabase';
 import type {
+  FarmAccessEvent,
+  FarmAccessEventEntry,
   FarmMemberBasicProfile,
   FarmActorDisplayProfile,
+  FarmPreview,
   LeaveCurrentFarmInput,
   MembershipActionInput,
   MemberRole,
   MemberStatus,
+  PreviewFarmByJoinCodeInput,
   RequestJoinFarmData,
   RequestJoinFarmInput,
   ServiceResult,
@@ -35,6 +39,23 @@ type ActiveWorkerRow = {
   joined_at: string | null;
 };
 
+type FarmPreviewRow = {
+  farm_name: string;
+  farm_location: string | null;
+  owner_name: string | null;
+};
+
+type FarmAccessEventRow = {
+  id: string;
+  user_id: string;
+  full_name: string;
+  event: FarmAccessEvent;
+  actor_id: string | null;
+  actor_name: string | null;
+  reason: string | null;
+  created_at: string;
+};
+
 type FarmMemberBasicProfileRow = {
   user_id: string;
   full_name: string;
@@ -46,19 +67,6 @@ type FarmActorDisplayProfileRow = {
   full_name: string;
   role: MemberRole;
   status: MemberStatus;
-};
-
-type WorkerMembershipRow = {
-  id: string;
-  user_id: string;
-  role: MemberRole;
-  status: MemberStatus;
-  created_at: string;
-  updated_at: string | null;
-  joined_at: string | null;
-  removed_at?: string | null;
-  removed_by?: string | null;
-  removed_reason?: string | null;
 };
 
 export async function requestJoinFarm(
@@ -83,6 +91,68 @@ export async function requestJoinFarm(
   });
 }
 
+// Langkah pertama alur gabung dua langkah: validasi kode sekaligus ambil
+// pratinjau kebun. Guard di RPC-nya identik dengan request_join_farm, jadi kode
+// yang lolos di sini dijamin bisa diajukan di langkah kedua.
+// Belum dipanggil dari layar mana pun — layarnya dikerjakan di Fase 3.
+export async function previewFarmByJoinCode(
+  input: PreviewFarmByJoinCodeInput
+): Promise<ServiceResult<FarmPreview>> {
+  const joinCode = input.joinCode.trim().toUpperCase();
+
+  if (!joinCode) {
+    return fail(new Error('Kode kebun wajib diisi.'));
+  }
+
+  const { data, error } = await supabase.rpc('preview_farm_by_join_code', {
+    p_join_code: joinCode,
+  });
+
+  if (error) {
+    return fail(error, 'Gagal memeriksa kode kebun.');
+  }
+
+  const row = ((data ?? []) as FarmPreviewRow[])[0];
+
+  if (!row) {
+    return fail(new Error('Kode kebun tidak ditemukan. Periksa kembali kode yang dimasukkan.'));
+  }
+
+  return ok(mapFarmPreview(row));
+}
+
+// Menutup pemberitahuan penolakan/penonaktifan milik pemanggil sendiri. Seluruh
+// baris rejected/removed miliknya dihapus sekali panggil; riwayatnya tetap utuh
+// di farm_access_events.
+// Belum dipanggil dari layar mana pun — layarnya dikerjakan di Fase 3.
+export async function acknowledgeAccessNotice(): Promise<ServiceResult<SuccessData>> {
+  const { error } = await supabase.rpc('acknowledge_access_notice');
+
+  if (error) {
+    return fail(error, 'Gagal menutup pemberitahuan akses.');
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
+// Membatalkan pengajuan milik pemanggil sendiri. Tanpa parameter: RPC-nya yang
+// mencari baris pending milik auth.uid(). Baris farm_members-nya dihapus, tapi
+// jejaknya tetap tercatat sebagai event 'cancelled' di farm_access_events.
+// Belum dipanggil dari layar mana pun — layarnya dikerjakan di Fase 3.
+export async function cancelJoinRequest(): Promise<ServiceResult<SuccessData>> {
+  const { error } = await supabase.rpc('cancel_join_request');
+
+  if (error) {
+    return fail(error, 'Gagal membatalkan pengajuan.');
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
 export async function getPendingWorkers(
   farmId: UUID
 ): Promise<ServiceResult<WorkerMembership[]>> {
@@ -95,6 +165,23 @@ export async function getPendingWorkers(
   }
 
   return ok(((data ?? []) as PendingWorkerRow[]).map(mapPendingWorker));
+}
+
+// Riwayat akses kebun dari tabel append-only farm_access_events. Lewat RPC,
+// bukan query langsung, karena policy profiles hanya mengizinkan seseorang
+// membaca profilnya sendiri — query langsung akan kehilangan seluruh nama.
+export async function getFarmAccessEvents(
+  farmId: UUID
+): Promise<ServiceResult<FarmAccessEventEntry[]>> {
+  const { data, error } = await supabase.rpc('get_farm_access_events', {
+    p_farm_id: farmId,
+  });
+
+  if (error) {
+    return fail(error, 'Gagal memuat riwayat akses kebun.');
+  }
+
+  return ok(((data ?? []) as FarmAccessEventRow[]).map(mapFarmAccessEventEntry));
 }
 
 export async function getActiveWorkers(
@@ -137,39 +224,6 @@ export async function getFarmActorDisplayProfiles(
   }
 
   return ok(((data ?? []) as FarmActorDisplayProfileRow[]).map(mapFarmActorDisplayProfile));
-}
-
-export async function getWorkerMemberships(
-  farmId: UUID
-): Promise<ServiceResult<WorkerMembership[]>> {
-  const [membersResult, profilesResult] = await Promise.all([
-    supabase
-      .from('farm_members')
-      .select('id, user_id, role, status, created_at, updated_at, joined_at, removed_at, removed_by, removed_reason')
-      .eq('farm_id', farmId)
-      .eq('role', 'worker')
-      .order('created_at', { ascending: false })
-      .returns<WorkerMembershipRow[]>(),
-    getFarmMemberBasicProfiles(farmId),
-  ]);
-
-  if (membersResult.error) {
-    return fail(membersResult.error, 'Gagal memuat riwayat akses pekerja.');
-  }
-
-  if (profilesResult.error) {
-    return fail(profilesResult.error);
-  }
-
-  const profileMap = new Map(
-    profilesResult.data.map((profile) => [profile.userId, profile])
-  );
-
-  return ok(
-    (membersResult.data ?? [])
-      .filter((row) => row.role === 'worker')
-      .map((row) => mapWorkerMembership(row, profileMap.get(row.user_id)))
-  );
 }
 
 export async function approveWorker(
@@ -248,6 +302,27 @@ function mapActiveWorker(row: ActiveWorkerRow): WorkerMembership {
   };
 }
 
+function mapFarmPreview(row: FarmPreviewRow): FarmPreview {
+  return {
+    farmName: row.farm_name,
+    location: row.farm_location,
+    ownerName: row.owner_name,
+  };
+}
+
+function mapFarmAccessEventEntry(row: FarmAccessEventRow): FarmAccessEventEntry {
+  return {
+    actorId: row.actor_id,
+    actorName: row.actor_name,
+    createdAt: row.created_at,
+    event: row.event,
+    fullName: row.full_name,
+    id: row.id,
+    reason: row.reason,
+    userId: row.user_id,
+  };
+}
+
 function mapFarmMemberBasicProfile(row: FarmMemberBasicProfileRow): FarmMemberBasicProfile {
   return {
     fullName: row.full_name,
@@ -265,25 +340,6 @@ function mapFarmActorDisplayProfile(row: FarmActorDisplayProfileRow): FarmActorD
   };
 }
 
-function mapWorkerMembership(
-  row: WorkerMembershipRow,
-  profile?: FarmMemberBasicProfile
-): WorkerMembership {
-  return {
-    createdAt: row.created_at,
-    fullName: profile?.fullName ?? 'Pengguna tidak tersedia',
-    joinedAt: row.joined_at,
-    membershipId: row.id,
-    phone: profile?.phone ?? null,
-    removedAt: row.removed_at,
-    removedBy: row.removed_by,
-    removedReason: row.removed_reason,
-    role: 'worker',
-    status: row.status,
-    updatedAt: row.updated_at,
-    userId: row.user_id,
-  };
-}
 
 function mapLeaveCurrentFarmError(error: { code?: string; message?: string }): string {
   if (error.code === 'PGRST202') {

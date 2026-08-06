@@ -1,3 +1,4 @@
+import type { FarmAccessEvent, MemberRole, MemberStatus } from '../constants/membership';
 import type {
   OperationalReportCategory,
   OperationalReportResolution,
@@ -13,11 +14,14 @@ export type {
   OperationalReportStatus,
 };
 
+// Peran, status keanggotaan, dan jenis event akses hidup di
+// src/constants/membership.ts — pola yang sama, diturunkan dari tuple readonly
+// sehingga nilainya bisa diiterasi dan divalidasi saat runtime, bukan cuma union
+// tipe telanjang. Di-re-export dari sini supaya ±20 import lama
+// `from '../types/domain'` tidak perlu diubah.
+export type { FarmAccessEvent, MemberRole, MemberStatus };
+
 export type UUID = string;
-
-export type MemberRole = 'owner' | 'worker';
-
-export type MemberStatus = 'pending' | 'active' | 'rejected' | 'removed';
 
 export type TreeConditionStatus =
   | 'healthy'
@@ -88,7 +92,12 @@ export type Farm = {
   name: string;
   location: string | null;
   areaSize: number | null;
-  joinCode: string;
+  // Opsional karena relasi non-aktif (pending/rejected/removed) memang TIDAK
+  // boleh tahu kode kebun: policy "Active members can view farm" (migration 007)
+  // menutup tabel farms untuk mereka, dan get_current_user_access hanya
+  // mengembalikan namanya. Sebelumnya kolom ini diisi string kosong supaya tipe
+  // terpenuhi — nilai yang benar secara maksud tapi bohong secara tipe.
+  joinCode?: string;
   createdBy?: UUID;
   createdAt?: string;
   updatedAt?: string | null;
@@ -888,6 +897,33 @@ export type RequestJoinFarmInput = {
 
 export type RequestJoinFarmData = {
   membershipId: UUID;
+};
+
+export type PreviewFarmByJoinCodeInput = {
+  joinCode: string;
+};
+
+// Pratinjau kebun untuk calon pemohon yang BELUM jadi anggota. Sengaja cuma tiga
+// field: RPC-nya SECURITY DEFINER dan menembus RLS, jadi setiap field tambahan
+// adalah kebocoran ke siapa pun yang menebak kode. Lihat migration 037.
+export type FarmPreview = {
+  farmName: string;
+  location: string | null;
+  ownerName: string | null;
+};
+
+// Satu baris riwayat akses kebun, dari tabel append-only farm_access_events
+// (migration 036). `actorName` null berarti pelakunya memang tidak pernah
+// tercatat — event warisan dari sebelum migration 020, bukan data hilang.
+export type FarmAccessEventEntry = {
+  id: UUID;
+  userId: UUID;
+  fullName: string;
+  event: FarmAccessEvent;
+  actorId: UUID | null;
+  actorName: string | null;
+  reason: string | null;
+  createdAt: string;
 };
 
 export type MembershipActionInput = {
