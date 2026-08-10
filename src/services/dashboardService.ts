@@ -1,8 +1,4 @@
 import { supabase } from '../lib/supabase';
-import {
-  getCareSOPNextScheduleReference,
-  getCareSOPs,
-} from './careSopService';
 import type {
   GetOwnerDashboardSummaryInput,
   GetWorkerDashboardSummaryInput,
@@ -11,6 +7,7 @@ import type {
   WorkerDashboardSummary,
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
+import { getTodayIsoDate } from '../utils/taskDueDate';
 
 type CountResult = {
   count: number | null;
@@ -43,7 +40,6 @@ export async function getOwnerDashboardSummary(
     pendingWorkers,
     floweringTrees,
     fruitingTrees,
-    dueOrOverdueSops,
   ] = await Promise.all([
     countActiveTrees(input.farmId),
     countHealthyTrees(input.farmId),
@@ -55,7 +51,6 @@ export async function getOwnerDashboardSummary(
     countPendingWorkers(input.farmId),
     countTreesByGrowthPhase(input.farmId, 'flowering'),
     countTreesByGrowthPhase(input.farmId, 'fruiting'),
-    countDueOrOverdueSops(input.farmId),
   ]);
 
   const failure = findFailedCount([
@@ -69,7 +64,6 @@ export async function getOwnerDashboardSummary(
     ['worker pending', pendingWorkers],
     ['pohon flowering', floweringTrees],
     ['pohon fruiting', fruitingTrees],
-    ['SOP jatuh tempo atau terlambat', dueOrOverdueSops],
   ]);
 
   if (failure) {
@@ -91,7 +85,6 @@ export async function getOwnerDashboardSummary(
     pendingWorkers: readCount(pendingWorkers),
     floweringTrees: readCount(floweringTrees),
     fruitingTrees: readCount(fruitingTrees),
-    dueOrOverdueSops: readCount(dueOrOverdueSops),
   });
 }
 
@@ -200,7 +193,7 @@ async function countFarmUnfinishedTasks(farmId: string): Promise<CountResult> {
 // Terlambat = due_date < hari ini & masih pending, minus jadwal dibatalkan.
 // Diekspor untuk dipakai nanti (P-4); belum disambungkan ke OwnerDashboardSummary.
 // Menghitung 'today' sendiri via getTodayIsoDate() agar berdiri sendiri, memakai
-// pola tanggal device-local yang sama dengan getTodayIsoDate lain & RF-11b.
+// sumber tanggal yang sama (WIB) dengan seluruh klasifikasi RF-11b.
 export async function countFarmOverdueTasks(farmId: string): Promise<CountResult> {
   const today = getTodayIsoDate();
 
@@ -327,41 +320,6 @@ async function countActiveWorkerTaskRows(
   };
 }
 
-async function countDueOrOverdueSops(farmId: string): Promise<CountResult> {
-  const sopsResult = await getCareSOPs({
-    activeOnly: true,
-    farmId,
-  });
-
-  if (sopsResult.error) {
-    return {
-      count: null,
-      error: new Error(sopsResult.error.message),
-    };
-  }
-
-  const references = await Promise.all(
-    sopsResult.data.map((sop) => getCareSOPNextScheduleReference({ sopId: sop.id }))
-  );
-
-  const failedReference = references.find((reference) => reference.error);
-
-  if (failedReference?.error) {
-    return {
-      count: null,
-      error: new Error(failedReference.error.message),
-    };
-  }
-
-  return {
-    count: references.filter(
-      (reference) =>
-        reference.data?.status === 'due_today' || reference.data?.status === 'overdue'
-    ).length,
-    error: null,
-  };
-}
-
 function findFailedCount(
   results: Array<[label: string, result: CountResult]>
 ): { label: string; error: Error } | null {
@@ -380,12 +338,4 @@ function findFailedCount(
 
 function readCount(result: CountResult): number {
   return result.count ?? 0;
-}
-
-function getTodayIsoDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }

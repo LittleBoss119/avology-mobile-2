@@ -4,9 +4,7 @@ import {
 } from '../constants/operationalReport';
 import { supabase } from '../lib/supabase';
 import type {
-  ActivityStatus,
   CareActivity,
-  CareActivityOrigin,
   CareCategory,
   CareTask,
   CareTaskDetail,
@@ -27,11 +25,16 @@ import type {
   ServiceResult,
   SuccessData,
   TargetType,
-  UpdateLatestTaskRealizationData,
-  UpdateLatestTaskRealizationInput,
+  UpdateTaskRealizationData,
+  UpdateTaskRealizationInput,
   TaskStatus,
   UUID,
 } from '../types/domain';
+import {
+  CARE_ACTIVITY_SELECT,
+  mapCareActivity,
+  type CareActivityRow,
+} from './careActivityShared';
 import {
   deletePhotoAttachment,
   getTaskProofPhotos,
@@ -42,9 +45,6 @@ import { fail, ok } from '../utils/serviceResult';
 
 const CARE_TASK_SELECT =
   'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, requires_photo, created_at, updated_at';
-
-const CARE_ACTIVITY_SELECT =
-  'id, farm_id, care_task_id, performed_by, status, note, performed_at, asal, category, produk';
 
 type CareTaskRow = {
   id: string;
@@ -66,19 +66,6 @@ type CareTaskRow = {
   requires_photo: boolean | null;
   created_at?: string;
   updated_at?: string | null;
-};
-
-type CareActivityRow = {
-  id: string;
-  farm_id: string;
-  care_task_id: string | null;
-  performed_by: string;
-  status: ActivityStatus;
-  note: string | null;
-  performed_at: string;
-  asal: CareActivityOrigin;
-  category: CareCategory | null;
-  produk: string | null;
 };
 
 type MembershipRow = {
@@ -201,7 +188,7 @@ export async function getTaskDetail(
     .returns<CareActivityRow[]>();
 
   if (activitiesResult.error) {
-    return fail(activitiesResult.error, 'Gagal memuat realisasi tugas.');
+    return fail(activitiesResult.error, 'Gagal memuat hasil kerja tugas.');
   }
 
   return ok({
@@ -257,7 +244,7 @@ export async function getOperationalReportFollowUpTasks(
     .returns<CareActivityRow[]>();
 
   if (activitiesResult.error) {
-    return fail(activitiesResult.error, 'Gagal memuat realisasi tindak lanjut laporan.');
+    return fail(activitiesResult.error, 'Gagal memuat hasil kerja tindak lanjut laporan.');
   }
 
   const activitiesByTaskId = new Map<string, CareActivity[]>();
@@ -410,6 +397,11 @@ export async function completeTask(
   const { data, error } = await supabase.rpc('complete_task', {
     p_note: normalizeOptionalText(input.note),
     p_produk: normalizeOptionalText(input.produk),
+    // Takaran dikirim apa adanya. Validasi pasangannya (jumlah tanpa satuan,
+    // takaran tanpa nama bahan) sengaja diserahkan ke RPC — pesan errornya
+    // sudah berbahasa Indonesia dan sampai ke layar lewat toServiceError.
+    p_produk_jumlah: input.produkJumlah ?? null,
+    p_produk_satuan: input.produkSatuan ?? null,
     p_task_id: input.taskId,
   });
 
@@ -464,7 +456,7 @@ export async function rollbackCompletedTaskActivity(
 ): Promise<ServiceResult<SuccessData>> {
   const activityId = normalizeRequiredText(
     input.activityId,
-    'Realisasi tugas tidak ditemukan.'
+    'Hasil kerja tidak ditemukan.'
   );
 
   if (activityId instanceof Error) {
@@ -484,17 +476,70 @@ export async function rollbackCompletedTaskActivity(
   });
 }
 
-export async function updateLatestTaskRealization(
-  input: UpdateLatestTaskRealizationInput
-): Promise<ServiceResult<UpdateLatestTaskRealizationData>> {
-  if (input.status !== 'completed' && input.status !== 'postponed') {
-    return fail(new Error('Status realisasi tidak valid.'));
+// "Perbaiki catatan" — hanya membetulkan isi baris realisasi TERAKHIR.
+//
+// Menggantikan updateLatestTaskRealization, yang dulu menulis sendiri ke
+// care_tasks dan care_activities lewat .update(). Dua jalur tulis itu SUDAH
+// DIBUANG dan tidak boleh kembali:
+//   * UPDATE care_tasks   -> melanggar aturan log-vs-state, dan sekarang juga
+//     ditolak karena policy-nya owner-only.
+//   * UPDATE care_activities -> grant UPDATE-nya dicabut migrasi 043, jadi
+//     sekarang berujung error keras.
+// Keduanya digantikan RPC update_task_realization (migrasi 043).
+//
+// Namanya tidak lagi menyebut "latest" karena fungsi ini tidak lagi menebak
+// baris mana yang terbaru: activityId dikirim eksplisit dan DB yang
+// memverifikasi (dengan tie-breaker `performed_at desc, id desc`).
+//
+// PEMBAGIAN TUGAS VERIFIKASI — sengaja tidak diduplikasi di sini:
+//   RPC yang menegakkan: baris ada, bukan catatan inisiatif, pemanggil adalah
+//   pencatatnya, pekerja masih aktif, baris ini yang terbaru, jadwal induk tidak
+//   dibatalkan, catatan penundaan wajib diisi, dan pasangan takaran bahan.
+//   Semua pesannya sudah berbahasa Indonesia dan lolos apa adanya lewat
+//   toServiceError, jadi menyalinnya ke sini hanya menambah round-trip dan
+//   risiko dua kalimat yang berbeda untuk kegagalan yang sama.
+//
+//   Klien yang menegakkan: HANYA aturan foto wajib. RPC tidak tahu apa-apa soal
+//   photo_attachments, jadi aturan ini tidak punya penjaga lain.
+export async function updateTaskRealization(
+  input: UpdateTaskRealizationInput
+): Promise<ServiceResult<UpdateTaskRealizationData>> {
+  const activityId = normalizeRequiredText(
+    input.activityId,
+    'Hasil kerja tidak ditemukan.'
+  );
+
+  if (activityId instanceof Error) {
+    return fail(activityId);
+  }
+
+  // Baris realisasi dibaca sekali untuk tiga hal yang TIDAK diketahui RPC:
+  // farm_id dan care_task_id untuk jalur foto, serta status untuk memutuskan
+  // apakah aturan foto wajib berlaku. Bukan untuk memeriksa akses.
+  const activityResult = await supabase
+    .from('care_activities')
+    .select(CARE_ACTIVITY_SELECT)
+    .eq('id', activityId)
+    .maybeSingle<CareActivityRow>();
+
+  if (activityResult.error) {
+    return fail(activityResult.error, 'Gagal memuat catatan hasil kerja.');
+  }
+
+  if (!activityResult.data) {
+    return fail(new Error('Catatan tidak ditemukan.'));
+  }
+
+  const activity = mapCareActivity(activityResult.data);
+
+  if (!activity.careTaskId) {
+    return fail(new Error('Catatan ini bukan hasil kerja dari tugas.'));
   }
 
   const taskResult = await supabase
     .from('care_tasks')
     .select(CARE_TASK_SELECT)
-    .eq('id', input.taskId)
+    .eq('id', activity.careTaskId)
     .maybeSingle<CareTaskRow>();
 
   if (taskResult.error) {
@@ -505,114 +550,53 @@ export async function updateLatestTaskRealization(
     return fail(new Error('Tugas tidak ditemukan atau tidak dapat diakses.'));
   }
 
-  const accessResult = await ensureActiveAssignedWorker(taskResult.data);
-
-  if (accessResult.error) {
-    return fail(accessResult.error);
-  }
-
-  const cancellationResult = await getTaskScheduleCancellationStatus(taskResult.data);
-
-  if (cancellationResult.error) {
-    return fail(cancellationResult.error);
-  }
-
-  if (cancellationResult.data) {
-    return fail(new Error('Tugas ini sudah dibatalkan oleh owner.'));
-  }
-
-  const latestActivityResult = await getLatestActivityForTask(input.taskId);
-
-  if (latestActivityResult.error) {
-    return fail(latestActivityResult.error);
-  }
-
-  const latestActivity = latestActivityResult.data;
-
-  if (!latestActivity) {
-    return fail(new Error('Realisasi tugas belum tersedia untuk diedit.'));
-  }
-
-  if (input.activityId && input.activityId !== latestActivity.id) {
-    return fail(new Error('Hanya realisasi terbaru yang dapat diedit.'));
-  }
-
   const proofResult = await getTaskProofPhotos({
-    activityId: latestActivity.id,
-    farmId: taskResult.data.farm_id,
+    activityId: activity.id,
+    farmId: activity.farmId,
   });
   const existingProofs = proofResult.data ?? [];
   const hasExistingProof = existingProofs.length > 0;
   const hasNewProof = Boolean(input.proofPhoto?.uri);
   const willRemoveExistingProof = input.removeExistingProof === true;
 
+  // Status dibaca dari BARIS-nya, bukan dari input — "perbaiki catatan" tidak
+  // pernah mengubah status, jadi aturan foto wajib hanya relevan untuk baris
+  // yang memang berstatus selesai.
   if (
     taskResult.data.requires_photo
-    && input.status === 'completed'
+    && activity.status === 'completed'
     && !hasNewProof
     && (!hasExistingProof || willRemoveExistingProof)
   ) {
     return fail(new Error('Foto wajib untuk menyelesaikan tugas ini.'));
   }
 
-  if (input.status === 'postponed' && !normalizeOptionalText(input.note)) {
-    return fail(new Error('Catatan penundaan wajib diisi.'));
+  const { error } = await supabase.rpc('update_task_realization', {
+    p_activity_id: activity.id,
+    p_note: normalizeOptionalText(input.note),
+    p_produk: normalizeOptionalText(input.produk),
+    p_produk_jumlah: input.produkJumlah ?? null,
+    p_produk_satuan: input.produkSatuan ?? null,
+  });
+
+  if (error) {
+    return fail(error, 'Gagal memperbarui catatan hasil kerja.');
   }
 
-  if (taskResult.data.status !== input.status) {
-    const updateTaskResult = await supabase
-      .from('care_tasks')
-      .update({
-        status: input.status,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', taskResult.data.id);
-
-    if (updateTaskResult.error) {
-      return fail(updateTaskResult.error, 'Gagal memperbarui status tugas.');
-    }
-  }
-
-  const nextNote = normalizeOptionalText(input.note);
-  const produkProvided = input.produk !== undefined;
-  const nextProduk = produkProvided ? normalizeOptionalText(input.produk) : undefined;
-
-  const noteChanged = latestActivity.note !== nextNote;
-  const statusChanged = latestActivity.status !== input.status;
-  const produkChanged = produkProvided && latestActivity.produk !== nextProduk;
-
-  if (statusChanged || noteChanged || produkChanged) {
-    const activityUpdate: { note: string | null; status: ActivityStatus; produk?: string | null } = {
-      note: nextNote,
-      status: input.status,
-    };
-
-    // Kolom produk hanya disentuh bila pemanggil mengirimnya (perilaku lama dijaga).
-    if (produkProvided) {
-      activityUpdate.produk = nextProduk;
-    }
-
-    const updateActivityResult = await supabase
-      .from('care_activities')
-      .update(activityUpdate)
-      .eq('id', latestActivity.id);
-
-    if (updateActivityResult.error) {
-      return fail(updateActivityResult.error, 'Gagal memperbarui realisasi tugas.');
-    }
-  }
-
+  // Penanganan foto tetap di sisi klien: unggahan storage tidak bisa ikut
+  // transaksi RPC, jadi kegagalannya dilaporkan sebagai peringatan, bukan
+  // membatalkan perbaikan catatan yang sudah berhasil.
   const warningMessage = await updateTaskProofPhoto({
-    activityId: latestActivity.id,
+    activityId: activity.id,
     existingProofs,
-    farmId: taskResult.data.farm_id,
+    farmId: activity.farmId,
     proofPhoto: input.proofPhoto,
     removeExistingProof: willRemoveExistingProof,
     taskId: taskResult.data.id,
   });
 
   return ok({
-    activityId: latestActivity.id,
+    activityId: activity.id,
     warningMessage,
   });
 }
@@ -756,29 +740,16 @@ async function getExistingActiveFollowUpTask(
   return ok(data);
 }
 
-async function getLatestActivityForTask(
-  taskId: UUID
-): Promise<ServiceResult<CareActivity | null>> {
-  const { data, error } = await supabase
-    .from('care_activities')
-    .select(CARE_ACTIVITY_SELECT)
-    .eq('care_task_id', taskId)
-    .order('performed_at', { ascending: false })
-    .limit(1)
-    .maybeSingle<CareActivityRow>();
-
-  if (error) {
-    return fail(error, 'Gagal memuat realisasi terbaru.');
-  }
-
-  return ok(data ? mapCareActivity(data) : null);
-}
+// getLatestActivityForTask() dihapus bersama updateLatestTaskRealization.
+// Penentuan "baris terakhir per tugas" kini sepenuhnya milik RPC
+// update_task_realization, lengkap dengan tie-breaker `id desc` yang tidak
+// pernah dimiliki versi klien.
 
 async function updateTaskProofPhoto(input: {
   activityId: UUID;
   existingProofs: TaskProofPhoto[];
   farmId: UUID;
-  proofPhoto?: UpdateLatestTaskRealizationInput['proofPhoto'];
+  proofPhoto?: UpdateTaskRealizationInput['proofPhoto'];
   removeExistingProof: boolean;
   taskId: UUID;
 }): Promise<string | null> {
@@ -798,7 +769,7 @@ async function updateTaskProofPhoto(input: {
     });
 
     if (uploadResult.error) {
-      return 'Realisasi berhasil diperbarui, tetapi foto bukti gagal diunggah.';
+      return 'Catatan berhasil diperbarui, tetapi foto bukti gagal diunggah.';
     }
 
     const deleteWarning = await deleteTaskProofPhotos(
@@ -818,7 +789,7 @@ async function deleteTaskProofPhotos(photos: TaskProofPhoto[]): Promise<string |
   const failedDelete = deleteResults.find((result) => result.error);
 
   return failedDelete?.error
-    ? 'Realisasi berhasil diperbarui, tetapi foto bukti lama belum dapat dihapus.'
+    ? 'Catatan berhasil diperbarui, tetapi foto bukti lama belum dapat dihapus.'
     : null;
 }
 
@@ -838,34 +809,11 @@ async function ensureActiveWorker(farmId: UUID): Promise<ServiceResult<SuccessDa
   });
 }
 
-async function ensureActiveAssignedWorker(
-  task: CareTaskRow
-): Promise<ServiceResult<SuccessData>> {
-  const userIdResult = await getCurrentUserId();
-
-  if (userIdResult.error) {
-    return fail(userIdResult.error);
-  }
-
-  const membershipResult = await getCurrentUserMembership(task.farm_id);
-
-  if (membershipResult.error) {
-    return fail(membershipResult.error);
-  }
-
-  const isAssignedActiveWorker =
-    membershipResult.data?.role === 'worker'
-    && membershipResult.data.status === 'active'
-    && task.assigned_to === userIdResult.data;
-
-  if (!isAssignedActiveWorker) {
-    return fail(new Error('Hanya pekerja yang ditugaskan yang dapat mengedit realisasi ini.'));
-  }
-
-  return ok({
-    success: true,
-  });
-}
+// ensureActiveAssignedWorker() dihapus bersama updateLatestTaskRealization.
+// Pemeriksaan yang sama kini dilakukan RPC update_task_realization, dengan
+// pesan 'Hanya pencatat yang bisa memperbaiki catatan ini.' dan 'Hanya pekerja
+// aktif yang bisa memperbaiki catatan.' — dan RPC memeriksa performed_by,
+// yang lebih tepat daripada assigned_to yang dipakai versi klien.
 
 async function ensureActiveOwnerOrAssignedWorker(
   task: CareTaskRow
@@ -966,21 +914,6 @@ function mapCareTask(
     targetType: row.target_type,
     title: row.title,
     updatedAt: row.updated_at,
-  };
-}
-
-function mapCareActivity(row: CareActivityRow): CareActivity {
-  return {
-    asal: row.asal,
-    careTaskId: row.care_task_id,
-    category: row.category,
-    farmId: row.farm_id,
-    id: row.id,
-    note: row.note,
-    performedAt: row.performed_at,
-    performedBy: row.performed_by,
-    produk: row.produk,
-    status: row.status,
   };
 }
 

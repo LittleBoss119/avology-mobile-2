@@ -1,3 +1,4 @@
+import { isGradePanen, MAX_BERAT_PANEN_KG, type GradePanen } from '../constants/gradePanen';
 import { supabase } from '../lib/supabase';
 import type {
   CreateHarvestRecordData,
@@ -15,14 +16,21 @@ import type {
 import { fail, ok } from '../utils/serviceResult';
 
 const HARVEST_RECORD_SELECT =
-  'id, farm_id, tree_id, harvested_by, fruit_count, fruit_condition, note, harvested_at, created_at, updated_at, is_deleted, deleted_at, deleted_by, delete_reason';
+  'id, farm_id, tree_id, harvested_by, fruit_count, harvest_weight_kg, fruit_condition, note, harvested_at, created_at, updated_at, is_deleted, deleted_at, deleted_by, delete_reason';
 
 type HarvestRecordRow = {
   id: string;
   farm_id: string;
   tree_id: string;
   harvested_by: string;
-  fruit_count: number;
+  // Nullable sejak migrasi 045: panen boleh dicatat lewat berat saja.
+  fruit_count: number | null;
+  // numeric(10,2) di database. PostgREST mengirim numeric sebagai STRING, bukan
+  // number, supaya presisinya tidak rusak oleh float JavaScript. Tipenya
+  // ditulis sebagai union apa adanya supaya tidak ada yang tergoda memakainya
+  // langsung sebagai angka — konversinya dilakukan mapper di bawah. Pola yang
+  // sama dengan produk_jumlah di careActivityShared.ts.
+  harvest_weight_kg: string | number | null;
   fruit_condition: string | null;
   note: string | null;
   harvested_at: string;
@@ -47,10 +55,10 @@ type MembershipRow = {
 export async function createHarvestRecord(
   input: CreateHarvestRecordInput
 ): Promise<ServiceResult<CreateHarvestRecordData>> {
-  const fruitCount = normalizePositiveInteger(input.fruitCount);
+  const amountResult = normalizeHarvestAmount(input.fruitCount, input.harvestWeightKg);
 
-  if (fruitCount instanceof Error) {
-    return fail(fruitCount);
+  if (amountResult instanceof Error) {
+    return fail(amountResult);
   }
 
   const userIdResult = await getCurrentUserId();
@@ -79,8 +87,9 @@ export async function createHarvestRecord(
     .from('harvest_records')
     .insert({
       farm_id: input.farmId,
-      fruit_condition: normalizeOptionalText(input.fruitCondition),
-      fruit_count: fruitCount,
+      fruit_condition: input.fruitCondition ?? null,
+      fruit_count: amountResult.fruitCount,
+      harvest_weight_kg: amountResult.harvestWeightKg,
       harvested_at: normalizeOptionalText(input.harvestedAt) ?? new Date().toISOString(),
       harvested_by: userIdResult.data,
       note: normalizeOptionalText(input.note),
@@ -168,15 +177,16 @@ export async function getHarvestRecordDetail(
 export async function updateOwnHarvestRecord(
   input: UpdateHarvestRecordInput
 ): Promise<ServiceResult<SuccessData>> {
-  const fruitCount = normalizePositiveInteger(input.fruitCount);
+  const amountResult = normalizeHarvestAmount(input.fruitCount, input.harvestWeightKg);
 
-  if (fruitCount instanceof Error) {
-    return fail(fruitCount);
+  if (amountResult instanceof Error) {
+    return fail(amountResult);
   }
 
   const { error } = await supabase.rpc('update_own_harvest_record', {
-    p_fruit_condition: normalizeOptionalText(input.fruitCondition),
-    p_fruit_count: fruitCount,
+    p_fruit_condition: input.fruitCondition ?? null,
+    p_fruit_count: amountResult.fruitCount,
+    p_harvest_weight_kg: amountResult.harvestWeightKg,
     p_harvested_at: normalizeOptionalText(input.harvestedAt),
     p_note: normalizeOptionalText(input.note),
     p_record_id: input.recordId,
@@ -276,8 +286,9 @@ function mapHarvestRecord(row: HarvestRecordRow): HarvestRecord {
   return {
     createdAt: row.created_at,
     farmId: row.farm_id,
-    fruitCondition: row.fruit_condition,
+    fruitCondition: toNullableGradePanen(row.fruit_condition),
     fruitCount: row.fruit_count,
+    harvestWeightKg: toNullableNumber(row.harvest_weight_kg),
     harvestedAt: row.harvested_at,
     harvestedBy: row.harvested_by,
     id: row.id,
@@ -291,12 +302,65 @@ function mapHarvestRecord(row: HarvestRecordRow): HarvestRecord {
   };
 }
 
-function normalizePositiveInteger(value: number): number | Error {
-  if (!Number.isInteger(value) || value <= 0) {
+// Menerima string ('12.50') maupun number, dan menolak apa pun yang bukan angka
+// terhingga. Nilai yang tidak bisa dibaca dijadikan null, bukan NaN — NaN akan
+// lolos sampai ke layar dan tampil sebagai teks aneh, bukan error yang
+// kelihatan. Pola yang sama dengan produk_jumlah di careActivityShared.ts.
+function toNullableNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+// Grade di luar daftar yang dikenal klien diperlakukan sebagai "tidak dinilai".
+//
+// Ini BUKAN sekadar jaring pengaman teoritis. Constraint grade di database
+// dipasang NOT VALID (migrasi 045), jadi 12 baris lama yang berisi "Bagus",
+// "Baik", "Good", dan "Good test harvest" MASIH ADA apa adanya sampai
+// dibersihkan terpisah. Tanpa penyaringan ini, nilai-nilai itu bocor ke tipe
+// GradePanen dan layar yang memetakan grade ke label akan menghasilkan
+// undefined di tengah teks.
+function toNullableGradePanen(value: string | null | undefined): GradePanen | null {
+  return isGradePanen(value) ? value : null;
+}
+
+// "Minimal salah satu terisi" menggantikan "jumlah buah wajib". Cerminan
+// constraint harvest_records_amount_present_check, dan RPC
+// update_own_harvest_record menegakkan aturan yang sama di sisi database.
+//
+// Mengembalikan pasangan yang sudah bersih supaya pemanggil tidak perlu
+// menormalkan dua kali.
+function normalizeHarvestAmount(
+  fruitCount: number | null | undefined,
+  harvestWeightKg: number | null | undefined
+): { fruitCount: number | null; harvestWeightKg: number | null } | Error {
+  const normalizedCount = fruitCount ?? null;
+  const normalizedWeight = harvestWeightKg ?? null;
+
+  if (normalizedCount === null && normalizedWeight === null) {
+    return new Error('Isi jumlah buah atau berat panen, minimal salah satu.');
+  }
+
+  if (normalizedCount !== null && (!Number.isInteger(normalizedCount) || normalizedCount <= 0)) {
     return new Error('Jumlah buah harus lebih dari 0.');
   }
 
-  return value;
+  if (normalizedWeight !== null && (!Number.isFinite(normalizedWeight) || normalizedWeight <= 0)) {
+    return new Error('Berat panen harus lebih dari 0.');
+  }
+
+  if (normalizedWeight !== null && normalizedWeight > MAX_BERAT_PANEN_KG) {
+    return new Error('Berat panen terlalu besar.');
+  }
+
+  return {
+    fruitCount: normalizedCount,
+    harvestWeightKg: normalizedWeight,
+  };
 }
 
 function normalizeOptionalText(value: string | null | undefined): string | null {

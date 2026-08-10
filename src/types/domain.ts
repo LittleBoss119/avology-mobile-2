@@ -4,6 +4,14 @@ import type {
   OperationalReportResolution,
   OperationalReportStatus,
 } from '../constants/operationalReport';
+import type { GradePanen } from '../constants/gradePanen';
+import type { SatuanBahan } from '../constants/satuanBahan';
+
+// Satuan takaran bahan dan grade panen hidup di src/constants/, pola yang sama
+// dengan dua import di atas: diturunkan dari tuple readonly supaya daftarnya
+// bisa diiterasi saat runtime. Di-re-export dari sini supaya pemakai cukup
+// mengimpor dari '../types/domain' seperti tipe domain lainnya.
+export type { GradePanen, SatuanBahan };
 
 // Status/kategori/resolusi laporan hidup di src/constants/operationalReport.ts
 // (satu sumber kebenaran, diturunkan dari tuple readonly). Di-re-export dari
@@ -46,15 +54,6 @@ export type CareCategory =
   | 'other';
 
 export type TargetType = 'farm' | 'row' | 'column' | 'tree' | 'custom';
-
-export type CareSOPDefaultTargetType = Exclude<TargetType, 'custom'>;
-
-export type CareSOPNextScheduleStatus =
-  | 'no_history'
-  | 'no_interval'
-  | 'upcoming'
-  | 'due_today'
-  | 'overdue';
 
 export type TaskStatus = 'pending' | 'completed' | 'postponed';
 
@@ -202,8 +201,18 @@ export type HarvestRecord = {
   farmId: UUID;
   treeId: UUID;
   harvestedBy: UUID;
-  fruitCount: number;
-  fruitCondition: string | null;
+  // Sejak migrasi 045 keduanya opsional, tapi constraint
+  // harvest_records_amount_present_check menjamin minimal SALAH SATU terisi.
+  // Jumlah buah tidak bisa dikonversi ke kilogram — berat alpukat terlalu
+  // bervariasi — jadi keduanya berdiri sendiri, bukan saling menggantikan.
+  fruitCount: number | null;
+  // harvestWeightKg SUDAH dikonversi ke number oleh mapHarvestRecord. Kolom
+  // aslinya numeric(10,2) dan PostgREST mengirimnya sebagai string; jangan
+  // membaca baris mentah tanpa lewat mapper itu.
+  harvestWeightKg: number | null;
+  // Grade mutu. Nilai lama di luar daftar (12 baris teks bebas yang belum
+  // dibersihkan) dipetakan jadi null oleh mapper, bukan dibiarkan bocor.
+  fruitCondition: GradePanen | null;
   note: string | null;
   harvestedAt: string;
   createdAt: string;
@@ -259,33 +268,6 @@ export type OperationalReport = {
   updatedAt?: string | null;
 };
 
-export type CareSOP = {
-  id: UUID;
-  farmId: UUID;
-  name: string;
-  category: CareCategory;
-  intervalDays: number | null;
-  defaultInstruction: string | null;
-  defaultTargetType: CareSOPDefaultTargetType;
-  defaultTargetRow: string | null;
-  defaultTargetColumn: string | null;
-  defaultTargetTreeId: UUID | null;
-  isActive: boolean;
-  createdBy?: UUID;
-  createdAt?: string;
-  updatedAt?: string | null;
-};
-
-export type CareSOPNextScheduleReference = {
-  sopId: UUID;
-  intervalDays: number | null;
-  lastPerformedAt: string | null;
-  nextDueDate: string | null;
-  status: CareSOPNextScheduleStatus;
-  daysUntilDue?: number;
-  overdueDays?: number;
-};
-
 export type CareSchedule = {
   id: UUID;
   farmId: UUID;
@@ -304,6 +286,12 @@ export type CareSchedule = {
   cancelledAt?: string | null;
   cancelledBy?: UUID | null;
   cancelReason?: string | null;
+  // Pengulangan (migration 040). repeatEveryDays null = jadwal sekali jalan.
+  // seriesId mengikat satu rantai (jadwal pertama memakai id dirinya sendiri);
+  // parentScheduleId menunjuk jadwal sebelumnya, null untuk jadwal pertama.
+  repeatEveryDays: number | null;
+  seriesId: UUID | null;
+  parentScheduleId: UUID | null;
   createdBy?: UUID;
   createdAt?: string;
   updatedAt?: string | null;
@@ -345,6 +333,18 @@ export type CareActivity = {
   // Hanya terisi untuk catatan inisiatif; untuk 'terjadwal' kategori ada di care_tasks.
   category: CareCategory | null;
   produk: string | null;
+  // Takaran bahan (migrasi 043). Selalu berpasangan: dua-duanya null, atau
+  // dua-duanya terisi — dijaga constraint care_activities_produk_qty_pair_check,
+  // yang juga mewajibkan `produk` ada isinya bila takaran diisi.
+  //
+  // produkJumlah SUDAH dikonversi ke number oleh mapCareActivity. Kolom aslinya
+  // numeric(10,2) dan PostgREST mengirimnya sebagai string; jangan membaca baris
+  // mentah langsung tanpa lewat mapper itu.
+  produkJumlah: number | null;
+  produkSatuan: SatuanBahan | null;
+  // Kapan catatan terakhir diperbaiki lewat update_task_realization.
+  // null = belum pernah diperbaiki. BUKAN pengganti performedAt.
+  editedAt: string | null;
 };
 
 // Detail read-only satu catatan perawatan (US-14 / Iterasi C).
@@ -377,7 +377,6 @@ export type OwnerDashboardSummary = {
   pendingWorkers: number;
   floweringTrees: number;
   fruitingTrees: number;
-  dueOrOverdueSops: number;
 };
 
 export type WorkerDashboardSummary = {
@@ -481,8 +480,12 @@ export type UpdateGrowthPhaseRecordInput = {
 export type CreateHarvestRecordInput = {
   farmId: UUID;
   treeId: UUID;
-  fruitCount: number;
-  fruitCondition?: string | null;
+  // Minimal salah satu dari fruitCount / harvestWeightKg wajib terisi —
+  // ditegakkan layanan sebelum insert, dan oleh constraint
+  // harvest_records_amount_present_check sebagai penjaga terakhir.
+  fruitCount?: number | null;
+  harvestWeightKg?: number | null;
+  fruitCondition?: GradePanen | null;
   note?: string | null;
   harvestedAt?: string | null;
 };
@@ -499,15 +502,18 @@ export type GetHarvestRecordDetailInput = {
   recordId: UUID;
 };
 
+// RPC update_own_harvest_record bersifat MENGGANTI, bukan menambal: nilai yang
+// tidak dikirim akan mengosongkan kolomnya. Kirim seluruh keadaan form.
 export type UpdateHarvestRecordInput = {
   recordId: UUID;
-  fruitCount: number;
-  fruitCondition?: string | null;
+  fruitCount?: number | null;
+  harvestWeightKg?: number | null;
+  fruitCondition?: GradePanen | null;
   note?: string | null;
   harvestedAt?: string | null;
 };
 
-// Pencatatan realisasi perawatan inisiatif. Satu catatan dapat berdampak ke
+// Pencatatan hasil kerja perawatan inisiatif. Satu catatan dapat berdampak ke
 // banyak pohon, sehingga target berupa daftar treeIds (bukan satu pohon).
 export type CreateCareActivityInput = {
   farmId: UUID;
@@ -520,10 +526,6 @@ export type CreateCareActivityInput = {
 
 export type CreateCareActivityData = {
   activityId: UUID;
-};
-
-export type GetCareActivitiesByTreeInput = {
-  treeId: UUID;
 };
 
 export type GetFloweringAndFruitingTreesInput = {
@@ -631,72 +633,19 @@ export type DeleteOwnOperationalReportInput = {
   operationalReportId: UUID;
 };
 
-export type GetCareSOPsInput = {
+// Tanpa satu pun field opsional diisi, hasilnya adalah seluruh jadwal kebun
+// tanpa penyaringan.
+export type GetCareSchedulesWithTasksInput = {
   farmId: UUID;
-  activeOnly?: boolean;
-};
-
-export type GetCareSOPDetailInput = {
-  sopId: UUID;
-};
-
-export type CreateCareSOPInput = {
-  farmId: UUID;
-  name: string;
-  category: CareCategory;
-  intervalDays?: number | null;
-  defaultInstruction?: string | null;
-  defaultTargetType: CareSOPDefaultTargetType;
-  defaultTargetRow?: string | null;
-  defaultTargetColumn?: string | null;
-  defaultTargetTreeId?: UUID | null;
-};
-
-export type CreateCareSOPData = {
-  sopId: UUID;
-};
-
-export type UpdateCareSOPInput = {
-  sopId: UUID;
-  name?: string;
-  category?: CareCategory;
-  intervalDays?: number | null;
-  defaultInstruction?: string | null;
-  defaultTargetType?: CareSOPDefaultTargetType;
-  defaultTargetRow?: string | null;
-  defaultTargetColumn?: string | null;
-  defaultTargetTreeId?: UUID | null;
-};
-
-export type SetCareSOPActiveStatusInput = {
-  sopId: UUID;
-  isActive: boolean;
-};
-
-export type GetCareSOPNextScheduleReferenceInput = {
-  sopId: UUID;
-};
-
-export type CreateScheduleFromSOPInput = {
-  farmId: UUID;
-  sopId: UUID;
-  scheduledDate: string;
-  assignedWorkerIds: UUID[];
-  targetType?: CareSOPDefaultTargetType;
-  targetRow?: string | null;
-  targetColumn?: string | null;
-  targetTreeId?: UUID | null;
-  instruction?: string | null;
-  requiresPhoto?: boolean;
-};
-
-export type CreateScheduleFromSOPData = {
-  scheduleId: UUID;
-  taskIds: UUID[];
-};
-
-export type GetCareSchedulesInput = {
-  farmId: UUID;
+  // Buang jadwal yang PUNYA tugas dan semuanya sudah 'completed'. Jadwal tanpa
+  // tugas tidak pernah ikut terbuang — justru itu yang menunggu penugasan.
+  excludeCompleted?: boolean;
+  // Batas bawah scheduled_date ('YYYY-MM-DD'), inklusif.
+  scheduledFrom?: string | null;
+  // Hanya berlaku bersama scheduledFrom. Ikut menyertakan jadwal yang LEBIH TUA
+  // dari batas itu tapi tugasnya masih terbuka, supaya pekerjaan tertunggak
+  // tidak pernah hilang dari daftar hanya karena tanggalnya sudah lewat jauh.
+  includeOlderOpenWork?: boolean;
 };
 
 export type GetCareScheduleDetailInput = {
@@ -709,6 +658,23 @@ export type CancelCareScheduleInput = {
 };
 
 export type CancelCareScheduleData = {
+  success: boolean;
+};
+
+export type AssignWorkerToScheduleInput = {
+  scheduleId: UUID;
+  workerId: UUID;
+};
+
+export type AssignWorkerToScheduleData = {
+  taskId: UUID;
+};
+
+export type StopScheduleRepeatInput = {
+  scheduleId: UUID;
+};
+
+export type StopScheduleRepeatData = {
   success: boolean;
 };
 
@@ -726,7 +692,12 @@ export type UpdateCareScheduleInput = {
   title: string;
   category: CareCategory;
   scheduledDate: string;
-  assignedWorkerId: UUID;
+  // Opsional sejak sebuah jadwal boleh punya NOL tugas. Kalau diisi, tugas yang
+  // ada dipindahtangankan seperti biasa. Kalau diisi TAPI jadwalnya belum punya
+  // tugas, updateCareSchedule MENOLAK — tidak ada tugas untuk dipindahkan, dan
+  // penugasan pekerja pertama jalurnya assignWorkerToSchedule. Kalau dikosongkan,
+  // field jadwal lain tetap bisa diubah tanpa menyentuh penugasan.
+  assignedWorkerId?: UUID | null;
   targetType: TargetType;
   targetRow?: string | null;
   targetColumn?: string | null;
@@ -749,6 +720,9 @@ export type CreateManualScheduleInput = {
   customTargetNote?: string | null;
   instruction?: string | null;
   requiresPhoto?: boolean;
+  // Jarak hari ke jadwal berikutnya. Diabaikan (dikirim null) kalau bukan
+  // bilangan positif — lihat normalizeRepeatEveryDays di careScheduleService.
+  repeatEveryDays?: number | null;
 };
 
 export type CreateManualScheduleData = {
@@ -772,6 +746,11 @@ export type CompleteTaskInput = {
   taskId: UUID;
   note?: string | null;
   produk?: string | null;
+  // Takaran bahan. Harus dikirim berpasangan — RPC complete_task menolak salah
+  // satunya saja dengan 'Takaran dan satuan harus diisi berdua.', dan menolak
+  // takaran tanpa nama bahan dengan 'Nama bahan wajib diisi kalau takaran diisi.'
+  produkJumlah?: number | null;
+  produkSatuan?: SatuanBahan | null;
 };
 
 export type CompleteTaskData = {
@@ -789,19 +768,27 @@ export type TaskRealizationProofPhotoInput = {
   mimeType?: string | null;
 };
 
-export type UpdateLatestTaskRealizationInput = {
-  taskId: UUID;
-  activityId?: UUID;
-  status: ActivityStatus;
+// Masukan untuk "perbaiki catatan" (RPC update_task_realization, migrasi 043).
+//
+// TIDAK ADA field `status` di sini, dan itu disengaja: memperbaiki catatan
+// menurut definisinya tidak mengubah hasil kerja. Status hanya berpindah lewat
+// baris BARU (complete_task / postpone_task), karena mesin rantai jadwal
+// berulang berbunyi AFTER INSERT — status yang berubah lewat UPDATE membuat
+// jadwal penerus tidak pernah dibuat dan rantainya putus diam-diam.
+//
+// taskId juga tidak diminta lagi: RPC hanya butuh activityId, dan taskId
+// diturunkan dari baris realisasinya sendiri supaya tidak mungkin tidak cocok.
+export type UpdateTaskRealizationInput = {
+  activityId: UUID;
   note?: string | null;
-  // Opsional: bila undefined kolom produk tidak disentuh (perilaku lama). Bila
-  // dikirim (string atau null), kolom produk pada baris care_activities diperbarui.
   produk?: string | null;
+  produkJumlah?: number | null;
+  produkSatuan?: SatuanBahan | null;
   proofPhoto?: TaskRealizationProofPhotoInput | null;
   removeExistingProof?: boolean;
 };
 
-export type UpdateLatestTaskRealizationData = {
+export type UpdateTaskRealizationData = {
   activityId: UUID;
   warningMessage?: string | null;
 };

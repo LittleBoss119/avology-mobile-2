@@ -665,7 +665,7 @@ export async function uploadTaskProofPhoto(
 ): Promise<ServiceResult<TaskProofPhoto>> {
   const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
   const taskId = normalizeRequiredText(input.taskId, 'Tugas tidak valid.');
-  const activityId = normalizeRequiredText(input.activityId, 'Realisasi tugas tidak valid.');
+  const activityId = normalizeRequiredText(input.activityId, 'Hasil kerja tidak valid.');
 
   if (farmId instanceof Error) {
     return fail(farmId);
@@ -763,7 +763,7 @@ export async function listTaskProofPhotosForActivities(
     .returns<Array<{ id: string }>>();
 
   if (validActivityResult.error) {
-    return fail(validActivityResult.error, 'Gagal memeriksa realisasi tugas.');
+    return fail(validActivityResult.error, 'Gagal memeriksa hasil kerja.');
   }
 
   const validActivityIds = (validActivityResult.data ?? []).map((row) => row.id);

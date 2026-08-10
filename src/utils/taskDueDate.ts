@@ -1,5 +1,32 @@
 import type { CareSchedule, CareScheduleDetail, CareTask, TaskStatus } from '../types/domain';
 
+// Tanggal "hari ini" milik aplikasi, sumber tunggal untuk semua todayIso di
+// file ini dan pemanggilnya. SENGAJA dipatok ke WIB (UTC+7), bukan zona waktu
+// perangkat.
+//
+// Alasannya ada di database: trigger rantai jadwal berulang (migration 041)
+// menghitung tanggal jadwal penerus dengan
+// `(new.performed_at at time zone 'Asia/Jakarta')::date`. Kalau aplikasi
+// mengklasifikasi "terlambat / hari ini" memakai zona perangkat, perangkat di
+// luar WIB akan menilai tanggal buatan server itu dengan penggaris berbeda —
+// jadwal yang menurut server jatuh tempo hari ini bisa tampil "terlambat", dan
+// jadwal yang baru saja dibuat rantai bisa tampil sudah lewat.
+//
+// Offsetnya dihitung manual, bukan lewat Intl/timeZone: Hermes tidak menjamin
+// data zona waktu IANA tersedia di semua build. Aman dipatok karena WIB tidak
+// pernah memakai DST dan sudah tetap di UTC+7 sejak 1964 — nilai yang sama
+// dengan yang dipakai Postgres untuk 'Asia/Jakarta' pada tanggal masa kini.
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+export function getTodayIsoDate(now: Date = new Date()): string {
+  const wibNow = new Date(now.getTime() + WIB_OFFSET_MS);
+  const year = wibNow.getUTCFullYear();
+  const month = `${wibNow.getUTCMonth() + 1}`.padStart(2, '0');
+  const day = `${wibNow.getUTCDate()}`.padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
 // Dua sistem klasifikasi waktu hidup berdampingan di file ini. Keduanya
 // display-layer & pure: STRING-COMPARE 'YYYY-MM-DD' terhadap tanggal LOKAL
 // hari ini (todayIso), bukan daysSinceLocal (timestamptz).
@@ -16,8 +43,9 @@ import type { CareSchedule, CareScheduleDetail, CareTask, TaskStatus } from '../
 //     'inactive' = jadwal dibatalkan atau tugas 'completed'.
 
 // RF-11b: klasifikasi jatuh tempo tugas untuk penanda in-app (display-layer, pure).
-// NON-PREDIKTIF & bukan level SOP — murni dari care_tasks.due_date + status yang
-// sudah ada. due_date adalah date murni, jadi cukup STRING-COMPARE 'YYYY-MM-DD'
+// NON-PREDIKTIF: tidak menghitung perkiraan apa pun dan tidak membaca sumber
+// rencana di atas tugas — murni dari care_tasks.due_date + status yang sudah
+// ada. due_date adalah date murni, jadi cukup STRING-COMPARE 'YYYY-MM-DD'
 // terhadap tanggal LOKAL hari ini (todayIso). Bukan daysSinceLocal (itu timestamptz).
 export type TaskDueMarker = 'overdue' | 'due_today';
 
@@ -155,7 +183,9 @@ function formatFullDate(iso: string): string {
 }
 
 // Selisih hari bulat dari fromIso ke toIso pada tengah malam lokal.
-function dayDifference(fromIso: string, toIso: string): number {
+// Diekspor supaya layar agenda memakai perhitungan yang sama dengan dueDatePill,
+// bukan salinan aritmetika tanggalnya sendiri.
+export function dayDifference(fromIso: string, toIso: string): number {
   const from = parseIsoDateParts(fromIso);
   const to = parseIsoDateParts(toIso);
 
@@ -222,6 +252,25 @@ export function scheduleTimeBucket(
 ): TimeBucket {
   if (schedule.isCancelled === true) {
     return 'inactive';
+  }
+
+  // Sejak migration 041 sebuah jadwal boleh punya NOL tugas: penerus rantai
+  // dibuat tanpa tugas kalau pekerjanya sudah keluar dari kebun. Tanpa cabang
+  // ini, loop di bawah tidak pernah menyetel flag apa pun dan jadwal jatuh ke
+  // 'inactive' — hilang dari chip Terlambat/Hari ini/Mendatang dan hanya muncul
+  // di chip Semua, padahal justru jadwal inilah yang paling butuh perhatian
+  // owner. Klasifikasinya memakai scheduledDate jadwal itu sendiri, satu-satunya
+  // tanggal yang tersedia saat belum ada tugas.
+  if (tasks.length === 0) {
+    if (schedule.scheduledDate < todayIso) {
+      return 'overdue';
+    }
+
+    if (schedule.scheduledDate === todayIso) {
+      return 'today';
+    }
+
+    return 'upcoming';
   }
 
   let hasToday = false;

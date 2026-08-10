@@ -47,16 +47,29 @@ const friendlyMessages: Array<[string, string]> = [
   ['Growth phase record tree must belong to the same farm', 'Pohon tidak terdaftar pada kebun yang dipilih.'],
   ['Only active farm members can create growth phase records', 'Hanya pemilik atau pekerja aktif yang dapat mencatat fase pertumbuhan.'],
   ['Hanya owner aktif yang dapat mengakses monitoring fase.', 'Hanya pemilik aktif yang dapat mengakses monitoring fase.'],
-  ['Only active owners can manage care SOPs', 'Hanya pemilik aktif yang dapat mengelola SOP perawatan.'],
-  ['SOP default target tree must belong to the same farm', 'Pohon target SOP tidak terdaftar pada kebun yang dipilih.'],
-  ['care_sops_interval_days_check', 'Interval perawatan SOP harus lebih dari 0 hari.'],
-  ['care_sops_default_target_check', 'Target bawaan SOP tidak valid.'],
-  ['Only active owners can create schedules from SOP', 'Hanya pemilik aktif yang dapat membuat jadwal dari SOP.'],
   ['Only active owners can create manual schedules', 'Hanya pemilik aktif yang dapat membuat jadwal manual.'],
-  ['Active SOP not found for farm', 'SOP aktif tidak ditemukan pada kebun ini.'],
-  ['SOP schedules cannot use custom target', 'Jadwal dari SOP tidak boleh memakai target khusus.'],
   ['Schedule tasks can only be assigned to active workers', 'Tugas hanya dapat diberikan kepada pekerja aktif.'],
   ['Care schedule target tree must belong to the same farm', 'Pohon target jadwal tidak terdaftar pada kebun yang dipilih.'],
+  // Guard dari migration 041: assign_worker_to_care_schedule dan
+  // stop_care_schedule_repeat. 'Schedule tasks can only be assigned to active
+  // workers' dipakai bersama kedua RPC lama di atas, jadi tidak diulang.
+  ['Care schedule not found', 'Jadwal perawatan tidak ditemukan atau tidak dapat diakses.'],
+  ['Only active owners can assign schedule tasks', 'Hanya pemilik aktif yang dapat menugaskan pekerja ke jadwal.'],
+  ['Cancelled schedule cannot be assigned', 'Jadwal yang sudah dibatalkan tidak bisa diberi pekerja.'],
+  ['Schedule already has a task', 'Jadwal ini sudah punya tugas. Ubah lewat Edit jadwal.'],
+  ['Only active owners can stop schedule repetition', 'Hanya pemilik aktif yang dapat menghentikan pengulangan jadwal.'],
+  ['Care schedule is not recurring', 'Jadwal ini bukan jadwal berulang.'],
+  // Guard cancel_care_schedule (migration 020). Dulu dipetakan oleh
+  // mapCancelScheduleError lokal di careScheduleService; dipindah ke sini supaya
+  // seluruh jadwal memakai satu jalur pemetaan. Teksnya sengaja dipertahankan
+  // apa adanya. 'Care schedule not found' tidak diulang — entri di atas sudah
+  // menghasilkan kalimat yang sama persis.
+  ['Only active owners can cancel care schedules', 'Hanya pemilik aktif yang dapat membatalkan jadwal.'],
+  ['Care schedule is already cancelled', 'Jadwal ini sudah dibatalkan.'],
+  [
+    'Care schedule cannot be cancelled after task realization exists',
+    'Jadwal tidak dapat dibatalkan karena sudah ada hasil kerja.',
+  ],
   ['Care tasks can only be assigned to active workers', 'Tugas hanya dapat diberikan kepada pekerja aktif.'],
   ['Operational report not found', 'Laporan operasional tidak ditemukan atau tidak dapat diakses.'],
   ['Only active workers can create operational reports', 'Hanya pekerja aktif yang dapat membuat laporan operasional.'],

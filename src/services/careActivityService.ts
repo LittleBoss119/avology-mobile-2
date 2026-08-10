@@ -5,18 +5,22 @@ import type {
   CareCategory,
   CreateCareActivityData,
   CreateCareActivityInput,
-  GetCareActivitiesByTreeInput,
   GetCareActivityDetailInput,
   ServiceResult,
   UUID,
 } from '../types/domain';
+import {
+  CARE_ACTIVITY_SELECT,
+  mapCareActivity,
+  type CareActivityRow,
+} from './careActivityShared';
 import { fail, ok } from '../utils/serviceResult';
 
-// Pencatatan realisasi perawatan (care_activities), baik yang berasal dari
+// Pencatatan hasil kerja perawatan (care_activities), baik yang berasal dari
 // tugas terjadwal maupun inisiatif. Menggantikan manualCareService.
 //
-// Tanggung jawab penjadwalan (SOP -> jadwal -> tugas) tetap di careTaskService
-// dan careScheduleService; service ini khusus realisasi.
+// Tanggung jawab penjadwalan (jadwal -> tugas) tetap di careTaskService dan
+// careScheduleService; service ini khusus pencatatan hasilnya.
 //
 // DISENGAJA: tidak ada update/soft-delete untuk catatan inisiatif.
 // care_activities tidak punya is_deleted/updated_at dan grant-nya hanya
@@ -24,8 +28,9 @@ import { fail, ok } from '../utils/serviceResult';
 // update_own_manual_care_record / soft_delete_own_manual_care_record dan akan
 // dievaluasi ulang setelah uji pakai user.
 
-const CARE_ACTIVITY_SELECT =
-  'id, farm_id, care_task_id, performed_by, status, note, performed_at, asal, category, produk';
+// CARE_ACTIVITY_SELECT, CareActivityRow, dan mapCareActivity kini hidup di
+// ./careActivityShared dan dipakai bersama careTaskService. Jangan
+// mendefinisikan ulang di sini.
 
 const careCategories: CareCategory[] = [
   'watering',
@@ -34,19 +39,6 @@ const careCategories: CareCategory[] = [
   'weeding',
   'other',
 ];
-
-type CareActivityRow = {
-  id: string;
-  farm_id: string;
-  care_task_id: string | null;
-  performed_by: string;
-  status: CareActivity['status'];
-  note: string | null;
-  performed_at: string;
-  asal: CareActivity['asal'];
-  category: CareCategory | null;
-  produk: string | null;
-};
 
 export async function createCareActivity(
   input: CreateCareActivityInput
@@ -80,24 +72,10 @@ export async function createCareActivity(
   return ok({ activityId: data as UUID });
 }
 
-export async function getCareActivitiesByTree(
-  input: GetCareActivitiesByTreeInput | UUID
-): Promise<ServiceResult<CareActivity[]>> {
-  const treeId = typeof input === 'string' ? input : input.treeId;
-
-  const { data, error } = await supabase
-    .from('care_activities')
-    .select(`${CARE_ACTIVITY_SELECT}, care_activity_trees!inner(tree_id)`)
-    .eq('care_activity_trees.tree_id', treeId)
-    .order('performed_at', { ascending: false })
-    .returns<CareActivityRow[]>();
-
-  if (error) {
-    return fail(error, 'Gagal memuat riwayat perawatan.');
-  }
-
-  return ok((data ?? []).map(mapCareActivity));
-}
+// getCareActivitiesByTree() dihapus: nol pemanggil sejak riwayat per pohon
+// pindah ke tree_history_view (migrasi 028). Fungsi itu satu-satunya pembaca
+// care_activity_trees dari sisi klien; sekarang tabel jembatan itu hanya
+// ditulis lewat RPC create_care_activity dan dibaca lewat view.
 
 // Detail read-only satu catatan perawatan (US-14 / Iterasi C). Untuk asal='terjadwal',
 // judul & kategori diambil dari tugas induk; kalau RLS menolak worker membaca tugas
@@ -146,21 +124,6 @@ export async function getCareActivityDetail(
     category,
     taskTitle,
   });
-}
-
-function mapCareActivity(row: CareActivityRow): CareActivity {
-  return {
-    asal: row.asal,
-    careTaskId: row.care_task_id,
-    category: row.category,
-    farmId: row.farm_id,
-    id: row.id,
-    note: row.note,
-    performedAt: row.performed_at,
-    performedBy: row.performed_by,
-    produk: row.produk,
-    status: row.status,
-  };
 }
 
 function normalizeTreeIds(treeIds: UUID[] | null | undefined): UUID[] {

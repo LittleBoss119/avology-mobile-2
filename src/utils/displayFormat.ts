@@ -1,12 +1,13 @@
+import { SATUAN_BAHAN_LABELS } from '../constants/satuanBahan';
 import type {
   ActivityStatus,
   CareCategory,
-  CareSOPDefaultTargetType,
   GrowthPhase,
   MemberRole,
   MemberStatus,
   OperationalReportCategory,
   OperationalReportStatus,
+  SatuanBahan,
   TargetType,
   TaskStatus,
   TreeConditionStatus,
@@ -122,6 +123,55 @@ export function formatActivityStatus(status: ActivityStatus): string {
   return labels[status];
 }
 
+// Takaran bahan jadi satu potong teks siap tampil: "2 kg", "0,5 liter".
+//
+// Mengembalikan null (bukan string kosong, bukan tanda hubung) kalau takarannya
+// tidak lengkap, supaya pemanggil bisa memutuskan sendiri apakah barisnya
+// disembunyikan atau diberi teks pengganti. Kolomnya memang berpasangan —
+// dijaga constraint care_activities_produk_qty_pair_check — tapi fungsi ini
+// tetap menolak pasangan setengah, karena data lama bisa saja lewat jalur lain.
+//
+// Angkanya diformat dengan locale id-ID sehingga pemisah desimalnya koma, dan
+// nol di belakang koma dibuang: 2.00 -> "2", 0.50 -> "0,5".
+export function formatTakaranBahan(
+  jumlah?: number | null,
+  satuan?: SatuanBahan | null
+): string | null {
+  if (jumlah === null || jumlah === undefined || !satuan) {
+    return null;
+  }
+
+  if (!Number.isFinite(jumlah)) {
+    return null;
+  }
+
+  const jumlahTeks = jumlah.toLocaleString('id-ID', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  });
+
+  return `${jumlahTeks} ${SATUAN_BAHAN_LABELS[satuan]}`;
+}
+
+// Nama bahan digabung takarannya bila ada: "NPK Mutiara · 2 kg".
+// Tanpa takaran, hanya nama bahannya. Tanpa nama bahan, null — takaran tanpa
+// nama bahan tidak pernah tersimpan (constraint), jadi tidak perlu ditampilkan.
+export function formatProdukDenganTakaran(
+  produk?: string | null,
+  jumlah?: number | null,
+  satuan?: SatuanBahan | null
+): string | null {
+  const namaBahan = produk?.trim();
+
+  if (!namaBahan) {
+    return null;
+  }
+
+  const takaran = formatTakaranBahan(jumlah, satuan);
+
+  return takaran ? `${namaBahan} · ${takaran}` : namaBahan;
+}
+
 export function formatDateOnly(value: string): string {
   const date = new Date(value);
 
@@ -136,7 +186,7 @@ export function formatDateOnly(value: string): string {
   });
 }
 
-export function formatTargetType(targetType: TargetType | CareSOPDefaultTargetType): string {
+export function formatTargetType(targetType: TargetType): string {
   const labels: Record<TargetType, string> = {
     column: 'Kolom',
     custom: 'Target Khusus',
@@ -182,7 +232,6 @@ export function sanitizeUserFacingMessage(message?: string | null): string | nul
     .replace(uuidPattern, 'data terkait')
     .replace(/\bTree ID\b/gi, 'Data pohon')
     .replace(/\bSchedule ID\b/gi, 'Data jadwal')
-    .replace(/\bSOP ID\b/gi, 'Data SOP')
     .replace(/\bWorker\b/g, 'Pekerja')
     .replace(/\bworker\b/g, 'pekerja')
     .replace(/\bOwner\b/g, 'Pemilik')
