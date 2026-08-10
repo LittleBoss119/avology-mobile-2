@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
+import { GRADE_PANEN_LABELS } from '../constants/gradePanen';
 import { colors, spacing, typography } from '../constants/theme';
 import {
   getCareActivityDetail,
@@ -22,13 +23,18 @@ import {
 import { getTreeDetail } from '../services/treeService';
 import { useAuth } from '../context/auth-context';
 import type {
+  HarvestRecord,
   MemberRole,
   ServiceResult,
   Tree,
   UUID,
 } from '../types/domain';
 import type { PhotoAttachmentPreviewItem } from '../types/media';
-import { formatCareCategory, formatPersonDisplayName } from '../utils/displayFormat';
+import {
+  formatCareCategory,
+  formatPersonDisplayName,
+  formatProdukDenganTakaran,
+} from '../utils/displayFormat';
 import { formatGrowthPhase, formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { PhotoAttachmentPreviewList } from './media';
 import {
@@ -312,10 +318,13 @@ async function loadRecordDetail(
         farmId: result.data.farmId,
         note: result.data.note,
         recordLabel: 'Panen',
-        rows: [
-          { label: 'Jumlah buah', value: String(result.data.fruitCount) },
-          { label: 'Kondisi buah', value: result.data.fruitCondition },
-        ],
+        // Baris yang nilainya null TIDAK ditambahkan sama sekali, bukan
+        // ditampilkan sebagai "-": sejak migrasi 045 panen boleh dicatat lewat
+        // berat saja atau jumlah saja, dan baris kosong hanya jadi kebisingan.
+        //
+        // String(result.data.fruitCount) yang lama menghasilkan teks "null"
+        // begitu kolomnya nullable — itu yang diperbaiki di sini.
+        rows: buildHarvestRows(result.data),
         title: 'Detail catatan panen',
         updatedAt: result.data.updatedAt,
       },
@@ -344,8 +353,12 @@ async function loadRecordDetail(
       rows.push({ label: 'Kategori', value: formatCareCategory(care.category) });
     }
 
-    if (care.produk && care.produk.trim()) {
-      rows.push({ label: 'Produk', value: care.produk });
+    // Utang dari Tahap D: baris ini dulu teks polos tanpa takaran, padahal tiga
+    // layar hasil kerja lain sudah memakai formatter yang sama.
+    const bahan = formatProdukDenganTakaran(care.produk, care.produkJumlah, care.produkSatuan);
+
+    if (bahan) {
+      rows.push({ label: 'Bahan', value: bahan });
     }
 
     // Status hanya informatif untuk terjadwal (inisiatif selalu completed).
@@ -430,6 +443,36 @@ async function loadRecordPhotos(
 // Guard eksahustif: recordType sudah dipersempit ke never di titik ini, jadi
 // cabang ini hanya tercapai bila union TreeRecordRouteType bertambah tanpa
 // pemanggilnya ikut disesuaikan.
+// Baris detail panen, hanya yang benar-benar ada isinya.
+//
+// Berat ditulis dengan locale id-ID supaya pemisah desimalnya koma, dan nol di
+// belakang koma dibuang: 12.00 -> "12 kg", 0.50 -> "0,5 kg".
+function buildHarvestRows(record: HarvestRecord): Array<{ label: string; value: string | null }> {
+  const rows: Array<{ label: string; value: string | null }> = [];
+
+  if (record.harvestWeightKg !== null) {
+    const berat = record.harvestWeightKg.toLocaleString('id-ID', {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+    });
+
+    rows.push({ label: 'Berat panen', value: `${berat} kg` });
+  }
+
+  if (record.fruitCount !== null) {
+    rows.push({ label: 'Jumlah buah', value: String(record.fruitCount) });
+  }
+
+  // Grade lama yang belum dibersihkan sudah dipetakan jadi null oleh mapper di
+  // harvestService, jadi barisnya cukup disembunyikan — bukan menampilkan teks
+  // bebas yang sudah tidak berlaku.
+  if (record.fruitCondition) {
+    rows.push({ label: 'Grade', value: GRADE_PANEN_LABELS[record.fruitCondition] });
+  }
+
+  return rows;
+}
+
 function unknownRecordType(recordType: never): ServiceResult<never> {
   return {
     data: null,

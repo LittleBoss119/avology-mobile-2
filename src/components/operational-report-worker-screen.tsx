@@ -28,12 +28,12 @@ import type {
 import type { PhotoAttachmentPreviewItem, PickedPhotoAsset, TaskProofPhotoMap } from '../types/media';
 import {
   formatActivityStatus,
+  formatCareCategory,
   formatOperationalReportCategory,
   formatOperationalReportStatus,
 } from '../utils/displayFormat';
 import { BottomSheet, ConfirmDialog, SheetActionRow } from './bottom-sheet';
 import { formatCareTarget, formatTaskStatus, getTaskTone } from './care-schedule-components';
-import { formatCareCategory } from './care-sop-components';
 import { Icon } from './icons';
 import {
   formatReportDate,
@@ -884,7 +884,7 @@ function WorkerFollowUpTaskCard({
         {task.activities.length > 0 ? (
           <View style={{ gap: spacing.sm }}>
             <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
-              Realisasi
+              Hasil kerja
             </Text>
             {task.activities.map((activity) => (
               <View
@@ -923,9 +923,14 @@ function WorkerFollowUpTaskCard({
             ))}
           </View>
         ) : (
-          <Text selectable style={{ color: colors.textSecondary, lineHeight: 21 }}>
-            Belum ada realisasi.
-          </Text>
+          // Dulu <Text> polos yang tidak terbaca sebagai keadaan kosong.
+          // Varian 'dashed' dipakai karena tugas ini memang menunggu diisi.
+          <EmptyState
+            icon="clipboard"
+            subtitle="Pekerja belum mencatat apa pun untuk tugas ini."
+            title="Belum dicatat"
+            variant="dashed"
+          />
         )}
       </Card>
     </Pressable>

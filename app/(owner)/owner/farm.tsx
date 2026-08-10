@@ -337,14 +337,6 @@ export default function OwnerFarmHubScreen() {
           apa pun dari angka itu. */}
       <NavRow icon="clock" title="Riwayat akses" onPress={() => router.push('/owner/workers')} />
 
-      <SectionLabel title="Aturan kerja" />
-      <NavRow
-        icon="file-text"
-        title="SOP perawatan"
-        subtitle="Template instruksi untuk pekerja"
-        onPress={() => router.push('/owner/sops')}
-      />
-
       <BottomSheet
         onClose={closeSheet}
         title={buildSheetTitle(sheet, confirmStep)}

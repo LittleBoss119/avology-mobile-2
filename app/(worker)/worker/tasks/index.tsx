@@ -4,7 +4,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BottomSheet } from '../../../../src/components/bottom-sheet';
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
-import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import { Icon } from '../../../../src/components/icons';
 import {
   Badge,
@@ -24,8 +23,8 @@ import { statusColors, tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getWorkerTasks } from '../../../../src/services/careTaskService';
 import type { CareTask, TargetType, TaskStatus } from '../../../../src/types/domain';
-import { formatTargetType, formatTaskStatus } from '../../../../src/utils/displayFormat';
-import { taskTimeBucket, type TimeBucket } from '../../../../src/utils/taskDueDate';
+import { formatCareCategory, formatTargetType, formatTaskStatus } from '../../../../src/utils/displayFormat';
+import { getTodayIsoDate, taskTimeBucket, type TimeBucket } from '../../../../src/utils/taskDueDate';
 
 type TimeFilter = 'all' | 'today' | 'overdue' | 'upcoming';
 type TaskTargetFilter = 'all' | TargetType;
@@ -453,14 +452,6 @@ function formatDate(value: string): string {
     month: 'short',
     year: 'numeric',
   });
-}
-
-function getTodayIsoDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 const styles = StyleSheet.create({

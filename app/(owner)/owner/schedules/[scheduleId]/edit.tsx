@@ -11,8 +11,9 @@ import {
   type ManualScheduleFormValues,
   type ScheduleFormErrors,
 } from '../../../../../src/components/care-schedule-components';
+import { Icon } from '../../../../../src/components/icons';
 import { Button, Card, EmptyState, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../../src/components/ui';
-import { colors } from '../../../../../src/constants/theme';
+import { colors, radius, spacing } from '../../../../../src/constants/theme';
 import { useAuth } from '../../../../../src/context/auth-context';
 import { setPendingFeedback } from '../../../../../src/lib/pendingFeedback';
 import {
@@ -222,6 +223,7 @@ export default function EditCareScheduleScreen() {
       stickyFooter={<Button title="Simpan perubahan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
+      <RepeatStatusNotice repeatEveryDays={schedule.repeatEveryDays} />
       <View onLayout={(event: LayoutChangeEvent) => (formTop.current = event.nativeEvent.layout.y)}>
         <ManualScheduleForm
           errors={errors}
@@ -238,6 +240,38 @@ export default function EditCareScheduleScreen() {
   );
 }
 
+// Read-only. Layar ini TIDAK menyediakan cara mengubah atau menghentikan
+// pengulangan: updateCareSchedule tidak menulis repeat_every_days, jadi kontrol
+// apa pun di sini akan berbohong. Menghentikan rantai jalurnya
+// stopScheduleRepeat dari layar detail jadwal.
+function RepeatStatusNotice({ repeatEveryDays }: { repeatEveryDays: number | null }) {
+  if (repeatEveryDays === null) {
+    return null;
+  }
+
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        backgroundColor: colors.primarySoft,
+        borderColor: colors.primaryBorder,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        flexDirection: 'row',
+        gap: spacing.md,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
+      }}
+    >
+      <Icon name="calendar" size={18} color={colors.primary} />
+      <Text selectable style={{ color: colors.text, flex: 1, fontSize: 14, fontWeight: '700' }}>
+        {`Berulang tiap ${repeatEveryDays} hari`}
+      </Text>
+    </View>
+  );
+}
+
 function buildInitialValues(schedule: CareScheduleDetail): ManualScheduleFormValues {
   const assignedWorkerId = schedule.tasks[0]?.assignedTo ?? '';
 
@@ -246,6 +280,11 @@ function buildInitialValues(schedule: CareScheduleDetail): ManualScheduleFormVal
     category: schedule.category,
     customTargetNote: schedule.customTargetNote ?? '',
     instruction: schedule.instruction ?? '',
+    // Selalu mati di layar Edit: updateCareSchedule tidak menulis
+    // repeat_every_days, jadi form tidak boleh berpura-pura bisa mengubahnya.
+    // Status rantainya ditampilkan read-only lewat RepeatStatusNotice.
+    repeatEnabled: false,
+    repeatEveryDays: '',
     requiresPhoto: schedule.requiresPhoto,
     scheduledDate: schedule.scheduledDate,
     targetColumn: schedule.targetColumn ?? '',

@@ -15,6 +15,7 @@ export type IconName =
   | 'tree'
   | 'file-text'
   | 'building-warehouse'
+  | 'clipboard'
   | 'chevron-left'
   | 'chevron-right'
   | 'chevron-down'
@@ -24,6 +25,7 @@ export type IconName =
   | 'clock'
   | 'pencil'
   | 'calendar'
+  | 'repeat'
   | 'target'
   | 'user'
   | 'copy'
@@ -76,6 +78,13 @@ const ICON_PATHS: Record<IconName, string[]> = {
     'M13 13h4v8h-10v-6h6',
     'M13 21v-9a1 1 0 0 0 -1 -1h-2a1 1 0 0 0 -1 1v3',
   ],
+  // Tabler "clipboard-text" (outline), verbatim seperti entri lain di file ini.
+  clipboard: [
+    'M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2',
+    'M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z',
+    'M9 12h6',
+    'M9 16h6',
+  ],
   'chevron-left': ['M15 6l-6 6l6 6'],
   'chevron-right': ['M9 6l6 6l-6 6'],
   'chevron-down': ['M6 9l6 6l6 -6'],
@@ -101,6 +110,11 @@ const ICON_PATHS: Record<IconName, string[]> = {
     'M4 11h16',
     'M11 15h1',
     'M12 15v3',
+  ],
+  // Tabler "repeat" (outline), verbatim seperti entri lain di file ini.
+  repeat: [
+    'M4 12v-3a3 3 0 0 1 3 -3h13m-3 -3l3 3l-3 3',
+    'M20 12v3a3 3 0 0 1 -3 3h-13m3 3l-3 -3l3 -3',
   ],
   target: [
     'M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0',

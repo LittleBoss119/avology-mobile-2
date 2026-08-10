@@ -131,7 +131,7 @@ const ownerNavigationItems: NavigationItem[] = [
     href: '/owner/farm',
     icon: 'farm',
     label: 'Kebun',
-    match: ['/owner/farm', '/owner/profile', '/owner/farm-profile', '/owner/workers', '/owner/sops'],
+    match: ['/owner/farm', '/owner/profile', '/owner/farm-profile', '/owner/workers'],
   },
 ];
 
@@ -189,7 +189,6 @@ const ownerTopLevelPaths = [
   '/owner/reports',
   '/owner/farm',
   '/owner/profile',
-  '/owner/sops',
 ];
 
 const workerTopLevelPaths = [

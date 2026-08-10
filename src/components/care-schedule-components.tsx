@@ -3,7 +3,6 @@ import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-co
 import { Platform, Pressable, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
 
 import type {
-  CareSchedule,
   CareTask,
   TargetType,
   TaskStatus,
@@ -18,15 +17,21 @@ import {
 } from '../utils/displayFormat';
 import { formatTreeDisplayCode } from '../utils/treeFormat';
 import { colors, radius, spacing } from '../constants/theme';
-import { appTheme, Badge, Card, CompactMetaItem, MetaRow } from './ui';
+import { Badge, Card, CompactMetaItem } from './ui';
 import { Icon } from './icons';
-import { careCategoryOptions } from './care-sop-components';
+import { careCategoryOptions } from '../constants/careCategory';
 
 export type ManualScheduleFormValues = {
   assignedWorkerId: string;
   category: '' | (typeof careCategoryOptions)[number];
   customTargetNote: string;
   instruction: string;
+  // Pengulangan hanya diisi layar Buat jadwal (ManualScheduleForm dengan
+  // showRepeat). Layar Edit selalu mengirim false/'' karena updateCareSchedule
+  // tidak menulis repeat_every_days — status rantainya ditampilkan read-only di
+  // layar itu, bukan lewat form ini.
+  repeatEnabled: boolean;
+  repeatEveryDays: string;
   requiresPhoto: boolean;
   scheduledDate: string;
   targetColumn: string;
@@ -36,6 +41,12 @@ export type ManualScheduleFormValues = {
   title: string;
 };
 
+// Batas jarak pengulangan yang diterima form. Database hanya mensyaratkan
+// > 0 (care_schedules_repeat_every_days_check); batas atas 365 murni penjaga
+// salah ketik di UI.
+export const REPEAT_EVERY_DAYS_MIN = 1;
+export const REPEAT_EVERY_DAYS_MAX = 365;
+
 export const careScheduleTargetOptions: TargetType[] = [
   'farm',
   'row',
@@ -43,54 +54,6 @@ export const careScheduleTargetOptions: TargetType[] = [
   'tree',
   'custom',
 ];
-
-export function CareScheduleCard({
-  assignedWorkerNames,
-  onPress,
-  schedule,
-  statusLabel,
-  statusTone = 'muted',
-}: {
-  assignedWorkerNames?: string[];
-  onPress?: () => void;
-  schedule: CareSchedule;
-  statusLabel?: string;
-  statusTone?: 'danger' | 'muted' | 'success' | 'warning';
-}) {
-  const content = (
-    <Card>
-      <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
-        <View style={{ flex: 1, gap: 5 }}>
-          <Text selectable style={{ color: '#1E2A24', fontSize: 18, fontWeight: '700', lineHeight: 24 }}>
-            {schedule.title}
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            <Badge label={formatCareCategory(schedule.category)} tone="success" />
-            <Badge label={schedule.careSopId ? 'Dari SOP' : 'Manual'} tone={schedule.careSopId ? 'warning' : 'muted'} />
-            {schedule.isCancelled ? (
-              <Badge label="Dibatalkan" tone="danger" />
-            ) : statusLabel ? (
-              <Badge label={statusLabel} tone={statusTone} />
-            ) : null}
-          </View>
-        </View>
-      </View>
-      <View style={{ backgroundColor: appTheme.primarySoft, borderRadius: 12, gap: 8, padding: 12 }}>
-        <MetaRow label="Target pekerjaan" value={formatCareTarget(schedule)} />
-        <MetaRow label="Jatuh tempo" value={formatDate(schedule.scheduledDate)} />
-        {assignedWorkerNames && assignedWorkerNames.length > 0 ? (
-          <MetaRow label="Pekerja" value={assignedWorkerNames.join(', ')} />
-        ) : null}
-      </View>
-    </Card>
-  );
-
-  if (!onPress) {
-    return content;
-  }
-
-  return <Pressable onPress={onPress}>{content}</Pressable>;
-}
 
 export function CareTaskSummaryCard({
   assignedWorkerName,
@@ -151,16 +114,19 @@ export type ScheduleFormErrors = {
   title?: string;
   category?: string;
   scheduledDate?: string;
+  repeatEveryDays?: string;
   assignedWorkerId?: string;
   targetType?: string;
   targetDetail?: string;
 };
 
-// Urutan field untuk "scroll ke error pertama" (RF §3.6).
+// Urutan field untuk "scroll ke error pertama" (RF §3.6). Harus mengikuti urutan
+// visual: blok Pengulangan berada antara Tanggal dan Pekerja.
 export const scheduleFormFieldOrder = [
   'title',
   'category',
   'scheduledDate',
+  'repeatEveryDays',
   'assignedWorkerId',
   'targetType',
   'targetDetail',
@@ -174,6 +140,7 @@ export function ManualScheduleForm({
   errors,
   onChange,
   onFieldLayout,
+  showRepeat = false,
   trees,
   values,
   workers,
@@ -181,6 +148,9 @@ export function ManualScheduleForm({
   errors?: ScheduleFormErrors;
   onChange: (values: ManualScheduleFormValues) => void;
   onFieldLayout?: (key: string, y: number) => void;
+  // Default false supaya layar Edit tidak berubah: pengulangan hanya bisa
+  // ditentukan saat jadwal dibuat.
+  showRepeat?: boolean;
   trees: Tree[];
   values: ManualScheduleFormValues;
   workers: WorkerMembership[];
@@ -243,6 +213,12 @@ export function ManualScheduleForm({
           onChangeDate={(value) => updateValue('scheduledDate', value)}
         />
       </View>
+
+      {showRepeat ? (
+        <View onLayout={reportLayout('repeatEveryDays')}>
+          <RepeatScheduleField error={errors?.repeatEveryDays} onChange={onChange} values={values} />
+        </View>
+      ) : null}
 
       <View onLayout={reportLayout('assignedWorkerId')}>
         <FormChipGroup
@@ -349,6 +325,12 @@ export function validateScheduleForm(values: ManualScheduleFormValues): Schedule
     errors.scheduledDate = 'Pilih tanggal.';
   }
 
+  const repeatError = repeatIntervalError(values);
+
+  if (repeatError) {
+    errors.repeatEveryDays = repeatError;
+  }
+
   if (!values.assignedWorkerId.trim()) {
     errors.assignedWorkerId = 'Pilih satu pekerja.';
   }
@@ -375,10 +357,39 @@ export function hasScheduleFormErrors(errors: ScheduleFormErrors): boolean {
     errors.title ||
       errors.category ||
       errors.scheduledDate ||
+      errors.repeatEveryDays ||
       errors.assignedWorkerId ||
       errors.targetType ||
       errors.targetDetail
   );
+}
+
+// Satu sumber aturan jarak pengulangan, dipakai validateScheduleForm dan
+// clearResolvedScheduleFormErrors supaya keduanya tidak bisa berbeda pendapat.
+// Mengembalikan null kalau valid (termasuk saat pengulangan dimatikan).
+function repeatIntervalError(values: ManualScheduleFormValues): string | null {
+  if (!values.repeatEnabled) {
+    return null;
+  }
+
+  const raw = values.repeatEveryDays.trim();
+
+  if (!raw) {
+    return 'Isi jarak hari pengulangan.';
+  }
+
+  // Hanya digit: menolak desimal, tanda minus, dan spasi di tengah sekaligus.
+  if (!/^\d+$/.test(raw)) {
+    return 'Jarak hari harus angka bulat.';
+  }
+
+  const days = Number(raw);
+
+  if (days < REPEAT_EVERY_DAYS_MIN || days > REPEAT_EVERY_DAYS_MAX) {
+    return `Jarak hari minimal ${REPEAT_EVERY_DAYS_MIN}, maksimal ${REPEAT_EVERY_DAYS_MAX}.`;
+  }
+
+  return null;
 }
 
 // Hapus error field yang sudah terisi (dipakai saat nilai berubah); tak pernah
@@ -395,6 +406,7 @@ export function clearResolvedScheduleFormErrors(
     title: values.title.trim() ? undefined : errors.title,
     category: values.category ? undefined : errors.category,
     scheduledDate: /^\d{4}-\d{2}-\d{2}$/.test(values.scheduledDate.trim()) ? undefined : errors.scheduledDate,
+    repeatEveryDays: repeatIntervalError(values) ? errors.repeatEveryDays : undefined,
     assignedWorkerId: values.assignedWorkerId.trim() ? undefined : errors.assignedWorkerId,
     targetType: values.targetType ? undefined : errors.targetType,
     targetDetail: isTargetDetailValid(values) ? undefined : errors.targetDetail,
@@ -452,6 +464,24 @@ function FormError({ message }: { message?: string }) {
   );
 }
 
+// Gaya kotak input dipakai bersama FormTextField dan RepeatScheduleField supaya
+// keduanya tidak bisa melenceng satu sama lain. Nilainya sengaja identik dengan
+// gaya inline yang dipakai FormTextField sebelum diekstrak.
+function formInputStyle(hasError: boolean, multiline = false) {
+  return {
+    backgroundColor: colors.surface,
+    borderColor: hasError ? colors.danger : colors.border,
+    borderCurve: 'continuous' as const,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: 16,
+    minHeight: multiline ? 104 : 54,
+    paddingHorizontal: spacing.lg,
+    ...(multiline ? { paddingTop: spacing.md, textAlignVertical: 'top' as const } : null),
+  };
+}
+
 function FormTextField({
   error,
   label,
@@ -475,18 +505,7 @@ function FormTextField({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.textSoft}
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: error ? colors.danger : colors.border,
-          borderCurve: 'continuous',
-          borderRadius: radius.md,
-          borderWidth: 1,
-          color: colors.text,
-          fontSize: 16,
-          minHeight: multiline ? 104 : 54,
-          paddingHorizontal: spacing.lg,
-          ...(multiline ? { paddingTop: spacing.md, textAlignVertical: 'top' } : null),
-        }}
+        style={formInputStyle(Boolean(error), multiline)}
         value={value}
       />
       <FormError message={error} />
@@ -494,7 +513,84 @@ function FormTextField({
   );
 }
 
-function FormChipGroup({
+// Blok "Pengulangan" pada layar Buat jadwal. Pill-nya memakai FormChipGroup yang
+// sama persis dengan field Kategori/Target/Pekerja — bukan salinan gayanya —
+// sehingga tidak mungkin berbeda tampilan. Latar hijau tipis memakai token tema
+// (primarySoft/primaryBorder) untuk memisahkannya dari field lain.
+function RepeatScheduleField({
+  error,
+  onChange,
+  values,
+}: {
+  error?: string;
+  onChange: (values: ManualScheduleFormValues) => void;
+  values: ManualScheduleFormValues;
+}) {
+  return (
+    <View
+      style={{
+        backgroundColor: colors.primarySoft,
+        borderColor: colors.primaryBorder,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        gap: spacing.md,
+        padding: spacing.lg,
+      }}
+    >
+      <FormChipGroup
+        label="Pengulangan"
+        options={[
+          { label: 'Sekali', value: 'once' },
+          { label: 'Berulang', value: 'repeat' },
+        ]}
+        selectedValue={values.repeatEnabled ? 'repeat' : 'once'}
+        onSelect={(value) =>
+          onChange({
+            ...values,
+            repeatEnabled: value === 'repeat',
+            // Angka dikosongkan saat kembali ke "Sekali" supaya nilai basi tidak
+            // ikut terkirim kalau owner berganti pikiran dua kali.
+            repeatEveryDays: value === 'repeat' ? values.repeatEveryDays : '',
+          })
+        }
+      />
+
+      {values.repeatEnabled ? (
+        <View style={{ gap: spacing.sm }}>
+          <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md }}>
+            <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
+              Tiap
+            </Text>
+            <TextInput
+              keyboardType="number-pad"
+              maxLength={3}
+              onChangeText={(value) => onChange({ ...values, repeatEveryDays: value })}
+              placeholder="7"
+              placeholderTextColor={colors.textSoft}
+              style={[
+                formInputStyle(Boolean(error)),
+                { paddingHorizontal: spacing.md, textAlign: 'center' as const, width: 86 },
+              ]}
+              value={values.repeatEveryDays}
+            />
+            <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
+              hari
+            </Text>
+          </View>
+          <FormError message={error} />
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+            Jadwal berikutnya dibuat setelah tugas selesai.
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// Diekspor supaya layar detail jadwal memakai pill yang SAMA PERSIS dengan
+// field Kategori/Target/Pekerja di form, bukan salinan gayanya.
+export function FormChipGroup({
   emptyText,
   error,
   label,

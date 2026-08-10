@@ -2,17 +2,25 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
-import { PhotoSourceSheet } from '../../../../../src/components/bottom-sheet';
+import { BottomSheet, PhotoSourceSheet } from '../../../../../src/components/bottom-sheet';
 import { Icon, type IconName } from '../../../../../src/components/icons';
 import {
   Badge,
   Button,
+  EmptyState,
   ErrorBanner,
   LoadingState,
+  OptionChip,
   Screen,
   TopAppBar,
 } from '../../../../../src/components/ui';
-import { colors, radius, spacing } from '../../../../../src/constants/theme';
+import {
+  MAX_TAKARAN_BAHAN,
+  SATUAN_BAHAN,
+  SATUAN_BAHAN_LABELS,
+  type SatuanBahan,
+} from '../../../../../src/constants/satuanBahan';
+import { spacing, tokens } from '../../../../../src/constants/theme';
 import { pickImageFromGallery, takePhotoFromCamera } from '../../../../../src/lib/media';
 import { setPendingFeedback } from '../../../../../src/lib/pendingFeedback';
 import {
@@ -20,14 +28,19 @@ import {
   getTaskDetail,
   postponeTask,
   rollbackCompletedTaskActivity,
-  updateLatestTaskRealization,
+  updateTaskRealization,
 } from '../../../../../src/services/careTaskService';
 import {
   listTaskProofPhotosForActivities,
   uploadTaskProofPhoto,
 } from '../../../../../src/services/photoAttachmentService';
-import type { ActivityStatus, CareTaskDetail } from '../../../../../src/types/domain';
+import type { ActivityStatus, CareActivity, CareTaskDetail } from '../../../../../src/types/domain';
 import type { PickedPhotoAsset, TaskProofPhoto } from '../../../../../src/types/media';
+import {
+  MAX_ANGKA_DESIMAL,
+  parseDecimalInput,
+  sanitizeDecimalInput,
+} from '../../../../../src/utils/decimalInput';
 
 type RecordMode = 'create' | 'edit';
 
@@ -44,13 +57,22 @@ export default function WorkerTaskRecordScreen() {
   const [submitting, setSubmitting] = React.useState(false);
   const [bannerError, setBannerError] = React.useState<string | null>(null);
 
+  // Hanya dipakai mode CREATE. Di mode edit, status dibaca dari baris yang
+  // sedang diperbaiki (editingActivity) dan tidak bisa digeser sama sekali.
   const [status, setStatus] = React.useState<ActivityStatus>('completed');
+  const [editingActivity, setEditingActivity] = React.useState<CareActivity | null>(null);
+
   const [note, setNote] = React.useState('');
   const [produk, setProduk] = React.useState('');
+  const [produkJumlah, setProdukJumlah] = React.useState('');
+  const [produkSatuan, setProdukSatuan] = React.useState<SatuanBahan | null>(null);
+  const [satuanSheetOpen, setSatuanSheetOpen] = React.useState(false);
+
   const [newPhoto, setNewPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [existingProof, setExistingProof] = React.useState<TaskProofPhoto | null>(null);
   const [removeExistingPhoto, setRemoveExistingPhoto] = React.useState(false);
 
+  const [bahanError, setBahanError] = React.useState<string | null>(null);
   const [photoError, setPhotoError] = React.useState<string | null>(null);
   const [reasonError, setReasonError] = React.useState<string | null>(null);
 
@@ -78,10 +100,19 @@ export default function WorkerTaskRecordScreen() {
     if (mode === 'edit' && activityId) {
       const activity = result.data.activities.find((item) => item.id === activityId);
 
+      // Baris yang mau diperbaiki disimpan utuh, bukan dipecah ke beberapa state.
+      // Statusnya jadi satu-satunya sumber kebenaran untuk mode edit.
+      setEditingActivity(activity ?? null);
+
       if (activity) {
-        setStatus(activity.status);
         setNote(activity.note ?? '');
         setProduk(activity.produk ?? '');
+        setProdukJumlah(activity.produkJumlah === null ? '' : String(activity.produkJumlah));
+        setProdukSatuan(activity.produkSatuan);
+      } else {
+        // Dulu form tetap terbuka dengan nilai kosong dan pekerja baru tahu ada
+        // yang salah setelah menekan Simpan. Sekarang dikatakan di depan.
+        setBannerError('Hasil kerja ini tidak ditemukan.');
       }
 
       const proofResult = await listTaskProofPhotosForActivities({
@@ -149,36 +180,88 @@ export default function WorkerTaskRecordScreen() {
 
   function selectStatus(next: ActivityStatus) {
     setStatus(next);
+    setBahanError(null);
     setPhotoError(null);
     setReasonError(null);
   }
 
+  // Status yang berlaku di layar ini. Mode edit membacanya dari BARIS-nya, jadi
+  // tidak ada jalan bagi pekerja untuk menggesernya lalu mengirim kombinasi yang
+  // pasti ditolak RPC (mis. mengisi bahan pada hasil kerja yang ditunda).
+  const effectiveStatus: ActivityStatus =
+    mode === 'edit' ? editingActivity?.status ?? 'completed' : status;
+  const isCompleted = effectiveStatus === 'completed';
   const hasUsableProof = Boolean(newPhoto) || (Boolean(existingProof) && !removeExistingPhoto);
   const photoUri = newPhoto?.uri ?? (existingProof && !removeExistingPhoto ? existingProof.signedUrl : null);
+
+  // Validasi bahan mendahului RPC supaya pekerja dapat jawaban tanpa menunggu
+  // jaringan. RPC tetap jadi penjaga terakhir dengan pesan yang sama maksudnya.
+  function validateBahan(): string | null {
+    const namaBahan = produk.trim();
+    const jumlahTeks = produkJumlah.trim();
+    const adaTakaran = Boolean(jumlahTeks) || Boolean(produkSatuan);
+
+    if (!adaTakaran) {
+      return null;
+    }
+
+    if (!namaBahan) {
+      return 'Isi nama bahannya dulu.';
+    }
+
+    if (!jumlahTeks || !produkSatuan) {
+      return 'Isi takaran dan pilih satuannya.';
+    }
+
+    const jumlah = parseDecimalInput(jumlahTeks);
+
+    if (jumlah === null) {
+      return 'Takaran harus lebih dari 0.';
+    }
+
+    // Dijaga di sini, bukan diserahkan ke constraint database. Pelanggaran
+    // constraint sampai ke layar sebagai "Terjadi kendala saat memproses data."
+    // — kalimat yang tidak memberitahu apa pun tentang angka yang kebesaran.
+    if (jumlah > MAX_TAKARAN_BAHAN) {
+      return 'Takaran terlalu besar.';
+    }
+
+    return null;
+  }
 
   async function handleSubmit() {
     if (!task) {
       return;
     }
 
-    if (status === 'completed' && task.requiresPhoto && !hasUsableProof) {
+    if (isCompleted) {
+      const bahanMessage = validateBahan();
+
+      if (bahanMessage) {
+        setBahanError(bahanMessage);
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        return;
+      }
+    }
+
+    if (isCompleted && task.requiresPhoto && !hasUsableProof) {
       setPhotoError('Tugas ini butuh bukti foto.');
       scrollRef.current?.scrollToEnd({ animated: true });
       return;
     }
 
-    if (status === 'postponed' && !note.trim()) {
+    if (!isCompleted && !note.trim()) {
       setReasonError('Isi alasan penundaan.');
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
     if (mode === 'edit') {
-      await submitEdit(task);
+      await submitEdit();
       return;
     }
 
-    if (status === 'completed') {
+    if (isCompleted) {
       await submitComplete(task);
       return;
     }
@@ -193,6 +276,8 @@ export default function WorkerTaskRecordScreen() {
     const result = await completeTask({
       note,
       produk,
+      produkJumlah: parseDecimalInput(produkJumlah),
+      produkSatuan,
       taskId: currentTask.id,
     });
 
@@ -254,7 +339,7 @@ export default function WorkerTaskRecordScreen() {
     router.back();
   }
 
-  async function submitEdit(currentTask: CareTaskDetail) {
+  async function submitEdit() {
     if (!activityId) {
       setBannerError('Hasil kerja tidak ditemukan.');
       return;
@@ -263,10 +348,15 @@ export default function WorkerTaskRecordScreen() {
     setSubmitting(true);
     setBannerError(null);
 
-    const result = await updateLatestTaskRealization({
+    // Bahan hanya dikirim untuk baris yang SELESAI. Untuk baris ditunda,
+    // ketiganya dikirim null — bukan sekadar tidak ditampilkan, supaya nilai
+    // lama pun ikut dibersihkan kalau entah bagaimana pernah terisi.
+    const result = await updateTaskRealization({
       activityId,
       note,
-      produk: status === 'completed' ? produk : undefined,
+      produk: isCompleted ? produk : null,
+      produkJumlah: isCompleted ? parseDecimalInput(produkJumlah) : null,
+      produkSatuan: isCompleted ? produkSatuan : null,
       proofPhoto: newPhoto
         ? {
             base64: newPhoto.base64,
@@ -276,8 +366,6 @@ export default function WorkerTaskRecordScreen() {
           }
         : null,
       removeExistingProof: removeExistingPhoto,
-      status,
-      taskId: currentTask.id,
     });
 
     if (result.error) {
@@ -303,7 +391,7 @@ export default function WorkerTaskRecordScreen() {
     return <LoadingState message="Memuat tugas..." />;
   }
 
-  const headerTitle = mode === 'edit' ? 'Edit hasil kerja' : 'Catat hasil kerja';
+  const headerTitle = mode === 'edit' ? 'Perbaiki catatan' : 'Catat hasil kerja';
 
   if (!task) {
     return (
@@ -313,14 +401,7 @@ export default function WorkerTaskRecordScreen() {
     );
   }
 
-  const submitLabel =
-    mode === 'edit'
-      ? 'Simpan perubahan'
-      : status === 'postponed'
-        ? 'Simpan penundaan'
-        : 'Simpan hasil kerja';
-
-  const showProduk = status === 'completed';
+  const submitLabel = mode === 'edit' ? 'Simpan perubahan' : 'Simpan hasil kerja';
 
   return (
     <Screen
@@ -330,56 +411,73 @@ export default function WorkerTaskRecordScreen() {
     >
       <ErrorBanner message={bannerError} />
 
-      <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+      <Text selectable style={{ color: tokens.color.text.tertiary, ...tokens.type.meta }}>
         {`${task.title} · ${formatDate(task.dueDate)}`}
       </Text>
 
       <View style={{ gap: spacing.sm }}>
-        <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-          Hasil pekerjaan
-        </Text>
-        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-          <ResultOption
-            active={status === 'completed'}
-            description="Sudah dikerjakan"
-            icon="check"
-            label="Selesai"
-            onPress={() => selectStatus('completed')}
-          />
-          <ResultOption
-            active={status === 'postponed'}
-            description="Belum bisa hari ini"
-            icon="clock"
-            label="Tunda"
-            onPress={() => selectStatus('postponed')}
-          />
-        </View>
+        <SectionLabel text="Hasil pekerjaan" />
+        {mode === 'edit' ? (
+          // TERKUNCI, bukan disembunyikan: pekerja tetap harus tahu entri ini
+          // Selesai atau Ditunda. Yang tidak boleh adalah mengubahnya —
+          // RPC update_task_realization tidak menerima status sama sekali.
+          <LockedResultRow status={effectiveStatus} />
+        ) : (
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <ResultOption
+              active={status === 'completed'}
+              description="Sudah dikerjakan"
+              icon="check"
+              label="Selesai"
+              onPress={() => selectStatus('completed')}
+            />
+            <ResultOption
+              active={status === 'postponed'}
+              description="Belum bisa hari ini"
+              icon="clock"
+              label="Tunda"
+              onPress={() => selectStatus('postponed')}
+            />
+          </View>
+        )}
       </View>
 
-      {status === 'completed' ? (
+      {isCompleted ? (
         <>
-          <TextArea
-            label="Catatan"
-            onChangeText={setNote}
-            placeholder="Contoh: Pekerjaan selesai sesuai instruksi"
-            value={note}
+          {/* Bahan sengaja DI ATAS catatan: ini data terstruktur yang paling
+              berharga buat Abah, sementara catatan teks bebas paling gampang
+              dilewati. Menukar urutannya menukar juga peluang keduanya diisi. */}
+          <BahanFields
+            error={bahanError}
+            jumlah={produkJumlah}
+            nama={produk}
+            satuan={produkSatuan}
+            onChangeJumlah={(value) => {
+              setProdukJumlah(sanitizeDecimalInput(value, MAX_ANGKA_DESIMAL));
+              setBahanError(null);
+            }}
+            onChangeNama={(value) => {
+              setProduk(value);
+              setBahanError(null);
+            }}
+            onOpenSatuan={() => setSatuanSheetOpen(true)}
           />
 
-          {showProduk ? (
-            <View style={{ gap: 7 }}>
-              <InlineFieldLabel label="Produk yang dipakai" optional />
-              <TextInput
-                onChangeText={setProduk}
-                placeholder="NPK Mutiara"
-                placeholderTextColor={colors.textSoft}
-                style={inputStyle}
-                value={produk}
-              />
-            </View>
-          ) : null}
+          <View style={{ gap: spacing.sm }}>
+            <SectionLabel optional text="Catatan" />
+            <NoteInput
+              onChangeText={setNote}
+              placeholder="Contoh: Pekerjaan selesai sesuai instruksi"
+              value={note}
+            />
+          </View>
 
           <View style={{ gap: spacing.sm }}>
-            <InlineFieldLabel label="Foto" optional={!task.requiresPhoto} required={task.requiresPhoto} />
+            <SectionLabel
+              optional={!task.requiresPhoto}
+              required={task.requiresPhoto}
+              text="Foto"
+            />
             <ProofPhotoField
               disabled={submitting}
               imageUri={photoUri}
@@ -387,46 +485,205 @@ export default function WorkerTaskRecordScreen() {
               onDeletePhoto={handleDeletePhoto}
               onGalleryPress={handlePickFromGallery}
             />
-            {photoError ? (
-              <Text selectable style={{ color: colors.danger, lineHeight: 20 }}>
-                {photoError}
-              </Text>
-            ) : null}
+            {photoError ? <FieldError message={photoError} /> : null}
           </View>
         </>
       ) : (
-        <TextArea
-          label="Alasan tunda"
-          error={reasonError}
-          onChangeText={(value) => {
-            setNote(value);
-            if (value.trim()) {
-              setReasonError(null);
-            }
-          }}
-          placeholder="Contoh: Stok air belum tersedia"
-          value={note}
-        />
+        <View style={{ gap: spacing.sm }}>
+          <SectionLabel text="Alasan tunda" />
+          <NoteInput
+            error={reasonError}
+            onChangeText={(value) => {
+              setNote(value);
+              if (value.trim()) {
+                setReasonError(null);
+              }
+            }}
+            placeholder="Contoh: Stok air belum tersedia"
+            value={note}
+          />
+        </View>
       )}
+
+      <SatuanSheet
+        onClose={() => setSatuanSheetOpen(false)}
+        onSelect={(value) => {
+          setProdukSatuan(value);
+          setBahanError(null);
+          setSatuanSheetOpen(false);
+        }}
+        selected={produkSatuan}
+        visible={satuanSheetOpen}
+      />
     </Screen>
   );
 }
 
 const inputStyle = {
-  backgroundColor: colors.surface,
-  borderColor: colors.border,
+  backgroundColor: tokens.color.surface.card,
+  borderColor: tokens.color.line.card,
   borderCurve: 'continuous' as const,
-  borderRadius: radius.md,
+  borderRadius: tokens.radius.control,
   borderWidth: 1,
-  color: colors.text,
-  fontSize: 16,
+  color: tokens.color.text.primary,
+  fontSize: tokens.type.body.fontSize,
   paddingHorizontal: spacing.lg,
   paddingVertical: spacing.md,
 };
 
-// Slot foto tunggal, dua keadaan, mengikuti pola TreeDetailHero (tree-detail-screen.tsx):
-// kosong = kotak dashed + ikon kamera; ada foto = gambar penuh radius 12 dengan
-// tombol kamera hijau di pojok kanan-bawah. Sumber foto lewat PhotoSourceSheet bersama.
+// Blok "Bahan yang dipakai". Tiga kolom dalam satu baris: nama bahan paling
+// lebar (flex), takaran sempit, satuan sedang.
+//
+// Satuan WAJIB dipilih dari daftar, tidak boleh diketik. Alasannya empiris:
+// kolom fruit_condition yang dibiarkan bebas sudah terlanjur berisi "Bagus",
+// "Baik", "Good", dan "Good test harvest" — empat nilai untuk satu maksud,
+// dari satu orang, dalam 12 baris. Data seperti itu tidak bisa dijumlahkan.
+function BahanFields({
+  error,
+  jumlah,
+  nama,
+  onChangeJumlah,
+  onChangeNama,
+  onOpenSatuan,
+  satuan,
+}: {
+  error: string | null;
+  jumlah: string;
+  nama: string;
+  onChangeJumlah: (value: string) => void;
+  onChangeNama: (value: string) => void;
+  onOpenSatuan: () => void;
+  satuan: SatuanBahan | null;
+}) {
+  const borderColor = error ? tokens.color.status.danger.text : tokens.color.line.card;
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <SectionLabel optional text="Bahan yang dipakai" />
+      <View style={{ alignItems: 'stretch', flexDirection: 'row', gap: spacing.sm }}>
+        <TextInput
+          onChangeText={onChangeNama}
+          placeholder="NPK Mutiara"
+          placeholderTextColor={tokens.color.text.tertiary}
+          style={{ ...inputStyle, borderColor, flex: 1 }}
+          value={nama}
+        />
+        <TextInput
+          keyboardType="decimal-pad"
+          onChangeText={onChangeJumlah}
+          placeholder="0"
+          placeholderTextColor={tokens.color.text.tertiary}
+          style={{ ...inputStyle, borderColor, textAlign: 'center', width: 76 }}
+          value={jumlah}
+        />
+        <Pressable
+          accessibilityLabel={satuan ? `Satuan ${SATUAN_BAHAN_LABELS[satuan]}` : 'Pilih satuan'}
+          accessibilityRole="button"
+          onPress={onOpenSatuan}
+          style={{
+            ...inputStyle,
+            alignItems: 'center',
+            borderColor,
+            flexDirection: 'row',
+            gap: spacing.xs,
+            justifyContent: 'center',
+            width: 104,
+          }}
+        >
+          <Text
+            numberOfLines={1}
+            selectable={false}
+            style={{
+              color: satuan ? tokens.color.text.primary : tokens.color.text.tertiary,
+              fontSize: tokens.type.body.fontSize,
+            }}
+          >
+            {satuan ? SATUAN_BAHAN_LABELS[satuan] : 'Satuan'}
+          </Text>
+          <Icon name="chevron-down" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+        </Pressable>
+      </View>
+      {error ? <FieldError message={error} /> : null}
+    </View>
+  );
+}
+
+// Pemilih satuan memakai BottomSheet dan OptionChip yang sudah ada — bukan
+// kontrol baru. Chip lebih mudah ditekan satu tangan daripada daftar panjang.
+function SatuanSheet({
+  onClose,
+  onSelect,
+  selected,
+  visible,
+}: {
+  onClose: () => void;
+  onSelect: (value: SatuanBahan) => void;
+  selected: SatuanBahan | null;
+  visible: boolean;
+}) {
+  return (
+    <BottomSheet
+      onClose={onClose}
+      subtitle="Pilih satuan takaran bahan."
+      title="Satuan"
+      visible={visible}
+    >
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.sm }}>
+        {SATUAN_BAHAN.map((value) => (
+          <OptionChip
+            key={value}
+            label={SATUAN_BAHAN_LABELS[value]}
+            onPress={() => onSelect(value)}
+            selected={selected === value}
+          />
+        ))}
+      </View>
+    </BottomSheet>
+  );
+}
+
+// Tampilan status di mode perbaiki. Sengaja memakai bahasa visual "terkunci"
+// yang sama dengan Field locked di ui.tsx — permukaan redup, garis rambut, dan
+// gembok — supaya terbaca "memang tidak bisa diubah", bukan "tombol mati".
+function LockedResultRow({ status }: { status: ActivityStatus }) {
+  const isCompleted = status === 'completed';
+
+  return (
+    <View
+      accessibilityLabel={`Hasil pekerjaan ${isCompleted ? 'Selesai' : 'Ditunda'}, tidak bisa diubah`}
+      style={{
+        alignItems: 'center',
+        backgroundColor: tokens.color.surface.subtle,
+        borderColor: tokens.color.line.hairline,
+        borderCurve: 'continuous',
+        borderRadius: tokens.radius.control,
+        borderWidth: 1,
+        flexDirection: 'row',
+        gap: spacing.md,
+        minHeight: tokens.layout.fieldHeight,
+        paddingHorizontal: spacing.lg,
+      }}
+    >
+      <Icon
+        name={isCompleted ? 'check' : 'clock'}
+        size={tokens.icon.md}
+        color={tokens.color.text.secondary}
+      />
+      <Text
+        selectable
+        style={{ ...tokens.type.bodyStrong, color: tokens.color.text.secondary, flex: 1 }}
+      >
+        {isCompleted ? 'Selesai' : 'Ditunda'}
+      </Text>
+      <Icon name="lock" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+    </View>
+  );
+}
+
+// Slot foto tunggal, dua keadaan. Kosong memakai EmptyState varian 'dashed'
+// yang dibuat di Tahap B, dibungkus Pressable supaya seluruh kotaknya jadi
+// target sentuh — bukan cuma ikonnya. Ada foto = gambar penuh dengan tombol
+// kamera hijau di pojok. Sumber foto lewat PhotoSourceSheet bersama.
 function ProofPhotoField({
   disabled,
   imageUri,
@@ -477,7 +734,7 @@ function ProofPhotoField({
       />
 
       {hasPhoto ? (
-        <View style={{ borderCurve: 'continuous', borderRadius: 12, overflow: 'hidden' }}>
+        <View style={{ borderCurve: 'continuous', borderRadius: tokens.radius.tile, overflow: 'hidden' }}>
           <Image resizeMode="cover" source={{ uri: imageUri ?? undefined }} style={{ height: 200, width: '100%' }} />
           <Pressable
             accessibilityLabel="Ubah foto"
@@ -486,8 +743,8 @@ function ProofPhotoField({
             onPress={openSheet}
             style={{
               alignItems: 'center',
-              backgroundColor: colors.primary,
-              borderRadius: radius.round,
+              backgroundColor: tokens.color.brand.base,
+              borderRadius: tokens.radius.pill,
               bottom: spacing.md,
               height: 38,
               justifyContent: 'center',
@@ -496,67 +753,38 @@ function ProofPhotoField({
               width: 38,
             }}
           >
-            <Icon name="camera" size={20} color="#FFFFFF" />
+            <Icon name="camera" size={tokens.icon.md} color={tokens.color.brand.on} />
           </Pressable>
         </View>
       ) : (
-        <Pressable
-          accessibilityLabel="Tambah foto"
-          accessibilityRole="button"
-          disabled={disabled}
-          onPress={openSheet}
-          style={{
-            alignItems: 'center',
-            backgroundColor: colors.photoPlaceholder,
-            borderColor: colors.border,
-            borderCurve: 'continuous',
-            borderRadius: 12,
-            borderStyle: 'dashed',
-            borderWidth: 1,
-            gap: spacing.sm,
-            justifyContent: 'center',
-            minHeight: 180,
-            padding: spacing.xl,
-          }}
-        >
-          <View
-            style={{
-              alignItems: 'center',
-              backgroundColor: colors.surface,
-              borderColor: colors.primaryBorder,
-              borderRadius: radius.round,
-              borderWidth: 1,
-              height: 52,
-              justifyContent: 'center',
-              width: 52,
-            }}
-          >
-            <Icon name="camera" size={24} color={colors.primary} />
-          </View>
-          <Text selectable={false} style={{ color: colors.text, fontWeight: '700' }}>
-            Tambah foto
-          </Text>
+        <Pressable accessibilityLabel="Tambah foto" accessibilityRole="button" disabled={disabled} onPress={openSheet}>
+          <EmptyState
+            icon="camera"
+            subtitle="Pencet untuk ambil atau pilih foto."
+            title="Tambah foto"
+            variant="dashed"
+          />
         </Pressable>
       )}
     </>
   );
 }
 
-function InlineFieldLabel({
-  label,
+function SectionLabel({
   optional = false,
   required = false,
+  text,
 }: {
-  label: string;
   optional?: boolean;
   required?: boolean;
+  text: string;
 }) {
   return (
     <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-        {label}
+      <Text selectable style={{ color: tokens.color.text.primary, fontSize: 14, fontWeight: '700' }}>
+        {text}
         {optional ? (
-          <Text selectable style={{ color: colors.textMuted, fontWeight: '400' }}>
+          <Text selectable style={{ color: tokens.color.text.tertiary, fontWeight: '400' }}>
             {' · opsional'}
           </Text>
         ) : null}
@@ -566,46 +794,55 @@ function InlineFieldLabel({
   );
 }
 
-function TextArea({
+function FieldError({ message }: { message: string }) {
+  return (
+    <Text
+      selectable
+      style={{
+        color: tokens.color.status.danger.text,
+        fontSize: tokens.type.meta.fontSize,
+        lineHeight: tokens.type.meta.lineHeight,
+      }}
+    >
+      {message}
+    </Text>
+  );
+}
+
+function NoteInput({
   error,
-  label,
   onChangeText,
   placeholder,
   value,
 }: {
   error?: string | null;
-  label: string;
   onChangeText: (value: string) => void;
   placeholder?: string;
   value: string;
 }) {
   return (
-    <View style={{ gap: 7 }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-        {label}
-      </Text>
+    <View style={{ gap: spacing.sm }}>
       <TextInput
         multiline
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.textSoft}
+        placeholderTextColor={tokens.color.text.tertiary}
         style={{
           ...inputStyle,
+          borderColor: error ? tokens.color.status.danger.text : tokens.color.line.card,
           minHeight: 96,
           paddingTop: spacing.md,
           textAlignVertical: 'top',
         }}
         value={value}
       />
-      {error ? (
-        <Text selectable style={{ color: colors.danger, lineHeight: 20 }}>
-          {error}
-        </Text>
-      ) : null}
+      {error ? <FieldError message={error} /> : null}
     </View>
   );
 }
 
+// Kartu pilihan hasil. Ini target sentuh utama layar ini, jadi sengaja besar:
+// satu tangan, satu jempol, tanpa perlu membidik.
 function ResultOption({
   active,
   description,
@@ -625,21 +862,43 @@ function ResultOption({
       accessibilityState={{ selected: active }}
       onPress={onPress}
       style={{
-        backgroundColor: active ? colors.primarySoft : colors.surface,
-        borderColor: active ? colors.primary : colors.border,
+        backgroundColor: active ? tokens.color.brand.soft : tokens.color.surface.card,
+        borderColor: active ? tokens.color.brand.base : tokens.color.line.card,
         borderCurve: 'continuous',
-        borderRadius: radius.lg,
+        borderRadius: tokens.radius.card,
         borderWidth: active ? 1.5 : 1,
         flex: 1,
-        gap: spacing.xs,
-        padding: spacing.md,
+        gap: spacing.sm,
+        minHeight: 132,
+        padding: spacing.lg,
       }}
     >
-      <Icon name={icon} size={20} color={active ? colors.primary : colors.textMuted} />
-      <Text selectable style={{ color: active ? colors.primaryDark : colors.text, fontSize: 16, fontWeight: '700' }}>
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: active ? tokens.color.surface.card : tokens.color.surface.subtle,
+          borderRadius: tokens.radius.pill,
+          height: 44,
+          justifyContent: 'center',
+          width: 44,
+        }}
+      >
+        <Icon
+          name={icon}
+          size={tokens.icon.lg}
+          color={active ? tokens.color.brand.base : tokens.color.text.tertiary}
+        />
+      </View>
+      <Text
+        selectable
+        style={{
+          ...tokens.type.heading,
+          color: active ? tokens.color.brand.dark : tokens.color.text.primary,
+        }}
+      >
         {label}
       </Text>
-      <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+      <Text selectable style={{ ...tokens.type.meta, color: tokens.color.text.tertiary }}>
         {description}
       </Text>
     </Pressable>

@@ -3,14 +3,13 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { BottomSheet, ConfirmDialog } from '../../../../src/components/bottom-sheet';
-import { formatCareTarget } from '../../../../src/components/care-schedule-components';
-import { formatCareCategory } from '../../../../src/components/care-sop-components';
+import { FormChipGroup, formatCareTarget } from '../../../../src/components/care-schedule-components';
 import { Icon, type IconName } from '../../../../src/components/icons';
-import { TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
+import { WorkResultList } from '../../../../src/components/work-result-list';
 import {
   Badge,
+  Button,
   CameraGlyph,
-  Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
@@ -22,31 +21,40 @@ import {
 import { colors, radius, spacing, statusColors, typography } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { consumePendingFeedback } from '../../../../src/lib/pendingFeedback';
-import { cancelCareSchedule, getCareScheduleDetail } from '../../../../src/services/careScheduleService';
+import {
+  assignWorkerToSchedule,
+  cancelCareSchedule,
+  getCareScheduleDetail,
+  stopScheduleRepeat,
+} from '../../../../src/services/careScheduleService';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
-import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
+import { getActiveWorkers, getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { listTaskProofPhotosForActivities } from '../../../../src/services/photoAttachmentService';
 import type {
-  ActivityStatus,
-  CareActivity,
   CareScheduleDetail,
   CareTaskDetail,
   FarmMemberBasicProfile,
+  WorkerMembership,
 } from '../../../../src/types/domain';
-import type { TaskProofPhoto, TaskProofPhotoMap } from '../../../../src/types/media';
-import { formatActivityStatus } from '../../../../src/utils/displayFormat';
-import { scheduleDueDatePill, type DueDatePill } from '../../../../src/utils/taskDueDate';
+import type { TaskProofPhotoMap } from '../../../../src/types/media';
+import { formatCareCategory } from '../../../../src/utils/displayFormat';
+import { getTodayIsoDate, scheduleDueDatePill, type DueDatePill } from '../../../../src/utils/taskDueDate';
 
 export default function CareScheduleDetailScreen() {
   const { currentFarm } = useAuth();
   const { scheduleId } = useLocalSearchParams<{ scheduleId: string }>();
   const [error, setError] = React.useState<string | null>(null);
+  const [activeWorkers, setActiveWorkers] = React.useState<WorkerMembership[]>([]);
+  const [assignLoading, setAssignLoading] = React.useState(false);
+  const [assignWorkerId, setAssignWorkerId] = React.useState('');
   const [cancelLoading, setCancelLoading] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [manageOpen, setManageOpen] = React.useState(false);
   const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [schedule, setSchedule] = React.useState<CareScheduleDetail | null>(null);
+  const [stopRepeatConfirmOpen, setStopRepeatConfirmOpen] = React.useState(false);
+  const [stopRepeatLoading, setStopRepeatLoading] = React.useState(false);
   const [success, setSuccess] = React.useState<string | null>(null);
   const [taskDetailMap, setTaskDetailMap] = React.useState<Record<string, CareTaskDetail>>({});
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
@@ -76,9 +84,12 @@ export default function CareScheduleDetailScreen() {
 
     setError(null);
 
-    const [scheduleResult, workersResult] = await Promise.all([
+    // getActiveWorkers ikut di sini (bukan query terpisah saat blok penugasan
+    // muncul) supaya tetap satu gelombang request seperti sebelumnya.
+    const [scheduleResult, workersResult, activeWorkersResult] = await Promise.all([
       getCareScheduleDetail({ scheduleId: normalizedScheduleId }),
       getFarmMemberBasicProfiles(farmId),
+      getActiveWorkers(farmId),
     ]);
 
     if (scheduleResult.error) {
@@ -88,7 +99,7 @@ export default function CareScheduleDetailScreen() {
       setTaskDetailMap({});
     } else {
       setSchedule(scheduleResult.data);
-      await loadTaskRealizationSummaries(scheduleResult.data);
+      await loadTaskWorkResultSummaries(scheduleResult.data);
     }
 
     if (workersResult.error) {
@@ -100,9 +111,13 @@ export default function CareScheduleDetailScreen() {
         )
       );
     }
+
+    // Gagal memuat pekerja aktif tidak boleh menutupi detail jadwalnya —
+    // blok penugasan cukup menampilkan keadaan kosongnya sendiri.
+    setActiveWorkers(activeWorkersResult.error ? [] : activeWorkersResult.data);
   }, [farmId, scheduleId]);
 
-  async function loadTaskRealizationSummaries(scheduleDetail: CareScheduleDetail) {
+  async function loadTaskWorkResultSummaries(scheduleDetail: CareScheduleDetail) {
     if (scheduleDetail.tasks.length === 0) {
       setProofPhotoMap({});
       setTaskDetailMap({});
@@ -160,8 +175,8 @@ export default function CareScheduleDetailScreen() {
   }
 
   const activeSchedule = schedule;
-  const hasRealization = scheduleHasRealization(activeSchedule, taskDetailMap);
-  const isLocked = activeSchedule.isCancelled === true || hasRealization;
+  const hasWorkResult = scheduleHasWorkResult(activeSchedule, taskDetailMap);
+  const isLocked = activeSchedule.isCancelled === true || hasWorkResult;
   const lockMessage = activeSchedule.isCancelled
     ? 'Jadwal ini sudah dibatalkan.'
     : 'Jadwal sudah punya hasil kerja dan tidak bisa diubah lagi.';
@@ -169,6 +184,13 @@ export default function CareScheduleDetailScreen() {
   const pill: DueDatePill = activeSchedule.isCancelled
     ? { tone: 'neutral', label: 'Jadwal dibatalkan' }
     : scheduleDueDatePill(activeSchedule, activeSchedule.tasks, getTodayIsoDate());
+
+  // Sejak migration 041 jadwal boleh punya NOL tugas: penerus rantai dibuat
+  // tanpa tugas kalau pekerjanya sudah keluar dari kebun saat itu.
+  const hasTasks = activeSchedule.tasks.length > 0;
+  const needsWorker = !hasTasks && activeSchedule.isCancelled !== true;
+  const isRecurring = activeSchedule.repeatEveryDays !== null;
+  const canStopRepeat = isRecurring && activeSchedule.isCancelled !== true;
 
   function handleRequestCancel() {
     // §5.4: sheet "Kelola jadwal" ditutup dulu (pemanggil memanggil onClose),
@@ -195,6 +217,53 @@ export default function CareScheduleDetailScreen() {
     await loadDetail();
     setCancelLoading(false);
     setConfirmOpen(false);
+  }
+
+  function handleRequestStopRepeat() {
+    // Pola yang sama dengan handleRequestCancel: tunggu sheet menutup dulu.
+    setTimeout(() => setStopRepeatConfirmOpen(true), 260);
+  }
+
+  async function runStopRepeat() {
+    setStopRepeatLoading(true);
+    setError(null);
+
+    const result = await stopScheduleRepeat({
+      scheduleId: activeSchedule.id,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setStopRepeatLoading(false);
+      setStopRepeatConfirmOpen(false);
+      return;
+    }
+
+    await loadDetail();
+    setStopRepeatLoading(false);
+    setStopRepeatConfirmOpen(false);
+    setSuccess('Pengulangan dihentikan. Jadwal ini tetap dikerjakan.');
+  }
+
+  async function runAssignWorker() {
+    setAssignLoading(true);
+    setError(null);
+
+    const result = await assignWorkerToSchedule({
+      scheduleId: activeSchedule.id,
+      workerId: assignWorkerId,
+    });
+
+    if (result.error) {
+      setError(result.error.message);
+      setAssignLoading(false);
+      return;
+    }
+
+    setAssignWorkerId('');
+    await loadDetail();
+    setAssignLoading(false);
+    setSuccess('Pekerja ditugaskan.');
   }
 
   const showWorkerHeadings = activeSchedule.tasks.length > 1;
@@ -231,23 +300,37 @@ export default function CareScheduleDetailScreen() {
     >
       <ManageScheduleSheet
         cancelDisabled={cancelLoading}
+        canStopRepeat={canStopRepeat}
         locked={isLocked}
         lockMessage={lockMessage}
+        stopRepeatDisabled={stopRepeatLoading}
         visible={manageOpen}
         onClose={() => setManageOpen(false)}
         onCancelSchedule={handleRequestCancel}
         onEditSchedule={() => router.push(`/owner/schedules/${activeSchedule.id}/edit`)}
+        onStopRepeat={handleRequestStopRepeat}
       />
 
       <ConfirmDialog
         confirmLabel="Batalkan jadwal"
         loading={cancelLoading}
-        message={`Tugas dari jadwal ini tidak lagi muncul sebagai pekerjaan aktif untuk ${formatScheduleWorkers(activeSchedule, workerNames)}. Tindakan ini tidak bisa dibatalkan.`}
+        message={buildCancelConfirmMessage(activeSchedule, workerNames)}
         title="Batalkan jadwal?"
         tone="danger"
         visible={confirmOpen}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={runCancelSchedule}
+      />
+
+      <ConfirmDialog
+        confirmLabel="Hentikan pengulangan"
+        loading={stopRepeatLoading}
+        message="Jadwal ini tetap dikerjakan seperti biasa — hanya kelanjutannya yang berhenti, jadi tidak ada jadwal baru yang dibuat setelah tugasnya selesai."
+        title="Hentikan pengulangan?"
+        tone="default"
+        visible={stopRepeatConfirmOpen}
+        onCancel={() => setStopRepeatConfirmOpen(false)}
+        onConfirm={runStopRepeat}
       />
 
       <ErrorBanner message={error} />
@@ -277,6 +360,18 @@ export default function CareScheduleDetailScreen() {
         </Text>
       </View>
 
+      {needsWorker ? (
+        <AssignWorkerNotice
+          loading={assignLoading}
+          onAssign={runAssignWorker}
+          onSelectWorker={setAssignWorkerId}
+          selectedWorkerId={assignWorkerId}
+          workers={activeWorkers}
+        />
+      ) : null}
+
+      {isRecurring ? <RecurringScheduleNotice schedule={activeSchedule} /> : null}
+
       <View style={{ gap: spacing.xs }}>
         <DueDatePillView pill={pill} />
         {activeSchedule.isCancelled && activeSchedule.cancelReason ? (
@@ -304,54 +399,164 @@ export default function CareScheduleDetailScreen() {
         </Text>
       </View>
 
-      <View style={{ gap: spacing.md }}>
-        <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700', lineHeight: typography.h3.lineHeight }}>
-          Hasil kerja
-        </Text>
-        {activeSchedule.tasks.map((task) => {
-          const activities = taskDetailMap[task.id]?.activities ?? [];
-          const workerName = workerNames[task.assignedTo];
+      {/* Tanpa tugas tidak ada hasil kerja yang mungkin ada — dulu heading ini
+          tetap dirender lalu [].map() menyisakan judul yatim tanpa isi. */}
+      {hasTasks ? (
+        <View style={{ gap: spacing.md }}>
+          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700', lineHeight: typography.h3.lineHeight }}>
+            Hasil kerja
+          </Text>
+          {activeSchedule.tasks.map((task) => {
+            const activities = taskDetailMap[task.id]?.activities ?? [];
+            const workerName = workerNames[task.assignedTo];
 
-          return (
-            <View key={task.id} style={{ gap: spacing.sm }}>
-              {showWorkerHeadings ? (
-                <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-                  {workerName ?? 'Pekerja tidak tersedia'}
-                </Text>
-              ) : null}
-              {activities.length === 0 ? (
-                <EmptyState
-                  title="Belum ada hasil kerja"
-                  subtitle={`${workerName ?? 'Pekerja'} belum menyelesaikan atau menunda tugas ini.`}
+            return (
+              <View key={task.id} style={{ gap: spacing.sm }}>
+                {showWorkerHeadings ? (
+                  <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
+                    {workerName ?? 'Pekerja tidak tersedia'}
+                  </Text>
+                ) : null}
+                {/* Bentuk yang sama dengan layar detail tugas — pekerja maupun
+                    owner. Tanpa onFixLatestNote: baris di sisi owner murni baca.
+
+                    performerNames tidak dioper di sini karena nama pekerjanya
+                    sudah jadi judul blok (showWorkerHeadings); mengulanginya di
+                    tiap baris cuma bising. */}
+                <WorkResultList
+                  activities={activities}
+                  emptySubtitle={`${workerName ?? 'Pekerja'} belum menyelesaikan atau menunda tugas ini.`}
+                  proofPhotoMap={proofPhotoMap}
                 />
-              ) : (
-                activities.map((activity) => (
-                  <WorkResultCard key={activity.id} activity={activity} proof={proofPhotoMap[activity.id]} />
-                ))
-              )}
-            </View>
-          );
-        })}
-      </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
     </Screen>
+  );
+}
+
+// Blok penugasan untuk jadwal yang belum punya tugas. Pill pekerja memakai
+// FormChipGroup yang sama dengan form Buat/Edit jadwal, bukan salinan gayanya.
+function AssignWorkerNotice({
+  loading,
+  onAssign,
+  onSelectWorker,
+  selectedWorkerId,
+  workers,
+}: {
+  loading: boolean;
+  onAssign: () => void;
+  onSelectWorker: (workerId: string) => void;
+  selectedWorkerId: string;
+  workers: WorkerMembership[];
+}) {
+  return (
+    <View
+      style={{
+        backgroundColor: statusColors.warning.background,
+        borderColor: statusColors.warning.border,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        gap: spacing.md,
+        padding: spacing.lg,
+      }}
+    >
+      <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm }}>
+        <Icon name="alert-triangle" size={18} color={statusColors.warning.text} />
+        <Text selectable style={{ color: statusColors.warning.text, flex: 1, fontSize: 15, fontWeight: '700' }}>
+          Belum ada pekerja
+        </Text>
+      </View>
+
+      {/* Penyebabnya tidak bisa dipastikan dari data yang ada di layar ini —
+          kalimatnya sengaja menyebut sebab yang paling mungkin tanpa mengklaim
+          pasti. Lihat catatan di laporan Tahap D. */}
+      <Text selectable style={{ color: colors.text, fontSize: 13, lineHeight: 19 }}>
+        Jadwal ini belum ditugaskan ke siapa pun, jadi tidak muncul sebagai pekerjaan aktif. Ini biasanya
+        terjadi kalau pekerja sebelumnya sudah keluar dari kebun saat jadwal ini dibuat.
+      </Text>
+
+      <FormChipGroup
+        emptyText="Belum ada pekerja aktif. Setujui pekerja dulu sebelum menugaskan."
+        label="Pilih pekerja"
+        options={workers.map((worker) => ({ label: worker.fullName, value: worker.userId }))}
+        selectedValue={selectedWorkerId}
+        onSelect={onSelectWorker}
+      />
+
+      {workers.length > 0 ? (
+        <Button
+          disabled={!selectedWorkerId}
+          loading={loading}
+          title="Tugaskan"
+          variant="primary"
+          onPress={onAssign}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+// Informasi rantai. Posisi urut (ke-berapa dalam rantai) TIDAK ditampilkan
+// karena butuh query baru ke care_schedules by series_id; yang bisa dihitung
+// murni dari data di layar hanyalah apakah jadwal ini pangkal rantai atau
+// lanjutan, lewat parentScheduleId.
+function RecurringScheduleNotice({ schedule }: { schedule: CareScheduleDetail }) {
+  const isChainStart = schedule.parentScheduleId === null;
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors.primarySoft,
+        borderColor: colors.primaryBorder,
+        borderCurve: 'continuous',
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        gap: spacing.xs,
+        padding: spacing.lg,
+      }}
+    >
+      <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm }}>
+        <Icon name="calendar" size={18} color={colors.primary} />
+        <Text selectable style={{ color: colors.text, flex: 1, fontSize: 15, fontWeight: '700' }}>
+          {`Berulang tiap ${schedule.repeatEveryDays} hari`}
+        </Text>
+      </View>
+      <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19 }}>
+        {isChainStart ? 'Jadwal pertama dalam rantai ini.' : 'Lanjutan dari jadwal sebelumnya.'}
+      </Text>
+      <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19 }}>
+        Tanggal jadwal berikutnya dihitung dari tanggal tugas ini diselesaikan, bukan dari tanggal yang
+        tertulis di jadwal.
+      </Text>
+    </View>
   );
 }
 
 function ManageScheduleSheet({
   cancelDisabled,
+  canStopRepeat,
   locked,
   lockMessage,
   onCancelSchedule,
   onClose,
   onEditSchedule,
+  onStopRepeat,
+  stopRepeatDisabled,
   visible,
 }: {
   cancelDisabled: boolean;
+  canStopRepeat: boolean;
   locked: boolean;
   lockMessage: string;
   onCancelSchedule: () => void;
   onClose: () => void;
   onEditSchedule: () => void;
+  onStopRepeat: () => void;
+  stopRepeatDisabled: boolean;
   visible: boolean;
 }) {
   return (
@@ -371,7 +576,23 @@ function ManageScheduleSheet({
             onEditSchedule();
           }}
         />
+        {/* Sengaja TIDAK terkunci oleh `locked`: jadwal yang sudah punya hasil
+            kerja tetap boleh dihentikan rantainya — itu justru saat paling wajar
+            owner ingin menyetopnya. Yang dikunci hanya edit & batal. */}
+        {canStopRepeat ? (
+          <ManageScheduleRow
+            description="Jadwal ini tetap dikerjakan, hanya kelanjutannya berhenti"
+            disabled={stopRepeatDisabled}
+            icon="x"
+            label="Hentikan pengulangan"
+            onPress={() => {
+              onClose();
+              onStopRepeat();
+            }}
+          />
+        ) : null}
         <ManageScheduleRow
+          description="Jadwal ini dibatalkan dan tugasnya tidak lagi aktif"
           disabled={locked || cancelDisabled}
           icon="x"
           label="Batalkan jadwal"
@@ -387,12 +608,16 @@ function ManageScheduleSheet({
 }
 
 function ManageScheduleRow({
+  description,
   disabled,
   icon,
   label,
   onPress,
   tone = 'default',
 }: {
+  // Dipakai untuk membedakan "Hentikan pengulangan" dari "Batalkan jadwal" —
+  // dua aksi yang artinya jauh berbeda dan tidak boleh tertukar.
+  description?: string;
   disabled: boolean;
   icon: IconName;
   label: string;
@@ -432,38 +657,18 @@ function ManageScheduleRow({
       >
         <Icon name={icon} size={20} color={iconColor} />
       </View>
-      <Text selectable style={{ color: textColor, flex: 1, fontSize: 16, fontWeight: '700' }}>
-        {label}
-      </Text>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text selectable style={{ color: textColor, fontSize: 16, fontWeight: '700' }}>
+          {label}
+        </Text>
+        {description ? (
+          <Text selectable style={{ color: colors.textMuted, fontSize: 12, lineHeight: 16 }}>
+            {description}
+          </Text>
+        ) : null}
+      </View>
       {disabled ? null : <Icon name="chevron-right" size={20} color={colors.textSoft} />}
     </Pressable>
-  );
-}
-
-function WorkResultCard({ activity, proof }: { activity: CareActivity; proof?: TaskProofPhoto }) {
-  return (
-    <Card>
-      <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
-        <Badge label={formatActivityStatus(activity.status)} tone={getActivityTone(activity.status)} />
-        <Text selectable style={{ color: colors.textMuted, fontSize: 12 }}>
-          {formatDateTime(activity.performedAt)}
-        </Text>
-      </View>
-      {activity.note ? (
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-          {activity.note}
-        </Text>
-      ) : null}
-      {activity.produk ? (
-        <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
-          <Icon name="basket" size={14} color={colors.textMuted} />
-          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-            {activity.produk}
-          </Text>
-        </View>
-      ) : null}
-      {proof ? <TaskProofPhotoPreview borderRadius={8} photo={proof} /> : null}
-    </Card>
   );
 }
 
@@ -520,9 +725,8 @@ function ProofPhotoIndicator() {
   );
 }
 
-function getActivityTone(status: ActivityStatus): 'success' | 'warning' {
-  return status === 'completed' ? 'success' : 'warning';
-}
+// getActivityTone() dan WorkResultCard dihapus: bentuk baris hasil kerja kini
+// milik WorkResultList, dipakai bersama layar pekerja.
 
 function formatScheduleStatus(schedule: CareScheduleDetail): string {
   if (schedule.isCancelled) {
@@ -564,7 +768,7 @@ function getScheduleTone(schedule: CareScheduleDetail): 'danger' | 'muted' | 'su
   return 'muted';
 }
 
-function scheduleHasRealization(
+function scheduleHasWorkResult(
   schedule: CareScheduleDetail,
   taskDetailMap: Record<string, CareTaskDetail>
 ): boolean {
@@ -582,12 +786,31 @@ function formatScheduleWorkers(
   return names.length > 0 ? names.join(', ') : 'Belum ada pekerja';
 }
 
-function getTodayIsoDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
+// Kalimatnya dirakit, bukan satu template: tanpa pekerja, menyisipkan
+// formatScheduleWorkers() menghasilkan "...pekerjaan aktif untuk Belum ada
+// pekerja." Jadwal berulang juga wajib disebut supaya owner tahu membatalkan
+// ikut menghentikan rantainya.
+function buildCancelConfirmMessage(
+  schedule: CareScheduleDetail,
+  workerNames: Record<string, string>
+): string {
+  const workerNamesList = Array.from(
+    new Set(schedule.tasks.map((task) => workerNames[task.assignedTo]).filter((name): name is string => Boolean(name)))
+  );
+
+  const lead =
+    schedule.tasks.length === 0
+      ? 'Jadwal ini belum punya tugas, jadi tidak ada pekerjaan aktif yang dibatalkan.'
+      : workerNamesList.length > 0
+        ? `Tugas dari jadwal ini tidak lagi muncul sebagai pekerjaan aktif untuk ${workerNamesList.join(', ')}.`
+        : 'Tugas dari jadwal ini tidak lagi muncul sebagai pekerjaan aktif.';
+
+  const repeatNote =
+    schedule.repeatEveryDays !== null
+      ? ' Pengulangannya ikut berhenti, jadi tidak ada jadwal lanjutan yang dibuat.'
+      : '';
+
+  return `${lead}${repeatNote} Tindakan ini tidak bisa dibatalkan.`;
 }
 
 function formatDate(value: string): string {

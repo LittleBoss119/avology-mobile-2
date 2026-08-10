@@ -127,8 +127,8 @@ export function TreeGrowthPhaseRecordScreen({
 
   return (
     <Screen
-      footer={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
       header={<TopAppBar title="Catat Fase" onBack={() => router.back()} />}
+      stickyFooter={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
 

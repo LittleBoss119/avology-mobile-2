@@ -17,12 +17,15 @@ import { createManualSchedule } from '../../../../src/services/careScheduleServi
 import { getActiveWorkers } from '../../../../src/services/memberService';
 import { getTrees } from '../../../../src/services/treeService';
 import type { CareCategory, Tree, WorkerMembership } from '../../../../src/types/domain';
+import { getTodayIsoDate } from '../../../../src/utils/taskDueDate';
 
 const initialValues: ManualScheduleFormValues = {
   assignedWorkerId: '',
   category: '',
   customTargetNote: '',
   instruction: '',
+  repeatEnabled: false,
+  repeatEveryDays: '',
   requiresPhoto: false,
   scheduledDate: getTodayIsoDate(),
   targetColumn: '',
@@ -138,6 +141,9 @@ export default function CreateManualScheduleScreen() {
       customTargetNote: values.targetType === 'custom' ? values.customTargetNote : null,
       farmId,
       instruction: values.instruction,
+      // Aman: validateScheduleForm sudah memastikan angkanya bulat & dalam batas
+      // saat repeatEnabled. "Sekali" mengirim null, bukan 0.
+      repeatEveryDays: values.repeatEnabled ? Number(values.repeatEveryDays.trim()) : null,
       requiresPhoto: values.requiresPhoto,
       scheduledDate: values.scheduledDate,
       targetColumn: values.targetType === 'column' ? values.targetColumn : null,
@@ -175,6 +181,7 @@ export default function CreateManualScheduleScreen() {
           onFieldLayout={(key, y) => {
             fieldOffsets.current[key] = y;
           }}
+          showRepeat
           trees={trees}
           values={values}
           workers={workers}
@@ -182,12 +189,4 @@ export default function CreateManualScheduleScreen() {
       </View>
     </Screen>
   );
-}
-
-function getTodayIsoDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }

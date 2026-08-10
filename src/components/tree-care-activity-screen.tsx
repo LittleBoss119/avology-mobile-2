@@ -8,7 +8,7 @@ import { getTreeDetail } from '../services/treeService';
 import type { CareCategory, Tree } from '../types/domain';
 import { formatCareCategory } from '../utils/displayFormat';
 import { formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
-import { careCategoryOptions } from './care-sop-components';
+import { careCategoryOptions } from '../constants/careCategory';
 import { useSnackbar } from './snackbar';
 import { Button, Card, DateField, ErrorBanner, Field, FormSection, LoadingState, MetaRow, OptionGroup, Screen, TopAppBar } from './ui';
 
@@ -123,8 +123,8 @@ export function TreeCareActivityScreen({
 
   return (
     <Screen
-      footer={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
       header={<TopAppBar title="Catat perawatan" onBack={() => router.back()} />}
+      stickyFooter={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
 

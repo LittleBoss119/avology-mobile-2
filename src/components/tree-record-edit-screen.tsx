@@ -2,6 +2,12 @@ import { router } from 'expo-router';
 import React from 'react';
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
+import {
+  GRADE_PANEN,
+  GRADE_PANEN_LABELS,
+  MAX_BERAT_PANEN_KG,
+  type GradePanen,
+} from '../constants/gradePanen';
 import { colors, radius, spacing, typography } from '../constants/theme';
 import {
   getConditionReportDetail,
@@ -22,6 +28,7 @@ import type {
   TreeConditionStatus,
   UUID,
 } from '../types/domain';
+import { MAX_ANGKA_DESIMAL, parseDecimalInput, sanitizeDecimalInput } from '../utils/decimalInput';
 import { formatGrowthPhase, formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import type { TreeRecordRouteType } from './tree-record-detail-screen';
 import {
@@ -33,6 +40,7 @@ import {
   FormSection,
   LoadingState,
   MetaRow,
+  OptionGroup,
   Screen,
   TopAppBar,
 } from './ui';
@@ -72,7 +80,8 @@ export function TreeRecordEditScreen({
   const [conditionStatus, setConditionStatus] = React.useState<TreeConditionStatus | ''>('');
   const [eventDate, setEventDate] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
-  const [fruitCondition, setFruitCondition] = React.useState('');
+  const [grade, setGrade] = React.useState<GradePanen | null>(null);
+  const [beratKg, setBeratKg] = React.useState('');
   const [fruitCount, setFruitCount] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
@@ -141,8 +150,11 @@ export function TreeRecordEditScreen({
 
       setCanEdit(result.data.canEdit === true);
       setEventDate(toDateInput(result.data.harvestedAt));
-      setFruitCondition(result.data.fruitCondition ?? '');
-      setFruitCount(String(result.data.fruitCount));
+      // Dulu `String(result.data.fruitCount)`. Sejak kolomnya nullable, itu
+      // menghasilkan teks "null" di dalam field — bukan field kosong.
+      setGrade(result.data.fruitCondition);
+      setBeratKg(result.data.harvestWeightKg === null ? '' : String(result.data.harvestWeightKg));
+      setFruitCount(result.data.fruitCount === null ? '' : String(result.data.fruitCount));
       setNote(result.data.note ?? '');
       return;
     }
@@ -215,19 +227,40 @@ export function TreeRecordEditScreen({
     }
 
     if (type === 'harvest') {
-      const parsedFruitCount = Number(fruitCount);
+      // Aturan yang sama persis dengan form catat panen: minimal salah satu
+      // dari berat atau jumlah buah, dan batas atas berat dijaga di klien
+      // supaya pesannya terbaca.
+      const beratTeks = beratKg.trim();
+      const jumlahTeks = fruitCount.trim();
 
-      if (!fruitCount.trim()) {
-        return 'Jumlah buah wajib diisi.';
+      if (!beratTeks && !jumlahTeks) {
+        return 'Isi berat panen atau jumlah buah, minimal salah satu.';
       }
 
-      if (!Number.isInteger(parsedFruitCount) || parsedFruitCount <= 0) {
-        return 'Jumlah buah harus lebih dari 0.';
+      if (beratTeks) {
+        const berat = parseDecimalInput(beratTeks);
+
+        if (berat === null) {
+          return 'Berat panen harus lebih dari 0.';
+        }
+
+        if (berat > MAX_BERAT_PANEN_KG) {
+          return 'Berat panen terlalu besar.';
+        }
+      }
+
+      if (jumlahTeks) {
+        const jumlah = Number(jumlahTeks);
+
+        if (!Number.isInteger(jumlah) || jumlah <= 0) {
+          return 'Jumlah buah harus lebih dari 0.';
+        }
       }
 
       const result = await updateOwnHarvestRecord({
-        fruitCondition,
-        fruitCount: parsedFruitCount,
+        fruitCondition: grade,
+        fruitCount: jumlahTeks ? Number(jumlahTeks) : null,
+        harvestWeightKg: parseDecimalInput(beratKg),
         harvestedAt: eventDate,
         note,
         recordId: id,
@@ -313,13 +346,32 @@ export function TreeRecordEditScreen({
       {normalizedType === 'harvest' ? (
         <FormSection title="Hasil panen">
           <DateField label="Tanggal panen *" onChangeDate={setEventDate} value={eventDate} />
+          {/* Berat di atas jumlah buah, sama dengan form catat panen. */}
+          <InputField
+            keyboardType="decimal-pad"
+            label="Berat panen (kg)"
+            onChangeText={(value) => setBeratKg(sanitizeDecimalInput(value, MAX_ANGKA_DESIMAL))}
+            value={beratKg}
+          />
           <InputField
             keyboardType="number-pad"
-            label="Jumlah buah *"
+            label="Jumlah buah"
             onChangeText={(value) => setFruitCount(value.replace(/[^0-9]/g, ''))}
             value={fruitCount}
           />
-          <InputField label="Kondisi buah" onChangeText={setFruitCondition} value={fruitCondition} />
+          {/* Grade memakai OptionGroup yang sama dengan form catat panen supaya
+              field ini terlihat identik di kedua layar. Menekan chip yang sudah
+              aktif membatalkan pilihan — grade memang opsional. */}
+          <OptionGroup
+            label="Grade"
+            options={GRADE_PANEN.map((option) => ({
+              disabled: submitting,
+              label: GRADE_PANEN_LABELS[option],
+              value: option,
+            }))}
+            value={grade}
+            onChange={(value) => setGrade(grade === value ? null : (value as GradePanen))}
+          />
           <TextArea label="Catatan" onChangeText={setNote} value={note} />
         </FormSection>
       ) : null}
@@ -432,7 +484,9 @@ function InputField({
   onChangeText,
   value,
 }: {
-  keyboardType?: 'default' | 'number-pad';
+  // 'decimal-pad' ditambahkan untuk field berat panen: pemisah desimal harus
+  // ada di papan tombol, dan 'number-pad' tidak menyediakannya.
+  keyboardType?: 'default' | 'decimal-pad' | 'number-pad';
   label: string;
   onChangeText: (value: string) => void;
   value: string;

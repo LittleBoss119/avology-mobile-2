@@ -22,10 +22,15 @@ import type {
   Tree,
   WorkerMembership,
 } from '../types/domain';
-import { formatOperationalReportCategory, formatTargetType } from '../utils/displayFormat';
+import {
+  formatCareCategory,
+  formatOperationalReportCategory,
+  formatTargetType,
+} from '../utils/displayFormat';
+import { getTodayIsoDate } from '../utils/taskDueDate';
 import { formatTreeLocation } from '../utils/treeFormat';
 import { ProofRequirementToggle } from './care-schedule-components';
-import { careCategoryOptions, formatCareCategory } from './care-sop-components';
+import { careCategoryOptions } from '../constants/careCategory';
 import { Icon } from './icons';
 import { useSnackbar } from './snackbar';
 import {
@@ -446,12 +451,4 @@ function TextArea({
       />
     </View>
   );
-}
-
-function getTodayIsoDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }

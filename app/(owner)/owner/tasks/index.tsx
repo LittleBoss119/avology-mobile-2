@@ -18,6 +18,7 @@ import { useAuth } from '../../../../src/context/auth-context';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { getFarmTasks } from '../../../../src/services/careTaskService';
 import type { CareTask, FarmMemberBasicProfile, TaskStatus } from '../../../../src/types/domain';
+import { getTodayIsoDate } from '../../../../src/utils/taskDueDate';
 
 type TaskStatusFilter = 'all' | 'today' | TaskStatus;
 
@@ -188,12 +189,4 @@ function SummaryPill({ label, value }: { label: string; value: number }) {
 
 function countTasksByStatus(tasks: CareTask[], status: TaskStatus): number {
   return tasks.filter((task) => task.status === status).length;
-}
-
-function getTodayIsoDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }

@@ -86,11 +86,6 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/trees/[treeId]/phase" options={{ headerShown: false, title: 'Catat Fase' }} />
           <Stack.Screen name="owner/trees/[treeId]/care" options={{ headerShown: false, title: 'Catat Perawatan' }} />
           <Stack.Screen name="owner/trees/[treeId]/harvest" options={{ headerShown: false, title: 'Catat Panen' }} />
-          <Stack.Screen name="owner/sops/index" options={{ headerShown: false, title: 'SOP Perawatan' }} />
-          <Stack.Screen name="owner/sops/create" options={{ headerShown: false, title: 'Tambah SOP' }} />
-          <Stack.Screen name="owner/sops/[sopId]" options={{ headerShown: false, title: 'Detail SOP' }} />
-          <Stack.Screen name="owner/sops/[sopId]/edit" options={{ headerShown: false, title: 'Edit SOP' }} />
-          <Stack.Screen name="owner/sops/[sopId]/schedule" options={{ headerShown: false, title: 'Buat Jadwal' }} />
           <Stack.Screen name="owner/schedules/index" options={{ headerShown: false, title: 'Jadwal Perawatan' }} />
           <Stack.Screen name="owner/schedules/create" options={{ headerShown: false, title: 'Jadwal Manual' }} />
           <Stack.Screen name="owner/schedules/[scheduleId]" options={{ headerShown: false, title: 'Detail Jadwal' }} />

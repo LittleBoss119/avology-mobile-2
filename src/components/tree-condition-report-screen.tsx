@@ -245,8 +245,8 @@ export function TreeConditionReportScreen({
 
   return (
     <Screen
-      footer={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
       header={<TopAppBar title="Catat Kondisi" onBack={() => router.back()} />}
+      stickyFooter={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
 

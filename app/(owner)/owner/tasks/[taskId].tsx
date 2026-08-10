@@ -7,9 +7,8 @@ import {
   formatTaskSource,
   formatTaskStatus,
 } from '../../../../src/components/care-schedule-components';
-import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import { ReportSourceRow } from '../../../../src/components/operational-report-source-row';
-import { TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
+import { WorkResultList } from '../../../../src/components/work-result-list';
 import {
   Badge,
   Card,
@@ -20,7 +19,7 @@ import {
   Screen,
   TopAppBar,
 } from '../../../../src/components/ui';
-import { colors } from '../../../../src/constants/theme';
+import { colors, tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
@@ -32,7 +31,7 @@ import type {
   OperationalReport,
 } from '../../../../src/types/domain';
 import type { TaskProofPhotoMap } from '../../../../src/types/media';
-import { formatActivityStatus } from '../../../../src/utils/displayFormat';
+import { formatCareCategory } from '../../../../src/utils/displayFormat';
 
 export default function OwnerTaskDetailScreen() {
   const { currentFarm } = useAuth();
@@ -185,37 +184,29 @@ export default function OwnerTaskDetailScreen() {
         </Card>
       )}
 
-      <Text selectable style={{ color: '#1E2A24', fontSize: 20, fontWeight: '700', paddingTop: 4 }}>
-        Hasil kerja
+      <Text selectable style={{ ...tokens.type.heading, color: tokens.color.text.primary, paddingTop: tokens.space.xs }}>
+        {task.activities.length === 0 ? 'Hasil kerja' : 'Riwayat hasil kerja'}
       </Text>
-      {task.activities.length === 0 ? (
-        <EmptyState
-          title="Belum ada hasil kerja"
-          subtitle={task.requiresPhoto ? 'Menunggu bukti foto dari pekerja.' : 'Pekerja belum menyelesaikan atau menunda tugas ini.'}
-        />
-      ) : (
-        <View style={{ gap: 12 }}>
-          {task.activities.map((activity) => (
-            <Card key={activity.id}>
-              <MetaRow label="Status" value={formatActivityStatus(activity.status)} />
-              <MetaRow label="Pelaksana" value={workerNames[activity.performedBy] ?? 'Pengguna tidak tersedia'} />
-              <MetaRow label="Waktu" value={formatDateTime(activity.performedAt)} />
-              <MetaRow label="Catatan" value={activity.note} />
-              {activity.status === 'completed' ? (
-                <>
-                  <Text selectable style={{ color: '#1E2A24', fontSize: 15, fontWeight: '700' }}>
-                    Bukti foto
-                  </Text>
-                  <TaskProofPhotoPreview
-                    emptyText={task.requiresPhoto ? 'Menunggu bukti foto dari pekerja.' : undefined}
-                    photo={proofPhotoMap[activity.id]}
-                  />
-                </>
-              ) : null}
-            </Card>
-          ))}
-        </View>
-      )}
+      {/* Bentuk barisnya SAMA PERSIS dengan yang dilihat pekerja — itu inti
+          gunanya bagi owner: melihat bahwa satu tugas sempat ditunda beberapa
+          kali sebelum beres, dan bahan apa yang dipakai.
+
+          Tanpa onFixLatestNote: memperbaiki catatan adalah hak pencatatnya, dan
+          RPC update_task_realization memang menolak siapa pun selain
+          performed_by. Baris di sisi owner murni baca.
+
+          performerNames dioper karena owner perlu tahu SIAPA yang mencatat;
+          pekerja tidak butuh itu, dia dirinya sendiri. */}
+      <WorkResultList
+        activities={task.activities}
+        emptySubtitle={
+          task.requiresPhoto
+            ? 'Menunggu pekerja mencatat hasil kerja dan bukti fotonya.'
+            : 'Pekerja belum menyelesaikan atau menunda tugas ini.'
+        }
+        performerNames={workerNames}
+        proofPhotoMap={proofPhotoMap}
+      />
     </Screen>
   );
 }

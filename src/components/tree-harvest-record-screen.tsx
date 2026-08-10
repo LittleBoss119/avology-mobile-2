@@ -2,15 +2,34 @@ import { router } from 'expo-router';
 import React from 'react';
 import { Text } from 'react-native';
 
+import {
+  GRADE_PANEN,
+  GRADE_PANEN_LABELS,
+  MAX_BERAT_PANEN_KG,
+  type GradePanen,
+} from '../constants/gradePanen';
 import { tokens } from '../constants/theme';
 import { createHarvestRecord } from '../services/harvestService';
 import { getTreeDetail } from '../services/treeService';
 import type { Tree } from '../types/domain';
+import { MAX_ANGKA_DESIMAL, parseDecimalInput, sanitizeDecimalInput } from '../utils/decimalInput';
 import { formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { useSnackbar } from './snackbar';
-import { Button, Card, DateField, ErrorBanner, Field, FormSection, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
+import {
+  Button,
+  Card,
+  DateField,
+  ErrorBanner,
+  Field,
+  FormSection,
+  LoadingState,
+  MetaRow,
+  OptionGroup,
+  Screen,
+  TopAppBar,
+} from './ui';
 
-type HarvestFormErrors = { fruitCount?: string };
+type HarvestFormErrors = { jumlah?: string };
 
 export function TreeHarvestRecordScreen({
   basePath,
@@ -23,7 +42,8 @@ export function TreeHarvestRecordScreen({
   const [error, setError] = React.useState<string | null>(null);
   const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
   const [fieldErrors, setFieldErrors] = React.useState<HarvestFormErrors>({});
-  const [fruitCondition, setFruitCondition] = React.useState('');
+  const [grade, setGrade] = React.useState<GradePanen | null>(null);
+  const [beratKg, setBeratKg] = React.useState('');
   const [fruitCount, setFruitCount] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
@@ -76,15 +96,10 @@ export function TreeHarvestRecordScreen({
       return;
     }
 
-    if (!fruitCount.trim()) {
-      setFieldErrors({ fruitCount: 'Jumlah buah dipanen wajib diisi.' });
-      return;
-    }
+    const jumlahMessage = validateJumlahPanen();
 
-    const parsedFruitCount = Number(fruitCount);
-
-    if (!Number.isInteger(parsedFruitCount) || parsedFruitCount <= 0) {
-      setFieldErrors({ fruitCount: 'Jumlah buah harus lebih dari 0.' });
+    if (jumlahMessage) {
+      setFieldErrors({ jumlah: jumlahMessage });
       return;
     }
 
@@ -94,8 +109,9 @@ export function TreeHarvestRecordScreen({
 
     const result = await createHarvestRecord({
       farmId: tree.farmId,
-      fruitCondition,
-      fruitCount: parsedFruitCount,
+      fruitCondition: grade,
+      fruitCount: fruitCount.trim() ? Number(fruitCount) : null,
+      harvestWeightKg: parseDecimalInput(beratKg),
       harvestedAt: eventDate,
       note,
       treeId: tree.id,
@@ -112,14 +128,51 @@ export function TreeHarvestRecordScreen({
     router.replace(`${basePath}/${tree.id}`);
   }
 
+  // Minimal salah satu dari berat atau jumlah buah. Cerminan constraint
+  // harvest_records_amount_present_check, dan RPC menegakkan aturan yang sama —
+  // ini hanya supaya pekerja dapat jawaban tanpa menunggu jaringan.
+  function validateJumlahPanen(): string | null {
+    const beratTeks = beratKg.trim();
+    const jumlahTeks = fruitCount.trim();
+
+    if (!beratTeks && !jumlahTeks) {
+      return 'Isi berat panen atau jumlah buah, minimal salah satu.';
+    }
+
+    if (beratTeks) {
+      const berat = parseDecimalInput(beratTeks);
+
+      if (berat === null) {
+        return 'Berat panen harus lebih dari 0.';
+      }
+
+      // Dijaga di sini, bukan diserahkan ke constraint database. Pelanggaran
+      // constraint sampai ke layar sebagai "Terjadi kendala saat memproses
+      // data." — kalimat yang tidak menyebut angka mana yang kebesaran.
+      if (berat > MAX_BERAT_PANEN_KG) {
+        return 'Berat panen terlalu besar.';
+      }
+    }
+
+    if (jumlahTeks) {
+      const jumlah = Number(jumlahTeks);
+
+      if (!Number.isInteger(jumlah) || jumlah <= 0) {
+        return 'Jumlah buah harus lebih dari 0.';
+      }
+    }
+
+    return null;
+  }
+
   if (loading) {
     return <LoadingState message="Memuat pohon..." />;
   }
 
   return (
     <Screen
-      footer={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
       header={<TopAppBar title="Catat panen" onBack={() => router.back()} />}
+      stickyFooter={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
 
@@ -134,24 +187,49 @@ export function TreeHarvestRecordScreen({
         </Card>
       ) : null}
 
-      <FormSection title="Hasil panen" description="Catat jumlah buah yang dipanen dari pohon ini.">
+      {/* URUTAN DISENGAJA: berat DI ATAS jumlah buah. Seluruh target pemilik
+          kebun berbasis kilogram (2 kg/m², 13 ton dari 6.500 m²), jadi berat
+          adalah metrik utama dan jumlah buah sekunder. Field yang di atas lebih
+          sering diisi. */}
+      <FormSection title="Hasil panen" description="Isi berat panen, jumlah buah, atau keduanya.">
         <DateField label="Tanggal panen *" onChangeDate={setEventDate} value={eventDate} />
         <Field
-          error={fieldErrors.fruitCount}
+          error={fieldErrors.jumlah}
+          keyboardType="decimal-pad"
+          label="Berat panen (kg)"
+          onChangeText={(value) => {
+            setBeratKg(sanitizeDecimalInput(value, MAX_ANGKA_DESIMAL));
+            setFieldErrors((prev) => ({ ...prev, jumlah: undefined }));
+          }}
+          placeholder="Contoh: 12,5"
+          value={beratKg}
+        />
+        <Field
           keyboardType="number-pad"
-          label="Jumlah buah dipanen *"
+          label="Jumlah buah"
           onChangeText={(value) => {
             setFruitCount(value.replace(/[^0-9]/g, ''));
-            setFieldErrors((prev) => ({ ...prev, fruitCount: undefined }));
+            setFieldErrors((prev) => ({ ...prev, jumlah: undefined }));
           }}
           placeholder="Contoh: 12"
           value={fruitCount}
         />
-        <Field
-          label="Kondisi buah"
-          onChangeText={setFruitCondition}
-          placeholder="Opsional"
-          value={fruitCondition}
+      </FormSection>
+
+      {/* Grade WAJIB dipilih dari daftar, tidak boleh diketik. Kolom ini dulu
+          teks bebas dan sudah terlanjur berisi "Bagus", "Baik", "Good", dan
+          "Good test harvest" — empat nilai untuk satu maksud, dari satu orang.
+          Menekan chip yang sudah aktif membatalkan pilihan, karena grade
+          memang opsional. */}
+      <FormSection title="Grade" description="Opsional. Mutu panen menurut penilaian di lapangan.">
+        <OptionGroup
+          options={GRADE_PANEN.map((option) => ({
+            disabled: submitting,
+            label: GRADE_PANEN_LABELS[option],
+            value: option,
+          }))}
+          value={grade}
+          onChange={(value) => setGrade(grade === value ? null : (value as GradePanen))}
         />
       </FormSection>
 

@@ -248,16 +248,6 @@ function buildActionRows(summary: OwnerDashboardSummary): ActionRowItem[] {
     });
   }
 
-  if (summary.dueOrOverdueSops > 0) {
-    rows.push({
-      key: 'sops',
-      title: 'SOP jatuh tempo',
-      value: summary.dueOrOverdueSops,
-      valueColor: tokens.color.status.warning.text,
-      route: '/owner/sops',
-    });
-  }
-
   if (summary.newOperationalReports > 0) {
     rows.push({
       key: 'reports',

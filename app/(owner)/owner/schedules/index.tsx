@@ -2,16 +2,13 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { BottomSheet, SheetActionRow } from '../../../../src/components/bottom-sheet';
+import { BottomSheet } from '../../../../src/components/bottom-sheet';
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
-import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import { Icon } from '../../../../src/components/icons';
 import {
   Badge,
   Button,
-  Card,
   ChipButton,
-  CompactMetaItem,
   EmptyState,
   ErrorBanner,
   FilterChipsRow,
@@ -23,20 +20,23 @@ import {
 } from '../../../../src/components/ui';
 import { statusColors, tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
-import { getCareScheduleDetail, getCareSchedules } from '../../../../src/services/careScheduleService';
+import { getCareSchedulesWithTasks } from '../../../../src/services/careScheduleService';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
-import type { CareSchedule, CareScheduleDetail, FarmMemberBasicProfile, TargetType } from '../../../../src/types/domain';
-import { formatTargetType } from '../../../../src/utils/displayFormat';
-import { scheduleTimeBucket, type TimeBucket } from '../../../../src/utils/taskDueDate';
+import type { CareScheduleDetail, FarmMemberBasicProfile, TargetType } from '../../../../src/types/domain';
+import { formatCareCategory, formatTargetType } from '../../../../src/utils/displayFormat';
+import { dayDifference, getTodayIsoDate, scheduleTimeBucket, type TimeBucket } from '../../../../src/utils/taskDueDate';
 
-type TimeFilter = 'all' | 'today' | 'overdue' | 'upcoming';
+// Sumbu waktu sekarang dinyatakan oleh struktur section (Terlambat + per
+// tanggal), bukan chip. Yang tersisa di baris chip hanya pemisah agenda-vs-arsip.
+type CompletionFilter = 'unfinished' | 'completed';
 type ScheduleSourceFilter = 'all' | 'manual' | 'sop';
 type ScheduleTargetFilter = 'all' | TargetType;
-type ScheduleVisualStatus = 'cancelled' | 'completed' | 'postponed' | 'unfinished';
 
-// Empat sumbu filter yang saling bebas: timeFilter (baris chip) + tiga+satu grup di sheet.
+// Tiga sumbu filter di sheet, saling bebas. Sumbu "Status" DIHAPUS: chip
+// Belum selesai/Selesai di baris atas sudah menyatakannya, dan menjalankan
+// keduanya bersamaan menghasilkan kombinasi mati seperti "Belum selesai" +
+// status "Selesai" yang selalu nol baris tanpa penjelasan.
 type SheetCriteria = {
-  statuses: ScheduleVisualStatus[]; // array kosong = semua status
   source: ScheduleSourceFilter;
   target: ScheduleTargetFilter;
   worker: string; // 'all' | userId
@@ -44,24 +44,32 @@ type SheetCriteria = {
 
 const DEFAULT_CRITERIA: SheetCriteria = {
   source: 'all',
-  statuses: [],
   target: 'all',
   worker: 'all',
 };
 
-const timeFilters: Array<{ label: string; value: TimeFilter }> = [
-  { label: 'Semua', value: 'all' },
-  { label: 'Hari ini', value: 'today' },
-  { label: 'Terlambat', value: 'overdue' },
-  { label: 'Mendatang', value: 'upcoming' },
+// "Selesai" juga menampung jadwal yang DIBATALKAN: keduanya sama-sama bukan
+// pekerjaan yang masih menunggu, dan membiarkan yang dibatalkan di daftar agenda
+// membuat "Belum selesai" berisi baris yang tidak bisa dikerjakan siapa pun.
+// Baris yang dibatalkan tetap memakai badge "Dibatalkan" supaya tidak tertukar
+// dengan yang benar-benar selesai. Lihat catatan di laporan Tahap E.
+const completionFilters: Array<{ label: string; value: CompletionFilter }> = [
+  { label: 'Belum selesai', value: 'unfinished' },
+  { label: 'Selesai', value: 'completed' },
 ];
 
-const statusOptions: Array<{ label: string; value: ScheduleVisualStatus }> = [
-  { label: 'Belum', value: 'unfinished' },
-  { label: 'Ditunda', value: 'postponed' },
-  { label: 'Selesai', value: 'completed' },
-  { label: 'Dibatalkan', value: 'cancelled' },
-];
+// Jendela pengambilan untuk agenda "Belum selesai": 180 hari ke belakang.
+//
+// Kenapa 180 dan bukan 30/90: rantai berulang terpanjang yang masuk akal untuk
+// kebun adalah perawatan semesteran, jadi satu siklus penuh apa pun pasti muat
+// di dalam jendela ini. Jadwal yang dibuat manual jauh di masa lalu pun masih
+// terlihat selama masih dalam setengah tahun terakhir.
+//
+// Jendela ini TIDAK dipakai sebagai penentu kebenaran daftar — jadwal yang lebih
+// tua tapi tugasnya masih terbuka tetap dipungut lewat includeOlderOpenWork,
+// jadi memperbesar/mengecilkan angka ini hanya menggeser berapa banyak baris
+// yang ikut terambil, bukan baris mana yang boleh hilang.
+const UNFINISHED_LOOKBACK_DAYS = 180;
 
 const sourceFilters: Array<{ label: string; value: ScheduleSourceFilter }> = [
   { label: 'Semua', value: 'all' },
@@ -80,25 +88,38 @@ const targetOptions: Array<{ label: string; value: ScheduleTargetFilter }> = [
 
 export default function CareScheduleListScreen() {
   const { currentFarm } = useAuth();
-  const [addSheetOpen, setAddSheetOpen] = React.useState(false);
+  const [completionFilter, setCompletionFilter] = React.useState<CompletionFilter>('unfinished');
   const [criteria, setCriteria] = React.useState<SheetCriteria>(DEFAULT_CRITERIA);
   const [debouncedSearch, setDebouncedSearch] = React.useState('');
-  const [details, setDetails] = React.useState<Record<string, CareScheduleDetail>>({});
   const [draft, setDraft] = React.useState<SheetCriteria>(DEFAULT_CRITERIA);
   const [error, setError] = React.useState<string | null>(null);
   const [filterSheetOpen, setFilterSheetOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
-  const [schedules, setSchedules] = React.useState<CareSchedule[]>([]);
+  // Chip yang datanya SEDANG dipegang, bukan chip yang sedang disorot. Selama
+  // pemuatan berlangsung, penyaringan klien tetap memakai nilai ini supaya
+  // baris lama tidak lenyap dan layar tidak berkedip kosong.
+  const [loadedFilter, setLoadedFilter] = React.useState<CompletionFilter>('unfinished');
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [schedules, setSchedules] = React.useState<CareScheduleDetail[]>([]);
   const [search, setSearch] = React.useState('');
-  const [timeFilter, setTimeFilter] = React.useState<TimeFilter>('all');
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
 
   const farmId = currentFarm?.farmId;
+  const hasLoadedOnceRef = React.useRef(false);
+  // Penjaga hasil basi: kalau chip ditekan cepat berkali-kali, hanya respons
+  // permintaan TERAKHIR yang boleh menulis state.
+  const requestIdRef = React.useRef(0);
 
+  // Dulu: getCareSchedules + satu getCareScheduleDetail per jadwal, sehingga
+  // jumlah request tumbuh linear terhadap jumlah jadwal — dan sejak rantai
+  // berulang ada, jumlah jadwal tumbuh sendiri seiring waktu.
+  // getCareSchedulesWithTasks memuat jadwal beserta tugasnya dalam jumlah
+  // request tetap.
   const loadSchedules = React.useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
-      setDetails({});
       setSchedules([]);
       setWorkerNames({});
       return;
@@ -106,19 +127,36 @@ export default function CareScheduleListScreen() {
 
     setError(null);
 
+    // "Selesai" adalah arsip — memang perlu dilihat utuh, jadi tanpa batas
+    // tanggal. "Belum selesai" adalah agenda kerja: dibatasi jendela tanggal,
+    // dengan jaring pengaman includeOlderOpenWork supaya tunggakan yang lebih
+    // tua dari jendela tetap ikut terambil.
+    const scheduledFrom =
+      completionFilter === 'completed'
+        ? null
+        : addDaysToIsoDate(getTodayIsoDate(), -UNFINISHED_LOOKBACK_DAYS);
+
     const [result, workersResult] = await Promise.all([
-      getCareSchedules({ farmId }),
+      getCareSchedulesWithTasks({
+        farmId,
+        includeOlderOpenWork: scheduledFrom !== null,
+        scheduledFrom,
+      }),
       getFarmMemberBasicProfiles(farmId),
     ]);
 
+    if (requestId !== requestIdRef.current) {
+      return;
+    }
+
     if (result.error) {
       setError(result.error.message);
-      setDetails({});
       setSchedules([]);
       return;
     }
 
     setSchedules(result.data);
+    setLoadedFilter(completionFilter);
 
     if (workersResult.error) {
       setWorkerNames({});
@@ -129,20 +167,7 @@ export default function CareScheduleListScreen() {
         )
       );
     }
-
-    const detailEntries = await Promise.all(
-      result.data.map(async (schedule) => {
-        const detailResult = await getCareScheduleDetail({ scheduleId: schedule.id });
-        return [schedule.id, detailResult.error ? null : detailResult.data] as const;
-      })
-    );
-
-    setDetails(
-      Object.fromEntries(
-        detailEntries.filter((entry): entry is readonly [string, CareScheduleDetail] => Boolean(entry[1]))
-      )
-    );
-  }, [farmId]);
+  }, [completionFilter, farmId]);
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -150,10 +175,25 @@ export default function CareScheduleListScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  // SATU efek untuk dua pemicu: layar mendapat fokus, dan chip berpindah
+  // (identitas loadSchedules ikut berubah karena completionFilter ada di
+  // dependency-nya). Tidak ada useEffect kedua, jadi tidak ada pemuatan ganda
+  // saat mount. LoadingState layar penuh hanya dipakai sebelum ada data sama
+  // sekali; sesudah itu pemuatan berjalan di latar dengan baris lama tetap
+  // terlihat.
   useFocusEffect(
     React.useCallback(() => {
-      setLoading(true);
-      loadSchedules().finally(() => setLoading(false));
+      if (hasLoadedOnceRef.current) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      loadSchedules().finally(() => {
+        hasLoadedOnceRef.current = true;
+        setLoading(false);
+        setRefreshing(false);
+      });
     }, [loadSchedules])
   );
 
@@ -163,22 +203,19 @@ export default function CareScheduleListScreen() {
 
   const todayIso = getTodayIsoDate();
 
-  // Ember waktu dihitung SEKALI per jadwal, lalu dipakai ulang untuk chip waktu,
-  // badge kartu, dan urutan daftar — satu sumber kebenaran, tidak dua definisi.
+  // Ember waktu dihitung SEKALI per jadwal, lalu dipakai ulang untuk penempatan
+  // section dan penanda keterlambatan — satu sumber kebenaran, tidak dua definisi.
+  // Tugas selalu ikut termuat sekarang, jadi tidak ada lagi cabang "detail belum
+  // ada": scheduleTimeBucket sendiri sudah menangani jadwal tanpa tugas.
   const buckets: Record<string, TimeBucket> = {};
   for (const schedule of schedules) {
-    buckets[schedule.id] = getScheduleBucket(schedule, details[schedule.id], todayIso);
+    buckets[schedule.id] = scheduleTimeBucket(schedule, schedule.tasks, todayIso);
   }
 
-  function matchesSchedule(schedule: CareSchedule, sheet: SheetCriteria): boolean {
-    if (timeFilter !== 'all' && buckets[schedule.id] !== timeFilter) {
-      return false;
-    }
-
-    if (
-      sheet.statuses.length > 0 &&
-      !sheet.statuses.includes(getScheduleStatus(schedule, details[schedule.id]))
-    ) {
+  function matchesSchedule(schedule: CareScheduleDetail, sheet: SheetCriteria): boolean {
+    // loadedFilter, BUKAN completionFilter: chip menyala seketika, tapi baris
+    // yang dipegang masih milik chip sebelumnya sampai data baru tiba.
+    if (isScheduleSettled(schedule) !== (loadedFilter === 'completed')) {
       return false;
     }
 
@@ -195,14 +232,13 @@ export default function CareScheduleListScreen() {
     }
 
     if (sheet.worker !== 'all') {
-      const detail = details[schedule.id];
-      if (!detail || !detail.tasks.some((task) => task.assignedTo === sheet.worker)) {
+      if (!schedule.tasks.some((task) => task.assignedTo === sheet.worker)) {
         return false;
       }
     }
 
     if (debouncedSearch) {
-      const workers = getScheduleWorkerNames(details[schedule.id], workerNames).join(' ');
+      const workers = getScheduleWorkerNames(schedule, workerNames).join(' ');
       const searchable = [schedule.title, formatCareTarget(schedule), workers]
         .filter(Boolean)
         .join(' ')
@@ -216,15 +252,22 @@ export default function CareScheduleListScreen() {
     return true;
   }
 
-  // Urutan: 'overdue' → paling lama telat di atas (tanggal terlama dulu);
-  // 'today'/'upcoming'/'all' → paling dekat di atas (tanggal terdekat dulu).
-  // Kedua definisi tersebut sama-sama scheduledDate menaik.
+  // Urutan menaik dipakai DUA kali: di dalam section "Terlambat" (paling lama
+  // telat di atas) dan sebagai urutan section per tanggal.
   const displayedSchedules = schedules
     .filter((schedule) => matchesSchedule(schedule, criteria))
     .sort((a, b) => (a.scheduledDate < b.scheduledDate ? -1 : a.scheduledDate > b.scheduledDate ? 1 : 0));
 
+  const sections = buildScheduleSections(displayedSchedules, buckets, todayIso);
+
+  // Angka chip = jumlah baris yang BENAR-BENAR dirender, jadi tidak pernah bisa
+  // berbeda dari isi daftar (ikut terpengaruh pencarian dan filter sheet).
+  // undefined saat menyegarkan: data yang sedang dipegang bisa jadi masih milik
+  // chip sebelumnya, dan angka basi lebih buruk daripada tanpa angka.
+  const activeChipCount = refreshing ? undefined : displayedSchedules.length;
+
+  // Tiga sumbu, sesuai isi sheet setelah "Status" dihapus.
   const activeGroupCount =
-    (criteria.statuses.length > 0 ? 1 : 0) +
     (criteria.source !== 'all' ? 1 : 0) +
     (criteria.target !== 'all' ? 1 : 0) +
     (criteria.worker !== 'all' ? 1 : 0);
@@ -235,11 +278,7 @@ export default function CareScheduleListScreen() {
   // owner, sehingga peta workerNames tak layak jadi sumber opsi filter pekerja.
   const assignedWorkerIds = new Set<string>();
   for (const schedule of schedules) {
-    const detail = details[schedule.id];
-    if (!detail) {
-      continue;
-    }
-    for (const task of detail.tasks) {
+    for (const task of schedule.tasks) {
       if (workerNames[task.assignedTo]) {
         assignedWorkerIds.add(task.assignedTo);
       }
@@ -251,8 +290,6 @@ export default function CareScheduleListScreen() {
       .map((userId) => ({ label: workerNames[userId], value: userId }))
       .sort((a, b) => a.label.localeCompare(b.label)),
   ];
-
-  const hasNoData = schedules.length === 0;
 
   function openFilterSheet() {
     setDraft(criteria);
@@ -266,7 +303,12 @@ export default function CareScheduleListScreen() {
 
   return (
     <Screen
-      floatingAction={<FloatingActionButton label="Tambah jadwal" onPress={() => setAddSheetOpen(true)} />}
+      // Dulu FAB membuka sheet berisi dua pilihan (manual / dari SOP). Sejak
+      // jalur SOP dihapus hanya tersisa satu tujuan, jadi sheet perantaranya
+      // ikut hilang dan FAB langsung membuka form.
+      floatingAction={
+        <FloatingActionButton label="Tambah jadwal" onPress={() => router.push('/owner/schedules/create')} />
+      }
       header={
         <MainTabHeader
           title="Jadwal"
@@ -277,14 +319,13 @@ export default function CareScheduleListScreen() {
     >
       <ErrorBanner message={error} />
 
-      {error ? null : hasNoData ? (
-        <EmptyState
-          icon="calendar-plus"
-          subtitle="Buat jadwal pertama untuk kebun kamu."
-          title="Belum ada jadwal"
-          variant="plain"
-        />
-      ) : (
+      {/* Tidak ada lagi cabang "kebun kosong" yang menyembunyikan pencarian dan
+          chip. Layar ini tidak bisa membedakan kebun yang benar-benar belum punya
+          jadwal dari kebun yang jadwalnya semua di luar jendela 180 hari — dan
+          menyembunyikan chip justru membuat saran "buka Selesai" mustahil
+          diikuti. Jadi kontrolnya selalu ada, dan teks kosongnya dibuat benar
+          untuk kedua keadaan. */}
+      {error ? null : (
         <>
           <SearchFilterRow
             filterActive={activeGroupCount > 0}
@@ -296,21 +337,39 @@ export default function CareScheduleListScreen() {
           />
 
           <FilterChipsRow>
-            {timeFilters.map((filter) => (
+            {completionFilters.map((filter) => (
               <ChipButton
                 key={filter.value}
-                active={timeFilter === filter.value}
+                active={completionFilter === filter.value}
+                // Hanya chip aktif yang berangka: data chip non-aktif memang
+                // tidak diambil, jadi angka apa pun di sana cuma tebakan.
+                count={filter.value === completionFilter ? activeChipCount : undefined}
                 label={filter.label}
-                onPress={() => setTimeFilter(filter.value)}
+                onPress={() => setCompletionFilter(filter.value)}
               />
             ))}
           </FilterChipsRow>
 
-          <Text selectable style={styles.metaLine}>
-            {`Menampilkan ${displayedSchedules.length} jadwal`}
-          </Text>
+          {/* Baris "Menampilkan N jadwal" dihapus — angkanya sudah pindah ke chip
+              aktif. Yang tersisa di slot ini hanya penanda pemuatan, yang tidak
+              bisa dititipkan ke chip karena di sana justru angkanya disembunyikan.
+              Slotnya bertinggi tetap supaya daftar tidak bergeser naik-turun tiap
+              kali menyegarkan. */}
+          <View style={styles.loadingSlot}>
+            {refreshing ? (
+              <Text selectable style={styles.metaLine}>
+                Memuat jadwal...
+              </Text>
+            ) : null}
+          </View>
 
-          {displayedSchedules.length === 0 ? (
+          {/* Saat menyegarkan, baris lama dipertahankan dan EmptyState ditahan —
+              kalau tidak, berpindah chip akan memunculkan "tidak ada yang cocok"
+              sekejap sebelum data baru datang. */}
+          {/* Pencarian dan filter diperiksa LEBIH DULU: owner yang mengetik
+              pencarian tanpa hasil harus diberi tahu pencariannya yang nihil,
+              bukan disuruh melihat riwayat. */}
+          {displayedSchedules.length === 0 && refreshing ? null : displayedSchedules.length === 0 ? (
             debouncedSearch.length > 0 ? (
               <EmptyState
                 icon="search"
@@ -318,32 +377,57 @@ export default function CareScheduleListScreen() {
                 title="Tidak ada hasil"
                 variant="plain"
               />
-            ) : (
+            ) : activeGroupCount > 0 ? (
               <EmptyState
                 icon="filter"
                 subtitle="Tidak ada jadwal dengan filter yang aktif."
                 title="Tidak ada yang cocok"
                 variant="plain"
               />
+            ) : loadedFilter === 'completed' ? (
+              <EmptyState
+                icon="calendar"
+                subtitle="Jadwal yang sudah selesai atau dibatalkan muncul di sini."
+                title="Belum ada riwayat"
+                variant="plain"
+              />
+            ) : (
+              // Benar untuk kebun yang belum punya jadwal MAUPUN kebun yang
+              // jadwalnya sudah beres semua — layar tidak bisa membedakan
+              // keduanya tanpa request tambahan, jadi kalimatnya tidak
+              // mengklaim salah satunya.
+              <EmptyState
+                icon="calendar-plus"
+                subtitle={'Buat jadwal baru, atau buka "Selesai" untuk melihat riwayat.'}
+                title="Tidak ada pekerjaan yang menunggu"
+                variant="plain"
+              />
             )
           ) : (
-            <View style={styles.list}>
-              {displayedSchedules.map((schedule) => (
-                <CompactScheduleCard
-                  key={schedule.id}
-                  bucket={buckets[schedule.id]}
-                  detail={details[schedule.id]}
-                  onPress={() => router.push(`/owner/schedules/${schedule.id}`)}
-                  schedule={schedule}
-                  workerNames={workerNames}
-                />
+            <View style={styles.sections}>
+              {sections.map((section) => (
+                <View key={section.key} style={styles.section}>
+                  <ScheduleSectionHeader section={section} />
+                  <View style={styles.sectionRows}>
+                    {section.schedules.map((schedule, index) => (
+                      <ScheduleRow
+                        key={schedule.id}
+                        isLast={index === section.schedules.length - 1}
+                        onPress={() => router.push(`/owner/schedules/${schedule.id}`)}
+                        overdueSinceIso={section.tone === 'danger' ? scheduleOverdueSinceIso(schedule) : null}
+                        schedule={schedule}
+                        todayIso={todayIso}
+                        workerNames={workerNames}
+                      />
+                    ))}
+                  </View>
+                </View>
               ))}
             </View>
           )}
         </>
       )}
 
-      <AddScheduleSheet onClose={() => setAddSheetOpen(false)} visible={addSheetOpen} />
       <ScheduleFilterSheet
         draft={draft}
         onApply={applyDraft}
@@ -356,129 +440,115 @@ export default function CareScheduleListScreen() {
   );
 }
 
-function CompactScheduleCard({
-  bucket,
-  detail,
-  onPress,
-  schedule,
-  workerNames,
-}: {
-  // RF-11b/ember waktu: dihitung di layar sekali per jadwal, dipakai untuk badge di sini.
-  bucket: TimeBucket;
-  detail?: CareScheduleDetail;
-  onPress: () => void;
-  schedule: CareSchedule;
-  workerNames: Record<string, string>;
-}) {
-  const status = getScheduleStatus(schedule, detail);
-  const workers = getScheduleWorkerNames(detail, workerNames);
-  const taskCount = detail?.tasks.length ?? 0;
-  const hasTitle = Boolean(schedule.title);
-  const showAttributes = schedule.requiresPhoto || Boolean(schedule.careSopId);
+function ScheduleSectionHeader({ section }: { section: ScheduleSection }) {
+  const isDanger = section.tone === 'danger';
 
-  const badge =
-    bucket === 'overdue' ? (
-      <Badge label="Terlambat" maxWidth={116} tone="danger" />
-    ) : (
-      <Badge label={formatScheduleStatusLabel(status)} maxWidth={116} tone={getScheduleStatusTone(status)} />
-    );
-
-  const metaRow = (
-    <View style={styles.cardMeta1}>
-      <CompactMetaItem icon="calendar" label={formatDate(schedule.scheduledDate)} />
-      <CompactMetaItem icon="target" label={formatCareTarget(schedule)} />
-      {taskCount > 1 ? (
-        <Text selectable numberOfLines={1} style={styles.cardProgress}>
-          {getScheduleProgress(detail)}
+  return (
+    <View style={styles.sectionHeader}>
+      <Text selectable style={[styles.sectionTitle, isDanger ? styles.sectionTitleDanger : null]}>
+        {section.title}
+      </Text>
+      {section.trailing ? (
+        <Text selectable style={[styles.sectionTrailing, isDanger ? styles.sectionTitleDanger : null]}>
+          {section.trailing}
         </Text>
       ) : null}
     </View>
   );
-
-  return (
-    <Pressable onPress={onPress}>
-      <Card style={styles.card} variant="default">
-        {hasTitle ? (
-          <>
-            <View style={styles.cardRow1}>
-              <Text selectable numberOfLines={1} style={[styles.cardTitle, styles.cardTitleFlex]}>
-                {schedule.title}
-              </Text>
-              {badge}
-            </View>
-            {/* Kategori digugus dengan baris meta: jarak judul→kategori (card gap) lebih besar dari kategori→meta (xs). */}
-            <View style={styles.categoryMetaGroup}>
-              <Text selectable numberOfLines={1} style={styles.cardCategory}>
-                {formatCareCategory(schedule.category)}
-              </Text>
-              {metaRow}
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.cardRow1}>
-              <Text selectable numberOfLines={1} style={[styles.cardTitle, styles.cardTitleFlex]}>
-                {formatCareCategory(schedule.category)}
-              </Text>
-              {badge}
-            </View>
-            {metaRow}
-          </>
-        )}
-
-        {showAttributes ? (
-          <View style={styles.cardAttributes}>
-            {schedule.requiresPhoto ? (
-              <View style={styles.proofPill}>
-                <Icon name="camera" size={tokens.icon.xs} color={statusColors.warning.text} />
-                <Text selectable={false} style={styles.proofPillText}>
-                  Butuh bukti
-                </Text>
-              </View>
-            ) : null}
-            {schedule.careSopId ? (
-              <View style={styles.sopPill}>
-                <Text selectable={false} style={styles.sopPillText}>
-                  SOP
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        <View style={styles.cardMeta2}>
-          <CompactMetaItem icon="user" label={formatWorkerSummary(workers)} />
-        </View>
-      </Card>
-    </Pressable>
-  );
 }
 
-function AddScheduleSheet({ onClose, visible }: { onClose: () => void; visible: boolean }) {
-  function goTo(path: '/owner/schedules/create' | '/owner/sops') {
-    onClose();
-    router.push(path);
-  }
+// Baris agenda: judul + SATU baris meta. Tanggal tidak lagi ikut di sini —
+// section header yang menyatakannya, dan badge status juga hilang karena sudah
+// tersirat dari section. Yang tersisa hanya yang TIDAK tersirat: lama
+// keterlambatan, penanda pengulangan, dan penanda pembatalan.
+function ScheduleRow({
+  isLast,
+  onPress,
+  overdueSinceIso,
+  schedule,
+  todayIso,
+  workerNames,
+}: {
+  isLast: boolean;
+  onPress: () => void;
+  // Non-null hanya di section "Terlambat".
+  overdueSinceIso: string | null;
+  schedule: CareScheduleDetail;
+  todayIso: string;
+  workerNames: Record<string, string>;
+}) {
+  const workers = getScheduleWorkerNames(schedule, workerNames);
+  const taskCount = schedule.tasks.length;
+  const title = schedule.title || formatCareCategory(schedule.category);
+  const overdueDays = overdueSinceIso ? Math.max(1, dayDifference(overdueSinceIso, todayIso)) : 0;
 
   return (
-    <BottomSheet onClose={onClose} title="Tambah jadwal" visible={visible}>
-      <View style={styles.sheetRows}>
-        <SheetActionRow
-          description="Susun jadwal dari awal"
-          icon="calendar"
-          iconTone="brand"
-          onPress={() => goTo('/owner/schedules/create')}
-          title="Buat jadwal manual"
-        />
-        <SheetActionRow
-          description="Pakai template yang tersimpan"
-          icon="file-text"
-          iconTone="neutral"
-          onPress={() => goTo('/owner/sops')}
-          title="Buat dari SOP"
-        />
+    <Pressable onPress={onPress} style={[styles.row, isLast ? null : styles.rowDivider]}>
+      <View style={styles.rowHeader}>
+        <Text selectable numberOfLines={1} style={styles.rowTitle}>
+          {title}
+        </Text>
+        <View style={styles.rowTrailing}>
+          {overdueSinceIso ? (
+            <Text selectable={false} style={styles.overdueText}>
+              {`${overdueDays} hari`}
+            </Text>
+          ) : null}
+          {schedule.repeatEveryDays !== null ? (
+            <View style={styles.repeatPill}>
+              <Icon name="repeat" size={tokens.icon.xs} color={tokens.color.brand.base} />
+              <Text selectable={false} style={styles.repeatPillText}>
+                {`${schedule.repeatEveryDays}h`}
+              </Text>
+            </View>
+          ) : null}
+          {schedule.isCancelled ? <Badge label="Dibatalkan" maxWidth={100} tone="danger" /> : null}
+        </View>
       </View>
-    </BottomSheet>
+
+      <View style={styles.rowMeta}>
+        <Text selectable numberOfLines={1} style={styles.rowMetaText}>
+          {`${formatCareCategory(schedule.category)} · ${formatCareTarget(schedule)} · `}
+        </Text>
+        {taskCount === 0 ? (
+          <View style={styles.noWorkerPill}>
+            <Icon name="alert-triangle" size={tokens.icon.xs} color={statusColors.warning.text} />
+            <Text selectable={false} style={styles.noWorkerPillText}>
+              Belum ada pekerja
+            </Text>
+          </View>
+        ) : (
+          <Text selectable numberOfLines={1} style={styles.rowMetaText}>
+            {formatWorkerSummary(workers)}
+          </Text>
+        )}
+      </View>
+
+      {taskCount > 1 || schedule.requiresPhoto || schedule.careSopId ? (
+        <View style={styles.rowAttributes}>
+          {taskCount > 1 ? (
+            <Text selectable numberOfLines={1} style={styles.rowProgress}>
+              {getScheduleProgress(schedule)}
+            </Text>
+          ) : null}
+          {schedule.requiresPhoto ? (
+            <View style={styles.proofPill}>
+              <Icon name="camera" size={tokens.icon.xs} color={statusColors.warning.text} />
+              <Text selectable={false} style={styles.proofPillText}>
+                Butuh bukti
+              </Text>
+            </View>
+          ) : null}
+          {schedule.careSopId ? (
+            <View style={styles.sopPill}>
+              <Text selectable={false} style={styles.sopPillText}>
+                SOP
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -497,18 +567,7 @@ function ScheduleFilterSheet({
   visible: boolean;
   workerOptions: Array<{ label: string; value: string }>;
 }) {
-  const isDefault =
-    draft.statuses.length === 0 &&
-    draft.source === 'all' &&
-    draft.target === 'all' &&
-    draft.worker === 'all';
-
-  function toggleStatus(value: ScheduleVisualStatus) {
-    const nextStatuses = draft.statuses.includes(value)
-      ? draft.statuses.filter((status) => status !== value)
-      : [...draft.statuses, value];
-    onDraftChange({ ...draft, statuses: nextStatuses });
-  }
+  const isDefault = draft.source === 'all' && draft.target === 'all' && draft.worker === 'all';
 
   return (
     <BottomSheet onClose={onClose} title="Filter jadwal" visible={visible}>
@@ -524,22 +583,6 @@ function ScheduleFilterSheet({
               Atur ulang
             </Text>
           </Pressable>
-        </View>
-
-        <View style={styles.filterGroup}>
-          <Text selectable style={styles.filterLabel}>
-            Status
-          </Text>
-          <FilterChipsRow>
-            {statusOptions.map((option) => (
-              <StatusChip
-                key={option.value}
-                active={draft.statuses.includes(option.value)}
-                label={option.label}
-                onPress={() => toggleStatus(option.value)}
-              />
-            ))}
-          </FilterChipsRow>
         </View>
 
         <View style={styles.filterGroup}>
@@ -596,127 +639,150 @@ function ScheduleFilterSheet({
   );
 }
 
-function StatusChip({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={[styles.statusChip, active ? styles.statusChipActive : null]}>
-      {active ? <Icon name="check" size={tokens.icon.xs} color={tokens.color.brand.on} /> : null}
-      <Text selectable={false} style={[styles.statusChipText, active ? styles.statusChipTextActive : null]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+type ScheduleSection = {
+  key: string;
+  title: string;
+  tone: 'danger' | 'default';
+  trailing?: string;
+  schedules: CareScheduleDetail[];
+};
 
-// Ember waktu level-jadwal via scheduleTimeBucket bila detail (tasks) sudah termuat.
-function getScheduleBucket(
-  schedule: CareSchedule,
-  detail: CareScheduleDetail | undefined,
+// Partisi TOTAL: setiap jadwal masuk ke tepat satu section — cabang if/else di
+// bawah tidak punya jalur yang membuang baris, tidak ada filter dan tidak ada
+// continue. Jumlah baris yang dirender selalu sama dengan panjang input.
+//
+// `schedules` sudah terurut scheduledDate MENAIK, jadi: (1) isi section
+// "Terlambat" ikut menaik (paling lama telat di atas), dan (2) kunci Map
+// bertambah menaik sehingga urutan section per tanggal juga menaik — Map
+// mempertahankan urutan penyisipan.
+function buildScheduleSections(
+  schedules: CareScheduleDetail[],
+  buckets: Record<string, TimeBucket>,
   todayIso: string
-): TimeBucket {
-  if (detail) {
-    return scheduleTimeBucket(schedule, detail.tasks, todayIso);
+): ScheduleSection[] {
+  const overdue: CareScheduleDetail[] = [];
+  const byDate = new Map<string, CareScheduleDetail[]>();
+
+  for (const schedule of schedules) {
+    if (buckets[schedule.id] === 'overdue') {
+      overdue.push(schedule);
+      continue;
+    }
+
+    const existing = byDate.get(schedule.scheduledDate);
+
+    if (existing) {
+      existing.push(schedule);
+    } else {
+      byDate.set(schedule.scheduledDate, [schedule]);
+    }
   }
 
-  // Fallback transien sampai detail termuat: pakai scheduledDate jadwal dengan aturan yang sama.
-  if (schedule.isCancelled) {
-    return 'inactive';
+  const sections: ScheduleSection[] = [];
+
+  // Digabung jadi SATU section berapa pun tanggalnya: yang penting bagi owner
+  // adalah "ini menumpuk", bukan tersebar di banyak header tanggal lampau.
+  if (overdue.length > 0) {
+    sections.push({
+      key: 'overdue',
+      title: 'Terlambat',
+      tone: 'danger',
+      trailing: `${overdue.length}`,
+      schedules: overdue,
+    });
   }
 
-  if (schedule.scheduledDate < todayIso) {
-    return 'overdue';
+  for (const [iso, list] of byDate) {
+    sections.push({
+      key: iso,
+      title: formatSectionTitle(iso, todayIso),
+      tone: 'default',
+      schedules: list,
+    });
   }
 
-  if (schedule.scheduledDate === todayIso) {
-    return 'today';
-  }
-
-  return 'upcoming';
+  return sections;
 }
 
-function getScheduleStatus(schedule?: CareSchedule, detail?: CareScheduleDetail): ScheduleVisualStatus {
-  if (schedule?.isCancelled || detail?.isCancelled) {
-    return 'cancelled';
+// "Hari ini"/"Besok" ditambah tanggalnya; selain itu nama hari + tanggal.
+function formatSectionTitle(iso: string, todayIso: string): string {
+  if (iso === todayIso) {
+    return `Hari ini · ${formatDate(iso)}`;
   }
 
-  if (!detail || detail.tasks.length === 0) {
-    return 'unfinished';
+  if (iso === addDaysToIsoDate(todayIso, 1)) {
+    return `Besok · ${formatDate(iso)}`;
   }
 
-  if (detail.tasks.every((task) => task.status === 'completed')) {
-    return 'completed';
+  const date = new Date(`${iso}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return iso;
   }
 
-  if (detail.tasks.some((task) => task.status === 'postponed')) {
-    return 'postponed';
-  }
-
-  return 'unfinished';
+  return `${date.toLocaleDateString('id-ID', { weekday: 'long' })}, ${formatDate(iso)}`;
 }
 
-function formatScheduleStatusLabel(status: ScheduleVisualStatus): string {
-  if (status === 'cancelled') {
-    return 'Dibatalkan';
+function addDaysToIsoDate(iso: string, days: number): string {
+  const date = new Date(`${iso}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return iso;
   }
 
-  if (status === 'completed') {
-    return 'Selesai';
-  }
+  date.setDate(date.getDate() + days);
 
-  if (status === 'postponed') {
-    return 'Ditunda';
-  }
-
-  return 'Belum';
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
-function getScheduleStatusTone(status: ScheduleVisualStatus): 'danger' | 'muted' | 'success' | 'warning' {
-  if (status === 'cancelled') {
-    return 'danger';
+// Tanggal acuan penghitungan keterlambatan. Tugas boleh punya due_date sendiri,
+// jadi dipakai tenggat TERAWAL yang belum selesai; kalau jadwal belum punya
+// tugas sama sekali, acuannya tanggal jadwal itu sendiri.
+function scheduleOverdueSinceIso(schedule: CareScheduleDetail): string {
+  const openDueDates = schedule.tasks
+    .filter((task) => task.status !== 'completed')
+    .map((task) => task.dueDate);
+
+  if (openDueDates.length === 0) {
+    return schedule.scheduledDate;
   }
 
-  if (status === 'completed') {
-    return 'success';
+  return openDueDates.reduce((earliest, dueDate) => (dueDate < earliest ? dueDate : earliest));
+}
+
+// Pemisah agenda-vs-arsip untuk chip atas. "Settled" = tidak menunggu pekerjaan
+// siapa pun lagi: sudah dibatalkan, atau punya tugas dan semuanya selesai.
+// Jadwal TANPA tugas sengaja TIDAK settled — justru itu yang menunggu penugasan.
+function isScheduleSettled(schedule: CareScheduleDetail): boolean {
+  if (schedule.isCancelled === true) {
+    return true;
   }
 
-  if (status === 'postponed') {
-    return 'warning';
-  }
-
-  // 'warning' khusus untuk 'Ditunda'; 'Belum' (unfinished) pakai 'muted' (seragam dgn layar pekerja).
-  return 'muted';
+  return schedule.tasks.length > 0 && schedule.tasks.every((task) => task.status === 'completed');
 }
 
 function getScheduleWorkerNames(
-  detail: CareScheduleDetail | undefined,
+  schedule: CareScheduleDetail,
   workerNames: Record<string, string>
 ): string[] {
-  if (!detail) {
-    return [];
-  }
-
   return Array.from(
-    new Set(detail.tasks.map((task) => workerNames[task.assignedTo]).filter((name): name is string => Boolean(name)))
+    new Set(schedule.tasks.map((task) => workerNames[task.assignedTo]).filter((name): name is string => Boolean(name)))
   );
 }
 
-function getScheduleProgress(detail?: CareScheduleDetail): string {
-  if (!detail || detail.tasks.length === 0) {
-    return 'Belum ada realisasi';
+function getScheduleProgress(schedule: CareScheduleDetail): string {
+  if (schedule.tasks.length === 0) {
+    return 'Belum ada hasil kerja';
   }
 
-  const completed = detail.tasks.filter((task) => task.status === 'completed').length;
-  const postponed = detail.tasks.filter((task) => task.status === 'postponed').length;
+  const completed = schedule.tasks.filter((task) => task.status === 'completed').length;
+  const postponed = schedule.tasks.filter((task) => task.status === 'postponed').length;
   const suffix = postponed > 0 ? `, ${postponed} ditunda` : '';
 
-  return `${completed}/${detail.tasks.length} selesai${suffix}`;
+  return `${completed}/${schedule.tasks.length} selesai${suffix}`;
 }
 
 function formatWorkerSummary(workers: string[]): string {
@@ -745,49 +811,91 @@ function formatDate(value: string): string {
   });
 }
 
-function getTodayIsoDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 const styles = StyleSheet.create({
   metaLine: { ...tokens.type.meta, color: tokens.color.text.tertiary },
-  list: { gap: tokens.space.md },
+  // Tinggi tetap: slot ini kosong saat idle dan berisi saat menyegarkan, jadi
+  // tanpa tinggi tetap seluruh daftar akan bergeser tiap kali memuat.
+  // tokens.space.xl (20) cukup untuk lineHeight tokens.type.meta (18).
+  loadingSlot: { height: tokens.space.xl, justifyContent: 'center' },
 
-  card: { gap: tokens.space.sm },
-  categoryMetaGroup: { gap: tokens.space.xs },
-  cardRow1: {
+  // Agenda: section dipisah jarak, baris dipisah garis rambut — bukan kartu
+  // bertumpuk berbayang.
+  sections: { gap: tokens.layout.sectionGap },
+  section: { gap: tokens.space.sm },
+  sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: tokens.space.sm,
     justifyContent: 'space-between',
   },
-  cardCategory: { ...tokens.type.meta, color: tokens.color.text.tertiary },
-  cardTitle: { ...tokens.type.subheading, color: tokens.color.text.primary },
-  cardTitleFlex: { flex: 1 },
-  cardMeta1: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: tokens.space.md,
+  sectionTitle: { ...tokens.type.label, color: tokens.color.text.secondary },
+  sectionTitleDanger: { color: tokens.color.status.danger.text },
+  sectionTrailing: { ...tokens.type.label, color: tokens.color.text.tertiary },
+  sectionRows: {
+    backgroundColor: tokens.color.surface.card,
+    borderColor: tokens.color.line.card,
+    borderCurve: 'continuous',
+    borderRadius: tokens.radius.cardInner,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  cardMeta2: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: tokens.space.md,
-  },
-  cardProgress: { ...tokens.type.meta, color: tokens.color.text.secondary },
 
-  cardAttributes: {
+  row: {
+    gap: tokens.space.xs,
+    paddingHorizontal: tokens.space.lg,
+    paddingVertical: tokens.space.md,
+  },
+  rowDivider: {
+    borderBottomColor: tokens.color.line.hairline,
+    borderBottomWidth: 1,
+  },
+  rowHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: tokens.space.sm,
+    justifyContent: 'space-between',
+  },
+  rowTitle: { ...tokens.type.bodyStrong, color: tokens.color.text.primary, flex: 1 },
+  rowTrailing: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 0,
+    gap: tokens.space.sm,
+  },
+  overdueText: { ...tokens.type.caption, color: tokens.color.status.danger.text },
+  repeatPill: {
+    alignItems: 'center',
+    backgroundColor: tokens.color.brand.soft,
+    borderRadius: tokens.radius.pill,
+    flexDirection: 'row',
+    gap: tokens.space.xs,
+    paddingHorizontal: tokens.space.sm,
+    paddingVertical: 2,
+  },
+  repeatPillText: { ...tokens.type.caption, color: tokens.color.brand.base },
+  rowMeta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  rowMetaText: { ...tokens.type.meta, color: tokens.color.text.tertiary, flexShrink: 1 },
+  noWorkerPill: {
+    alignItems: 'center',
+    backgroundColor: statusColors.warning.background,
+    borderRadius: tokens.radius.pill,
+    flexDirection: 'row',
+    gap: tokens.space.xs,
+    paddingHorizontal: tokens.space.sm,
+    paddingVertical: 1,
+  },
+  noWorkerPillText: { ...tokens.type.caption, color: statusColors.warning.text },
+  rowAttributes: {
     alignItems: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: tokens.space.sm,
   },
+  rowProgress: { ...tokens.type.meta, color: tokens.color.text.secondary },
   proofPill: {
     alignItems: 'center',
     backgroundColor: statusColors.warning.background,
@@ -798,6 +906,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   proofPillText: { ...tokens.type.caption, color: statusColors.warning.text },
+
   sopPill: {
     alignSelf: 'flex-start',
     backgroundColor: 'transparent',
@@ -809,7 +918,6 @@ const styles = StyleSheet.create({
   },
   sopPillText: { ...tokens.type.caption, color: tokens.color.text.tertiary },
 
-  sheetRows: { gap: tokens.space.sm },
   filterSheetBody: { gap: tokens.space.md },
   filterGroup: { gap: tokens.space.sm },
   filterLabel: { ...tokens.type.label, color: tokens.color.text.primary },
@@ -817,21 +925,4 @@ const styles = StyleSheet.create({
   resetText: { ...tokens.type.label, color: tokens.color.brand.base },
   resetTextDisabled: { color: tokens.color.text.tertiary },
 
-  statusChip: {
-    alignItems: 'center',
-    backgroundColor: tokens.color.surface.card,
-    borderColor: tokens.color.line.card,
-    borderRadius: tokens.radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: tokens.space.xs,
-    paddingHorizontal: tokens.space.md,
-    paddingVertical: tokens.space.sm,
-  },
-  statusChipActive: {
-    backgroundColor: tokens.color.brand.base,
-    borderColor: tokens.color.brand.base,
-  },
-  statusChipText: { ...tokens.type.label, color: tokens.color.text.primary },
-  statusChipTextActive: { color: tokens.color.brand.on },
 });

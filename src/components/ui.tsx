@@ -19,6 +19,7 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -66,6 +67,40 @@ type AutoScrollContextValue = {
 
 const AutoScrollContext = React.createContext<AutoScrollContextValue | null>(null);
 
+// Tinggi pita gradasi di atas stickyFooter. Setinggi satu kontrol (56) —
+// cukup panjang untuk memudar halus, tidak sepanjang blok yang menutupi konten.
+// Angka ini juga dipakai saat menghitung ruang bawah konten scroll, jadi
+// mengubahnya di sini otomatis ikut menggeser padding-nya.
+const STICKY_FOOTER_FADE_HEIGHT = tokens.layout.controlHeight;
+
+// Perkiraan ruang bawah yang dipakai HANYA pada frame pertama, sebelum footer
+// sempat diukur onLayout. Bukan angka ajaib: satu tombol setinggi controlHeight
+// + pita gradasi + satu jarak. Kebetulan hasilnya 128, sama persis dengan
+// konstanta lama yang digantikannya, jadi frame pertama tidak bergeser sedikit
+// pun dibanding sebelum perubahan ini.
+const STICKY_FOOTER_FALLBACK_RESERVE =
+  tokens.layout.controlHeight + STICKY_FOOTER_FADE_HEIGHT + tokens.space.lg;
+
+// Mengubah token warna heksadesimal jadi rgba beralfa.
+//
+// Dipakai untuk ujung ATAS gradasi footer. Sengaja TIDAK memakai literal
+// 'transparent': di iOS 'transparent' ditafsirkan sebagai hitam-alfa-nol,
+// sehingga gradasinya melewati abu-abu dan memunculkan pita kotor di tengah.
+// Warna latar yang sama dengan alfa 0 membuat kedua ujung gradasi berada di
+// hue yang sama, jadi yang berubah hanya opasitasnya.
+//
+// Hanya menerima heksadesimal 6 digit — itu bentuk semua token warna di
+// theme.ts. Kalau kelak ada token 3 digit atau rgba, fungsi ini harus ikut
+// disesuaikan.
+function withAlpha(hexColor: string, alpha: number): string {
+  const normalized = hexColor.replace('#', '');
+  const red = parseInt(normalized.slice(0, 2), 16);
+  const green = parseInt(normalized.slice(2, 4), 16);
+  const blue = parseInt(normalized.slice(4, 6), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
 export function Screen({
   applyTopInset = false,
   autoScrollOnFocus = false,
@@ -108,6 +143,18 @@ export function Screen({
   const keyboard = useKeyboardMetrics();
   const backgroundColor =
     variant === 'surface' ? colors.surface : variant === 'soft' ? colors.backgroundDeep : colors.background;
+  // Warna dasar footer sekaligus titik AKHIR gradasi. Diambil dari tokens dan
+  // dipetakan per variant supaya selalu cocok dengan latar layar yang sedang
+  // dipakai. Nilainya identik dengan `backgroundColor` di atas — hanya jalur
+  // tokennya yang berbeda, jadi tidak ada pergeseran warna.
+  const footerBaseColor =
+    variant === 'surface'
+      ? tokens.color.surface.card
+      : variant === 'soft'
+        ? tokens.color.surface.subtle
+        : tokens.color.surface.canvas;
+  // Tinggi footer diukur, bukan ditebak. 0 berarti belum sempat diukur.
+  const [stickyFooterHeight, setStickyFooterHeight] = React.useState(0);
 
   // Window tidak menyusut saat keyboard naik (adjustResize tidak berlaku di Android
   // edge-to-edge), jadi stickyFooter yang position:absolute harus diangkat manual.
@@ -142,12 +189,24 @@ export function Screen({
   // lagi di sini — nav bar tertutup keyboard, ruang untuknya tidak relevan. Saat
   // keyboard tertutup (atau saat fallback aktif) padding kembali ke rumus lama persis.
   const footerPaddingBottom = screenYBasisActive ? spacing.md : Math.max(insets.bottom, spacing.md);
+  // Ruang bawah yang harus dikosongkan konten scroll supaya item TERAKHIR tidak
+  // tertutup footer yang kini mengambang di atasnya.
+  //
+  // Begitu footer terukur, angkanya = tinggi footer + tinggi pita gradasi + satu
+  // jarak. Pita gradasi ikut dihitung karena item terakhir harus berhenti di
+  // ATAS gradasi, bukan di tengahnya — kalau berhenti di tengah, teksnya
+  // separuh pudar dan terlihat seperti bug.
+  const stickyFooterReserve =
+    stickyFooterHeight > 0
+      ? stickyFooterHeight + STICKY_FOOTER_FADE_HEIGHT + tokens.space.lg
+      : STICKY_FOOTER_FALLBACK_RESERVE + insets.bottom;
+
   // keyboardOverlap, bukan keyboardLift: jalur non-sticky juga perlu ruang bawah
   // supaya field yang tertutup keyboard bisa digulung naik. Untuk layar ber-sticky
   // nilainya tidak berubah — di sana keyboardLift memang sama dengan
   // keyboardOverlap, jadi hasil penjumlahannya identik dengan sebelumnya.
   const overlayBottomPadding =
-    (stickyFooter ? 128 + insets.bottom : floatingAction ? 132 : tokens.space.xxxl) + keyboardOverlap;
+    (hasStickyFooter ? stickyFooterReserve : floatingAction ? 132 : tokens.space.xxxl) + keyboardOverlap;
 
   // Ref internal dipakai kalau pemanggil tidak mengoper scrollRef sendiri, supaya
   // auto-scroll tetap punya pegangan ke ScrollView. Untuk layar yang mengoper
@@ -270,21 +329,53 @@ export function Screen({
         {footer ? <View style={{ gap: spacing.md, paddingBottom: spacing.lg }}>{footer}</View> : null}
       </ScrollView>
       {stickyFooter ? (
+        // Footer mengambang. Pembungkus luar TIDAK punya latar sendiri dan tidak
+        // punya garis pemisah — yang memisahkannya dari konten adalah pita
+        // gradasi di bawah ini.
+        //
+        // `bottom: keyboardLift` dipertahankan apa adanya. Jangan diutak-atik:
+        // rumusnya memakai `screenY`, bukan `height`, dan itu sudah dibetulkan
+        // dengan susah payah (lihat catatan panjang di atas).
         <View
+          onLayout={(event) => setStickyFooterHeight(event.nativeEvent.layout.height)}
           style={{
-            backgroundColor,
-            borderTopColor: colors.border,
-            borderTopWidth: 1,
             bottom: keyboardLift,
             left: 0,
-            paddingBottom: footerPaddingBottom,
-            paddingHorizontal: spacing.screenHorizontal,
-            paddingTop: spacing.md,
             position: 'absolute',
             right: 0,
           }}
         >
-          {stickyFooter}
+          {/* Pita gradasi. Duduk DI ATAS footer lewat top negatif, sehingga
+              tidak menambah tinggi pembungkus (anak absolute tidak dihitung
+              layout induk) dan tinggi hasil onLayout tetap murni tinggi footer.
+
+              Memudar dari alfa 0 di puncak ke warna latar solid tepat di batas
+              footer, jadi teks yang lewat di belakangnya menghilang perlahan,
+              bukan terpotong garis.
+
+              pointerEvents 'none' WAJIB: tanpa itu pita ini menangkap sentuhan
+              dan konten di bawahnya tidak bisa digulung maupun ditekan. */}
+          <LinearGradient
+            colors={[withAlpha(footerBaseColor, 0), footerBaseColor]}
+            pointerEvents="none"
+            style={{
+              height: STICKY_FOOTER_FADE_HEIGHT,
+              left: 0,
+              position: 'absolute',
+              right: 0,
+              top: -STICKY_FOOTER_FADE_HEIGHT,
+            }}
+          />
+          <View
+            style={{
+              backgroundColor: footerBaseColor,
+              paddingBottom: footerPaddingBottom,
+              paddingHorizontal: spacing.screenHorizontal,
+              paddingTop: spacing.md,
+            }}
+          >
+            {stickyFooter}
+          </View>
         </View>
       ) : null}
       {floatingAction ? (
@@ -1666,6 +1757,37 @@ export function LoadingState({ message = 'Memuat data...' }: { message?: string 
   );
 }
 
+// Lingkaran ikon milik EmptyState. Bukan komponen publik — hanya supaya
+// markup-nya tidak disalin tiga kali di dalam file ini. `background` dioper
+// eksplisit karena tiap varian duduk di atas warna yang berbeda: lingkaran
+// harus kontras terhadap kotak di belakangnya, bukan menyatu dengannya.
+function EmptyStateGlyph({ background, name }: { background: string; name: IconName }) {
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        backgroundColor: background,
+        borderRadius: tokens.radius.pill,
+        height: 56,
+        justifyContent: 'center',
+        width: 56,
+      }}
+    >
+      <Icon name={name} size={tokens.icon.lg} color={tokens.color.text.tertiary} />
+    </View>
+  );
+}
+
+// Tiga varian:
+//   'card'   (bawaan) — di dalam Card, teks rata kiri. Bentuk paling umum.
+//   'plain'  — tanpa kotak, rata tengah. Untuk daftar kosong satu layar penuh.
+//   'dashed' — kotak border putus-putus, rata tengah. Untuk "belum dicatat"
+//              dan slot foto kosong, yang mengundang user menekan sesuatu.
+//
+// Varian 'card' dan 'plain' sengaja tidak berubah perilakunya bagi pemanggil
+// yang sudah ada. Satu-satunya perbaikan pada 'card': prop `icon` dulu DIAM-DIAM
+// diabaikan di cabang itu, sekarang dirender. Aman untuk pemanggil lama karena
+// tidak ada satu pun yang mengirim `icon` bersama varian 'card'.
 export function EmptyState({
   icon,
   subtitle,
@@ -1675,25 +1797,46 @@ export function EmptyState({
   icon?: IconName;
   subtitle?: string;
   title: string;
-  variant?: 'card' | 'plain';
+  variant?: 'card' | 'dashed' | 'plain';
 }) {
   if (variant === 'plain') {
     return (
       <View style={{ alignItems: 'center', gap: tokens.space.sm }}>
-        {icon ? (
-          <View
-            style={{
-              alignItems: 'center',
-              backgroundColor: tokens.color.surface.subtle,
-              borderRadius: tokens.radius.pill,
-              height: 56,
-              justifyContent: 'center',
-              width: 56,
-            }}
-          >
-            <Icon name={icon} size={24} color={tokens.color.text.tertiary} />
-          </View>
+        {icon ? <EmptyStateGlyph background={tokens.color.surface.subtle} name={icon} /> : null}
+        <Text selectable style={{ ...tokens.type.subheading, color: tokens.color.text.primary, textAlign: 'center' }}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text selectable style={{ ...tokens.type.meta, color: tokens.color.text.tertiary, textAlign: 'center' }}>
+            {subtitle}
+          </Text>
         ) : null}
+      </View>
+    );
+  }
+
+  if (variant === 'dashed') {
+    return (
+      // Border putus-putus dibaca sebagai "tempat ini masih kosong dan menunggu
+      // diisi", beda dari kotak bergaris utuh yang terbaca sebagai kartu berisi.
+      // Lingkaran ikonnya memakai surface.card supaya kontras di atas kotak
+      // surface.subtle.
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: tokens.color.surface.subtle,
+          borderColor: tokens.color.line.card,
+          borderCurve: 'continuous',
+          borderRadius: tokens.radius.cardInner,
+          borderStyle: 'dashed',
+          borderWidth: 1,
+          gap: tokens.space.sm,
+          justifyContent: 'center',
+          paddingHorizontal: tokens.space.xl,
+          paddingVertical: tokens.space.xxxl,
+        }}
+      >
+        {icon ? <EmptyStateGlyph background={tokens.color.surface.card} name={icon} /> : null}
         <Text selectable style={{ ...tokens.type.subheading, color: tokens.color.text.primary, textAlign: 'center' }}>
           {title}
         </Text>
@@ -1708,6 +1851,7 @@ export function EmptyState({
 
   return (
     <Card>
+      {icon ? <EmptyStateGlyph background={tokens.color.surface.subtle} name={icon} /> : null}
       <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
         {title}
       </Text>
@@ -1735,10 +1879,15 @@ export function MetaRow({ label, value }: { label: string; value?: string | null
   );
 }
 
-// Baris menu bernavigasi: ikon kiri + label + chevron kanan. Bentuknya mengikuti
-// pola inline yang sudah dipakai di tab Kebun (app/(owner)/owner/farm.tsx, baris
-// SOP perawatan), tapi tanpa lingkaran latar ikon karena baris menu profil hanya
-// perlu ikon + label. Pemakaian inline lama SENGAJA belum dimigrasikan ke sini.
+// Baris menu bernavigasi: ikon kiri + label + chevron kanan.
+//
+// Bentuknya mengikuti pola baris-menu inline yang dipakai di tab Kebun, tapi
+// tanpa lingkaran latar ikon — baris menu profil hanya perlu ikon + label.
+// Pemakaian inline lama di layar-layar itu SENGAJA belum dimigrasikan ke sini.
+//
+// Acuan aslinya dulu adalah baris "SOP perawatan" di tab Kebun. Baris itu sudah
+// tidak ada sejak fitur SOP dilepas dari aplikasi, jadi rujukannya dihapus —
+// yang tersisa dan tetap berlaku adalah bentuk barisnya.
 export function MenuRow({
   danger = false,
   icon,

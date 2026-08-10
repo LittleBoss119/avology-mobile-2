@@ -1,12 +1,11 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { formatCareTarget } from '../../../../src/components/care-schedule-components';
-import { formatCareCategory } from '../../../../src/components/care-sop-components';
 import { Icon } from '../../../../src/components/icons';
 import { ReportSourceRow } from '../../../../src/components/operational-report-source-row';
-import { TaskProofPhotoPreview } from '../../../../src/components/task-proof-photo';
+import { WorkResultList } from '../../../../src/components/work-result-list';
 import {
   Badge,
   Button,
@@ -24,15 +23,10 @@ import { consumePendingFeedback } from '../../../../src/lib/pendingFeedback';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
 import { getOperationalReportDetail } from '../../../../src/services/operationalReportService';
 import { listTaskProofPhotosForActivities } from '../../../../src/services/photoAttachmentService';
-import type {
-  ActivityStatus,
-  CareActivity,
-  CareTaskDetail,
-  OperationalReport,
-} from '../../../../src/types/domain';
-import type { TaskProofPhoto, TaskProofPhotoMap } from '../../../../src/types/media';
-import { formatActivityStatus, formatTaskStatus } from '../../../../src/utils/displayFormat';
-import { dueDatePill, type DueDatePill } from '../../../../src/utils/taskDueDate';
+import type { CareTaskDetail, OperationalReport } from '../../../../src/types/domain';
+import type { TaskProofPhotoMap } from '../../../../src/types/media';
+import { formatCareCategory, formatTaskStatus } from '../../../../src/utils/displayFormat';
+import { dueDatePill, getTodayIsoDate, type DueDatePill } from '../../../../src/utils/taskDueDate';
 
 export default function WorkerTaskDetailScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
@@ -203,85 +197,24 @@ export default function WorkerTaskDetailScreen() {
           selectable
           style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700', lineHeight: typography.h3.lineHeight }}
         >
-          Riwayat hasil kerja
+          {activeTask.activities.length === 0 ? 'Hasil kerja' : 'Riwayat hasil kerja'}
         </Text>
-        {activeTask.activities.length === 0 ? (
-          <EmptyState title="Belum ada hasil kerja" subtitle="Catat hasil kerja untuk menyimpannya di sini." />
-        ) : (
-          activeTask.activities.map((activity, index) => (
-            <WorkResultCard
-              key={activity.id}
-              activity={activity}
-              isLatest={index === 0 && !isCancelledByOwner}
-              proof={proofPhotoMap[activity.id]}
-              onEdit={() =>
-                router.push(`/worker/tasks/${activeTask.id}/record?mode=edit&activityId=${activity.id}`)
-              }
-            />
-          ))
-        )}
+        {/* Bentuk barisnya milik WorkResultList, dipakai bersama layar owner.
+            Tugas yang sudah dibatalkan owner tidak lagi menawarkan aksi
+            perbaiki — handler-nya tidak dioper sama sekali. */}
+        <WorkResultList
+          activities={activeTask.activities}
+          emptySubtitle="Pencet tombol di bawah untuk mulai."
+          proofPhotoMap={proofPhotoMap}
+          onFixLatestNote={
+            isCancelledByOwner
+              ? undefined
+              : (activity) =>
+                  router.push(`/worker/tasks/${activeTask.id}/record?mode=edit&activityId=${activity.id}`)
+          }
+        />
       </View>
     </Screen>
-  );
-}
-
-function WorkResultCard({
-  activity,
-  isLatest,
-  onEdit,
-  proof,
-}: {
-  activity: CareActivity;
-  isLatest: boolean;
-  onEdit: () => void;
-  proof?: TaskProofPhoto;
-}) {
-  return (
-    <Card>
-      <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
-        <Badge label={formatActivityStatus(activity.status)} tone={getActivityTone(activity.status)} />
-        <Text selectable style={{ color: colors.textMuted, fontSize: 12 }}>
-          {formatDateTime(activity.performedAt)}
-        </Text>
-      </View>
-      {activity.note ? (
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-          {activity.note}
-        </Text>
-      ) : null}
-      {activity.produk ? (
-        <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
-          <Icon name="basket" size={14} color={colors.textMuted} />
-          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-            {activity.produk}
-          </Text>
-        </View>
-      ) : null}
-      {proof ? <TaskProofPhotoPreview borderRadius={8} photo={proof} /> : null}
-      {isLatest ? (
-        <View
-          style={{
-            alignItems: 'flex-end',
-            borderTopColor: colors.divider,
-            borderTopWidth: 1,
-            marginTop: spacing.xs,
-            paddingTop: spacing.sm,
-          }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            onPress={onEdit}
-            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
-            style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}
-          >
-            <Icon name="pencil" size={16} color={colors.primaryDark} />
-            <Text selectable style={{ color: colors.primaryDark, fontSize: 14, fontWeight: '700' }}>
-              Edit
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
-    </Card>
   );
 }
 
@@ -338,9 +271,8 @@ function ProofPhotoIndicator() {
   );
 }
 
-function getActivityTone(status: ActivityStatus): 'success' | 'warning' {
-  return status === 'completed' ? 'success' : 'warning';
-}
+// getActivityTone() dihapus bersama WorkResultCard: status hasil kerja kini
+// ditandai ikon berwarna di dalam baris, bukan Badge.
 
 function getTaskTone(status: CareTaskDetail['status']): 'danger' | 'muted' | 'success' | 'warning' {
   if (status === 'completed') {
@@ -368,14 +300,6 @@ function feedbackMessage(feedback: string | null): string | null {
   }
 
   return null;
-}
-
-function getTodayIsoDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 function formatDateTime(value: string): string {
