@@ -92,7 +92,7 @@ const STICKY_FOOTER_FALLBACK_RESERVE =
 // Hanya menerima heksadesimal 6 digit — itu bentuk semua token warna di
 // theme.ts. Kalau kelak ada token 3 digit atau rgba, fungsi ini harus ikut
 // disesuaikan.
-function withAlpha(hexColor: string, alpha: number): string {
+export function withAlpha(hexColor: string, alpha: number): string {
   const normalized = hexColor.replace('#', '');
   const red = parseInt(normalized.slice(0, 2), 16);
   const green = parseInt(normalized.slice(2, 4), 16);

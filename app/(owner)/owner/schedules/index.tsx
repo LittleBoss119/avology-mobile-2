@@ -24,7 +24,14 @@ import { getCareSchedulesWithTasks } from '../../../../src/services/careSchedule
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import type { CareScheduleDetail, FarmMemberBasicProfile, TargetType } from '../../../../src/types/domain';
 import { formatCareCategory, formatTargetType } from '../../../../src/utils/displayFormat';
-import { dayDifference, getTodayIsoDate, scheduleTimeBucket, type TimeBucket } from '../../../../src/utils/taskDueDate';
+import {
+  addDaysToIsoDate,
+  dayDifference,
+  formatAgendaSectionTitle,
+  getTodayIsoDate,
+  scheduleTimeBucket,
+  type TimeBucket,
+} from '../../../../src/utils/taskDueDate';
 
 // Sumbu waktu sekarang dinyatakan oleh struktur section (Terlambat + per
 // tanggal), bukan chip. Yang tersisa di baris chip hanya pemisah agenda-vs-arsip.
@@ -260,12 +267,6 @@ export default function CareScheduleListScreen() {
 
   const sections = buildScheduleSections(displayedSchedules, buckets, todayIso);
 
-  // Angka chip = jumlah baris yang BENAR-BENAR dirender, jadi tidak pernah bisa
-  // berbeda dari isi daftar (ikut terpengaruh pencarian dan filter sheet).
-  // undefined saat menyegarkan: data yang sedang dipegang bisa jadi masih milik
-  // chip sebelumnya, dan angka basi lebih buruk daripada tanpa angka.
-  const activeChipCount = refreshing ? undefined : displayedSchedules.length;
-
   // Tiga sumbu, sesuai isi sheet setelah "Status" dihapus.
   const activeGroupCount =
     (criteria.source !== 'all' ? 1 : 0) +
@@ -341,26 +342,21 @@ export default function CareScheduleListScreen() {
               <ChipButton
                 key={filter.value}
                 active={completionFilter === filter.value}
-                // Hanya chip aktif yang berangka: data chip non-aktif memang
-                // tidak diambil, jadi angka apa pun di sana cuma tebakan.
-                count={filter.value === completionFilter ? activeChipCount : undefined}
                 label={filter.label}
                 onPress={() => setCompletionFilter(filter.value)}
               />
             ))}
           </FilterChipsRow>
 
-          {/* Baris "Menampilkan N jadwal" dihapus — angkanya sudah pindah ke chip
-              aktif. Yang tersisa di slot ini hanya penanda pemuatan, yang tidak
-              bisa dititipkan ke chip karena di sana justru angkanya disembunyikan.
-              Slotnya bertinggi tetap supaya daftar tidak bergeser naik-turun tiap
-              kali menyegarkan. */}
-          <View style={styles.loadingSlot}>
-            {refreshing ? (
-              <Text selectable style={styles.metaLine}>
-                Memuat jadwal...
-              </Text>
-            ) : null}
+          {/* Satu baris yang berganti isi, bukan dua slot. Saat menyegarkan
+              angkanya sengaja tidak ditampilkan: data yang sedang dipegang bisa
+              jadi masih milik chip sebelumnya, dan angka basi lebih buruk
+              daripada tanpa angka. Tingginya tetap supaya daftar tidak bergeser
+              naik-turun tiap kali menyegarkan. */}
+          <View style={styles.metaSlot}>
+            <Text selectable style={styles.metaLine}>
+              {refreshing ? 'Memuat jadwal...' : `Menampilkan ${displayedSchedules.length} jadwal`}
+            </Text>
           </View>
 
           {/* Saat menyegarkan, baris lama dipertahankan dan EmptyState ditahan —
@@ -695,47 +691,13 @@ function buildScheduleSections(
   for (const [iso, list] of byDate) {
     sections.push({
       key: iso,
-      title: formatSectionTitle(iso, todayIso),
+      title: formatAgendaSectionTitle(iso, todayIso),
       tone: 'default',
       schedules: list,
     });
   }
 
   return sections;
-}
-
-// "Hari ini"/"Besok" ditambah tanggalnya; selain itu nama hari + tanggal.
-function formatSectionTitle(iso: string, todayIso: string): string {
-  if (iso === todayIso) {
-    return `Hari ini · ${formatDate(iso)}`;
-  }
-
-  if (iso === addDaysToIsoDate(todayIso, 1)) {
-    return `Besok · ${formatDate(iso)}`;
-  }
-
-  const date = new Date(`${iso}T00:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-
-  return `${date.toLocaleDateString('id-ID', { weekday: 'long' })}, ${formatDate(iso)}`;
-}
-
-function addDaysToIsoDate(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-
-  date.setDate(date.getDate() + days);
-
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 // Tanggal acuan penghitungan keterlambatan. Tugas boleh punya due_date sendiri,
@@ -797,26 +759,12 @@ function formatWorkerSummary(workers: string[]): string {
   return `${workers.length} pekerja`;
 }
 
-function formatDate(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
 const styles = StyleSheet.create({
   metaLine: { ...tokens.type.meta, color: tokens.color.text.tertiary },
-  // Tinggi tetap: slot ini kosong saat idle dan berisi saat menyegarkan, jadi
-  // tanpa tinggi tetap seluruh daftar akan bergeser tiap kali memuat.
+  // Tinggi tetap: isi slot ini berganti antara jumlah dan penanda memuat, jadi
+  // tanpa tinggi tetap seluruh daftar bisa bergeser tiap kali memuat.
   // tokens.space.xl (20) cukup untuk lineHeight tokens.type.meta (18).
-  loadingSlot: { height: tokens.space.xl, justifyContent: 'center' },
+  metaSlot: { height: tokens.space.xl, justifyContent: 'center' },
 
   // Agenda: section dipisah jarak, baris dipisah garis rambut — bukan kartu
   // bertumpuk berbayang.

@@ -211,6 +211,11 @@ export async function getOperationalReportFollowUpTasks(
     return fail(reportId);
   }
 
+  // BUKAN duplikasi dari baris laporan yang sudah dipegang layar — ini PENJAGA
+  // AKSES, dan datanya memang tidak dipakai di bawah. Tanpa dia, laporan yang
+  // tidak boleh diakses pemanggil akan lolos ke query care_tasks yang juga
+  // ber-RLS dan balik sebagai daftar kosong, bukan error — "tidak punya tugas"
+  // jadi tak terbedakan dari "tidak boleh kamu lihat". Jangan dihapus.
   const reportResult = await getAccessibleOperationalReportSource(reportId);
 
   if (reportResult.error) {

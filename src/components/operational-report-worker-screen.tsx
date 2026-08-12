@@ -2,6 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { getSelectableOperationalReportCategories } from '../constants/operationalReport';
 import { colors, radius, spacing, tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
 import { getOperationalReportFollowUpTasks } from '../services/careTaskService';
@@ -16,6 +17,7 @@ import {
   createOperationalReport,
   deleteOwnOperationalReport,
   getOperationalReportEditEligibility,
+  getOperationalReportEditEligibilityFromReport,
   getOperationalReportDetail,
   updateOwnOperationalReport,
 } from '../services/operationalReportService';
@@ -178,6 +180,8 @@ export function WorkerCreateOperationalReportScreen() {
     >
       <ErrorBanner message={error} />
       <OperationalReportForm
+        // Laporan baru hanya boleh memakai kategori yang masih ditawarkan.
+        categories={getSelectableOperationalReportCategories()}
         errors={errors}
         photoBusy={submitting}
         photos={photos}
@@ -436,6 +440,10 @@ export function WorkerEditOperationalReportScreen({ reportId }: { reportId?: str
     >
       <ErrorBanner message={error} />
       <OperationalReportForm
+        // Kategori laporan yang sedang diedit ikut disertakan kalau ia sudah
+        // tidak ditawarkan lagi, supaya laporan lama tidak tampil seolah belum
+        // memilih kategori dan pilihannya tidak hilang saat disimpan.
+        categories={getSelectableOperationalReportCategories(report.category)}
         errors={errors}
         photoBusy={photoBusy}
         photoError={photoError}
@@ -495,12 +503,16 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
     // Empat permintaan paralel. Sebelumnya laporan dimuat dulu baru tugas
     // secara serial, jadi detail pekerja selalu satu round-trip lebih lambat
     // daripada detail owner tanpa alasan.
-    const [reportResult, membersResult, tasksResult, eligibilityResult, photosResult] =
+    //
+    // Eligibility TIDAK ikut di sini. Sejak ia jadi fungsi murni, jawabannya
+    // bisa dihitung dari baris laporan yang baru saja dimuat ditambah userId
+    // yang sudah dipegang sesi — dulu cabang kelima di sini mengambil ULANG
+    // laporan yang sama (plus farm_members dan auth.getUser) hanya untuk itu.
+    const [reportResult, membersResult, tasksResult, photosResult] =
       await Promise.all([
         getOperationalReportDetail({ operationalReportId: normalizedReportId }),
         getFarmMemberBasicProfiles(farmId),
         getOperationalReportFollowUpTasks({ operationalReportId: normalizedReportId }),
-        getOperationalReportEditEligibility({ operationalReportId: normalizedReportId }),
         listOperationalReportPhotos({ farmId, operationalReportId: normalizedReportId }),
       ]);
 
@@ -516,17 +528,21 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
     if (reportResult.error) {
       setError(reportResult.error.message);
       setReport(null);
+      setCanEdit(false);
     } else if (reportResult.data.reportedBy !== currentFarm.userId) {
       setError('Laporan tidak ditemukan atau bukan laporan milik Anda.');
       setReport(null);
+      setCanEdit(false);
     } else {
       setReport(reportResult.data);
-    }
 
-    // Guard hapus di RPC identik dengan guard edit ditambah cek pembuat, dan
-    // pembuat sudah diperiksa di atas — jadi satu flag ini menentukan kedua
-    // aksi di menu titik tiga.
-    setCanEdit(!eligibilityResult.error && eligibilityResult.data.canEdit);
+      // Guard hapus di RPC identik dengan guard edit ditambah cek pembuat, dan
+      // pembuat sudah diperiksa di atas — jadi satu flag ini menentukan kedua
+      // aksi: tombol "Ubah laporan" di footer dan "Hapus laporan" di menu.
+      setCanEdit(
+        getOperationalReportEditEligibilityFromReport(reportResult.data, currentFarm.userId).canEdit
+      );
+    }
 
     if (tasksResult.error) {
       setFollowUpTasks([]);
@@ -538,14 +554,21 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
         task.activities.map((activity) => activity.id)
       );
 
-      // Pekerja boleh membaca bukti fotonya sendiri (RLS
-      // can_access_task_proof_photo mengizinkan pelaku tugas).
-      const proofResult = await listTaskProofPhotosForActivities({
-        activityIds,
-        farmId,
-      });
+      // Tanpa aktivitas tidak ada bukti foto yang bisa diminta. Permintaan
+      // dengan daftar id kosong cuma menambah satu round-trip yang jawabannya
+      // sudah pasti kosong — dan ini jalur serial, jadi ongkosnya terasa.
+      if (activityIds.length === 0) {
+        setProofPhotoMap({});
+      } else {
+        // Pekerja boleh membaca bukti fotonya sendiri (RLS
+        // can_access_task_proof_photo mengizinkan pelaku tugas).
+        const proofResult = await listTaskProofPhotosForActivities({
+          activityIds,
+          farmId,
+        });
 
-      setProofPhotoMap(proofResult.error ? {} : proofResult.data);
+        setProofPhotoMap(proofResult.error ? {} : proofResult.data);
+      }
     }
 
     if (membersResult.error) {
@@ -640,6 +663,18 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
           }
         />
       }
+      // "Ubah laporan" naik ke footer: ikon tiga titik tidak terbaca sebagai
+      // tombol oleh pengguna sasaran, jadi aksi yang paling sering dipakai tidak
+      // boleh bersembunyi di sana. "Hapus laporan" sengaja TETAP di menu —
+      // aksi merusak tidak boleh sedangkal satu ketukan.
+      stickyFooter={
+        canEdit ? (
+          <Button
+            title="Ubah laporan"
+            onPress={() => router.push(`/worker/reports/${report.id}/edit`)}
+          />
+        ) : undefined
+      }
     >
       <ErrorBanner message={error} />
 
@@ -667,15 +702,6 @@ export function WorkerOperationalReportDetailScreen({ reportId }: { reportId?: s
 
       <BottomSheet onClose={() => setMenuOpen(false)} title="Aksi laporan" visible={menuOpen}>
         <View style={{ gap: spacing.sm }}>
-          <SheetActionRow
-            icon="pencil"
-            iconTone="brand"
-            title="Edit laporan"
-            onPress={() => {
-              setMenuOpen(false);
-              router.push(`/worker/reports/${report.id}/edit`);
-            }}
-          />
           <SheetActionRow
             icon="x"
             iconTone="danger"
@@ -776,10 +802,8 @@ function OwnerResponseCard({
 function formatWorkerResolutionMessage(report: OperationalReport): string {
   const { resolution, status } = report;
 
-  if (status === 'new') {
-    return 'Belum ada respons. Laporan sudah masuk ke daftar pemilik.';
-  }
-
+  // Tidak ada cabang 'new' di sini: OwnerResponseCard sudah return lebih dulu
+  // untuk status itu, jadi fungsi ini tidak pernah dipanggil dengannya.
   if (status === 'rejected') {
     return 'Laporan ditolak';
   }
@@ -826,11 +850,12 @@ function WorkerFollowUpSection({
         // Policy care_tasks hanya mengizinkan pekerja melihat tugas yang
         // di-assign ke dirinya. Kalau owner menugaskannya ke pekerja lain,
         // daftar ini kosong padahal tugasnya ADA — jangan bilang "belum ada".
-        <Card>
-          <Text selectable style={{ color: colors.textSecondary, lineHeight: 21 }}>
-            Tugas tindak lanjut diberikan ke pekerja lain.
-          </Text>
-        </Card>
+        <EmptyState
+          icon="user"
+          subtitle="Tugas tindak lanjut laporan ini tidak ditugaskan kepadamu, jadi rinciannya tidak terbuka."
+          title="Dikerjakan pekerja lain"
+          variant="dashed"
+        />
       ) : (
         <View style={{ gap: spacing.md }}>
           {tasks.map((task) => (

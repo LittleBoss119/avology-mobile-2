@@ -18,13 +18,43 @@ import type { CareSchedule, CareScheduleDetail, CareTask, TaskStatus } from '../
 // dengan yang dipakai Postgres untuk 'Asia/Jakarta' pada tanggal masa kini.
 const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
 
-export function getTodayIsoDate(now: Date = new Date()): string {
-  const wibNow = new Date(now.getTime() + WIB_OFFSET_MS);
-  const year = wibNow.getUTCFullYear();
-  const month = `${wibNow.getUTCMonth() + 1}`.padStart(2, '0');
-  const day = `${wibNow.getUTCDate()}`.padStart(2, '0');
+// Inti konversi WIB: satu-satunya tempat WIB_OFFSET_MS benar-benar diterapkan.
+// getTodayIsoDate dan toWibIsoDate keduanya lewat sini supaya tidak ada jalur
+// kedua yang bisa bergeser sendiri.
+function wibIsoDateFromDate(date: Date): string {
+  const wibDate = new Date(date.getTime() + WIB_OFFSET_MS);
+  const year = wibDate.getUTCFullYear();
+  const month = `${wibDate.getUTCMonth() + 1}`.padStart(2, '0');
+  const day = `${wibDate.getUTCDate()}`.padStart(2, '0');
 
   return `${year}-${month}-${day}`;
+}
+
+export function getTodayIsoDate(now: Date = new Date()): string {
+  return wibIsoDateFromDate(now);
+}
+
+// Timestamptz dari database (mis. '2026-08-10T04:12:00+00:00') menjadi tanggal
+// WIB 'YYYY-MM-DD', bentuk yang dimengerti dayDifference dan seluruh util di
+// file ini. Kolom seperti operational_reports.responded_at adalah timestamptz,
+// sedangkan semua klasifikasi waktu di sini bekerja pada tanggal murni — ini
+// jembatannya, dan sengaja tinggal di file ini supaya layar tidak pernah
+// menghitung offset WIB sendiri.
+//
+// null untuk nilai kosong maupun nilai yang tidak bisa diurai: pemanggil harus
+// memilih untuk TIDAK menampilkan apa pun, bukan menampilkan tanggal karangan.
+export function toWibIsoDate(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return wibIsoDateFromDate(parsed);
 }
 
 // Dua sistem klasifikasi waktu hidup berdampingan di file ini. Keduanya
@@ -151,6 +181,13 @@ const MONTHS_ID_SHORT = [
   'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
 ];
 
+// Alasannya sama dengan MONTHS_ID_SHORT: jangan bergantung pada data locale
+// Intl yang tidak dijamin lengkap di semua build Hermes. Indeks mengikuti
+// Date.getDay() — 0 = Minggu.
+const DAYS_ID_LONG = [
+  'Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu',
+];
+
 function parseIsoDateParts(iso: string): { day: number; month: number; year: number } | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
     return null;
@@ -172,7 +209,14 @@ function formatShortDate(iso: string): string {
 }
 
 // "27 Jun 2026"
-function formatFullDate(iso: string): string {
+//
+// Diekspor untuk menggantikan helper `formatDate` lokal yang dulu disalin di
+// layar jadwal owner dan layar tugas pekerja. Kedua salinan itu memakai
+// `new Date('YYYY-MM-DD')`, yang menurut spesifikasi diurai sebagai UTC —
+// di zona waktu negatif tanggalnya mundur sehari, padahal seluruh klasifikasi
+// di file ini sudah dipatok WIB lewat getTodayIsoDate(). Versi ini tidak
+// menyentuh Date sama sekali: murni pecah string, jadi tidak bisa bergeser.
+export function formatFullDate(iso: string): string {
   const parts = parseIsoDateParts(iso);
 
   if (!parts) {
@@ -180,6 +224,55 @@ function formatFullDate(iso: string): string {
   }
 
   return `${`${parts.day}`.padStart(2, '0')} ${MONTHS_ID_SHORT[parts.month - 1]} ${parts.year}`;
+}
+
+// Geser tanggal ISO sejumlah hari (boleh negatif). Diangkat dari layar jadwal
+// owner. Berbeda dari versi lama yang mengurai lewat `new Date(iso + 'T00:00:00')`,
+// di sini tanggalnya dibangun dari komponen — sama seperti dayDifference — jadi
+// tidak ada jalur penguraian string tanggal kedua di basis kode ini.
+export function addDaysToIsoDate(iso: string, days: number): string {
+  const parts = parseIsoDateParts(iso);
+
+  if (!parts) {
+    return iso;
+  }
+
+  const date = new Date(parts.year, parts.month - 1, parts.day);
+  date.setDate(date.getDate() + days);
+
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+// Judul section agenda per tanggal, dipakai bersama layar jadwal owner dan
+// layar tugas pekerja: "Hari ini · 27 Jun 2026", "Besok · 28 Jun 2026", selain
+// itu "Senin, 29 Jun 2026".
+//
+// Nama harinya diambil dari DAYS_ID_LONG, bukan toLocaleDateString dengan
+// { weekday: 'long' } seperti versi lama di layar owner. Hasilnya identik pada
+// build yang datanya lengkap, dan tidak lagi bisa jatuh ke bahasa Inggris pada
+// build yang tidak lengkap.
+export function formatAgendaSectionTitle(iso: string, todayIso: string): string {
+  if (iso === todayIso) {
+    return `Hari ini · ${formatFullDate(iso)}`;
+  }
+
+  if (iso === addDaysToIsoDate(todayIso, 1)) {
+    return `Besok · ${formatFullDate(iso)}`;
+  }
+
+  const parts = parseIsoDateParts(iso);
+
+  if (!parts) {
+    return iso;
+  }
+
+  const weekday = DAYS_ID_LONG[new Date(parts.year, parts.month - 1, parts.day).getDay()];
+
+  return `${weekday}, ${formatFullDate(iso)}`;
 }
 
 // Selisih hari bulat dari fromIso ke toIso pada tengah malam lokal.

@@ -18,6 +18,7 @@ import type {
   CareTaskDetail,
   FarmMemberBasicProfile,
   OperationalReport,
+  OperationalReportStatus,
 } from '../types/domain';
 import type { PhotoAttachmentPreviewItem } from '../types/media';
 import {
@@ -34,6 +35,7 @@ import {
   formatOwnerReportResolution,
   getOwnerReportActions,
   type OwnerReportAction,
+  type OwnerReportActionKey,
 } from './operational-report-owner-actions';
 import { useSnackbar } from './snackbar';
 import {
@@ -138,10 +140,31 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
     }, [loadDetail])
   );
 
+  // Dipilih DARI DALAM sheet pemilihan, jadi ada overlay yang harus menutup dulu.
   function handleSelectAction(action: OwnerReportAction) {
     setActionSheetOpen(false);
 
     // Buat tugas tetap lewat rute penuh — formnya terlalu besar untuk sheet.
+    // Navigasi tidak memunculkan overlay kedua, jadi tidak perlu jeda.
+    if (action.key === 'create_task') {
+      if (report) {
+        router.push(`/owner/reports/${report.id}/task`);
+      }
+
+      return;
+    }
+
+    // Beri jeda agar animasi tutup sheet pemilihan selesai sebelum sheet
+    // konfirmasi muncul, supaya tidak ada dua overlay bertumpuk (pola yang sama
+    // dipakai di detail laporan pekerja dan detail jadwal).
+    setTimeout(() => setPendingAction(action), 260);
+  }
+
+  // Pintasan satu-aksi: sheet PEMILIHAN tidak pernah dibuka, jadi tidak ada
+  // overlay yang harus menutup lebih dulu dan tidak ada jeda yang perlu
+  // ditunggu. Langkah berikutnya sama persis dengan jalur lewat sheet —
+  // termasuk sheet konfirmasi beserta catatan yang ter-prefill.
+  function startActionDirectly(action: OwnerReportAction) {
     if (action.key === 'create_task') {
       if (report) {
         router.push(`/owner/reports/${report.id}/task`);
@@ -168,7 +191,11 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
           ? await markReportAlreadyResolved({ note, operationalReportId: report.id })
           : action.key === 'reject'
             ? await rejectReport({ operationalReportId: report.id, reason: note })
-            : await closeReport({ note, operationalReportId: report.id });
+            : await closeReport({
+                currentResolution: report.resolution,
+                note,
+                operationalReportId: report.id,
+              });
 
     if (result.error) {
       return result.error.message;
@@ -219,8 +246,19 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
       stickyFooter={
         actions.length > 0 ? (
           <Button
-            title={report.status === 'new' ? 'Tindak lanjuti laporan' : 'Perbarui laporan'}
-            onPress={() => setActionSheetOpen(true)}
+            title={getPrimaryActionLabel(report.status, actions)}
+            onPress={() => {
+              // Satu aksi saja berarti tidak ada yang perlu dipilih: sheet
+              // pemilihan dilewati dan owner langsung sampai ke langkah
+              // berikutnya. Status 'new' dikecualikan — di sana sheet tetap
+              // dibuka apa adanya.
+              if (report.status !== 'new' && actions.length === 1) {
+                startActionDirectly(actions[0]);
+                return;
+              }
+
+              setActionSheetOpen(true);
+            }}
           />
         ) : undefined
       }
@@ -262,6 +300,7 @@ export function OwnerOperationalReportDetailScreen({ reportId }: { reportId?: st
 
       <OwnerReportActionSheet
         actions={actions}
+        status={report.status}
         onClose={() => setActionSheetOpen(false)}
         onSelect={handleSelectAction}
         visible={actionSheetOpen}
@@ -367,17 +406,57 @@ function FollowUpTaskRow({
   );
 }
 
+// Label tombol utama. Urutan cabangnya disengaja: status 'new' menang lebih
+// dulu, karena di sana daftar aksinya selalu berisi empat dan cabang jumlah di
+// bawahnya akan salah membacanya sebagai "ubah".
+function getPrimaryActionLabel(
+  status: OperationalReportStatus,
+  actions: OwnerReportAction[]
+): string {
+  if (status === 'new') {
+    return 'Tindak lanjuti laporan';
+  }
+
+  // Satu aksi: tombolnya menyebut aksi itu sendiri, jadi owner tahu persis apa
+  // yang akan terjadi sebelum menekannya.
+  return actions.length === 1 ? actions[0].title : 'Ubah tindak lanjut';
+}
+
+// Kelompok tampilan. Ini murni cara menyusun daftar di layar — aksi mana yang
+// tersedia tetap sepenuhnya ditentukan getOwnerReportActions.
+const TODO_ACTION_KEYS: OwnerReportActionKey[] = ['create_task', 'self_handled'];
+
 function OwnerReportActionSheet({
   actions,
   onClose,
   onSelect,
+  status,
   visible,
 }: {
   actions: OwnerReportAction[];
   onClose: () => void;
   onSelect: (action: OwnerReportAction) => void;
+  status: OperationalReportStatus;
   visible: boolean;
 }) {
+  const todoActions = actions.filter((action) => TODO_ACTION_KEYS.includes(action.key));
+  const closingActions = actions.filter((action) => !TODO_ACTION_KEYS.includes(action.key));
+
+  // Urutan kelompok mengikuti apa yang paling mungkin dipilih owner di keadaan
+  // itu: pada 'new' aksi yang paling mungkin adalah membuat tugas, sedangkan
+  // pada 'in_progress' pekerjaannya sudah jalan atau sudah diurus sendiri, jadi
+  // yang paling mungkin adalah menutup laporan.
+  const groups =
+    status === 'new'
+      ? [
+          { actions: todoActions, title: 'Perlu dikerjakan' },
+          { actions: closingActions, title: 'Tutup laporan' },
+        ]
+      : [
+          { actions: closingActions, title: 'Tutup laporan' },
+          { actions: todoActions, title: 'Perlu dikerjakan' },
+        ];
+
   return (
     <BottomSheet
       onClose={onClose}
@@ -385,23 +464,33 @@ function OwnerReportActionSheet({
       title="Tindak lanjuti laporan"
       visible={visible}
     >
-      <View style={{ gap: spacing.sm }}>
-        {actions.map((action) => (
-          <SheetActionRow
-            key={action.key}
-            description={action.description}
-            icon={action.icon}
-            iconTone={
-              action.emphasis === 'primary'
-                ? 'brand'
-                : action.emphasis === 'danger'
-                  ? 'danger'
-                  : 'neutral'
-            }
-            title={action.title}
-            onPress={() => onSelect(action)}
-          />
-        ))}
+      <View style={{ gap: spacing.md }}>
+        {groups.map((group) =>
+          // Judul kelompok kosong tidak dirender: pada laporan in_progress yang
+          // masih punya tugas berjalan, "Perlu dikerjakan" memang tidak berisi
+          // apa pun.
+          group.actions.length === 0 ? null : (
+            <View key={group.title} style={{ gap: spacing.sm }}>
+              <SectionHeader title={group.title} />
+              {group.actions.map((action) => (
+                <SheetActionRow
+                  key={action.key}
+                  description={action.description}
+                  icon={action.icon}
+                  iconTone={
+                    action.emphasis === 'primary'
+                      ? 'brand'
+                      : action.emphasis === 'danger'
+                        ? 'danger'
+                        : 'neutral'
+                  }
+                  title={action.title}
+                  onPress={() => onSelect(action)}
+                />
+              ))}
+            </View>
+          )
+        )}
       </View>
     </BottomSheet>
   );

@@ -58,10 +58,6 @@ type MembershipRow = {
   status: MemberStatus;
 };
 
-type FollowUpTaskIdRow = {
-  id: string;
-};
-
 export async function createOperationalReport(
   input: CreateOperationalReportInput
 ): Promise<ServiceResult<CreateOperationalReportData>> {
@@ -244,9 +240,22 @@ export async function rejectReport(
 export async function closeReport(
   input: CloseReportInput
 ): Promise<ServiceResult<SuccessData>> {
+  const note = toOwnerNoteInstruction(input.note);
+
+  // '' berarti "hapus catatan". Untuk laporan self_handled RPC menolaknya —
+  // nullif(btrim(...)) mengubahnya jadi null, lalu guard catatan wajib melempar
+  // 'Owner note is required when handling the report directly', pesan yang tidak
+  // masuk akal bagi owner yang sedang MENUTUP laporan. Dicegah di sini supaya
+  // alasannya terbaca. null/undefined tidak kena: itu "pertahankan catatan lama".
+  if (input.currentResolution === 'self_handled' && note === '') {
+    return fail(
+      new Error('Catatan tidak bisa dikosongkan. Isi atau biarkan catatan lama.')
+    );
+  }
+
   return callUpdateOperationalReportStatus({
     operationalReportId: input.operationalReportId,
-    ownerResponseNote: toOwnerNoteInstruction(input.note),
+    ownerResponseNote: note,
     resolution: null,
     status: 'resolved',
   });
@@ -304,7 +313,13 @@ export async function getOperationalReportEditEligibility(
     return fail(reportResult.error);
   }
 
-  return getOperationalReportEditEligibilityFromReport(reportResult.data);
+  const userIdResult = await getCurrentUserId();
+
+  if (userIdResult.error) {
+    return fail(userIdResult.error);
+  }
+
+  return ok(getOperationalReportEditEligibilityFromReport(reportResult.data, userIdResult.data));
 }
 
 export async function updateOwnOperationalReport(
@@ -420,25 +435,25 @@ export async function deleteOwnOperationalReport(
   });
 }
 
-// Dipakai untuk menyembunyikan tombol edit/hapus SEBELUM round-trip. Bukan
+// Aturan boleh-tidaknya sebuah laporan diubah pemiliknya, sebagai fungsi MURNI:
+// masuk baris laporan + id pengguna, keluar keputusan. Nol round-trip.
+//
+// Dipakai untuk menyembunyikan tombol ubah/hapus SEBELUM round-trip. Bukan
 // pengganti guard RPC update_own_operational_report / delete_own_operational_report
-// — keduanya menegakkan aturan yang sama di sisi database. Di sini sengaja
-// hanya dua sumber data: sesi lokal (siapa saya) + satu query tugas tindak
-// lanjut. Sisanya sudah ada di baris laporan yang dipegang pemanggil.
-async function getOperationalReportEditEligibilityFromReport(
-  report: OperationalReport
-): Promise<ServiceResult<OperationalReportEditEligibility>> {
-  const userIdResult = await getCurrentUserId();
-
-  if (userIdResult.error) {
-    return fail(userIdResult.error);
-  }
-
-  if (report.reportedBy !== userIdResult.data) {
-    return ok({
+// — keduanya menegakkan aturan yang sama di sisi database.
+//
+// Diekspor supaya layar yang SUDAH memegang baris laporan dan id penggunanya
+// tidak perlu lewat getOperationalReportEditEligibility, yang mengambil ulang
+// baris laporan yang sama dari database. Satu-satunya salinan logika ini.
+export function getOperationalReportEditEligibilityFromReport(
+  report: OperationalReport,
+  currentUserId: UUID
+): OperationalReportEditEligibility {
+  if (report.reportedBy !== currentUserId) {
+    return {
       canEdit: false,
       reason: 'Hanya pembuat laporan yang bisa mengedit laporan ini.',
-    });
+    };
   }
 
   if (
@@ -447,46 +462,21 @@ async function getOperationalReportEditEligibilityFromReport(
     Boolean(report.respondedBy) ||
     Boolean(normalizeOptionalText(report.ownerResponseNote))
   ) {
-    return ok({
+    return {
       canEdit: false,
       reason: 'Laporan ini sudah ditindaklanjuti owner dan tidak bisa diedit.',
-    });
+    };
   }
 
-  const followUpTaskResult = await getOperationalReportFollowUpTaskExists(report.id);
-
-  if (followUpTaskResult.error) {
-    return fail(followUpTaskResult.error);
-  }
-
-  if (followUpTaskResult.data) {
-    return ok({
-      canEdit: false,
-      reason: 'Laporan ini sudah memiliki tugas tindak lanjut dan tidak bisa diedit.',
-    });
-  }
-
-  return ok({
+  // Tidak ada lagi query tugas tindak lanjut di sini: RPC
+  // create_task_from_operational_report menyetel status='in_progress' dalam
+  // transaksi yang sama dengan insert tugasnya, jadi status==='new' sudah
+  // menjamin nol tugas. Cabang di atas menutup semua kasus lainnya. Guard
+  // sebenarnya tetap ada di RPC update_own/delete_own_operational_report.
+  return {
     canEdit: true,
     reason: null,
-  });
-}
-
-async function getOperationalReportFollowUpTaskExists(
-  reportId: UUID
-): Promise<ServiceResult<boolean>> {
-  const { data, error } = await supabase
-    .from('care_tasks')
-    .select('id')
-    .eq('operational_report_id', reportId)
-    .limit(1)
-    .returns<FollowUpTaskIdRow[]>();
-
-  if (error) {
-    return fail(error, 'Gagal memeriksa tugas tindak lanjut laporan.');
-  }
-
-  return ok((data ?? []).length > 0);
+  };
 }
 
 // Semua pesan `raise exception` dari RPC laporan (status, edit, hapus) dipetakan

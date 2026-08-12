@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -6,7 +7,7 @@ import {
   OPERATIONAL_REPORT_CATEGORIES,
   OPERATIONAL_REPORT_STATUSES,
 } from '../constants/operationalReport';
-import { colors, radius, spacing } from '../constants/theme';
+import { colors, spacing, tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
 import { getFarmMemberBasicProfiles } from '../services/memberService';
 import { getOperationalReports } from '../services/operationalReportService';
@@ -23,23 +24,22 @@ import {
   formatOperationalReportCategory,
   formatOperationalReportStatus,
 } from '../utils/displayFormat';
+import { dayDifference, getTodayIsoDate, toWibIsoDate } from '../utils/taskDueDate';
 import { BottomSheet } from './bottom-sheet';
+import { Icon } from './icons';
 import { getReportStatusTone } from './operational-report-common';
 import {
   Badge,
   Button,
-  CameraGlyph,
-  Card,
   ChipButton,
-  CompactMetaItem,
   EmptyState,
   ErrorBanner,
   FilterChipsRow,
-  FloatingActionButton,
   LoadingState,
   MainTabHeader,
   Screen,
   SearchFilterRow,
+  withAlpha,
 } from './ui';
 
 type OperationalReportStatusFilter = 'all' | OperationalReportStatus;
@@ -66,6 +66,9 @@ const reportStatusFilterOptions: OperationalReportStatusFilter[] = [
   ...OPERATIONAL_REPORT_STATUSES,
 ];
 
+// Lebar pita gradasi di tepi kanan deret chip status.
+const CHIP_ROW_FADE_WIDTH = tokens.space.xxxl;
+
 export function OperationalReportListScreen({ role, onProfilePress }: OperationalReportListScreenProps) {
   const isOwner = role === 'owner';
   const { currentFarm } = useAuth();
@@ -76,13 +79,24 @@ export function OperationalReportListScreen({ role, onProfilePress }: Operationa
   const [loading, setLoading] = React.useState(true);
   const [reports, setReports] = React.useState<OperationalReport[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [statusFilter, setStatusFilter] = React.useState<OperationalReportStatusFilter>('all');
+  // Owner membuka layar ini untuk mengurus yang belum ditindaklanjuti, jadi
+  // defaultnya 'new'. Pekerja datang untuk melihat nasib laporannya sendiri,
+  // jadi defaultnya 'all'. Ini NILAI AWAL state saja — begitu user menekan chip
+  // lain, tidak ada apa pun di sini yang mengembalikannya.
+  const [statusFilter, setStatusFilter] = React.useState<OperationalReportStatusFilter>(
+    isOwner ? 'new' : 'all'
+  );
   const [memberNames, setMemberNames] = React.useState<Record<string, string>>({});
   const [photoCounts, setPhotoCounts] = React.useState<Record<string, number>>({});
 
   const farmId = currentFarm?.farmId;
+  const todayIso = getTodayIsoDate();
 
-  const filteredReports = React.useMemo(() => {
+  // Semua kriteria KECUALI status. Dipakai dua kali: sebagai dasar angka di chip
+  // status, dan sebagai dasar daftar yang ditampilkan. Dengan begini angka di
+  // chip selalu berarti "sebanyak ini yang akan kamu lihat kalau chip ini
+  // ditekan" — bukan angka yang bertentangan dengan pencarian yang sedang aktif.
+  const reportsBeforeStatusFilter = React.useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
     return reports.filter((report) => {
@@ -100,14 +114,40 @@ export function OperationalReportListScreen({ role, onProfilePress }: Operationa
       const searchableText = searchableParts.filter(Boolean).join(' ').toLowerCase();
 
       const matchesSearch = !normalizedQuery || searchableText.includes(normalizedQuery);
-      const matchesStatus = statusFilter === 'all' || report.status === statusFilter;
       const matchesCategory =
         criteria.categories.length === 0 || criteria.categories.includes(report.category);
       const matchesReporter = criteria.reporter === 'all' || report.reportedBy === criteria.reporter;
 
-      return matchesSearch && matchesStatus && matchesCategory && matchesReporter;
+      return matchesSearch && matchesCategory && matchesReporter;
     });
-  }, [criteria.categories, criteria.reporter, isOwner, memberNames, reports, searchQuery, statusFilter]);
+  }, [criteria.categories, criteria.reporter, isOwner, memberNames, reports, searchQuery]);
+
+  const filteredReports = React.useMemo(
+    () =>
+      statusFilter === 'all'
+        ? reportsBeforeStatusFilter
+        : reportsBeforeStatusFilter.filter((report) => report.status === statusFilter),
+    [reportsBeforeStatusFilter, statusFilter]
+  );
+
+  // Angka chip dihitung dari baris yang SUDAH dimuat — nol query tambahan.
+  // Chip berangka nol tetap dirender: "Ditolak · 0" adalah jawaban, sedangkan
+  // chip yang hilang membuat user mengira filternya rusak.
+  const statusCounts = React.useMemo(() => {
+    const counts: Record<OperationalReportStatusFilter, number> = {
+      all: reportsBeforeStatusFilter.length,
+      in_progress: 0,
+      new: 0,
+      rejected: 0,
+      resolved: 0,
+    };
+
+    for (const report of reportsBeforeStatusFilter) {
+      counts[report.status] += 1;
+    }
+
+    return counts;
+  }, [reportsBeforeStatusFilter]);
 
   const loadReports = React.useCallback(async () => {
     if (!farmId || !currentFarm || currentFarm.role !== role || currentFarm.status !== 'active') {
@@ -167,6 +207,7 @@ export function OperationalReportListScreen({ role, onProfilePress }: Operationa
   const hasActiveFilters =
     statusFilter !== 'all' || activeFilterCount > 0 || searchQuery.trim().length > 0;
   const hasNoData = reports.length === 0;
+  const filterEmptyCopy = getFilterEmptyCopy(statusFilter, isOwner);
 
   const reporterOptions: Array<{ label: string; value: string }> = [
     { label: 'Semua', value: 'all' },
@@ -187,13 +228,6 @@ export function OperationalReportListScreen({ role, onProfilePress }: Operationa
 
   return (
     <Screen
-      // Ruang ekstra di bawah supaya FAB tidak menutupi kartu terakhir.
-      contentStyle={{ paddingBottom: 160 }}
-      floatingAction={
-        role === 'worker' ? (
-          <FloatingActionButton label="Buat laporan" onPress={() => router.push('/worker/reports/create')} />
-        ) : undefined
-      }
       header={
         <MainTabHeader
           title="Laporan"
@@ -201,18 +235,37 @@ export function OperationalReportListScreen({ role, onProfilePress }: Operationa
           onProfilePress={onProfilePress}
         />
       }
+      // Hanya pekerja yang bisa membuat laporan. Owner tidak punya footer sama
+      // sekali, jadi daftarnya memakai seluruh tinggi layar. Tinggi footer
+      // diukur Screen lewat onLayout — tidak ada lagi paddingBottom tebakan.
+      //
+      // Saat layar kosong footer ini padam: EmptyState sudah membawa tombol
+      // "Buat laporan" sendiri, dan dua tombol berlabel sama di satu layar cuma
+      // saling mengulang.
+      stickyFooter={
+        role === 'worker' && !hasNoData ? (
+          <Button title="Buat laporan" onPress={() => router.push('/worker/reports/create')} />
+        ) : undefined
+      }
     >
       <ErrorBanner message={error} />
 
       {error ? null : hasNoData ? (
-        <EmptyState
-          title="Belum ada laporan"
-          subtitle={
-            isOwner
-              ? 'Laporan dari pekerja akan muncul di sini.'
-              : 'Buat laporan jika ada kondisi lapangan.'
-          }
-        />
+        <View style={{ gap: tokens.space.lg }}>
+          <EmptyState
+            icon="clipboard"
+            subtitle={
+              isOwner
+                ? 'Begitu pekerja mengirim laporan kondisi lapangan, semuanya muncul di sini.'
+                : 'Kirim laporan kalau kamu menemukan kondisi lapangan yang perlu ditangani pemilik.'
+            }
+            title={isOwner ? 'Belum ada laporan dari pekerja' : 'Belum ada laporan'}
+            variant="dashed"
+          />
+          {isOwner ? null : (
+            <Button title="Buat laporan" onPress={() => router.push('/worker/reports/create')} />
+          )}
+        </View>
       ) : (
         <>
           <SearchFilterRow
@@ -224,40 +277,83 @@ export function OperationalReportListScreen({ role, onProfilePress }: Operationa
             value={searchQuery}
           />
 
-          {/* Bleed ke tepi kanan layar: tanpa ini chip terakhir terlihat
-              terpotong di tengah-tengah padding, bukan jelas berlanjut. */}
-          <FilterChipsRow style={{ marginRight: -spacing.screenHorizontal }}>
-            {reportStatusFilterOptions.map((status) => (
-              <ChipButton
-                key={status}
-                active={statusFilter === status}
-                label={status === 'all' ? 'Semua' : formatOperationalReportStatus(status)}
-                onPress={() => setStatusFilter(status)}
-              />
-            ))}
-          </FilterChipsRow>
+          {/* Deret chip status sengaja BLEED ke tepi kanan layar lewat marginRight
+              negatif. Tanpa itu deretnya berhenti rapi di batas padding dan
+              terbaca seperti sudah habis; dengan itu chip terakhir terpotong oleh
+              tepi layar, dan potongan itulah isyarat utama bahwa masih ada
+              lanjutannya. Pita gradasi di bawah memperkuat isyarat, bukan
+              menggantikannya — polanya sama persis dengan pita footer di Screen. */}
+          <View style={{ position: 'relative' }}>
+            <FilterChipsRow style={{ marginRight: -spacing.screenHorizontal }}>
+              {reportStatusFilterOptions.map((status) => (
+                <ChipButton
+                  key={status}
+                  active={statusFilter === status}
+                  count={statusCounts[status]}
+                  label={status === 'all' ? 'Semua' : formatOperationalReportStatus(status)}
+                  onPress={() => setStatusFilter(status)}
+                />
+              ))}
+            </FilterChipsRow>
+            {/* pointerEvents 'none' WAJIB: tanpa itu pita ini menangkap sentuhan
+                dan chip di belakangnya tidak bisa digulung maupun ditekan. */}
+            <LinearGradient
+              colors={[withAlpha(tokens.color.surface.canvas, 0), tokens.color.surface.canvas]}
+              end={{ x: 1, y: 0 }}
+              pointerEvents="none"
+              start={{ x: 0, y: 0 }}
+              style={{
+                bottom: 0,
+                position: 'absolute',
+                right: -spacing.screenHorizontal,
+                top: 0,
+                width: CHIP_ROW_FADE_WIDTH,
+              }}
+            />
+          </View>
 
-          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+          <Text selectable style={{ ...tokens.type.meta, color: tokens.color.text.tertiary }}>
             {hasActiveFilters
               ? `Menampilkan ${filteredReports.length} dari ${reports.length} laporan`
               : `Menampilkan ${filteredReports.length} laporan`}
           </Text>
 
           {filteredReports.length === 0 ? (
-            <EmptyState title="Tidak ada laporan pada filter ini" />
+            <EmptyState
+              icon="search"
+              subtitle={filterEmptyCopy.subtitle}
+              title={filterEmptyCopy.title}
+              variant="dashed"
+            />
           ) : (
-            <View style={{ gap: spacing.md }}>
-              {filteredReports.map((report) => (
-                <OperationalReportCard
+            <View>
+              {filteredReports.map((report, index) => (
+                <View
                   key={report.id}
-                  photoCount={photoCounts[report.id] ?? 0}
-                  report={report}
-                  reporterName={memberNames[report.reportedBy]}
-                  showReporter={isOwner}
-                  onPress={() =>
-                    router.push(isOwner ? `/owner/reports/${report.id}` : `/worker/reports/${report.id}`)
+                  // Garis rambut sebagai pemisah, bukan kartu berbayang. Baris
+                  // terakhir tidak diberi garis supaya daftarnya tidak terlihat
+                  // menggantung.
+                  style={
+                    index === filteredReports.length - 1
+                      ? undefined
+                      : { borderBottomColor: tokens.color.line.hairline, borderBottomWidth: 1 }
                   }
-                />
+                >
+                  <OperationalReportRow
+                    ageDays={getReportAgeDays(report, todayIso)}
+                    photoCount={photoCounts[report.id] ?? 0}
+                    report={report}
+                    reporterName={memberNames[report.reportedBy]}
+                    showReporter={isOwner}
+                    // Pil status hanya berguna kalau daftarnya campur. Saat satu
+                    // status sudah dipilih lewat chip, setiap baris pasti berstatus
+                    // itu dan pilnya cuma pengulangan.
+                    showStatus={statusFilter === 'all'}
+                    onPress={() =>
+                      router.push(isOwner ? `/owner/reports/${report.id}` : `/worker/reports/${report.id}`)
+                    }
+                  />
+                </View>
               ))}
             </View>
           )}
@@ -277,89 +373,144 @@ export function OperationalReportListScreen({ role, onProfilePress }: Operationa
   );
 }
 
-function OperationalReportCard({
+// Umur laporan yang sedang diproses, dalam hari WIB. null = tidak usah ditandai.
+//
+// Sengaja TIDAK melihat tugas tindak lanjut: data tugas tidak tersedia di layar
+// ini, dan mengambilnya berarti query tambahan. Penanda ini murni dibaca dari
+// responded_at yang sudah ada di baris laporan.
+function getReportAgeDays(report: OperationalReport, todayIso: string): number | null {
+  if (report.status !== 'in_progress') {
+    return null;
+  }
+
+  const respondedIso = toWibIsoDate(report.respondedAt);
+
+  // responded_at kosong pada baris in_progress berarti datanya tidak lengkap.
+  // Lebih baik tidak menampilkan apa pun daripada menampilkan "0 hari" atau "-".
+  if (!respondedIso) {
+    return null;
+  }
+
+  const days = dayDifference(respondedIso, todayIso);
+
+  // Baru diproses hari ini belum punya umur yang perlu diperingatkan, dan
+  // "Diproses sejak 0 hari lalu" bukan kalimat yang benar.
+  return days >= 1 ? days : null;
+}
+
+function getFilterEmptyCopy(
+  statusFilter: OperationalReportStatusFilter,
+  isOwner: boolean
+): { subtitle: string; title: string } {
+  // Filter 'new' yang kosong adalah KABAR BAIK, bukan kekosongan: artinya tidak
+  // ada lagi yang menunggu ditangani. Kalimatnya harus terbaca begitu.
+  if (statusFilter === 'new') {
+    return {
+      subtitle: isOwner
+        ? 'Semua laporan yang masuk sudah kamu tindak lanjuti.'
+        : 'Semua laporanmu sudah ditanggapi pemilik.',
+      title: 'Tidak ada laporan yang menunggu',
+    };
+  }
+
+  if (statusFilter === 'all') {
+    return {
+      subtitle: 'Coba ubah kata pencarian, kategori, atau pelapor yang dipilih.',
+      title: 'Tidak ada laporan yang cocok',
+    };
+  }
+
+  return {
+    subtitle: `Belum ada laporan berstatus "${formatOperationalReportStatus(statusFilter)}" yang cocok dengan pencarian dan filter saat ini.`,
+    title: 'Tidak ada laporan yang cocok',
+  };
+}
+
+function OperationalReportRow({
+  ageDays,
   onPress,
   photoCount,
   report,
   reporterName,
   showReporter,
+  showStatus,
 }: {
-  onPress?: () => void;
+  ageDays: number | null;
+  onPress: () => void;
   photoCount: number;
   report: OperationalReport;
   reporterName?: string;
   showReporter: boolean;
+  showStatus: boolean;
 }) {
   // Deskripsi selalu jadi judul. Sejak tahap 3 deskripsi wajib, jadi tidak ada
   // lagi cabang "kalau kosong pakai label kategori".
-  const content = (
-    <Card padding={spacing.md}>
-      <View style={{ gap: spacing.sm }}>
-        <View
-          style={{
-            alignItems: 'flex-start',
-            flexDirection: 'row',
-            gap: spacing.sm,
-            justifyContent: 'space-between',
-          }}
+  const secondaryLine = [
+    formatOperationalReportCategory(report.category),
+    showReporter ? reporterName ?? 'Pelapor tidak tersedia' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        gap: tokens.space.xs,
+        opacity: pressed ? 0.6 : 1,
+        paddingVertical: tokens.space.lg,
+      })}
+    >
+      <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: tokens.space.sm }}>
+        <Text
+          selectable
+          ellipsizeMode="tail"
+          numberOfLines={2}
+          style={{ ...tokens.type.subheading, color: tokens.color.text.primary, flex: 1 }}
         >
-          <Text
-            selectable
-            ellipsizeMode="tail"
-            numberOfLines={2}
-            style={{ color: colors.text, flex: 1, fontSize: 15, fontWeight: '600', lineHeight: 21 }}
-          >
-            {report.description}
-          </Text>
+          {report.description}
+        </Text>
+        {showStatus ? (
           <Badge
             label={formatOperationalReportStatus(report.status)}
             tone={getReportStatusTone(report.status)}
           />
-        </View>
-
-        <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          <Badge label={formatOperationalReportCategory(report.category)} tone="info" />
-          {report.locationNote ? <CompactMetaItem icon="target" label={report.locationNote} /> : null}
-        </View>
-
-        <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-          <CompactMetaItem icon="calendar" label={formatDateOnly(report.createdAt)} />
-          {showReporter ? (
-            <CompactMetaItem icon="user" label={reporterName ?? 'Pelapor tidak tersedia'} />
-          ) : null}
-          {photoCount > 0 ? <PhotoCountChip count={photoCount} /> : null}
-        </View>
+        ) : null}
       </View>
-    </Card>
-  );
 
-  if (!onPress) {
-    return content;
-  }
-
-  return <Pressable onPress={onPress}>{content}</Pressable>;
-}
-
-function PhotoCountChip({ count }: { count: number }) {
-  return (
-    <View
-      style={{
-        alignItems: 'center',
-        backgroundColor: colors.successBg,
-        borderColor: colors.successBorder,
-        borderRadius: radius.round,
-        borderWidth: 1,
-        flexDirection: 'row',
-        gap: 4,
-        paddingHorizontal: spacing.sm,
-        paddingVertical: 3,
-      }}
-    >
-      <CameraGlyph color={colors.success} />
-      <Text selectable={false} style={{ color: colors.success, fontSize: 12, fontWeight: '700' }}>
-        {count}
+      <Text
+        selectable
+        ellipsizeMode="tail"
+        numberOfLines={1}
+        style={{ ...tokens.type.meta, color: tokens.color.text.secondary }}
+      >
+        {secondaryLine}
       </Text>
-    </View>
+
+      <View style={{ alignItems: 'center', flexDirection: 'row', gap: tokens.space.sm }}>
+        <Text selectable style={{ ...tokens.type.meta, color: tokens.color.text.tertiary }}>
+          {formatDateOnly(report.createdAt)}
+        </Text>
+        {photoCount > 0 ? (
+          <View style={{ alignItems: 'center', flexDirection: 'row', gap: tokens.space.xs }}>
+            <Text selectable={false} style={{ ...tokens.type.meta, color: tokens.color.text.tertiary }}>
+              ·
+            </Text>
+            <Icon name="camera" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+            <Text selectable={false} style={{ ...tokens.type.meta, color: tokens.color.text.tertiary }}>
+              {photoCount}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {ageDays === null ? null : (
+        <Text selectable style={{ ...tokens.type.meta, color: tokens.color.status.warning.text }}>
+          {`Diproses sejak ${ageDays} hari lalu`}
+        </Text>
+      )}
+    </Pressable>
   );
 }
 

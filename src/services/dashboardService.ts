@@ -224,6 +224,16 @@ async function countPendingWorkers(farmId: string): Promise<CountResult> {
     .eq('status', 'pending');
 }
 
+// Jatuh tempo hari ini DAN masih menunggu dikerjakan. Sebelumnya tanpa filter
+// status sama sekali, sehingga tugas yang sudah selesai hari ini tetap terhitung
+// — kartu beranda bisa bilang "3" sementara section "Hari ini" di layar tugas
+// hanya berisi 1.
+//
+// Definisinya sengaja dipatok ke chip "Belum selesai" di layar tugas pekerja,
+// yaitu status BUKAN 'completed'. Karena itu 'postponed' ikut dihitung, tidak
+// seperti padanan owner countFarmTasksDueToday yang memakai pending saja: di
+// sisi pekerja tugas yang ditunda masih pekerjaan yang menunggu dirinya, dan
+// countWorkerUnfinishedTasks di bawah sudah memperlakukannya begitu sejak awal.
 async function countWorkerTasksDueToday(
   farmId: string,
   userId: string,
@@ -236,6 +246,7 @@ async function countWorkerTasksDueToday(
     .eq('farm_id', farmId)
     .eq('assigned_to', userId)
     .eq('due_date', today)
+    .in('status', ['pending', 'postponed'])
   );
 }
 

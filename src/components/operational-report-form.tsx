@@ -1,7 +1,6 @@
 import React from 'react';
 import { Text, TextInput, View } from 'react-native';
 
-import { OPERATIONAL_REPORT_CATEGORIES } from '../constants/operationalReport';
 import { colors, radius, spacing } from '../constants/theme';
 import type { OperationalReportCategory } from '../types/domain';
 import type { PickedPhotoAsset } from '../types/media';
@@ -78,6 +77,7 @@ export function clearResolvedOperationalReportFormErrors(
 }
 
 export function OperationalReportForm({
+  categories,
   errors,
   onAddPhoto,
   onChange,
@@ -87,6 +87,10 @@ export function OperationalReportForm({
   photos,
   values,
 }: {
+  // Datang dari pemanggil, BUKAN diimpor di sini: Buat dan Edit menawarkan
+  // daftar yang berbeda. Edit ikut menyertakan kategori laporan yang sedang
+  // dibuka kalau kategori itu sudah tidak ditawarkan lagi.
+  categories: readonly OperationalReportCategory[];
   errors?: OperationalReportFormErrors;
   // Bagian foto hanya dirender kalau pemanggil menyediakan handler-nya.
   // Buat dan Edit menanganinya dengan cara berbeda: Buat menahan foto di
@@ -103,7 +107,7 @@ export function OperationalReportForm({
     <>
       <FormSection title="Kategori" description="Pilih satu kategori yang paling mendekati.">
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          {OPERATIONAL_REPORT_CATEGORIES.map((option) => (
+          {categories.map((option) => (
             <ChipButton
               key={option}
               active={values.category === option}

@@ -606,6 +606,10 @@ export type RejectReportInput = {
 export type CloseReportInput = {
   operationalReportId: UUID;
   note?: string | null;
+  // Resolution laporan saat ini. Dipakai closeReport untuk menolak pengosongan
+  // catatan pada laporan self_handled sebelum round-trip — RPC menolaknya juga,
+  // tapi dengan pesan yang tidak masuk akal bagi owner.
+  currentResolution?: OperationalReportResolution | null;
 };
 
 export type OperationalReportEditEligibility = {

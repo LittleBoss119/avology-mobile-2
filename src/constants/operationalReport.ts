@@ -13,9 +13,16 @@ export const OPERATIONAL_REPORT_STATUSES = [
 
 export type OperationalReportStatus = (typeof OPERATIONAL_REPORT_STATUSES)[number];
 
-// Sembilan kategori yang dipakai UI. Urutannya adalah urutan tampil chip:
-// hama/penyakit dulu (paling sering), lalu kerusakan, lalu kondisi luar,
-// dan 'other' selalu terakhir sebagai penampung.
+// Kesembilan kategori yang SAH — cerminan penuh enum operational_report_category
+// di database. Ini yang menurunkan tipe, memvalidasi baris yang dibaca, dan
+// mengisi sheet filter, jadi ia harus tetap lengkap: laporan lama berkategori
+// 'weather' atau 'worker_need' masih harus bisa dibaca dan dicari.
+//
+// Urutannya adalah urutan tampil chip: hama/penyakit dulu (paling sering), lalu
+// kerusakan, lalu kondisi luar, dan 'other' selalu terakhir sebagai penampung.
+//
+// Untuk daftar yang DITAWARKAN saat membuat laporan, pakai
+// getSelectableOperationalReportCategories() — bukan array ini.
 export const OPERATIONAL_REPORT_CATEGORIES = [
   'pest',
   'disease',
@@ -30,15 +37,48 @@ export const OPERATIONAL_REPORT_CATEGORIES = [
 
 export type OperationalReportCategory = (typeof OPERATIONAL_REPORT_CATEGORIES)[number];
 
-// Nilai enum SQL yang masih ada di database tapi sengaja tidak dipakai UI.
-// Keduanya punya nol baris, jadi tidak perlu ditampilkan atau bisa dipilih —
-// tapi mapper baris DB tetap harus aman kalau suatu saat menemuinya.
-export const LEGACY_OPERATIONAL_REPORT_CATEGORIES = [
-  'area_pest_disease',
-  'disaster_weather',
-] as const;
+// Yang boleh DIPILIH pekerja saat membuat laporan. Dua kategori sengaja tidak
+// ada di sini, dan keduanya TETAP nilai yang sah — hanya tidak ditawarkan lagi:
+//
+//   weather      tumpang tindih dengan 'disaster' dari sudut pandang pekerja
+//                yang harus memilih dalam dua detik di tengah kebun.
+//   worker_need  bukan kondisi lapangan, jadi salah tempat di alur laporan ini.
+//
+// Urutannya mengikuti OPERATIONAL_REPORT_CATEGORIES supaya penyisipan kategori
+// warisan di getSelectableOperationalReportCategories jatuh di posisi aslinya.
+export const SELECTABLE_OPERATIONAL_REPORT_CATEGORIES: readonly OperationalReportCategory[] = [
+  'pest',
+  'disease',
+  'land_damage',
+  'broken_tool',
+  'disaster',
+  'out_of_stock',
+  'other',
+];
 
 export const FALLBACK_OPERATIONAL_REPORT_CATEGORY: OperationalReportCategory = 'other';
+
+// Daftar chip kategori untuk form Buat dan Edit.
+//
+// Tanpa argumen (form Buat) hasilnya daftar pendek. Dengan argumen (form Edit)
+// kategori laporan yang sedang dibuka ikut disertakan kalau ia sudah tidak
+// ditawarkan lagi — kalau tidak, laporan lama berkategori 'weather' akan tampil
+// seolah belum memilih kategori, dan pekerja tidak punya cara memilihnya ulang.
+//
+// Penyisipannya lewat filter atas daftar lengkap, bukan ditempel di ujung, jadi
+// kategori warisan muncul di posisi aslinya dan terlihat seperti chip biasa.
+export function getSelectableOperationalReportCategories(
+  currentCategory?: OperationalReportCategory | null
+): OperationalReportCategory[] {
+  if (!currentCategory || SELECTABLE_OPERATIONAL_REPORT_CATEGORIES.includes(currentCategory)) {
+    return [...SELECTABLE_OPERATIONAL_REPORT_CATEGORIES];
+  }
+
+  return OPERATIONAL_REPORT_CATEGORIES.filter(
+    (category) =>
+      SELECTABLE_OPERATIONAL_REPORT_CATEGORIES.includes(category) || category === currentCategory
+  );
+}
 
 // Keputusan owner atas sebuah laporan:
 //   task         -> dibuatkan tugas tindak lanjut untuk pekerja
