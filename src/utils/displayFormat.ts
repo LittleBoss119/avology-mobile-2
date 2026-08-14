@@ -188,10 +188,8 @@ export function formatDateOnly(value: string): string {
 
 export function formatTargetType(targetType: TargetType): string {
   const labels: Record<TargetType, string> = {
-    column: 'Kolom',
     custom: 'Target Khusus',
     farm: 'Seluruh Kebun',
-    row: 'Baris',
     tree: 'Pohon',
   };
 

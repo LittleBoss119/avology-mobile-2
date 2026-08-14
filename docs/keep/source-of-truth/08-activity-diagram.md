@@ -1,5 +1,20 @@
 # Activity Diagram Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Fitur SOP perawatan dan target
+> jadwal berupa **baris**/**kolom** sudah dicabut dari sistem. Activity diagram
+> "Owner Mengelola SOP Perawatan" dihapus, dan "Owner Membuat Jadwal dan Tugas
+> dari SOP" diganti menjadi "Owner Membuat Jadwal dan Tugas Perawatan". Karena
+> daftar diagram di dokumen ini bernomor urut dan tidak dirujuk dokumen lain,
+> penomorannya dirapatkan. Riwayat keputusannya ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** Diagram "Owner Membuat Jadwal dan
+> Tugas Perawatan" dan "Worker Melihat dan Merealisasikan Tugas" disunting:
+> penyapuan jadwal terlewat, pengaturan masa toleransi, penundaan bertanggal,
+> dan penautan pohon saat tugas diselesaikan kini muncul di alurnya. Batasan
+> nomor 13 diperbaiki karena rantai jadwal sudah tidak menunggu konfirmasi
+> owner. Penomoran diagram TIDAK bergeser. Riwayat keputusannya ada di
+> `decision-log.md` (DL-034 sampai DL-038).
+
 ## 1. Tujuan Activity Diagram
 
 Activity diagram digunakan untuk menggambarkan alur aktivitas utama dalam sistem Avology V2. Diagram ini membantu menjelaskan bagaimana proses bisnis berjalan dari sisi owner, worker, dan sistem.
@@ -20,11 +35,10 @@ Activity diagram Avology V2 mencakup alur berikut:
 6. Pengguna Mencatat Kondisi Pohon
 7. Worker Membuat Laporan Operasional Kebun
 8. Owner Menindaklanjuti Laporan Operasional
-9. Owner Mengelola SOP Perawatan
-10. Owner Membuat Jadwal dan Tugas dari SOP
-11. Worker Melihat dan Merealisasikan Tugas
-12. Pengguna Mencatat Fase Pertumbuhan Pohon
-13. Owner Melihat Dashboard
+9. Owner Membuat Jadwal dan Tugas Perawatan
+10. Worker Melihat dan Merealisasikan Tugas
+11. Pengguna Mencatat Fase Pertumbuhan Pohon
+12. Owner Melihat Dashboard
 
 ---
 
@@ -360,85 +374,38 @@ stop
 
 ---
 
-# 11. Activity Diagram Owner Mengelola SOP Perawatan
+# 11. Activity Diagram Owner Membuat Jadwal dan Tugas Perawatan
 
 ## Deskripsi
 
-Alur ini menjelaskan proses owner membuat, mengubah, mengaktifkan, atau menonaktifkan SOP perawatan. SOP digunakan sebagai template standar untuk membuat jadwal perawatan.
+Alur ini menjelaskan proses owner membuat jadwal perawatan beserta tugas worker. Untuk jadwal berulang, owner menentukan interval pengulangan, dasar perhitungan tanggal penerus, dan masa toleransi keterlambatan; siklus berikutnya kemudian dibentuk sistem tanpa perlu dibuat ulang oleh owner.
 
 ```plantuml
 @startuml
-title Activity Diagram Owner Mengelola SOP Perawatan
+title Activity Diagram Owner Membuat Jadwal dan Tugas Perawatan
 
 start
 
-:Owner membuka halaman SOP perawatan;
-:Sistem menampilkan daftar SOP;
-
-if (Owner membuat SOP baru?) then (Buat)
-  :Owner mengisi nama SOP;
-  :Owner memilih kategori SOP;
-  :Owner mengisi interval hari;
-  :Owner mengisi instruksi default;
-  :Owner menentukan target default;
-  :Sistem memvalidasi data SOP;
-
-  if (Data valid?) then (Ya)
-    :Sistem menyimpan SOP;
-    :SOP berstatus aktif;
-  else (Tidak)
-    :Sistem menampilkan pesan kesalahan;
-  endif
-
-elseif (Owner mengubah SOP?) then (Edit)
-  :Owner memilih SOP;
-  :Owner mengubah data SOP;
-  :Sistem menyimpan perubahan SOP;
-
-elseif (Owner menonaktifkan SOP?) then (Nonaktif)
-  :Owner memilih SOP;
-  :Sistem mengubah status SOP menjadi tidak aktif;
-  :SOP tidak muncul sebagai pilihan utama jadwal;
-
-else (Lihat)
-  :Owner melihat detail SOP;
-endif
-
-stop
-@enduml
-```
-
----
-
-# 12. Activity Diagram Owner Membuat Jadwal dan Tugas dari SOP
-
-## Deskripsi
-
-Alur ini menjelaskan proses owner membuat jadwal dari SOP. Sistem membantu menghitung acuan jadwal berikutnya berdasarkan tanggal realisasi terakhir dan interval SOP, tetapi tidak membuat tugas otomatis tanpa konfirmasi owner.
-
-```plantuml
-@startuml
-title Activity Diagram Owner Membuat Jadwal dan Tugas dari SOP
-
-start
-
-:Owner membuka halaman SOP atau jadwal;
-:Owner memilih SOP aktif;
-:Sistem membaca interval SOP;
-:Sistem mencari tanggal realisasi terakhir SOP terkait;
-
-if (Ada realisasi terakhir?) then (Ya)
-  :Sistem menghitung acuan tanggal berikutnya;
-  :Sistem menampilkan status jatuh tempo;
-else (Tidak)
-  :Sistem meminta owner menentukan tanggal awal;
-endif
+:Owner membuka halaman jadwal perawatan;
+:Sistem menyapu jadwal yang lewat masa toleransi;
+:Sistem menandai jadwal terlewat dan membuat penerusnya;
+:Sistem menampilkan daftar jadwal beserta statusnya;
 
 :Owner memilih buat jadwal;
-:Sistem mengisi kategori dan instruksi dari SOP;
+:Owner mengisi judul jadwal;
+:Owner memilih kategori perawatan;
+:Owner mengisi instruksi perawatan;
 :Owner menentukan tanggal jadwal;
 :Owner menentukan target jadwal;
 :Owner memilih worker;
+
+if (Jadwal berulang?) then (Ya)
+  :Owner menentukan interval pengulangan;
+  :Owner memilih dasar tanggal penerus;
+  :Owner menentukan masa toleransi keterlambatan;
+else (Tidak)
+endif
+
 :Owner meninjau jadwal;
 
 if (Owner menyimpan jadwal?) then (Ya)
@@ -455,11 +422,11 @@ stop
 
 ---
 
-# 13. Activity Diagram Worker Melihat dan Merealisasikan Tugas
+# 12. Activity Diagram Worker Melihat dan Merealisasikan Tugas
 
 ## Deskripsi
 
-Alur ini menjelaskan proses worker melihat tugas, membuka detail tugas, lalu menandai tugas sebagai selesai atau tertunda. Realisasi tugas akan menjadi riwayat perawatan.
+Alur ini menjelaskan proses worker melihat tugas, membuka detail tugas, lalu menandai tugas sebagai selesai atau tertunda. Realisasi tugas akan menjadi riwayat perawatan, dan tugas yang diselesaikan juga menautkan pohon yang dirawat sehingga masuk ke riwayat pohon.
 
 ```plantuml
 @startuml
@@ -477,13 +444,30 @@ start
 if (Worker menyelesaikan tugas?) then (Selesai)
   :Worker menambahkan catatan singkat jika diperlukan;
   :Sistem menyimpan tanggal realisasi;
+
+  if (Target tugas?) then (Pohon tertentu)
+    :Sistem menautkan pohon target ke aktivitas;
+  elseif (Seluruh kebun) then (Kebun)
+    :Sistem menautkan semua pohon kebun yang belum diarsipkan;
+  else (Catatan bebas)
+    :Sistem tidak menautkan pohon;
+  endif
+
   :Sistem mengubah status tugas menjadi selesai;
   :Sistem menyimpan aktivitas ke riwayat perawatan;
+  :Sistem menampilkan aktivitas pada riwayat setiap pohon yang tertaut;
+
+  if (Jadwal induk berulang?) then (Ya)
+    :Sistem membuat jadwal penerus;
+  else (Tidak)
+  endif
 
 elseif (Worker menunda tugas?) then (Tertunda)
+  :Worker memilih tanggal rencana pengerjaan ulang;
   :Worker mengisi alasan atau catatan singkat;
   :Sistem mengubah status tugas menjadi tertunda;
-  :Owner dapat melihat tugas tertunda;
+  :Sistem menggeser tenggat tugas ke tanggal penundaan;
+  :Owner dapat melihat tugas tertunda beserta tanggal rencananya;
 
 else (Tidak ada aksi)
   :Status tugas tetap belum selesai;
@@ -495,7 +479,7 @@ stop
 
 ---
 
-# 14. Activity Diagram Pengguna Mencatat Fase Pertumbuhan Pohon
+# 13. Activity Diagram Pengguna Mencatat Fase Pertumbuhan Pohon
 
 ## Deskripsi
 
@@ -534,7 +518,7 @@ stop
 
 ---
 
-# 15. Activity Diagram Owner Melihat Dashboard
+# 14. Activity Diagram Owner Melihat Dashboard
 
 ## Deskripsi
 
@@ -556,7 +540,7 @@ start
 :Sistem mengambil laporan operasional baru;
 :Sistem mengambil worker pending;
 :Sistem mengambil pohon berbunga dan berbuah;
-:Sistem mengambil SOP jatuh tempo atau terlambat;
+:Sistem mengambil jadwal jatuh tempo atau terlambat;
 :Sistem menampilkan ringkasan dashboard;
 
 if (Owner memilih salah satu ringkasan?) then (Ya)
@@ -571,7 +555,7 @@ stop
 
 ---
 
-# 16. Catatan Batasan Activity Diagram
+# 15. Catatan Batasan Activity Diagram
 
 Activity diagram Avology V2 tidak mencakup fitur berikut:
 
@@ -587,13 +571,15 @@ Activity diagram Avology V2 tidak mencakup fitur berikut:
 10. Marketplace
 11. Grading buah
 12. Sistem kelompok tani
-13. Recurring task otomatis tanpa konfirmasi owner
+13. Penjadwal latar yang berjalan di luar aplikasi
+
+Catatan untuk nomor 13: rantai jadwal berulang MEMANG berjalan tanpa konfirmasi owner, tetapi perhitungannya menumpang pada jalur baca aplikasi. Yang tidak dimiliki MVP adalah proses yang hidup sendiri di luar aplikasi seperti cron atau push notification.
 
 Fitur tersebut tidak termasuk MVP dan hanya dapat dipertimbangkan sebagai pengembangan lanjutan.
 
 ---
 
-# 17. Ringkasan Alur Sistem
+# 16. Ringkasan Alur Sistem
 
 Secara umum, alur kerja Avology V2 adalah sebagai berikut:
 
@@ -601,8 +587,8 @@ Secara umum, alur kerja Avology V2 adalah sebagai berikut:
 2. Worker mengajukan bergabung menggunakan kode kebun.
 3. Owner menyetujui worker.
 4. Owner mengelola data pohon.
-5. Owner membuat SOP perawatan.
-6. Sistem membantu menampilkan acuan jadwal berikutnya berdasarkan interval SOP.
+5. Owner membuat jadwal perawatan.
+6. Sistem membantu menampilkan acuan jadwal berikutnya berdasarkan interval pengulangan jadwal.
 7. Owner membuat jadwal dan tugas untuk worker.
 8. Worker melihat dan merealisasikan tugas.
 9. Worker atau owner mencatat kondisi serta fase pertumbuhan pohon.

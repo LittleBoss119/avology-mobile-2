@@ -136,8 +136,10 @@ await runStage(STAGE, async () => {
       p_title: `Follow up report ${state.runId}`,
       p_instruction: 'Resolve report follow-up',
       p_target_type: 'farm',
-      p_target_row: null,
-      p_target_column: null,
+      // Wajib sejak migrasi 047: p_category kehilangan `default null` seiring
+      // care_tasks.category menjadi NOT NULL. Tanpa argumen ini PostgREST tidak
+      // menemukan signature yang cocok dan gagal dengan PGRST202.
+      p_category: 'other',
       p_target_tree_id: null,
       p_custom_target_note: null,
     }),

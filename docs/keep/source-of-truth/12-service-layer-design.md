@@ -1,10 +1,32 @@
 # Service Layer Design Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Bab "Service Care SOP" beserta
+> enam fungsinya (`getCareSOPs`, `getCareSOPDetail`, `createCareSOP`,
+> `updateCareSOP`, `setCareSOPActiveStatus`, `getCareSOPNextScheduleReference`)
+> dan `createScheduleFromSOP` dihapus, begitu juga `careSopService.ts` dari
+> struktur folder. Input service kehilangan `targetRow`/`targetColumn`, dan
+> `targetType` menyusut menjadi `'farm' | 'tree' | 'custom'`. Penomoran bab dan
+> daftar iterasi dirapatkan.
+>
+> Catatan penting untuk pembaca: keenam fungsi Care SOP di atas **tidak pernah
+> diimplementasikan** — bab itu adalah rancangan yang cakupannya dicabut sebelum
+> dibangun. Riwayat keputusannya ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** Dua fungsi ditambahkan pada Service
+> Farm Member (`leaveCurrentFarm`) dan tiga pada Service Care Schedule
+> (`getScheduleEditEligibility`, `cancelCareSchedule`, serta catatan penyaringan
+> pada `getCareScheduleDetail`). `completeTask` kini menautkan pohon,
+> `postponeTask` mewajibkan tanggal dan menggeser tenggat, dan `removeWorker`
+> melepas tugas terbuka sebelum mencabut keanggotaan. Sisa `careSopId` pada
+> output `getCareScheduleDetail` — yang tertinggal dari sinkronisasi 046 —
+> ikut dibersihkan. Riwayat keputusannya ada di `decision-log.md` (DL-034 sampai
+> DL-038).
+
 ## 1. Tujuan Service Layer
 
 Service layer digunakan sebagai lapisan penghubung antara antarmuka aplikasi dengan database Supabase. Tujuan utama service layer adalah agar logic bisnis tidak langsung ditulis di komponen UI.
 
-Dengan adanya service layer, setiap fitur utama memiliki fungsi yang jelas, seperti membuat kebun, mengajukan join kebun, membuat laporan kondisi pohon, membuat jadwal dari SOP, menyelesaikan tugas, dan mengambil data dashboard.
+Dengan adanya service layer, setiap fitur utama memiliki fungsi yang jelas, seperti membuat kebun, mengajukan join kebun, membuat laporan kondisi pohon, membuat jadwal perawatan, menyelesaikan tugas, dan mengambil data dashboard.
 
 Service layer membantu menjaga struktur kode agar lebih rapi, mudah diuji, dan mudah dikembangkan.
 
@@ -38,7 +60,6 @@ src/
     treeService.ts
     conditionReportService.ts
     operationalReportService.ts
-    careSopService.ts
     careScheduleService.ts
     careTaskService.ts
     growthPhaseService.ts
@@ -61,7 +82,6 @@ src/
 | `treeService.ts`              | Mengatur data pohon                           |
 | `conditionReportService.ts`   | Mengatur laporan kondisi pohon                |
 | `operationalReportService.ts` | Mengatur laporan operasional kebun            |
-| `careSopService.ts`           | Mengatur template SOP perawatan               |
 | `careScheduleService.ts`      | Mengatur jadwal perawatan                     |
 | `careTaskService.ts`          | Mengatur tugas worker dan realisasi tugas     |
 | `growthPhaseService.ts`       | Mengatur fase pertumbuhan pohon               |
@@ -541,8 +561,53 @@ Owner mengeluarkan worker aktif dari kebun.
 ### Proses
 
 1. Memanggil RPC `remove_worker`.
-2. Status worker berubah menjadi removed.
-3. Riwayat tugas dan laporan worker tetap tersimpan.
+2. RPC melepas seluruh tugas terbuka milik worker itu di kebun tersebut.
+3. Status worker berubah menjadi removed.
+4. Riwayat tugas dan laporan worker tetap tersimpan.
+
+### Catatan
+
+Pelepasan tugas dijalankan SEBELUM status keanggotaan diubah. Setelah status berhenti `active`, validasi tugas menolak setiap perubahan pada tugas milik orang itu, sehingga pelepasan menjadi mustahil. Urutan ini bukan gaya penulisan, melainkan syarat agar RPC-nya tidak gagal.
+
+Tugas yang dilepas berhenti dihitung sebagai tunggakan, dan jadwalnya kembali muncul sebagai jadwal yang belum punya pekerja sehingga dapat ditugaskan ulang.
+
+---
+
+## 6.7 `leaveCurrentFarm`
+
+### Tujuan
+
+Worker keluar sendiri dari kebun tempatnya bekerja.
+
+### Digunakan oleh
+
+* Profile Screen
+
+### Input
+
+```ts
+{
+  farmId: string;
+}
+```
+
+### Output
+
+```ts
+{
+  success: boolean;
+}
+```
+
+### Proses
+
+1. Memanggil RPC `leave_current_farm`.
+2. RPC melepas seluruh tugas terbuka milik worker itu di kebun tersebut.
+3. Status keanggotaan berubah menjadi removed.
+
+### Catatan
+
+Diperlakukan persis sama dengan `removeWorker`. Yang menentukan pelepasan tugas adalah keanggotaan berhenti `active`, bukan siapa yang memulainya.
 
 ---
 
@@ -992,308 +1057,13 @@ Owner mengubah status laporan operasional.
 
 ---
 
-# 10. Service Care SOP
+# 10. Service Care Schedule
 
-## 10.1 `getCareSOPs`
-
-### Tujuan
-
-Mengambil daftar SOP perawatan.
-
-### Digunakan oleh
-
-* Care SOP List Screen
-* Create Schedule Screen
-* Owner Dashboard
-
-### Input
-
-```ts
-{
-  farmId: string;
-  activeOnly?: boolean;
-}
-```
-
-### Output
-
-```ts
-Array<{
-  id: string;
-  name: string;
-  category: string;
-  intervalDays?: number;
-  defaultInstruction?: string;
-  defaultTargetType: 'farm' | 'row' | 'column' | 'tree';
-  isActive: boolean;
-}>
-```
-
----
-
-## 10.2 `getCareSOPDetail`
+## 10.1 `createManualSchedule`
 
 ### Tujuan
 
-Mengambil detail SOP.
-
-### Digunakan oleh
-
-* Care SOP Detail Screen
-* Edit Care SOP Screen
-
-### Input
-
-```ts
-{
-  sopId: string;
-}
-```
-
-### Output
-
-```ts
-{
-  id: string;
-  farmId: string;
-  name: string;
-  category: string;
-  intervalDays?: number;
-  defaultInstruction?: string;
-  defaultTargetType: 'farm' | 'row' | 'column' | 'tree';
-  defaultTargetRow?: string;
-  defaultTargetColumn?: string;
-  defaultTargetTreeId?: string;
-  isActive: boolean;
-}
-```
-
----
-
-## 10.3 `createCareSOP`
-
-### Tujuan
-
-Owner membuat template SOP perawatan.
-
-### Digunakan oleh
-
-* Create Care SOP Screen
-
-### Input
-
-```ts
-{
-  farmId: string;
-  name: string;
-  category: 'watering' | 'fertilizing' | 'spraying' | 'weeding' | 'other';
-  intervalDays?: number;
-  defaultInstruction?: string;
-  defaultTargetType: 'farm' | 'row' | 'column' | 'tree';
-  defaultTargetRow?: string;
-  defaultTargetColumn?: string;
-  defaultTargetTreeId?: string;
-}
-```
-
-### Output
-
-```ts
-{
-  sopId: string;
-}
-```
-
-### Validasi
-
-* Hanya owner active yang boleh membuat SOP.
-* `name` wajib diisi.
-* `category` wajib dipilih.
-* Jika `intervalDays` diisi, nilainya harus lebih dari 0.
-* Target harus sesuai dengan `defaultTargetType`.
-* `defaultTargetType` tidak boleh `custom` pada MVP.
-
----
-
-## 10.4 `updateCareSOP`
-
-### Tujuan
-
-Owner mengubah template SOP perawatan.
-
-### Digunakan oleh
-
-* Edit Care SOP Screen
-
-### Input
-
-```ts
-{
-  sopId: string;
-  name?: string;
-  category?: string;
-  intervalDays?: number;
-  defaultInstruction?: string;
-  defaultTargetType?: 'farm' | 'row' | 'column' | 'tree';
-  defaultTargetRow?: string;
-  defaultTargetColumn?: string;
-  defaultTargetTreeId?: string;
-}
-```
-
-### Output
-
-```ts
-{
-  success: boolean;
-}
-```
-
----
-
-## 10.5 `setCareSOPActiveStatus`
-
-### Tujuan
-
-Owner mengaktifkan atau menonaktifkan SOP.
-
-### Digunakan oleh
-
-* Care SOP Detail Screen
-
-### Input
-
-```ts
-{
-  sopId: string;
-  isActive: boolean;
-}
-```
-
-### Output
-
-```ts
-{
-  success: boolean;
-}
-```
-
----
-
-## 10.6 `getCareSOPNextScheduleReference`
-
-### Tujuan
-
-Menghitung acuan jadwal berikutnya berdasarkan interval SOP dan realisasi terakhir.
-
-### Digunakan oleh
-
-* Care SOP List Screen
-* Care SOP Detail Screen
-* Owner Dashboard
-
-### Input
-
-```ts
-{
-  sopId: string;
-}
-```
-
-### Output
-
-```ts
-{
-  sopId: string;
-  intervalDays?: number;
-  lastPerformedAt?: string;
-  nextDueDate?: string;
-  status: 'no_interval' | 'no_history' | 'not_due' | 'due_today' | 'overdue';
-  overdueDays?: number;
-}
-```
-
-### Proses
-
-1. Mengambil data SOP.
-2. Mengambil realisasi terakhir dari task yang berasal dari jadwal dengan `care_sop_id` tersebut.
-3. Jika belum ada histori, status menjadi `no_history`.
-4. Jika ada histori dan interval, sistem menghitung:
-
-```txt
-lastPerformedAt + intervalDays
-```
-
-5. Sistem menentukan status:
-
-   * `not_due`
-   * `due_today`
-   * `overdue`
-
-### Catatan
-
-Fungsi ini tidak membuat tugas otomatis. Fungsi ini hanya memberi acuan kepada owner.
-
----
-
-# 11. Service Care Schedule
-
-## 11.1 `createScheduleFromSOP`
-
-### Tujuan
-
-Owner membuat jadwal perawatan dari SOP dan menghasilkan tugas worker.
-
-### Digunakan oleh
-
-* Create Schedule From SOP Screen
-* Care SOP Detail Screen
-
-### Input
-
-```ts
-{
-  farmId: string;
-  sopId: string;
-  scheduledDate: string;
-  assignedWorkerId: string;
-  targetType: 'farm' | 'row' | 'column' | 'tree';
-  targetRow?: string;
-  targetColumn?: string;
-  targetTreeId?: string;
-  instruction?: string;
-}
-```
-
-### Output
-
-```ts
-{
-  scheduleId: string;
-  taskId: string;
-}
-```
-
-### Proses
-
-1. Mengambil data SOP.
-2. Membuat `care_schedules`.
-3. Membuat `care_tasks`.
-4. Tugas muncul pada daftar tugas worker.
-
-### Catatan
-
-Fungsi ini sebaiknya menggunakan RPC agar pembuatan schedule dan task terjadi dalam satu transaksi. Kalau jadwal berhasil dibuat tapi task gagal, database akan punya separuh kenyataan. Itu tidak filosofis, itu bug.
-
-Jadwal dari SOP hanya boleh memakai target terstruktur. Target `custom` hanya berlaku untuk jadwal manual atau tugas tindak lanjut yang dibuat manual oleh owner.
-
----
-
-## 11.2 `createManualSchedule`
-
-### Tujuan
-
-Owner membuat jadwal manual tanpa SOP dan menghasilkan tugas worker.
+Owner membuat jadwal perawatan dan menghasilkan tugas worker.
 
 ### Digunakan oleh
 
@@ -1308,9 +1078,7 @@ Owner membuat jadwal manual tanpa SOP dan menghasilkan tugas worker.
   category: 'watering' | 'fertilizing' | 'spraying' | 'weeding' | 'other';
   scheduledDate: string;
   assignedWorkerId: string;
-  targetType: 'farm' | 'row' | 'column' | 'tree' | 'custom';
-  targetRow?: string;
-  targetColumn?: string;
+  targetType: 'farm' | 'tree' | 'custom';
   targetTreeId?: string;
   customTargetNote?: string;
   instruction?: string;
@@ -1328,7 +1096,7 @@ Owner membuat jadwal manual tanpa SOP dan menghasilkan tugas worker.
 
 ### Proses
 
-1. Membuat `care_schedules` tanpa `care_sop_id`.
+1. Membuat `care_schedules`.
 2. Membuat `care_tasks`.
 3. Mengembalikan `scheduleId` dan `taskId`.
 
@@ -1338,7 +1106,7 @@ Sebaiknya juga menggunakan RPC agar schedule dan task dibuat secara konsisten.
 
 ---
 
-## 11.3 `getCareSchedules`
+## 10.2 `getCareSchedules`
 
 ### Tujuan
 
@@ -1375,7 +1143,7 @@ Array<{
 
 ---
 
-## 11.4 `getCareScheduleDetail`
+## 10.3 `getCareScheduleDetail`
 
 ### Tujuan
 
@@ -1399,25 +1167,117 @@ Mengambil detail jadwal perawatan.
 {
   id: string;
   farmId: string;
-  careSopId?: string;
   title: string;
   category: string;
   scheduledDate: string;
   targetType: string;
-  targetRow?: string;
-  targetColumn?: string;
   targetTreeId?: string;
   customTargetNote?: string;
   instruction?: string;
+  repeatEveryDays?: number;
+  dateBasis: 'jadwal' | 'realisasi';
+  graceDays?: number;
+  missedAt?: string;
+  seriesId?: string;
+  parentScheduleId?: string;
+  isCancelled: boolean;
   createdBy: string;
 }
 ```
 
+### Catatan
+
+Daftar tugas yang menyertai detail jadwal TIDAK memuat tugas yang sudah dilepas. Tanpa penyaringan itu, jadwal yang pekerjanya sudah keluar akan menampilkan nama orang yang tidak lagi ada di kebun, alih-alih terbaca sebagai jadwal yang menunggu penugasan ulang.
+
 ---
 
-# 12. Service Care Task
+## 10.4 `getScheduleEditEligibility`
 
-## 12.1 `getWorkerTasks`
+### Tujuan
+
+Menentukan apakah sebuah jadwal masih boleh diedit atau dibatalkan owner.
+
+### Digunakan oleh
+
+* Care Schedule Detail Screen
+* Edit Schedule Screen
+
+### Input
+
+```ts
+{
+  scheduleId: string;
+}
+```
+
+### Output
+
+```ts
+{
+  canEdit: boolean;
+  reason: string | null;
+}
+```
+
+### Proses
+
+1. Memastikan pemanggil adalah owner aktif kebun tersebut.
+2. Menolak jadwal yang sudah dibatalkan.
+3. Menolak jadwal yang sudah memiliki aktivitas berstatus `completed`.
+
+### Catatan
+
+Yang mengunci jadwal hanya hasil kerja yang benar-benar selesai. Aktivitas berstatus `postponed` TIDAK mengunci, karena penundaan berarti pekerjaannya belum dilakukan sehingga tidak ada riwayat yang bisa dipalsukan dengan mengubah jadwalnya.
+
+Aturan yang sama harus berlaku di tiga tempat sekaligus: pemeriksaan ini, RPC pembatalan jadwal, dan tombol pada layar detail jadwal. Kalau salah satunya longgar sendiri, tombolnya hidup tetapi RPC-nya menolak — atau sebaliknya, tombolnya mati padahal aksinya diizinkan.
+
+---
+
+## 10.5 `cancelCareSchedule`
+
+### Tujuan
+
+Owner membatalkan jadwal perawatan.
+
+### Digunakan oleh
+
+* Care Schedule Detail Screen
+
+### Input
+
+```ts
+{
+  scheduleId: string;
+  reason?: string;
+}
+```
+
+### Output
+
+```ts
+{
+  success: boolean;
+}
+```
+
+### Proses
+
+1. Memanggil RPC `cancel_care_schedule`.
+2. RPC memastikan pemanggil owner aktif dan jadwal belum dibatalkan.
+3. RPC menolak jadwal yang sudah memiliki aktivitas berstatus `completed`.
+4. Jadwal ditandai dibatalkan beserta waktu, pelaku, dan alasannya.
+
+### Catatan
+
+Tugas dari jadwal yang dibatalkan berhenti dihitung sebagai pekerjaan aktif, baik di daftar tugas worker maupun di dashboard owner.
+
+Membatalkan jadwal berbeda dari menghentikan pengulangan: pembatalan menutup jadwal yang sedang berjalan, sedangkan penghentian pengulangan membiarkannya tetap dikerjakan dan hanya memutus rantainya.
+
+---
+
+# 11. Service Care Task
+
+## 11.1 `getWorkerTasks`
 
 ### Tujuan
 
@@ -1444,9 +1304,10 @@ Worker mengambil daftar tugas miliknya.
 Array<{
   id: string;
   title: string;
-  category?: string;
+  category: string;
   dueDate: string;
   status: string;
+  missedAt?: string;
   targetType: string;
   instruction?: string;
 }>
@@ -1456,9 +1317,13 @@ Array<{
 
 Dalam implementasi, `workerId` sebaiknya berasal dari `auth.uid()`, bukan bebas dikirim frontend. Karena memberi frontend kendali penuh atas ID worker adalah cara cepat mengundang kekacauan.
 
+Daftar ini TIDAK memuat tugas yang sudah dilepas. Penyaringannya wajib meski worker itu sudah keluar, karena baris keanggotaan dipakai ulang saat ia bergabung kembali: tanpa penyaringan, tugas lamanya muncul lagi sebagai tunggakan begitu ia aktif kembali di kebun yang sama.
+
+Pembacaan daftar ini juga menjadi salah satu pemicu penyapu jadwal terlewat.
+
 ---
 
-## 12.2 `getFarmTasks`
+## 11.2 `getFarmTasks`
 
 ### Tujuan
 
@@ -1496,7 +1361,7 @@ Array<{
 
 ---
 
-## 12.3 `getTaskDetail`
+## 11.3 `getTaskDetail`
 
 ### Tujuan
 
@@ -1524,8 +1389,6 @@ Mengambil detail tugas.
   category?: string;
   instruction?: string;
   targetType: string;
-  targetRow?: string;
-  targetColumn?: string;
   targetTreeId?: string;
   customTargetNote?: string;
   dueDate: string;
@@ -1539,7 +1402,7 @@ Mengambil detail tugas.
 
 ---
 
-## 12.4 `completeTask`
+## 11.4 `completeTask`
 
 ### Tujuan
 
@@ -1569,20 +1432,30 @@ Worker menandai tugas sebagai selesai dan membuat aktivitas realisasi.
 ### Proses
 
 1. Memastikan task milik worker aktif.
-2. Insert ke `care_activities` dengan status `completed`.
-3. Trigger memperbarui status task menjadi `completed`.
+2. Menolak tugas yang statusnya sudah `completed`, agar satu tugas tidak dicatat selesai dua kali.
+3. Insert ke `care_activities` dengan status `completed`.
+4. Menautkan pohon terdampak ke aktivitas tersebut melalui `care_activity_trees`, diturunkan dari target tugas:
+   * target `tree` — satu pohon, dari `target_tree_id`
+   * target `farm` — seluruh pohon kebun yang belum diarsipkan
+   * target `custom` — tidak ada pohon yang ditautkan
+5. Trigger memperbarui status task menjadi `completed`.
+6. Jika jadwal induknya berulang, sistem membentuk jadwal penerusnya.
 
 ### Catatan
 
 Fungsi ini sebaiknya menggunakan RPC. Jangan biarkan frontend insert activity dan update task secara terpisah seperti manusia yang percaya “nanti juga sinkron sendiri”.
 
+Penautan pohon berada di dalam RPC yang sama agar seluruhnya satu transaksi. Kalau penautan gagal, aktivitasnya ikut dibatalkan sehingga tidak ada realisasi yang tercatat tanpa pohon.
+
+Pohon diresolusi pada saat penyelesaian, bukan saat jadwal dibuat, agar tautannya mencerminkan pohon yang benar-benar ada ketika pekerjaan dilakukan.
+
 ---
 
-## 12.5 `postponeTask`
+## 11.5 `postponeTask`
 
 ### Tujuan
 
-Worker menandai tugas sebagai tertunda dan mencatat alasan.
+Worker menandai tugas sebagai tertunda, mencatat alasan, dan menyebut kapan pekerjaan itu akan dikerjakan.
 
 ### Digunakan oleh
 
@@ -1594,6 +1467,7 @@ Worker menandai tugas sebagai tertunda dan mencatat alasan.
 {
   taskId: string;
   note: string;
+  postponedUntil: string;
 }
 ```
 
@@ -1608,12 +1482,21 @@ Worker menandai tugas sebagai tertunda dan mencatat alasan.
 ### Proses
 
 1. Memastikan task milik worker aktif.
-2. Insert ke `care_activities` dengan status `postponed`.
-3. Trigger memperbarui status task menjadi `postponed`.
+2. Menolak penundaan tanpa tanggal maupun tanpa catatan.
+3. Insert ke `care_activities` dengan status `postponed` dan `postponed_until` terisi.
+4. Trigger memperbarui status task menjadi `postponed` dan menggeser `due_date` tugas ke tanggal penundaan.
+
+### Catatan
+
+Penundaan adalah penjadwalan ulang, bukan jalan buntu. Sebelum tanggalnya diwajibkan, tugas yang ditunda tetap memakai tenggat lama sehingga selamanya terlihat terlambat dan akhirnya hangus kena masa toleransi.
+
+Pergeseran `due_date` ditaruh di trigger, bukan di dalam RPC ini, karena tanggal penundaan punya dua jalur tulis: pencatatan baru dan perbaikan catatan terakhir. Satu salinan aturan di trigger membuat keduanya tidak bisa berbeda.
+
+Penundaan tidak mengunci jadwal. Owner tetap dapat mengedit maupun membatalkan jadwal yang tugasnya sedang tertunda.
 
 ---
 
-## 12.6 `createTaskFromOperationalReport`
+## 11.6 `createTaskFromOperationalReport`
 
 ### Tujuan
 
@@ -1632,9 +1515,7 @@ Owner membuat tugas tindak lanjut dari laporan operasional.
   dueDate: string;
   title: string;
   instruction?: string;
-  targetType: 'farm' | 'row' | 'column' | 'tree' | 'custom';
-  targetRow?: string;
-  targetColumn?: string;
+  targetType: 'farm' | 'tree' | 'custom';
   targetTreeId?: string;
   customTargetNote?: string;
 }
@@ -1664,9 +1545,9 @@ Fungsi ini sebaiknya menggunakan RPC.
 
 ---
 
-# 13. Service Growth Phase
+# 12. Service Growth Phase
 
-## 13.1 `createGrowthPhaseRecord`
+## 12.1 `createGrowthPhaseRecord`
 
 ### Tujuan
 
@@ -1708,7 +1589,7 @@ Owner atau worker mencatat fase pertumbuhan pohon.
 
 ---
 
-## 13.2 `getGrowthPhaseRecords`
+## 12.2 `getGrowthPhaseRecords`
 
 ### Tujuan
 
@@ -1741,7 +1622,7 @@ Array<{
 
 ---
 
-## 13.3 `getFloweringAndFruitingTrees`
+## 12.3 `getFloweringAndFruitingTrees`
 
 ### Tujuan
 
@@ -1777,9 +1658,9 @@ Fungsi ini bukan prediksi panen. Ini hanya monitoring fase pohon. Tolong jangan 
 
 ---
 
-# 14. Service History
+# 13. Service History
 
-## 14.1 `getTreeHistory`
+## 13.1 `getTreeHistory`
 
 ### Tujuan
 
@@ -1819,9 +1700,9 @@ Array<{
 
 ---
 
-# 15. Service Dashboard
+# 14. Service Dashboard
 
-## 15.1 `getOwnerDashboardSummary`
+## 14.1 `getOwnerDashboardSummary`
 
 ### Tujuan
 
@@ -1852,7 +1733,7 @@ Mengambil ringkasan dashboard owner.
   pendingWorkers: number;
   floweringTrees: number;
   fruitingTrees: number;
-  overdueSOPs: number;
+  overdueSchedules: number;
 }
 ```
 
@@ -1869,11 +1750,11 @@ Mengambil ringkasan dashboard owner.
 | pendingWorkers        | `farm_members.status = pending`          |
 | floweringTrees        | `trees.current_growth_phase = flowering` |
 | fruitingTrees         | `trees.current_growth_phase = fruiting`  |
-| overdueSOPs           | hasil perhitungan interval SOP           |
+| overdueSchedules      | hasil perhitungan interval pengulangan jadwal |
 
 ---
 
-## 15.2 `getWorkerDashboardSummary`
+## 14.2 `getWorkerDashboardSummary`
 
 ### Tujuan
 
@@ -1905,9 +1786,13 @@ Mengambil ringkasan dashboard worker.
 
 Data tugas worker harus berdasarkan `auth.uid()` agar worker hanya melihat tugasnya sendiri.
 
+Seluruh penghitung tunggakan — baik di dashboard owner maupun worker — memakai definisi tugas terbuka yang sama: status `pending` atau `postponed`, belum terlewat, dan belum dilepas. Satu penghitung yang lupa salah satu syarat akan menampilkan pekerjaan yang sebenarnya sudah tidak menjadi tanggungan siapa pun.
+
+Angka "sudah selesai" sengaja TIDAK menyaring tugas terlewat: pekerjaan yang sempat hangus lalu tetap dikerjakan adalah kerja yang benar-benar dilakukan, dan membuangnya akan menghapus jejaknya.
+
 ---
 
-# 16. Service yang Disarankan Menggunakan RPC
+# 15. Service yang Disarankan Menggunakan RPC
 
 Beberapa operasi sebaiknya menggunakan RPC karena melibatkan banyak langkah atau validasi role penting.
 
@@ -1917,16 +1802,20 @@ Beberapa operasi sebaiknya menggunakan RPC karena melibatkan banyak langkah atau
 | `requestJoinFarm`                 | Validasi join code dan membership              |
 | `approveWorker`                   | Hanya owner active yang boleh approve          |
 | `rejectWorker`                    | Hanya owner active yang boleh reject           |
-| `removeWorker`                    | Hanya owner active yang boleh remove           |
-| `createScheduleFromSOP`           | Membuat schedule dan task dalam satu transaksi |
+| `removeWorker`                    | Melepas tugas terbuka lalu mencabut keanggotaan, dalam urutan yang tidak boleh terbalik |
+| `leaveCurrentFarm`                | Alasan sama dengan `removeWorker`              |
 | `createManualSchedule`            | Membuat schedule dan task dalam satu transaksi |
+| `assignWorkerToSchedule`          | Menugaskan pekerja ke jadwal yang belum punya tugas aktif |
+| `cancelCareSchedule`              | Validasi owner aktif dan pemeriksaan hasil kerja selesai |
+| `stopScheduleRepeat`              | Memutus rantai tanpa membatalkan jadwal berjalan |
 | `createTaskFromOperationalReport` | Membuat task dan update report status          |
-| `completeTask`                    | Insert activity dan update status task         |
-| `postponeTask`                    | Insert activity dan update status task         |
+| `completeTask`                    | Insert activity, menautkan pohon, dan update status task |
+| `postponeTask`                    | Insert activity, menggeser tenggat, dan update status task |
+| `sweepMissedSchedules`            | Menandai jadwal terlewat dan melanjutkan rantai, dilindungi kunci per kebun |
 
 ---
 
-# 17. Service yang Bisa Menggunakan Query Langsung
+# 16. Service yang Bisa Menggunakan Query Langsung
 
 | Service Function          | Query                                   |
 | ------------------------- | --------------------------------------- |
@@ -1936,7 +1825,6 @@ Beberapa operasi sebaiknya menggunakan RPC karena melibatkan banyak langkah atau
 | `getTreeDetail`           | Select dari `trees`                     |
 | `getTreeConditionReports` | Select dari `tree_condition_reports`    |
 | `getOperationalReports`   | Select dari `operational_reports`       |
-| `getCareSOPs`             | Select dari `care_sops`                 |
 | `getCareSchedules`        | Select dari `care_schedules`            |
 | `getWorkerTasks`          | Select dari `care_tasks`                |
 | `getFarmTasks`            | Select dari `care_tasks`                |
@@ -1945,7 +1833,7 @@ Beberapa operasi sebaiknya menggunakan RPC karena melibatkan banyak langkah atau
 
 ---
 
-# 18. Standar Error Handling
+# 17. Standar Error Handling
 
 Setiap service sebaiknya mengembalikan format error yang konsisten.
 
@@ -1978,13 +1866,13 @@ Setiap service sebaiknya mengembalikan format error yang konsisten.
 | Worker belum disetujui   | Pengajuan Anda masih menunggu persetujuan owner.                  |
 | Worker removed           | Akses Anda ke kebun ini sudah dinonaktifkan.                      |
 | Tree code duplikat       | Kode pohon sudah digunakan di kebun ini.                          |
-| SOP interval tidak valid | Interval perawatan harus lebih dari 0 hari.                       |
+| Interval pengulangan tidak valid | Interval pengulangan harus lebih dari 0 hari. |
 | Task bukan milik worker  | Anda tidak memiliki akses ke tugas ini.                           |
 | Gagal koneksi            | Gagal memuat data. Periksa koneksi internet Anda.                 |
 
 ---
 
-# 19. Standar Naming Function
+# 18. Standar Naming Function
 
 Gunakan nama fungsi berdasarkan aksi bisnis, bukan berdasarkan tabel mentah.
 
@@ -1995,7 +1883,6 @@ createFarm()
 requestJoinFarm()
 approveWorker()
 createTreeConditionReport()
-createScheduleFromSOP()
 completeTask()
 getOwnerDashboardSummary()
 ```
@@ -2013,7 +1900,7 @@ Nama kedua terlalu database-oriented. Boleh dipakai di dalam service, tapi janga
 
 ---
 
-# 20. Prioritas Implementasi Service
+# 19. Prioritas Implementasi Service
 
 Service sebaiknya dibuat berdasarkan urutan dependency sistem.
 
@@ -2041,25 +1928,17 @@ Service sebaiknya dibuat berdasarkan urutan dependency sistem.
 7. `createTreeConditionReport`
 8. `getTreeConditionReports`
 
-## Iterasi 3: SOP Perawatan dan Acuan Jadwal Berikutnya
-
-1. `getCareSOPs`
-2. `getCareSOPDetail`
-3. `createCareSOP`
-4. `updateCareSOP`
-5. `setCareSOPActiveStatus`
-6. `getCareSOPNextScheduleReference`
-7. `createScheduleFromSOP`
-
-## Iterasi 4: Jadwal Manual dan Realisasi Tugas
+## Iterasi 3: Jadwal Perawatan dan Realisasi Tugas
 
 1. `createManualSchedule`
-2. `getWorkerTasks`
-3. `getTaskDetail`
-4. `completeTask`
-5. `postponeTask`
+2. `getCareSchedules`
+3. `getCareScheduleDetail`
+4. `getWorkerTasks`
+5. `getTaskDetail`
+6. `completeTask`
+7. `postponeTask`
 
-## Iterasi 5: Laporan Operasional Kebun dan Tindak Lanjut
+## Iterasi 4: Laporan Operasional Kebun dan Tindak Lanjut
 
 1. `createOperationalReport`
 2. `getOperationalReports`
@@ -2067,14 +1946,14 @@ Service sebaiknya dibuat berdasarkan urutan dependency sistem.
 4. `updateOperationalReportStatus`
 5. `createTaskFromOperationalReport`
 
-## Iterasi 6: Fase Pertumbuhan dan Riwayat Pohon
+## Iterasi 5: Fase Pertumbuhan dan Riwayat Pohon
 
 1. `createGrowthPhaseRecord`
 2. `getGrowthPhaseRecords`
 3. `getFloweringAndFruitingTrees`
 4. `getTreeHistory`
 
-## Iterasi 7: Dashboard dan Final MVP Polish
+## Iterasi 6: Dashboard dan Final MVP Polish
 
 1. `getOwnerDashboardSummary`
 2. `getWorkerDashboardSummary`
@@ -2091,8 +1970,7 @@ Service sebaiknya dibuat berdasarkan urutan dependency sistem.
 | Tree Service               | CRUD pohon dan arsip pohon                 |
 | Condition Report Service   | Laporan dan riwayat kondisi pohon          |
 | Operational Report Service | Laporan umum kebun dan status laporan      |
-| Care SOP Service           | Template SOP dan acuan jadwal berikutnya   |
-| Care Schedule Service      | Jadwal dari SOP dan jadwal manual          |
+| Care Schedule Service      | Jadwal perawatan dan pengulangannya        |
 | Care Task Service          | Daftar tugas, detail tugas, selesai, tunda |
 | Growth Phase Service       | Catat dan lihat fase pertumbuhan           |
 | History Service            | Riwayat pohon terintegrasi                 |

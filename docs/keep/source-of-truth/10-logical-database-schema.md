@@ -1,5 +1,24 @@
 # Logical Database Schema Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Tabel `care_sops` beserta relasinya
+> dihapus, begitu juga kolom `target_row`/`target_column` pada `care_schedules`
+> dan `care_tasks`. Nilai enum `target_type` menyusut menjadi `farm`, `tree`,
+> `custom`. Kolom `care_tasks.category` menjadi `not null`, dan
+> `care_schedules.repeat_every_days` ditambahkan sebagai interval pengulangan.
+> Penomoran bab dan sub-bab dirapatkan. Kolom `row_position`/`column_position`
+> pada tabel `trees` TIDAK terpengaruh. Riwayat keputusannya ada di
+> `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** `care_schedules` bertambah
+> `date_basis`, `grace_days`, `missed_at`, `series_id`, `parent_schedule_id`, dan
+> `is_cancelled`; `care_tasks` bertambah `missed_at`, `released_at`, dan
+> `released_reason`; `care_activities` bertambah `postponed_until`. Tabel
+> jembatan `care_activity_trees` ditambahkan sebagai bab 13 — tabel ini sudah ada
+> di database sejak migrasi 025 tetapi belum pernah masuk dokumen, dan migrasi
+> 050 menjadikannya satu-satunya jalan aktivitas perawatan masuk ke riwayat
+> pohon. Bab 13 sampai 24 karena itu bergeser satu nomor. Riwayat keputusannya
+> ada di `decision-log.md` (DL-034 sampai DL-038).
+
 ## 1. Tujuan Logical Database Schema
 
 Logical database schema digunakan untuk menerjemahkan data model konseptual Avology V2 menjadi rancangan tabel yang lebih dekat dengan implementasi database.
@@ -26,8 +45,8 @@ Perancangan schema Avology V2 menggunakan prinsip berikut:
 3. Worker yang dikeluarkan tidak dihapus permanen, tetapi diberi status `removed`.
 4. Pohon yang tidak aktif lebih baik diarsipkan daripada dihapus permanen.
 5. Data historis seperti kondisi pohon, fase pertumbuhan, laporan, tugas, dan aktivitas tidak boleh mudah hilang.
-6. SOP hanya menjadi template standar perawatan, bukan dokumen panjang.
-7. Interval SOP digunakan untuk menghitung acuan jadwal berikutnya, bukan membuat tugas otomatis penuh tanpa konfirmasi owner.
+6. Jadwal perawatan dibuat manual oleh owner, tanpa tabel template terpisah.
+7. Interval pengulangan pada jadwal membentuk rantai jadwal penerus yang dihitung sistem saat aplikasi membaca data, tanpa penjadwal yang berjalan di luar aplikasi.
 8. Dashboard tidak memiliki tabel sendiri, tetapi mengambil ringkasan dari tabel operasional.
 9. Riwayat pohon dapat dibentuk dari gabungan laporan kondisi, fase pertumbuhan, dan aktivitas perawatan.
 10. Setiap tabel penting memiliki `created_at` dan jika perlu `updated_at`.
@@ -124,7 +143,7 @@ Digunakan pada tabel `operational_reports`.
 
 ## 3.7 `care_category`
 
-Digunakan pada tabel `care_sops`, `care_schedules`, dan `care_tasks`.
+Digunakan pada tabel `care_schedules` dan `care_tasks`.
 
 | Nilai       | Keterangan         |
 | ----------- | ------------------ |
@@ -138,15 +157,18 @@ Digunakan pada tabel `care_sops`, `care_schedules`, dan `care_tasks`.
 
 ## 3.8 `target_type`
 
-Digunakan untuk target SOP, jadwal, dan tugas. Pada MVP, `custom` hanya digunakan untuk jadwal dan tugas, bukan untuk default target SOP.
+Digunakan untuk target jadwal dan tugas.
 
 | Nilai  | Keterangan                         |
 | ------ | ---------------------------------- |
 | farm   | Seluruh kebun                      |
-| row    | Baris tertentu                     |
-| column | Kolom tertentu                     |
 | tree   | Pohon tertentu                     |
-| custom | Target bebas atau deskripsi manual, khusus jadwal dan tugas |
+| custom | Target bebas atau deskripsi manual |
+
+Nilai `row` dan `column` sudah dicabut di migrasi 047. Keduanya masih ada di
+tipe enum PostgreSQL karena `alter type ... drop value` tidak tersedia, tetapi
+ditutup oleh CHECK constraint pada `care_schedules` dan `care_tasks` sehingga
+tidak dapat lagi tersimpan.
 
 ---
 
@@ -338,48 +360,7 @@ Laporan operasional dapat ditindaklanjuti menjadi tugas worker melalui tabel `ca
 
 ---
 
-# 10. Tabel `care_sops`
-
-## Fungsi
-
-Tabel `care_sops` menyimpan template SOP perawatan.
-
-## Struktur Tabel
-
-| Kolom                  | Tipe Data     | Constraint                  | Keterangan                    |
-| ---------------------- | ------------- | --------------------------- | ----------------------------- |
-| id                     | uuid          | PK                          | ID SOP                        |
-| farm_id                | uuid          | FK ke farms.id, not null    | ID kebun                      |
-| name                   | text          | not null                    | Nama SOP                      |
-| category               | care_category | not null                    | Kategori SOP                  |
-| interval_days          | integer       | nullable                    | Interval perawatan dalam hari |
-| default_instruction    | text          | nullable                    | Instruksi default             |
-| default_target_type    | target_type   | default farm                | Target default                |
-| default_target_row     | text          | nullable                    | Target baris default          |
-| default_target_column  | text          | nullable                    | Target kolom default          |
-| default_target_tree_id | uuid          | FK ke trees.id, nullable    | Target pohon default          |
-| is_active              | boolean       | default true                | Status aktif SOP              |
-| created_by             | uuid          | FK ke profiles.id, not null | Owner pembuat SOP             |
-| created_at             | timestamptz   | default now()               | Tanggal SOP dibuat            |
-| updated_at             | timestamptz   | nullable                    | Tanggal SOP diperbarui        |
-
-## Constraint yang Disarankan
-
-| Constraint                                    | Tujuan                                           |
-| --------------------------------------------- | ------------------------------------------------ |
-| interval_days > 0                             | Interval tidak boleh nol atau negatif jika diisi |
-| target_tree_id wajib jika target_type = tree  | Menjaga konsistensi target pohon                 |
-| target_row wajib jika target_type = row       | Menjaga konsistensi target baris                 |
-| target_column wajib jika target_type = column | Menjaga konsistensi target kolom                 |
-| default_target_type tidak boleh custom        | Default target SOP hanya memakai target terstruktur |
-
-## Catatan
-
-SOP tidak membuat tugas otomatis penuh. SOP hanya menyediakan template dan interval untuk membantu owner membuat jadwal berikutnya secara semi-otomatis.
-
----
-
-# 11. Tabel `care_schedules`
+# 10. Tabel `care_schedules`
 
 ## Fungsi
 
@@ -391,16 +372,20 @@ Tabel `care_schedules` menyimpan jadwal perawatan yang dibuat owner.
 | ------------------ | ------------- | ---------------------------- | --------------------------------------- |
 | id                 | uuid          | PK                           | ID jadwal                               |
 | farm_id            | uuid          | FK ke farms.id, not null     | ID kebun                                |
-| care_sop_id        | uuid          | FK ke care_sops.id, nullable | SOP terkait jika jadwal dibuat dari SOP |
 | title              | text          | not null                     | Judul jadwal                            |
 | category           | care_category | not null                     | Kategori jadwal                         |
 | scheduled_date     | date          | not null                     | Tanggal jadwal                          |
 | target_type        | target_type   | not null                     | Jenis target jadwal                     |
-| target_row         | text          | nullable                     | Target baris                            |
-| target_column      | text          | nullable                     | Target kolom                            |
 | target_tree_id     | uuid          | FK ke trees.id, nullable     | Target pohon                            |
 | custom_target_note | text          | nullable                     | Target custom                           |
 | instruction        | text          | nullable                     | Instruksi jadwal                        |
+| repeat_every_days  | integer       | nullable                     | Interval pengulangan dalam hari         |
+| date_basis         | text          | not null, default `jadwal`   | Dasar tanggal penerus: `jadwal` atau `realisasi` |
+| grace_days         | integer       | nullable                     | Masa toleransi keterlambatan dalam hari |
+| missed_at          | timestamptz   | nullable                     | Waktu jadwal dinyatakan terlewat        |
+| series_id          | uuid          | nullable                     | Penanda satu rantai pengulangan         |
+| parent_schedule_id | uuid          | FK ke care_schedules.id, nullable | Jadwal pendahulu dalam rantai      |
+| is_cancelled       | boolean       | not null, default false      | Penanda jadwal dibatalkan owner         |
 | created_by         | uuid          | FK ke profiles.id, not null  | Owner pembuat jadwal                    |
 | created_at         | timestamptz   | default now()                | Tanggal jadwal dibuat                   |
 | updated_at         | timestamptz   | nullable                     | Tanggal jadwal diperbarui               |
@@ -409,20 +394,27 @@ Tabel `care_schedules` menyimpan jadwal perawatan yang dibuat owner.
 
 | Constraint                                         | Tujuan                |
 | -------------------------------------------------- | --------------------- |
+| target_type hanya boleh farm, tree, atau custom    | Menutup nilai enum row/column yang sudah dicabut |
 | target_tree_id wajib jika target_type = tree       | Menjaga target pohon  |
-| target_row wajib jika target_type = row            | Menjaga target baris  |
-| target_column wajib jika target_type = column      | Menjaga target kolom  |
 | custom_target_note wajib jika target_type = custom | Menjaga target custom |
-| care_sop_id harus kosong jika target_type = custom | Membatasi custom hanya untuk jadwal manual |
 | custom_target_note kosong jika target_type bukan custom | Mencegah target campuran |
+| repeat_every_days > 0 jika diisi                   | Interval tidak boleh nol atau negatif |
+| date_basis hanya boleh `jadwal` atau `realisasi`   | Menutup nilai dasar tanggal yang tidak dikenal |
+| grace_days >= 0 jika diisi                         | Nol berarti terlewat begitu lewat tanggal; negatif tidak bermakna |
 
 ## Catatan
 
-Jadwal dapat dibuat dari SOP atau secara manual. Jika `care_sop_id` kosong, maka jadwal dianggap jadwal manual.
+Siklus pertama sebuah jadwal dibuat manual oleh owner. Jadwal yang mengisi `repeat_every_days` membentuk rantai: begitu siklus berjalan ditutup, sistem membuat jadwal penerusnya sendiri tanpa menunggu konfirmasi owner.
+
+Seluruh siklus dalam satu rantai berbagi `series_id` yang sama, dan setiap penerus menunjuk pendahulunya lewat `parent_schedule_id`. Dalam satu rantai hanya boleh ada satu jadwal terbuka pada satu waktu.
+
+`grace_days` menentukan berapa lama keterlambatan masih ditoleransi. Jadwal yang melewati batas itu diberi `missed_at` dan rantainya dilanjutkan ke siklus berikutnya. Jadwal tanpa `grace_days` tidak pernah dinyatakan terlewat.
+
+Penandaan terlewat dan pembentukan penerus dihitung saat aplikasi membaca data, bukan oleh penjadwal yang berjalan di luar aplikasi.
 
 ---
 
-# 12. Tabel `care_tasks`
+# 11. Tabel `care_tasks`
 
 ## Fungsi
 
@@ -444,15 +436,16 @@ Tugas dapat berasal dari:
 | assigned_to           | uuid          | FK ke profiles.id, not null            | Worker penerima tugas          |
 | assigned_by           | uuid          | FK ke profiles.id, not null            | Owner pemberi tugas            |
 | title                 | text          | not null                               | Judul tugas                    |
-| category              | care_category | nullable                               | Kategori tugas                 |
+| category              | care_category | not null                               | Kategori tugas                 |
 | instruction           | text          | nullable                               | Instruksi tugas                |
 | target_type           | target_type   | not null                               | Jenis target tugas             |
-| target_row            | text          | nullable                               | Target baris                   |
-| target_column         | text          | nullable                               | Target kolom                   |
 | target_tree_id        | uuid          | FK ke trees.id, nullable               | Target pohon                   |
 | custom_target_note    | text          | nullable                               | Target custom                  |
-| due_date              | date          | not null                               | Tanggal pelaksanaan tugas      |
+| due_date              | date          | not null                               | Tanggal pelaksanaan tugas, ikut bergeser saat tugas ditunda |
 | status                | task_status   | default pending                        | Status tugas                   |
+| missed_at             | timestamptz   | nullable                               | Waktu tugas dinyatakan terlewat |
+| released_at           | timestamptz   | nullable                               | Waktu tugas dilepas karena pekerjanya berhenti aktif |
+| released_reason       | text          | nullable                               | Sebab pelepasan: `removed_by_owner` atau `left_by_worker` |
 | created_at            | timestamptz   | default now()                          | Tanggal tugas dibuat           |
 | updated_at            | timestamptz   | nullable                               | Tanggal tugas diperbarui       |
 
@@ -463,18 +456,24 @@ Tugas dapat berasal dari:
 | Minimal salah satu dari `care_schedule_id` atau `operational_report_id` boleh diisi | Menentukan sumber tugas                                  |
 | assigned_to harus worker active pada farm terkait                                   | Mencegah tugas diberikan ke user yang bukan worker aktif |
 | target_tree_id wajib jika target_type = tree                                        | Menjaga target pohon                                     |
-| target_row wajib jika target_type = row                                             | Menjaga target baris                                     |
-| target_column wajib jika target_type = column                                       | Menjaga target kolom                                     |
 | custom_target_note wajib jika target_type = custom                                  | Menjaga target custom untuk tugas manual atau tindak lanjut |
 | custom_target_note kosong jika target_type bukan custom                             | Mencegah target campuran                                 |
+| released_at dan released_reason harus terisi bersama atau kosong bersama            | Pelepasan selalu punya waktu dan sebab                   |
+| released_reason hanya boleh `removed_by_owner` atau `left_by_worker`                | Menyamakan kosakata dengan sebab keluarnya keanggotaan   |
 
 ## Catatan
 
 Tabel ini menyimpan status tugas terbaru. Perubahan status atau realisasi dicatat di tabel `care_activities`.
 
+`missed_at` dan `released_at` bukan nilai `status`, melainkan penanda terpisah, dan sebabnya sengaja tidak disatukan. **Terlewat** berarti tenggat beserta masa toleransinya habis. **Dilepas** berarti pekerjanya berhenti aktif sehingga tugas itu tidak lagi menjadi tanggungan siapa pun; pekerjaannya sendiri belum tentu terlambat.
+
+Tugas dinyatakan terbuka bila statusnya `pending` atau `postponed`, `missed_at` kosong, dan `released_at` kosong. Definisi inilah yang dipakai seluruh penghitung tunggakan, penyapu jadwal terlewat, dan pemeriksaan "jadwal ini masih punya tugas aktif".
+
+Tugas yang sudah dilepas tidak dapat diperbarui lagi selama pemiliknya belum aktif kembali, karena validasi tugas mensyaratkan penerima tugas adalah worker aktif.
+
 ---
 
-# 13. Tabel `care_activities`
+# 12. Tabel `care_activities`
 
 ## Fungsi
 
@@ -505,13 +504,51 @@ Kalau hanya satu aktivitas, riwayat penundaan bisa hilang. Dan kehilangan riwaya
 | performed_by | uuid            | FK ke profiles.id, not null   | Worker pelaksana       |
 | status       | activity_status | not null                      | Status aktivitas       |
 | note         | text            | nullable                      | Catatan realisasi      |
+| postponed_until | date         | nullable                      | Tanggal rencana pengerjaan ulang |
 | performed_at | timestamptz     | default now()                 | Waktu aktivitas dibuat |
+
+## Constraint yang Disarankan
+
+| Constraint                                                              | Tujuan                                            |
+| ----------------------------------------------------------------------- | ------------------------------------------------- |
+| postponed_until wajib diisi jika status = postponed                     | Penundaan harus menyebut kapan akan dikerjakan    |
+| postponed_until wajib kosong jika status = completed                    | Pekerjaan yang selesai tidak punya tanggal tunda  |
 
 ## Catatan
 
-Jika tugas berkaitan dengan pohon tertentu, sistem dapat menampilkan aktivitas ini pada riwayat pohon berdasarkan `target_tree_id` pada `care_tasks`.
+Pohon yang dirawat TIDAK disimpan pada tabel ini, melainkan pada tabel jembatan `care_activity_trees`. Satu perawatan dapat berdampak pada banyak pohon sekaligus, sehingga hubungannya banyak-ke-banyak dan tidak dapat diwakili satu kolom `tree_id`.
 
-Dengan pendekatan ini, `care_activities` tidak menyimpan `tree_id` secara langsung pada MVP karena target pohon sudah ada pada `care_tasks`.
+Penundaan wajib menyebut `postponed_until`, dan tanggal itu juga menggeser `care_tasks.due_date` sehingga masa toleransi jadwal dihitung ulang dari tanggal baru tersebut.
+
+Satu tugas hanya boleh memiliki satu aktivitas berstatus `completed`. Perbaikan catatan dilakukan dengan menyunting aktivitas terakhir, bukan dengan menambah baris baru.
+
+---
+
+# 13. Tabel `care_activity_trees`
+
+## Fungsi
+
+Tabel `care_activity_trees` adalah jembatan yang mencatat pohon mana saja yang terdampak oleh satu aktivitas perawatan.
+
+## Struktur Tabel
+
+| Kolom            | Tipe Data | Constraint                         | Keterangan                  |
+| ---------------- | --------- | ---------------------------------- | --------------------------- |
+| care_activity_id | uuid      | FK ke care_activities.id, not null | Aktivitas perawatan terkait |
+| tree_id          | uuid      | FK ke trees.id, not null           | Pohon yang terdampak        |
+
+Primary key gabungan `(care_activity_id, tree_id)`.
+
+## Catatan
+
+Jembatan ini terisi dari dua jalur:
+
+1. **Pencatatan inisiatif** — pelaku memilih sendiri pohon yang dirawat.
+2. **Realisasi tugas terjadwal** — pohon diturunkan dari target tugas saat tugas diselesaikan: target `tree` menautkan satu pohon, target `farm` menautkan seluruh pohon kebun yang belum diarsipkan, dan target `custom` tidak menautkan pohon sama sekali.
+
+Pohon ditentukan pada saat penyelesaian tugas, bukan saat jadwal dibuat, agar tautannya mencerminkan pohon yang benar-benar ada ketika pekerjaan dilakukan.
+
+Tabel ini hanya menerima operasi baca dan tulis baru. Tautan yang sudah terbentuk tidak dapat dihapus atau diubah; koreksi hanya mungkin dengan menghapus aktivitas induknya.
 
 ---
 
@@ -551,8 +588,8 @@ View ini dapat menggabungkan data dari:
 
 1. `tree_condition_reports`
 2. `growth_phase_records`
-3. `care_tasks`
-4. `care_activities`
+3. `care_activities` melalui jembatan `care_activity_trees`
+4. `care_tasks`, hanya untuk mengambil judul tugas dari aktivitas terjadwal
 
 ## Bentuk Data yang Ditampilkan
 
@@ -570,6 +607,8 @@ View ini dapat menggabungkan data dari:
 
 View ini membantu halaman detail pohon menampilkan riwayat dalam satu timeline tanpa harus membuat tabel baru yang menduplikasi data.
 
+Aktivitas perawatan masuk ke timeline lewat `care_activity_trees`, bukan lewat target pohon pada `care_tasks`. Konsekuensinya satu perawatan yang menyasar seluruh kebun muncul di riwayat setiap pohon yang terdampak, dan perawatan bertarget catatan bebas tidak muncul di riwayat pohon mana pun.
+
 ---
 
 # 16. Ringkasan Tabel Final
@@ -582,10 +621,10 @@ View ini membantu halaman detail pohon menampilkan riwayat dalam satu timeline t
 | trees                  | Menyimpan data pohon individual         |
 | tree_condition_reports | Menyimpan riwayat kondisi pohon         |
 | operational_reports    | Menyimpan laporan operasional kebun     |
-| care_sops              | Menyimpan template SOP perawatan        |
 | care_schedules         | Menyimpan jadwal perawatan              |
 | care_tasks             | Menyimpan tugas worker                  |
 | care_activities        | Menyimpan aktivitas realisasi tugas     |
+| care_activity_trees    | Menautkan aktivitas perawatan ke pohon terdampak |
 | growth_phase_records   | Menyimpan riwayat fase pertumbuhan      |
 | tree_history_view      | View untuk timeline riwayat pohon       |
 
@@ -643,27 +682,17 @@ Satu kebun memiliki banyak laporan operasional.
 
 ---
 
-## 17.6 `farms` ke `care_sops`
+## 17.6 `farms` ke `care_schedules`
 
 ```txt
-farms.id 1..N care_sops.farm_id
+farms.id 1..N care_schedules.farm_id
 ```
 
-Satu kebun memiliki banyak SOP.
+Satu kebun memiliki banyak jadwal perawatan.
 
 ---
 
-## 17.7 `care_sops` ke `care_schedules`
-
-```txt
-care_sops.id 1..N care_schedules.care_sop_id
-```
-
-Satu SOP dapat digunakan dalam banyak jadwal. Pada jadwal manual, `care_sop_id` boleh kosong.
-
----
-
-## 17.8 `care_schedules` ke `care_tasks`
+## 17.7 `care_schedules` ke `care_tasks`
 
 ```txt
 care_schedules.id 1..N care_tasks.care_schedule_id
@@ -673,7 +702,7 @@ Satu jadwal dapat menghasilkan satu atau lebih tugas.
 
 ---
 
-## 17.9 `operational_reports` ke `care_tasks`
+## 17.8 `operational_reports` ke `care_tasks`
 
 ```txt
 operational_reports.id 0..N care_tasks.operational_report_id
@@ -683,7 +712,7 @@ Satu laporan operasional dapat menghasilkan tugas tindak lanjut atau tidak mengh
 
 ---
 
-## 17.10 `care_tasks` ke `care_activities`
+## 17.9 `care_tasks` ke `care_activities`
 
 ```txt
 care_tasks.id 0..N care_activities.care_task_id
@@ -693,7 +722,28 @@ Satu tugas dapat belum memiliki aktivitas, atau memiliki beberapa aktivitas, mis
 
 ---
 
-## 17.11 `trees` ke `growth_phase_records`
+## 17.10 `care_activities` dan `trees` ke `care_activity_trees`
+
+```txt
+care_activities.id 0..N care_activity_trees.care_activity_id
+trees.id           0..N care_activity_trees.tree_id
+```
+
+Relasi banyak-ke-banyak antara aktivitas perawatan dan pohon. Satu aktivitas dapat menautkan banyak pohon, dan satu pohon dapat terdampak banyak aktivitas.
+
+---
+
+## 17.11 `care_schedules` ke `care_schedules`
+
+```txt
+care_schedules.id 0..1 care_schedules.parent_schedule_id
+```
+
+Relasi rekursif untuk rantai jadwal berulang. Setiap penerus menunjuk satu pendahulu, dan siklus pertama tidak menunjuk siapa pun.
+
+---
+
+## 17.12 `trees` ke `growth_phase_records`
 
 ```txt
 trees.id 1..N growth_phase_records.tree_id
@@ -717,12 +767,16 @@ Index digunakan agar query penting lebih cepat.
 | trees                  | farm_id, current_growth_phase | Dashboard fase berbunga/berbuah   |
 | tree_condition_reports | tree_id, reported_at          | Riwayat kondisi pohon             |
 | operational_reports    | farm_id, status               | Laporan baru/diproses             |
-| care_sops              | farm_id, is_active            | SOP aktif per kebun               |
 | care_schedules         | farm_id, scheduled_date       | Jadwal per tanggal                |
 | care_tasks             | assigned_to, due_date         | Tugas worker hari ini             |
 | care_tasks             | farm_id, status               | Dashboard tugas                   |
+| care_tasks             | farm_id, due_date, hanya untuk tugas terbuka | Penyapu jadwal terlewat dan penghitung tunggakan |
 | care_activities        | care_task_id                  | Riwayat aktivitas tugas           |
+| care_activities        | care_task_id, performed_at, id | Mencari realisasi terakhir sebuah tugas |
+| care_activity_trees    | tree_id                       | Riwayat perawatan satu pohon      |
 | growth_phase_records   | tree_id, recorded_at          | Riwayat fase pohon                |
+
+Index pada `care_tasks (farm_id, due_date)` sengaja bersifat parsial: hanya mencakup baris yang statusnya `pending` atau `postponed`, `missed_at` kosong, dan `released_at` kosong. Himpunan itulah definisi tugas terbuka, dan membatasi index padanya membuat penyapu tidak perlu memindai tugas yang sudah selesai, sudah terlewat, atau sudah dilepas.
 
 ---
 
@@ -792,7 +846,6 @@ Owner dapat:
 * melihat dan mengubah data kebun miliknya
 * menerima, menolak, dan mengeluarkan worker
 * mengelola data pohon
-* mengelola SOP
 * membuat jadwal
 * membuat tugas
 * melihat laporan operasional
@@ -817,7 +870,6 @@ Worker tidak dapat:
 
 * menghapus kebun
 * mengelola worker
-* mengelola SOP
 * membuat jadwal utama
 * mengakses data kebun lain
 * mengakses kebun setelah statusnya removed
@@ -830,8 +882,6 @@ Untuk target seperti kebun, baris, kolom, dan pohon, schema menggunakan kombinas
 
 ```txt
 target_type
-target_row
-target_column
 target_tree_id
 custom_target_note
 ```
@@ -840,9 +890,8 @@ Alasan tidak menggunakan satu kolom `target_value` saja:
 
 1. Lebih jelas secara struktur.
 2. Target pohon bisa menggunakan foreign key.
-3. Target baris dan kolom tetap fleksibel.
-4. Lebih mudah divalidasi.
-5. Lebih mudah dipakai pada query.
+3. Lebih mudah divalidasi.
+4. Lebih mudah dipakai pada query.
 
 Contoh:
 
@@ -850,27 +899,8 @@ Contoh:
 
 ```txt
 target_type = farm
-target_row = null
-target_column = null
 target_tree_id = null
-```
-
-## Target baris tertentu
-
-```txt
-target_type = row
-target_row = "B"
-target_column = null
-target_tree_id = null
-```
-
-## Target kolom tertentu
-
-```txt
-target_type = column
-target_row = null
-target_column = "03"
-target_tree_id = null
+custom_target_note = null
 ```
 
 ## Target pohon tertentu
@@ -878,51 +908,75 @@ target_tree_id = null
 ```txt
 target_type = tree
 target_tree_id = id pohon
+custom_target_note = null
 ```
 
 ## Target custom
 
-Contoh ini hanya berlaku untuk jadwal manual dan tugas manual/tindak lanjut, bukan untuk default target SOP atau jadwal dari SOP.
-
 ```txt
 target_type = custom
+target_tree_id = null
 custom_target_note = "Saluran air dekat area belakang kebun"
 ```
 
 ---
 
-# 22. Catatan Penting tentang SOP Interval
+# 22. Catatan Penting tentang Rantai Jadwal Berulang
 
-Untuk menghitung acuan jadwal berikutnya, sistem mengambil data:
+Untuk membentuk jadwal penerus, sistem mengambil data:
 
-1. SOP yang dipilih
-2. `interval_days`
-3. realisasi terakhir dari tugas yang berasal dari SOP tersebut
+1. Jadwal yang berulang
+2. `repeat_every_days`
+3. `date_basis`, yang menentukan tanggal mana yang dipakai sebagai dasar
+4. `grace_days`, untuk menentukan kapan siklus dinyatakan terlewat
 
 Rumus:
 
 ```txt
-tanggal realisasi terakhir + interval_days
+tanggal dasar + repeat_every_days
+```
+
+dengan tanggal dasar bergantung pada `date_basis`:
+
+```txt
+date_basis = jadwal    -> scheduled_date
+date_basis = realisasi -> tanggal pekerjaan benar-benar dilakukan
 ```
 
 Contoh:
 
 ```txt
-SOP: Semprot Pencegahan
-Interval: 14 hari
+Jadwal: Semprot Pencegahan
+Interval pengulangan: 14 hari
+Dasar tanggal: realisasi
 Realisasi terakhir: 1 Juni 2026
-Acuan berikutnya: 15 Juni 2026
+Jadwal penerus: 15 Juni 2026
 ```
 
-Sistem hanya menampilkan acuan dan status:
+Status jadwal yang ditampilkan:
 
 ```txt
 belum jatuh tempo
 jatuh tempo hari ini
 terlambat
+terlewat
 ```
 
-Sistem tidak membuat tugas otomatis tanpa konfirmasi owner.
+Sistem membentuk jadwal penerus sendiri, tanpa konfirmasi owner, begitu siklus berjalan ditutup. Siklus dapat ditutup karena dua sebab: tugasnya diselesaikan, atau siklusnya melewati `scheduled_date + grace_days` sehingga dinyatakan terlewat.
+
+Contoh siklus terlewat:
+
+```txt
+Jadwal: Semprot Pencegahan
+Tanggal jadwal: 1 Juni 2026
+Masa toleransi: 3 hari
+Hari ini: 5 Juni 2026
+-> jadwal ditandai terlewat, penerus tetap dibuat
+```
+
+Jadwal tanpa `grace_days` tidak pernah dinyatakan terlewat dan menunggu selamanya sampai dikerjakan.
+
+Perhitungan ini dijalankan saat aplikasi membaca data, dilindungi kunci per kebun agar dua pembacaan yang bersamaan tidak membuat penerus ganda. Sistem tetap tidak memakai penjadwal yang berjalan di luar aplikasi.
 
 ---
 
@@ -958,12 +1012,11 @@ Fitur-fitur tersebut dapat dipertimbangkan pada pengembangan lanjutan setelah MV
 4. `trees` menyimpan data pohon individual.
 5. `tree_condition_reports` menyimpan riwayat kondisi pohon.
 6. `operational_reports` menyimpan laporan umum kebun.
-7. `care_sops` menyimpan template standar perawatan.
-8. `care_schedules` menyimpan jadwal perawatan.
-9. `care_tasks` menyimpan tugas worker.
-10. `care_activities` menyimpan aktivitas realisasi tugas.
-11. `growth_phase_records` menyimpan riwayat fase pertumbuhan.
-12. `tree_history_view` dapat digunakan untuk menampilkan riwayat pohon secara terintegrasi.
-13. Worker yang dikeluarkan menggunakan status `removed`, bukan delete permanen.
-14. Pohon tidak aktif menggunakan `is_archived`.
-15. SOP interval digunakan sebagai acuan jadwal berikutnya, bukan recurring otomatis penuh.
+7. `care_schedules` menyimpan jadwal perawatan.
+8. `care_tasks` menyimpan tugas worker.
+9. `care_activities` menyimpan aktivitas realisasi tugas.
+10. `growth_phase_records` menyimpan riwayat fase pertumbuhan.
+11. `tree_history_view` dapat digunakan untuk menampilkan riwayat pohon secara terintegrasi.
+12. Worker yang dikeluarkan menggunakan status `removed`, bukan delete permanen.
+13. Pohon tidak aktif menggunakan `is_archived`.
+14. Interval pengulangan jadwal digunakan sebagai acuan jadwal berikutnya, bukan recurring otomatis penuh.

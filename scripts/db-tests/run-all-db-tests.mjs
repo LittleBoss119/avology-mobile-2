@@ -15,6 +15,11 @@ const stages = [
   '07-feature-foundation.test.mjs',
   '08-tree-record-edit-delete-foundation.test.mjs',
   '09-farm-relation-lifecycle.test.mjs',
+  '10-grace-period-missed-sweep.test.mjs',
+  '11-dated-postponement.test.mjs',
+  '12-care-activity-tree-links.test.mjs',
+  '13-task-release-on-membership-exit.test.mjs',
+  '14-schedule-lock-on-completed-only.test.mjs',
 ];
 
 const summary = {

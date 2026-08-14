@@ -15,6 +15,7 @@ import type {
   GetScheduleEditEligibilityInput,
   MemberRole,
   MemberStatus,
+  ScheduleDateBasis,
   ScheduleEditEligibility,
   ServiceResult,
   StopScheduleRepeatData,
@@ -25,17 +26,18 @@ import type {
   UpdateCareScheduleInput,
   UUID,
 } from '../types/domain';
+import { sweepMissedSchedules } from './missedScheduleSweep';
 import { fail, ok } from '../utils/serviceResult';
 
 const CARE_SCHEDULE_SELECT =
-  'id, farm_id, care_sop_id, title, category, scheduled_date, target_type, target_row, target_column, target_tree_id, custom_target_note, instruction, requires_photo, is_cancelled, cancelled_at, cancelled_by, cancel_reason, repeat_every_days, series_id, parent_schedule_id, created_by, created_at, updated_at';
+  'id, farm_id, title, category, scheduled_date, target_type, target_tree_id, custom_target_note, instruction, requires_photo, is_cancelled, cancelled_at, cancelled_by, cancel_reason, repeat_every_days, series_id, parent_schedule_id, missed_at, grace_days, date_basis, created_by, created_at, updated_at';
 
 // Batas id per query .in(). PostgREST menaruh seluruh daftar id di query string,
 // jadi satu .in() dengan ratusan uuid membuat URL melewati batas panjang server.
 const SCHEDULE_TASK_BATCH_SIZE = 100;
 
 const CARE_TASK_SELECT =
-  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, requires_photo, created_at, updated_at';
+  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_tree_id, custom_target_note, due_date, status, missed_at, requires_photo, created_at, updated_at';
 
 const careCategories: CareCategory[] = [
   'watering',
@@ -63,13 +65,10 @@ type ScheduleTaskRpcRow = {
 type CareScheduleRow = {
   id: string;
   farm_id: string;
-  care_sop_id: string | null;
   title: string;
   category: CareCategory;
   scheduled_date: string;
   target_type: TargetType;
-  target_row: string | null;
-  target_column: string | null;
   target_tree_id: string | null;
   custom_target_note: string | null;
   instruction: string | null;
@@ -81,6 +80,9 @@ type CareScheduleRow = {
   repeat_every_days?: number | null;
   series_id?: string | null;
   parent_schedule_id?: string | null;
+  missed_at?: string | null;
+  grace_days?: number | null;
+  date_basis?: ScheduleDateBasis | null;
   created_by?: string;
   created_at?: string;
   updated_at?: string | null;
@@ -97,12 +99,11 @@ type CareTaskRow = {
   category: CareCategory | null;
   instruction: string | null;
   target_type: TargetType;
-  target_row: string | null;
-  target_column: string | null;
   target_tree_id: string | null;
   custom_target_note: string | null;
   due_date: string;
   status: TaskStatus;
+  missed_at?: string | null;
   requires_photo: boolean | null;
   created_at?: string;
   updated_at?: string | null;
@@ -114,8 +115,6 @@ type CareActivityIdRow = {
 
 type NormalizedManualTarget = {
   targetType: TargetType;
-  targetRow: string | null;
-  targetColumn: string | null;
   targetTreeId: string | null;
   customTargetNote: string | null;
 };
@@ -123,12 +122,13 @@ type NormalizedManualTarget = {
 type EditableScheduleUpdate = {
   assignedWorkerId: UUID | null;
   category: CareCategory;
+  // undefined = jangan sentuh kolomnya; null = setel jadi "tidak pernah terlewat".
+  graceDays: number | null | undefined;
+  dateBasis: ScheduleDateBasis | undefined;
   customTargetNote: string | null;
   instruction: string | null;
   requiresPhoto: boolean;
   scheduledDate: string;
-  targetColumn: string | null;
-  targetRow: string | null;
   targetTreeId: string | null;
   targetType: TargetType;
   title: string;
@@ -163,8 +163,6 @@ export async function createManualSchedule(
 
   const target = normalizeManualTarget({
     customTargetNote: input.customTargetNote,
-    targetColumn: input.targetColumn,
-    targetRow: input.targetRow,
     targetTreeId: input.targetTreeId,
     targetType: input.targetType,
   });
@@ -197,8 +195,6 @@ export async function createManualSchedule(
     p_repeat_every_days: normalizeRepeatEveryDays(input.repeatEveryDays),
     p_requires_photo: input.requiresPhoto ?? false,
     p_scheduled_date: scheduledDate,
-    p_target_column: target.targetColumn,
-    p_target_row: target.targetRow,
     p_target_tree_id: target.targetTreeId,
     p_target_type: target.targetType,
     p_title: title,
@@ -244,6 +240,10 @@ export async function getCareSchedulesWithTasks(
     return fail(accessResult.error);
   }
 
+  // Tandai jadwal yang lewat masa toleransi sebelum membaca, supaya daftar
+  // yang tampil sudah mencerminkan keadaan terkini.
+  await sweepMissedSchedules(input.farmId);
+
   const scheduledFrom = normalizeOptionalText(input.scheduledFrom);
   let scheduleQuery = supabase
     .from('care_schedules')
@@ -270,7 +270,6 @@ export async function getCareSchedulesWithTasks(
   if (scheduledFrom && input.includeOlderOpenWork) {
     const tailResult = await getOlderOpenScheduleRows(
       input.farmId,
-      scheduledFrom,
       new Set(scheduleRows.map((row) => row.id))
     );
 
@@ -347,6 +346,11 @@ export async function getCareScheduleDetail(
     .from('care_tasks')
     .select(CARE_TASK_SELECT)
     .eq('care_schedule_id', input.scheduleId)
+    // Tugas yang dilepas saat pekerjanya keluar dari kebun (migrasi 051) tidak
+    // ikut ditampilkan. Barisnya sengaja dipertahankan di database sebagai
+    // jejak, tapi bagi owner jadwal ini harus terbaca "belum ada pekerja" --
+    // bukan tugas menunggu atas nama orang yang sudah pergi.
+    .is('released_at', null)
     .order('due_date', { ascending: true })
     .order('created_at', { ascending: true })
     .returns<CareTaskRow[]>();
@@ -509,15 +513,22 @@ export async function updateCareSchedule(
     }
   }
 
+  // Dibandingkan SEBELUM jadwal ditulis: setelah update, schedule.scheduledDate
+  // yang dipegang di sini sudah menjadi salinan lama, jadi perbandingan harus
+  // terjadi di titik ini.
+  const scheduleDateChanged = schedule.scheduledDate !== normalized.scheduledDate;
+
   const now = new Date().toISOString();
   const scheduleUpdate = {
+    // Keduanya hanya ikut dikirim kalau pemanggil memang menyebutkannya;
+    // `undefined` berarti kolomnya tidak disentuh.
+    ...(normalized.graceDays !== undefined ? { grace_days: normalized.graceDays } : {}),
+    ...(normalized.dateBasis !== undefined ? { date_basis: normalized.dateBasis } : {}),
     category: normalized.category,
     custom_target_note: normalized.customTargetNote,
     instruction: normalized.instruction,
     requires_photo: normalized.requiresPhoto,
     scheduled_date: normalized.scheduledDate,
-    target_column: normalized.targetColumn,
-    target_row: normalized.targetRow,
     target_tree_id: normalized.targetTreeId,
     target_type: normalized.targetType,
     title: normalized.title,
@@ -542,11 +553,19 @@ export async function updateCareSchedule(
         ...(normalized.assignedWorkerId ? { assigned_to: normalized.assignedWorkerId } : {}),
         category: normalized.category,
         custom_target_note: normalized.customTargetNote,
-        due_date: normalized.scheduledDate,
+        // due_date HANYA ditimpa kalau owner benar-benar memindahkan tanggal
+        // jadwal pada penyuntingan ini.
+        //
+        // Sebelum migrasi 049 baris ini tidak bersyarat, sehingga owner yang
+        // sekadar membetulkan judul ikut menarik kembali tenggat setiap tugas
+        // ke scheduled_date — menghapus tanggal penundaan yang baru saja
+        // disepakati pekerja, tanpa peringatan apa pun.
+        //
+        // Kalau tanggal jadwal memang diubah, itu penjadwalan ulang yang
+        // disengaja owner dan wajar menang atas penundaan pekerja.
+        ...(scheduleDateChanged ? { due_date: normalized.scheduledDate } : {}),
         instruction: normalized.instruction,
         requires_photo: normalized.requiresPhoto,
-        target_column: normalized.targetColumn,
-        target_row: normalized.targetRow,
         target_tree_id: normalized.targetTreeId,
         target_type: normalized.targetType,
         title: normalized.title,
@@ -578,17 +597,38 @@ export async function updateCareSchedule(
 // masih di dalam jendela tanggal ia tetap muncul; kalau menua melewati batas
 // tanpa pernah ditugaskan, ia lolos. Menutupnya butuh anti-join (view atau RPC)
 // yang tidak bisa dibuat tanpa migrasi baru.
+//
+// Penyaring `due_date < scheduledFrom` DIBUANG di migrasi 049. Sejak penundaan
+// bertanggal, due_date sebuah tugas bisa MAJU melewati jendela sementara
+// scheduled_date jadwal induknya tetap tertinggal jauh di belakang. Tugas
+// seperti itu tidak terambil kueri utama (jadwalnya di luar jendela) dan dulu
+// juga tidak terambil di sini (due_date-nya sudah tidak lebih kecil dari
+// scheduledFrom) — jadi ia hilang sama sekali dari daftar owner.
+//
+// Tanpa penyaring itu, kueri ini memungut SELURUH tugas terbuka milik kebun.
+// Himpunannya tetap kecil dengan alasan yang sama seperti sebelumnya: yang
+// pending/postponed dan belum hangus adalah pekerjaan yang benar-benar
+// menunggu. Jadwal yang sudah termuat kueri utama tetap dibuang lewat
+// alreadyLoadedIds di bawah, jadi tidak ada baris ganda.
 async function getOlderOpenScheduleRows(
   farmId: UUID,
-  scheduledFrom: string,
   alreadyLoadedIds: Set<UUID>
 ): Promise<ServiceResult<CareScheduleRow[]>> {
   const openTasksResult = await supabase
     .from('care_tasks')
     .select('care_schedule_id')
     .eq('farm_id', farmId)
-    .lt('due_date', scheduledFrom)
     .in('status', ['pending', 'postponed'])
+    // Tugas yang sudah dinyatakan terlewat (migrasi 048) tidak lagi dipungut
+    // ke dalam daftar. Penerusnya sudah dibuat penyapu, jadi menyeretnya terus
+    // dari luar jendela tanggal hanya membuat daftar owner tumbuh tanpa batas
+    // seiring rantai berjalan.
+    .is('missed_at', null)
+    // Tugas yang dilepas (migrasi 051) juga bukan tunggakan: pekerjaannya tidak
+    // lagi jadi tanggungan siapa pun sampai owner menugaskannya ulang. Tanpa
+    // baris ini, jadwal yang pekerjanya keluar tetap menyeret dirinya ke daftar
+    // owner sebagai pekerjaan mandek -- persis gejala yang diperbaiki 051.
+    .is('released_at', null)
     .returns<{ care_schedule_id: string | null }[]>();
 
   if (openTasksResult.error) {
@@ -668,6 +708,11 @@ async function getTasksByScheduleId(
         .from('care_tasks')
         .select(CARE_TASK_SELECT)
         .in('care_schedule_id', batch)
+        // Sama seperti kueri detail jadwal: tugas yang dilepas (migrasi 051)
+        // tidak dihitung sebagai tugas jadwal. Inilah yang membuat
+        // schedule.tasks.length jatuh ke 0 sehingga baris jadwal menampilkan
+        // penanda "Belum ada pekerja" yang sudah ada, tanpa penanda baru.
+        .is('released_at', null)
         .order('due_date', { ascending: true })
         .order('created_at', { ascending: true })
         .returns<CareTaskRow[]>()
@@ -734,6 +779,16 @@ async function getScheduleEditEligibilityFromDetail(
     .from('care_activities')
     .select('id')
     .in('care_task_id', taskIds)
+    // Hanya hasil kerja yang BENAR-BENAR terjadi yang mengunci jadwal
+    // (migrasi 052). Sebelumnya baris aktivitas apa pun mengunci, sehingga
+    // satu kali "Tunda" dari pekerja membuat jadwalnya tidak bisa diedit
+    // maupun dibatalkan — jalan buntu, karena penundaan justru berarti
+    // pekerjaannya BELUM dikerjakan.
+    //
+    // Cerminan penjaga yang sama di cancel_care_schedule. Keduanya harus
+    // bergerak bersama: kalau yang satu longgar dan yang lain tidak, tombolnya
+    // hidup tapi RPC-nya menolak (atau sebaliknya, tombol mati padahal boleh).
+    .eq('status', 'completed')
     .limit(1)
     .returns<CareActivityIdRow[]>();
 
@@ -902,8 +957,6 @@ function normalizeScheduleDate(value: string): string | Error {
 
 function normalizeManualTarget(input: {
   targetType: TargetType | string | null | undefined;
-  targetRow?: string | null;
-  targetColumn?: string | null;
   targetTreeId?: string | null;
   customTargetNote?: string | null;
 }): NormalizedManualTarget | Error {
@@ -911,49 +964,19 @@ function normalizeManualTarget(input: {
     return new Error('Target jadwal wajib dipilih.');
   }
 
-  if (!['farm', 'row', 'column', 'tree', 'custom'].includes(input.targetType)) {
+  // 'row' dan 'column' dibuang di migrasi 047. Nilainya masih ada di enum
+  // target_type (PostgreSQL tidak bisa mencabut nilai enum), tapi ditutup CHECK
+  // di kedua tabel — menerimanya di sini hanya berujung pelanggaran constraint
+  // dengan pesan yang tidak terbaca pengguna.
+  if (!['farm', 'tree', 'custom'].includes(input.targetType)) {
     return new Error('Target jadwal tidak valid.');
   }
 
   if (input.targetType === 'farm') {
     return {
       customTargetNote: null,
-      targetColumn: null,
-      targetRow: null,
       targetTreeId: null,
       targetType: 'farm',
-    };
-  }
-
-  if (input.targetType === 'row') {
-    const row = normalizeOptionalText(input.targetRow);
-
-    if (!row) {
-      return new Error('Baris target wajib diisi.');
-    }
-
-    return {
-      customTargetNote: null,
-      targetColumn: null,
-      targetRow: row,
-      targetTreeId: null,
-      targetType: 'row',
-    };
-  }
-
-  if (input.targetType === 'column') {
-    const column = normalizeOptionalText(input.targetColumn);
-
-    if (!column) {
-      return new Error('Kolom target wajib diisi.');
-    }
-
-    return {
-      customTargetNote: null,
-      targetColumn: column,
-      targetRow: null,
-      targetTreeId: null,
-      targetType: 'column',
     };
   }
 
@@ -966,8 +989,6 @@ function normalizeManualTarget(input: {
 
     return {
       customTargetNote: null,
-      targetColumn: null,
-      targetRow: null,
       targetTreeId: treeId,
       targetType: 'tree',
     };
@@ -981,11 +1002,38 @@ function normalizeManualTarget(input: {
 
   return {
     customTargetNote,
-    targetColumn: null,
-    targetRow: null,
     targetTreeId: null,
     targetType: 'custom',
   };
+}
+
+// Presedensi masa toleransi, sepadan dengan create_manual_schedule (migrasi 048):
+//   neverExpires true -> null, jadwal tidak pernah dinyatakan terlewat
+//   graceDays diisi    -> dipakai apa adanya
+//   keduanya kosong    -> undefined, artinya kolomnya tidak disentuh sama sekali
+//
+// Mengirim keduanya sekaligus ditolak, bukan salah satunya menang diam-diam:
+// itu tanda pemanggil bingung, dan lebih baik ketahuan sebagai error.
+function normalizeGraceDays(input: UpdateCareScheduleInput): number | null | undefined | Error {
+  const neverExpires = input.neverExpires === true;
+
+  if (neverExpires && input.graceDays !== undefined && input.graceDays !== null) {
+    return new Error('Pilih salah satu: tidak pernah terlewat atau masa toleransi, jangan keduanya.');
+  }
+
+  if (neverExpires) {
+    return null;
+  }
+
+  if (input.graceDays === undefined || input.graceDays === null) {
+    return undefined;
+  }
+
+  if (!Number.isInteger(input.graceDays) || input.graceDays < 0) {
+    return new Error('Masa toleransi harus bilangan bulat tidak negatif.');
+  }
+
+  return input.graceDays;
 }
 
 function normalizeScheduleUpdateInput(input: UpdateCareScheduleInput): EditableScheduleUpdate | Error {
@@ -1014,8 +1062,6 @@ function normalizeScheduleUpdateInput(input: UpdateCareScheduleInput): EditableS
 
   const target = normalizeManualTarget({
     customTargetNote: input.customTargetNote,
-    targetColumn: input.targetColumn,
-    targetRow: input.targetRow,
     targetTreeId: input.targetTreeId,
     targetType: input.targetType,
   });
@@ -1024,15 +1070,25 @@ function normalizeScheduleUpdateInput(input: UpdateCareScheduleInput): EditableS
     return target;
   }
 
+  const graceDays = normalizeGraceDays(input);
+
+  if (graceDays instanceof Error) {
+    return graceDays;
+  }
+
+  if (input.dateBasis !== undefined && input.dateBasis !== 'jadwal' && input.dateBasis !== 'realisasi') {
+    return new Error('Dasar tanggal jadwal tidak valid.');
+  }
+
   return {
     assignedWorkerId,
     category,
+    dateBasis: input.dateBasis,
+    graceDays,
     customTargetNote: target.customTargetNote,
     instruction: normalizeOptionalText(input.instruction),
     requiresPhoto: input.requiresPhoto ?? false,
     scheduledDate,
-    targetColumn: target.targetColumn,
-    targetRow: target.targetRow,
     targetTreeId: target.targetTreeId,
     targetType: target.targetType,
     title,
@@ -1041,7 +1097,6 @@ function normalizeScheduleUpdateInput(input: UpdateCareScheduleInput): EditableS
 
 function mapCareSchedule(row: CareScheduleRow): CareSchedule {
   return {
-    careSopId: row.care_sop_id,
     category: row.category,
     createdAt: row.created_at,
     createdBy: row.created_by,
@@ -1051,6 +1106,9 @@ function mapCareSchedule(row: CareScheduleRow): CareSchedule {
     instruction: row.instruction,
     isCancelled: row.is_cancelled ?? false,
     parentScheduleId: row.parent_schedule_id ?? null,
+    missedAt: row.missed_at ?? null,
+    graceDays: row.grace_days ?? null,
+    dateBasis: row.date_basis ?? 'jadwal',
     repeatEveryDays: row.repeat_every_days ?? null,
     requiresPhoto: row.requires_photo ?? false,
     scheduledDate: row.scheduled_date,
@@ -1058,8 +1116,6 @@ function mapCareSchedule(row: CareScheduleRow): CareSchedule {
     cancelledAt: row.cancelled_at,
     cancelledBy: row.cancelled_by,
     cancelReason: row.cancel_reason,
-    targetColumn: row.target_column,
-    targetRow: row.target_row,
     targetTreeId: row.target_tree_id,
     targetType: row.target_type,
     title: row.title,
@@ -1076,14 +1132,13 @@ function mapCareTask(row: CareTaskRow): CareTask {
     createdAt: row.created_at,
     customTargetNote: row.custom_target_note,
     dueDate: row.due_date,
+    missedAt: row.missed_at ?? null,
     farmId: row.farm_id,
     id: row.id,
     instruction: row.instruction,
     operationalReportId: row.operational_report_id,
     requiresPhoto: row.requires_photo ?? false,
     status: row.status,
-    targetColumn: row.target_column,
-    targetRow: row.target_row,
     targetTreeId: row.target_tree_id,
     targetType: row.target_type,
     title: row.title,

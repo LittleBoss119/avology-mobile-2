@@ -6,6 +6,7 @@ import type {
   ServiceResult,
   WorkerDashboardSummary,
 } from '../types/domain';
+import { sweepMissedSchedules } from './missedScheduleSweep';
 import { fail, ok } from '../utils/serviceResult';
 import { getTodayIsoDate } from '../utils/taskDueDate';
 
@@ -27,6 +28,9 @@ type ScheduleCancellationRow = {
 export async function getOwnerDashboardSummary(
   input: GetOwnerDashboardSummaryInput
 ): Promise<ServiceResult<OwnerDashboardSummary>> {
+  // Angka dashboard ikut terpengaruh penandaan terlewat, jadi disapu dulu.
+  await sweepMissedSchedules(input.farmId);
+
   const today = getTodayIsoDate();
 
   const [
@@ -91,6 +95,8 @@ export async function getOwnerDashboardSummary(
 export async function getWorkerDashboardSummary(
   input: GetWorkerDashboardSummaryInput
 ): Promise<ServiceResult<WorkerDashboardSummary>> {
+  await sweepMissedSchedules(input.farmId);
+
   const today = getTodayIsoDate();
 
   const [todayTasks, unfinishedTasks, completedTasks] = await Promise.all([
@@ -174,6 +180,13 @@ async function countFarmTasksDueToday(
       .eq('farm_id', farmId)
       .eq('due_date', today)
       .eq('status', 'pending')
+      .is('missed_at', null)
+      // Tugas yang dilepas saat pekerjanya keluar dari kebun (migrasi 051)
+      // TETAP berstatus 'pending' — pelepasan sengaja tidak menyentuh status
+      // supaya sebabnya bisa dibedakan dari 'terlewat'. Karena itu ia hanya
+      // terbuang lewat filter ini, dan tanpanya kartu beranda owner tetap
+      // menghitung pekerjaan yang sudah tidak jadi tanggungan siapa pun.
+      .is('released_at', null)
   );
 }
 
@@ -187,6 +200,9 @@ async function countFarmUnfinishedTasks(farmId: string): Promise<CountResult> {
       .select('id, care_schedule_id')
       .eq('farm_id', farmId)
       .eq('status', 'pending')
+      .is('missed_at', null)
+      // Lihat countFarmTasksDueToday: tugas terlepas masih 'pending'.
+      .is('released_at', null)
   );
 }
 
@@ -204,6 +220,11 @@ export async function countFarmOverdueTasks(farmId: string): Promise<CountResult
       .eq('farm_id', farmId)
       .lt('due_date', today)
       .eq('status', 'pending')
+      .is('missed_at', null)
+      // Penghitung "terlambat" inilah yang paling kentara salah sebelum
+      // migrasi 051: tugas milik mantan pekerja menumpuk di sini tanpa ada
+      // seorang pun yang bisa menyelesaikannya.
+      .is('released_at', null)
   );
 }
 
@@ -247,6 +268,11 @@ async function countWorkerTasksDueToday(
     .eq('assigned_to', userId)
     .eq('due_date', today)
     .in('status', ['pending', 'postponed'])
+    .is('missed_at', null)
+    // Penting untuk kasus bergabung kembali: request_join_farm memakai ULANG
+    // baris keanggotaan yang sama (036:237), jadi begitu mantan pekerja aktif
+    // lagi di kebun ini, tugas lamanya lolos RLS dan akan terhitung lagi.
+    .is('released_at', null)
   );
 }
 
@@ -261,9 +287,17 @@ async function countWorkerUnfinishedTasks(
     .eq('farm_id', farmId)
     .eq('assigned_to', userId)
     .in('status', ['pending', 'postponed'])
+    .is('missed_at', null)
+    // Lihat countWorkerTasksDueToday: kasus bergabung kembali.
+    .is('released_at', null)
   );
 }
 
+// SENGAJA tanpa filter `missed_at is null`, berbeda dari lima penghitung
+// tunggakan di atas. Tugas yang sempat hangus lalu tetap dikerjakan pekerja
+// punya missed_at terisi DAN status 'completed' — dan itu benar-benar pekerjaan
+// yang selesai. Membuangnya dari angka "sudah selesai" akan menghapus jejak
+// kerja yang nyata dilakukan.
 async function countWorkerCompletedTasks(
   farmId: string,
   userId: string

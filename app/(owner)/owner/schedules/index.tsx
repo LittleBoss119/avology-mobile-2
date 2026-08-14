@@ -36,21 +36,20 @@ import {
 // Sumbu waktu sekarang dinyatakan oleh struktur section (Terlambat + per
 // tanggal), bukan chip. Yang tersisa di baris chip hanya pemisah agenda-vs-arsip.
 type CompletionFilter = 'unfinished' | 'completed';
-type ScheduleSourceFilter = 'all' | 'manual' | 'sop';
 type ScheduleTargetFilter = 'all' | TargetType;
 
-// Tiga sumbu filter di sheet, saling bebas. Sumbu "Status" DIHAPUS: chip
+// Dua sumbu filter di sheet, saling bebas. Sumbu "Status" DIHAPUS: chip
 // Belum selesai/Selesai di baris atas sudah menyatakannya, dan menjalankan
 // keduanya bersamaan menghasilkan kombinasi mati seperti "Belum selesai" +
-// status "Selesai" yang selalu nol baris tanpa penjelasan.
+// status "Selesai" yang selalu nol baris tanpa penjelasan. Sumbu "Sumber"
+// (Manual/SOP) DIHAPUS bersama fitur SOP di migrasi 046 — kolom care_sop_id
+// yang membedakan keduanya sudah tidak ada, jadi semua jadwal kini manual.
 type SheetCriteria = {
-  source: ScheduleSourceFilter;
   target: ScheduleTargetFilter;
   worker: string; // 'all' | userId
 };
 
 const DEFAULT_CRITERIA: SheetCriteria = {
-  source: 'all',
   target: 'all',
   worker: 'all',
 };
@@ -78,17 +77,9 @@ const completionFilters: Array<{ label: string; value: CompletionFilter }> = [
 // yang ikut terambil, bukan baris mana yang boleh hilang.
 const UNFINISHED_LOOKBACK_DAYS = 180;
 
-const sourceFilters: Array<{ label: string; value: ScheduleSourceFilter }> = [
-  { label: 'Semua', value: 'all' },
-  { label: 'Manual', value: 'manual' },
-  { label: 'SOP', value: 'sop' },
-];
-
 const targetOptions: Array<{ label: string; value: ScheduleTargetFilter }> = [
   { label: 'Semua', value: 'all' },
   { label: formatTargetType('farm'), value: 'farm' },
-  { label: formatTargetType('row'), value: 'row' },
-  { label: formatTargetType('column'), value: 'column' },
   { label: formatTargetType('tree'), value: 'tree' },
   { label: formatTargetType('custom'), value: 'custom' },
 ];
@@ -226,14 +217,6 @@ export default function CareScheduleListScreen() {
       return false;
     }
 
-    if (sheet.source === 'manual' && schedule.careSopId) {
-      return false;
-    }
-
-    if (sheet.source === 'sop' && !schedule.careSopId) {
-      return false;
-    }
-
     if (sheet.target !== 'all' && schedule.targetType !== sheet.target) {
       return false;
     }
@@ -267,9 +250,8 @@ export default function CareScheduleListScreen() {
 
   const sections = buildScheduleSections(displayedSchedules, buckets, todayIso);
 
-  // Tiga sumbu, sesuai isi sheet setelah "Status" dihapus.
+  // Dua sumbu, sesuai isi sheet setelah "Status" dan "Sumber" dihapus.
   const activeGroupCount =
-    (criteria.source !== 'all' ? 1 : 0) +
     (criteria.target !== 'all' ? 1 : 0) +
     (criteria.worker !== 'all' ? 1 : 0);
 
@@ -520,7 +502,7 @@ function ScheduleRow({
         )}
       </View>
 
-      {taskCount > 1 || schedule.requiresPhoto || schedule.careSopId ? (
+      {taskCount > 1 || schedule.requiresPhoto ? (
         <View style={styles.rowAttributes}>
           {taskCount > 1 ? (
             <Text selectable numberOfLines={1} style={styles.rowProgress}>
@@ -532,13 +514,6 @@ function ScheduleRow({
               <Icon name="camera" size={tokens.icon.xs} color={statusColors.warning.text} />
               <Text selectable={false} style={styles.proofPillText}>
                 Butuh bukti
-              </Text>
-            </View>
-          ) : null}
-          {schedule.careSopId ? (
-            <View style={styles.sopPill}>
-              <Text selectable={false} style={styles.sopPillText}>
-                SOP
               </Text>
             </View>
           ) : null}
@@ -563,7 +538,7 @@ function ScheduleFilterSheet({
   visible: boolean;
   workerOptions: Array<{ label: string; value: string }>;
 }) {
-  const isDefault = draft.source === 'all' && draft.target === 'all' && draft.worker === 'all';
+  const isDefault = draft.target === 'all' && draft.worker === 'all';
 
   return (
     <BottomSheet onClose={onClose} title="Filter jadwal" visible={visible}>
@@ -579,22 +554,6 @@ function ScheduleFilterSheet({
               Atur ulang
             </Text>
           </Pressable>
-        </View>
-
-        <View style={styles.filterGroup}>
-          <Text selectable style={styles.filterLabel}>
-            Sumber
-          </Text>
-          <FilterChipsRow>
-            {sourceFilters.map((filter) => (
-              <ChipButton
-                key={filter.value}
-                active={draft.source === filter.value}
-                label={filter.label}
-                onPress={() => onDraftChange({ ...draft, source: filter.value })}
-              />
-            ))}
-          </FilterChipsRow>
         </View>
 
         <View style={styles.filterGroup}>
@@ -660,7 +619,14 @@ function buildScheduleSections(
   const byDate = new Map<string, CareScheduleDetail[]>();
 
   for (const schedule of schedules) {
-    if (buckets[schedule.id] === 'overdue') {
+    // 'missed' (migrasi 048) sementara diperlakukan sama seperti 'overdue'
+    // supaya tampilan tidak berubah sebelum tahap polish UI: jadwal terlewat
+    // tetap berada di section "Terlambat", bukan berpindah diam-diam ke
+    // section tanggal lampau. Datanya sudah terpisah di taskDueDate.ts dan
+    // tinggal dipakai saat statusnya benar-benar ditampilkan.
+    const bucket = buckets[schedule.id];
+
+    if (bucket === 'overdue' || bucket === 'missed') {
       overdue.push(schedule);
       continue;
     }
@@ -854,17 +820,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   proofPillText: { ...tokens.type.caption, color: statusColors.warning.text },
-
-  sopPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'transparent',
-    borderColor: tokens.color.line.card,
-    borderRadius: tokens.radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: tokens.space.sm,
-    paddingVertical: 2,
-  },
-  sopPillText: { ...tokens.type.caption, color: tokens.color.text.tertiary },
 
   filterSheetBody: { gap: tokens.space.md },
   filterGroup: { gap: tokens.space.sm },

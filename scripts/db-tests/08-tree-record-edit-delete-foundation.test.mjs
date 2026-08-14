@@ -194,8 +194,6 @@ await runStage(STAGE, async () => {
       p_note: 'Updated manual care foundation test',
       p_performed_at: null,
       p_record_id: manualCare.id,
-      p_target_column: null,
-      p_target_row: null,
       p_target_tree_id: state.treeId,
       p_target_type: 'tree',
     }),

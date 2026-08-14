@@ -37,8 +37,8 @@ Setiap keputusan dicatat menggunakan format berikut:
 | DL-004 | Membatasi MVP pada sistem informasi manajemen kebun alpukat          | Accepted |
 | DL-005 | Menghapus prediksi panen otomatis dari MVP                           | Accepted |
 | DL-006 | Mengubah estimasi panen menjadi monitoring fase pertumbuhan          | Accepted |
-| DL-007 | Mempertahankan SOP sebagai template standar perawatan                | Accepted |
-| DL-008 | Menggunakan jadwal semi-otomatis berdasarkan interval SOP            | Accepted |
+| DL-007 | Mempertahankan SOP sebagai template standar perawatan                | Superseded |
+| DL-008 | Menggunakan jadwal semi-otomatis berdasarkan interval SOP            | Superseded |
 | DL-009 | Menambahkan laporan operasional kebun                                | Accepted |
 | DL-010 | Menambahkan manajemen worker oleh owner                              | Accepted |
 | DL-011 | Worker removed tidak dihapus permanen                                | Accepted |
@@ -58,10 +58,17 @@ Setiap keputusan dicatat menggunakan format berikut:
 | DL-025 | UAT dapat melibatkan responden tambahan dengan karakteristik relevan | Accepted |
 | DL-026 | Permanent delete pohon tidak masuk MVP                               | Accepted |
 | DL-027 | Screen rejected dan removed access tetap dibuat minimal              | Accepted |
-| DL-028 | Opsi custom target SOP tidak digunakan pada MVP                      | Accepted |
+| DL-028 | Opsi custom target SOP tidak digunakan pada MVP                      | Superseded |
 | DL-029 | Owner dapat melihat profil worker dalam kebun yang sama              | Accepted |
 | DL-030 | Growth phase tetap menjadi fitur critical MVP                        | Accepted |
-| DL-031 | Custom target hanya digunakan untuk jadwal atau task manual          | Accepted |
+| DL-031 | Custom target hanya digunakan untuk jadwal atau task manual          | Superseded |
+| DL-032 | Mencabut fitur SOP perawatan dari sistem                             | Accepted |
+| DL-033 | Mencabut target baris dan kolom dari jadwal dan tugas                | Accepted |
+| DL-034 | Rantai jadwal berulang berjalan sendiri dengan masa toleransi        | Accepted |
+| DL-035 | Penundaan tugas wajib bertanggal dan menggeser tenggat               | Accepted |
+| DL-036 | Realisasi tugas terjadwal menautkan pohon yang dirawat               | Accepted |
+| DL-037 | Tugas terbuka dilepas saat keanggotaan berhenti aktif                | Accepted |
+| DL-038 | Jadwal hanya terkunci oleh hasil kerja yang selesai                  | Accepted |
 
 ---
 
@@ -192,12 +199,11 @@ MVP Avology V2 dibatasi sebagai sistem informasi manajemen kebun alpukat berbasi
 3. Pencatatan pohon individual
 4. Laporan kondisi pohon
 5. Laporan operasional kebun
-6. SOP perawatan
-7. Jadwal dan tugas worker
-8. Realisasi tugas
-9. Fase pertumbuhan
-10. Riwayat pohon
-11. Dashboard owner dan worker
+6. Jadwal dan tugas worker
+7. Realisasi tugas
+8. Fase pertumbuhan
+9. Riwayat pohon
+10. Dashboard owner dan worker
 
 ### Alasan
 
@@ -743,7 +749,7 @@ Dashboard adalah hasil agregasi dari data yang sudah ada. Membuat tabel dashboar
 
 ### Dampak
 
-* Dashboard mengambil data dari tabel `trees`, `care_tasks`, `operational_reports`, `farm_members`, `care_sops`, dan `growth_phase_records`.
+* Dashboard mengambil data dari tabel `trees`, `care_tasks`, `operational_reports`, `farm_members`, dan `growth_phase_records`.
 * Tidak ada tabel `dashboard`.
 * Query dashboard perlu dibuat efisien.
 * Jika diperlukan, dashboard dapat menggunakan view atau RPC agregasi.
@@ -1068,6 +1074,234 @@ Accepted
 
 ---
 
+## DL-032 Mencabut Fitur SOP Perawatan dari Sistem
+
+### Konteks
+
+DL-007 memutuskan SOP dipertahankan sebagai template standar perawatan, dan DL-008 membangun acuan jadwal berikutnya di atas `care_sops.interval_days`.
+
+Pada praktiknya fitur SOP tidak pernah selesai dibangun: enam service yang dirancang di `12-service-layer-design.md` dan empat halaman di `13-screen-navigation-flow.md` tidak pernah diimplementasikan. Yang berjalan di aplikasi hanyalah jadwal manual. Audit database menunjukkan `interval_days` tidak pernah dibaca RPC mana pun, dan sebagian besar baris `care_sops` adalah fixture pengujian.
+
+Kebutuhan pengulangan perawatan yang menjadi alasan DL-008 sudah dijawab lebih dahulu oleh kolom `care_schedules.repeat_every_days` (migrasi 040 dan 041), yang menghitung jadwal berikutnya dari tanggal realisasi terakhir tanpa memerlukan template terpisah.
+
+### Keputusan
+
+Tabel `care_sops`, RPC `create_schedule_from_sop`, dan kolom `care_schedules.care_sop_id` dihapus dari database melalui migrasi 046.
+
+### Alasan
+
+Mempertahankan tabel dan RPC yang tidak dipakai membebani setiap perubahan skema berikutnya: dua trigger validasi yang masih aktif membaca `care_sops`, sehingga tabel itu tidak bisa diabaikan begitu saja. Menghapusnya menyederhanakan model tanpa kehilangan kemampuan apa pun yang benar-benar berjalan.
+
+### Dampak
+
+* DL-007 dan DL-008 berstatus superseded.
+* Interval pengulangan hidup di `care_schedules.repeat_every_days`, bukan di template.
+* FR-13, FR-14, US-21, US-22, US-23, US-25, UC-18, dan UC-20 dihapus; nomornya sengaja tidak dipakai ulang.
+* Dokumen 04 sampai 17 disunting mengikuti keputusan ini.
+
+### Status
+
+Accepted
+
+---
+
+## DL-033 Mencabut Target Baris dan Kolom dari Jadwal dan Tugas
+
+### Konteks
+
+DL-028 dan DL-031 mengatur kapan target `custom` boleh dipakai, dengan asumsi target terstruktur mencakup `farm`, `row`, `column`, dan `tree`.
+
+Audit menemukan bahwa `target_row` dan `target_column` hanyalah teks bebas yang diketik owner. Tidak ada satu pun query yang menghubungkannya ke `trees.row_position` / `trees.column_position`, sehingga target "Baris B" tidak pernah menghasilkan daftar pohon dan hanya tampil sebagai label. Nilainya juga tidak terpakai di riwayat pohon maupun dashboard.
+
+Pemakaiannya juga nyaris nol. Pemeriksaan isi tabel sebelum migrasi 047 menemukan **nol baris** bertarget `row`, dan **satu baris** bertarget `column` yang isinya `'1'` — satu karakter tanpa makna operasional apa pun. Dengan kata lain, fitur ini dicabut bukan berdasarkan dugaan bahwa ia tidak dipakai, melainkan berdasarkan hitungan bahwa ia memang tidak pernah dipakai.
+
+### Keputusan
+
+Kolom `target_row` dan `target_column` dihapus dari `care_schedules` dan `care_tasks` melalui migrasi 047. Nilai `target_type` yang berlaku menyusut menjadi `farm`, `tree`, dan `custom`. Pada migrasi yang sama, `care_tasks.category` menjadi `not null`.
+
+### Alasan
+
+Target yang tidak dapat di-resolve ke entitas apa pun memberi kesan presisi yang tidak dimiliki sistem. Menyisakan tiga target yang benar-benar bermakna membuat validasi, form, dan constraint jauh lebih sederhana.
+
+### Dampak
+
+* DL-028 dan DL-031 berstatus superseded; aturan target `custom` kini berlaku untuk seluruh jadwal dan tugas, karena semuanya dibuat manual.
+* Nilai `row` dan `column` TETAP ada di tipe enum `target_type` PostgreSQL karena `alter type ... drop value` tidak tersedia; keduanya ditutup oleh CHECK constraint pada kedua tabel.
+* Kolom `trees.row_position` dan `trees.column_position` tidak terpengaruh — itu posisi fisik pohon, bukan target jadwal.
+* Signature `create_manual_schedule` dan `create_task_from_operational_report` berubah.
+
+### Status
+
+Accepted
+
+---
+
+## DL-034 Rantai Jadwal Berulang Berjalan Sendiri dengan Masa Toleransi
+
+### Konteks
+
+DL-008 memutuskan jadwal berjalan semi-otomatis: sistem menghitung acuan tanggal berikutnya, tetapi tugas baru hanya dibuat setelah owner mengonfirmasi. Keputusan itu sudah berstatus superseded sejak DL-032, namun konsekuensinya belum pernah dicatat sebagai keputusan tersendiri.
+
+Sejak migrasi 041 sistem sebenarnya sudah membuat jadwal penerus sendiri lewat rantai `series_id` / `parent_schedule_id`. Yang belum terjawab adalah apa yang terjadi ketika satu siklus TIDAK dikerjakan sama sekali: rantai berhenti diam-diam. Penjaga "satu jadwal terbuka per rantai" melihat siklus lama masih menganggur, sehingga penerus tidak pernah lahir dan perawatan rutin berhenti tanpa satu pun pesan kesalahan.
+
+### Keputusan
+
+Migrasi 048 menambahkan tiga hal pada `care_schedules`: `grace_days` sebagai masa toleransi keterlambatan, `date_basis` sebagai dasar perhitungan tanggal penerus, dan `missed_at` sebagai penanda siklus terlewat. Siklus yang melewati `scheduled_date + grace_days` dinyatakan terlewat, dan penerusnya tetap dibuat.
+
+Penandaan dan pembentukan penerus dijalankan penyapu yang menumpang pada jalur baca aplikasi, dilindungi kunci per kebun, bukan oleh penjadwal yang hidup di luar aplikasi.
+
+### Alasan
+
+Perawatan rutin adalah alasan utama fitur jadwal ada. Rantai yang berhenti karena satu siklus terlewat justru gagal pada kasus yang paling membutuhkannya.
+
+Masa toleransi ditaruh per jadwal, bukan sebagai angka global, karena toleransi penyiraman dan toleransi pemupukan tidak sama. Jadwal tanpa `grace_days` sengaja tidak pernah dinyatakan terlewat, sehingga owner tetap bisa membuat jadwal yang menunggu selamanya.
+
+Penyapu dipilih ketimbang penjadwal latar agar MVP tetap tidak membutuhkan cron, token perangkat, maupun push notification — batasan yang sudah ditetapkan DL-018.
+
+### Dampak
+
+* FR-17 ditulis ulang; klaim "sistem tidak membuat tugas berulang otomatis tanpa konfirmasi owner" dicabut dari dokumen 04, 05, 06, 07, 08, 09, dan 10.
+* US-24 berubah judul menjadi "Sistem Melanjutkan Jadwal Berulang", UC-19 menjadi "Melanjutkan Jadwal Berulang" dengan aktor tambahan Sistem.
+* Baris "Recurring task otomatis penuh" pada daftar fitur di luar MVP dipersempit menjadi penjadwal latar.
+* Penerus hanya membawa tugas jika pekerja siklus sebelumnya masih aktif; jika tidak, penerus lahir tanpa tugas dan menunggu penugasan owner.
+
+### Status
+
+Accepted
+
+---
+
+## DL-035 Penundaan Tugas Wajib Bertanggal dan Menggeser Tenggat
+
+### Konteks
+
+DL-023 memutuskan satu tugas boleh memiliki lebih dari satu aktivitas, tepatnya agar tugas dapat ditunda lebih dulu lalu diselesaikan di hari lain. Yang tidak diatur adalah kapan pekerjaan yang ditunda itu akan dikerjakan.
+
+Akibatnya penundaan menjadi jalan buntu. Tenggat tugas tetap di tanggal lama, sehingga tugas yang ditunda selamanya terlihat terlambat, dan setelah DL-034 berlaku ia akhirnya hangus kena masa toleransi — padahal pekerja sudah menyatakan niat mengerjakannya.
+
+### Keputusan
+
+Migrasi 049 menambahkan `postponed_until` pada `care_activities` dan mewajibkannya terisi untuk setiap realisasi berstatus `postponed`. Tanggal itu menggeser `care_tasks.due_date`, sehingga masa toleransi dihitung ulang dari tanggal baru.
+
+### Alasan
+
+Penundaan adalah penjadwalan ulang, bukan pengabaian. Menuntut satu tanggal mengubah "belum saya kerjakan" menjadi "akan saya kerjakan tanggal sekian", dan itulah yang membuat penundaan bisa hidup berdampingan dengan masa toleransi.
+
+Pergeseran tenggat ditaruh pada trigger, bukan di dalam RPC penundaan, karena tanggal penundaan punya dua jalur tulis: pencatatan baru dan perbaikan catatan terakhir. Satu salinan aturan mencegah keduanya berbeda diam-diam.
+
+### Dampak
+
+* FR-20, US-31, dan UC-25 disunting; tanggal dan catatan menjadi wajib saat menunda.
+* Constraint database menolak realisasi `postponed` tanpa tanggal, dan realisasi `completed` yang menyertakan tanggal tunda.
+* Owner melihat tanggal rencana pengerjaan ulang pada tugas yang tertunda.
+
+### Status
+
+Accepted
+
+---
+
+## DL-036 Realisasi Tugas Terjadwal Menautkan Pohon yang Dirawat
+
+### Konteks
+
+DL-022 memutuskan riwayat pohon dibentuk dari gabungan beberapa tabel histori, salah satunya aktivitas perawatan. Sejak migrasi 025 tautan aktivitas ke pohon disimpan pada tabel jembatan `care_activity_trees`, karena satu perawatan dapat berdampak pada banyak pohon.
+
+Audit menemukan jembatan itu hanya pernah diisi dari satu jalur, yaitu pencatatan inisiatif. Jalur tugas terjadwal tidak pernah menyentuhnya sama sekali. Hitungannya tegas: **14 aktivitas terjadwal, nol tautan pohon**. Artinya seluruh pekerjaan terjadwal — justru pekerjaan yang direncanakan owner dan paling layak dilacak — tidak pernah muncul di riwayat pohon mana pun.
+
+### Keputusan
+
+Migrasi 050 membuat penyelesaian tugas ikut mengisi `care_activity_trees`, dengan pohon diturunkan dari target tugas: target `tree` menautkan satu pohon, target `farm` menautkan seluruh pohon kebun yang belum diarsipkan, dan target `custom` tidak menautkan apa pun.
+
+Pohon diresolusi pada saat penyelesaian tugas, bukan pada saat jadwal dibuat.
+
+### Alasan
+
+Riwayat perawatan per pohon adalah salah satu janji utama sistem ini kepada pemilik kebun. Riwayat yang hanya memuat pencatatan inisiatif memberi gambaran yang keliru tentang pohon yang sebenarnya paling rutin dirawat.
+
+Resolusi di akhir dipilih karena jadwal berulang bisa lahir berbulan-bulan sebelum dikerjakan, sementara daftar pohon kebun berubah di antaranya. Menautkan pohon berdasarkan keadaan saat pekerjaan benar-benar dilakukan lebih jujur daripada berdasarkan keadaan saat rencana disusun.
+
+Target `custom` sengaja tidak menautkan apa pun. Targetnya memang tidak menunjuk pohon, dan menebak-nebak pohon dari teks bebas akan mengulang persis kekeliruan yang dicabut DL-033.
+
+### Dampak
+
+* FR-21 disunting; US-30 dan UC-24 bertambah langkah penautan pohon.
+* `tree_history_view` mengambil pohon dari jembatan, bukan dari target pohon pada tugas, sehingga perawatan bertarget seluruh kebun muncul di riwayat setiap pohon terdampak.
+* Entitas `CareActivityTree` masuk ke dokumen 09, 10, dan 11 — jembatan ini sudah ada di database sejak migrasi 025 tetapi belum pernah terdokumentasi.
+* Tautan yang terbentuk tidak dapat dikoreksi; jembatan sengaja tidak punya jalur hapus maupun ubah.
+
+### Status
+
+Accepted
+
+---
+
+## DL-037 Tugas Terbuka Dilepas Saat Keanggotaan Berhenti Aktif
+
+### Konteks
+
+DL-011 memutuskan worker yang dikeluarkan tidak dihapus permanen, melainkan diberi status `removed`, agar riwayat tugas dan laporannya tetap dapat ditelusuri. Keputusan itu tetap berlaku.
+
+Yang tidak diperhitungkan adalah tugas yang masih terbuka saat keanggotaan berakhir. Keanggotaan dapat berpindah keluar dari `active` kapan saja, dan baris keanggotaan yang sama dipakai ulang ketika orang itu mengajukan bergabung kembali. Akibatnya tugas lama otomatis menjadi milik anggota non-aktif tanpa satu pun perubahan pada tugas itu sendiri.
+
+Tugas seperti itu terjebak di tengah: tidak terlihat oleh mantan pekerja, tidak bisa ditugaskan ulang karena jadwalnya dianggap sudah punya tugas, tetapi tetap dihitung sebagai tunggakan di dashboard owner.
+
+### Keputusan
+
+Migrasi 051 melepas seluruh tugas terbuka milik anggota yang berhenti aktif, baik karena dikeluarkan owner maupun karena keluar sendiri. Pelepasan dicatat pada kolom `released_at` dan `released_reason`, dan dijalankan sebelum status keanggotaan diubah.
+
+### Alasan
+
+Pemicunya adalah keanggotaan berhenti `active`, bukan nilai status akhirnya. Menyandarkan aturan pada nilai `removed` saja akan melewatkan jalur keluar lain yang mungkin ditambahkan kemudian.
+
+Pelepasan dicatat sebagai kolom tersendiri, bukan sebagai nilai status baru maupun dengan menumpang penanda terlewat. Sebabnya berbeda dan tidak boleh tertukar: terlewat berarti tenggatnya habis, sedangkan dilepas berarti pekerjaannya tidak lagi menjadi tanggungan siapa pun. Menyatukan keduanya akan membuat mantan pekerja terlihat lalai atas pekerjaan yang ia tinggalkan secara sah.
+
+Urutan pelepasan sebelum pencabutan keanggotaan bersifat wajib, karena validasi tugas menolak setiap perubahan pada tugas milik orang yang sudah tidak aktif.
+
+### Dampak
+
+* FR-06, US-09, dan UC-09 disunting; jalur keluar atas kemauan sendiri ikut dicatat.
+* Definisi "tugas terbuka" menjadi: status `pending` atau `postponed`, belum terlewat, dan belum dilepas. Definisi ini dipakai seluruh penghitung tunggakan dan penyapu jadwal.
+* Penjaga "jadwal sudah punya tugas" dilonggarkan menjadi "jadwal masih punya tugas aktif", sehingga jadwal dapat ditugaskan ulang.
+* Jadwal yang tugasnya dilepas memakai penanda "Belum ada pekerja" yang sudah ada; tidak ada penanda baru yang ditambahkan.
+
+### Status
+
+Accepted
+
+---
+
+## DL-038 Jadwal Hanya Terkunci oleh Hasil Kerja yang Selesai
+
+### Konteks
+
+Sejak awal, jadwal dikunci dari penyuntingan dan pembatalan begitu ada aktivitas apa pun yang menempel pada tugasnya. Aturan itu masuk akal ketika aktivitas hanya berarti pekerjaan selesai.
+
+Setelah DL-023 mengizinkan satu tugas memiliki banyak aktivitas, penundaan juga menulis baris aktivitas. Akibatnya satu kali pekerja menekan tunda sudah cukup mengunci jadwalnya selamanya: owner tidak dapat mengedit, dan tidak dapat membatalkan. Keadaan buntu ini terkonfirmasi langsung pada perangkat.
+
+### Keputusan
+
+Migrasi 052 mempersempit penguncian menjadi hanya aktivitas berstatus `completed`.
+
+### Alasan
+
+Yang dilindungi penguncian adalah riwayat. Begitu pekerjaan benar-benar dilakukan, mengubah jadwalnya membuat catatan lama berbicara tentang perintah yang tidak pernah diberikan.
+
+Penundaan tidak membawa risiko itu sama sekali: tidak ada pekerjaan yang terjadi, tidak ada bahan yang tercatat, tidak ada pohon yang tertaut, dan tidak ada foto bukti. Mengunci jadwal karenanya menghukum owner atas pekerjaan yang justru belum dikerjakan.
+
+### Dampak
+
+* FR-15 dan NFR-08 disunting; owner dapat mengedit maupun membatalkan jadwal yang tugasnya tertunda.
+* Aturan yang sama berlaku di tiga tempat: RPC pembatalan jadwal, pemeriksaan kelayakan sunting, dan tombol pada layar detail jadwal. Ketiganya harus bergerak bersama.
+* Perilaku migrasi 049 — mengedit jadwal tanpa mengubah tanggal tidak menimpa tenggat hasil penundaan — baru benar-benar dapat dijalankan lewat aplikasi setelah keputusan ini, karena sebelumnya layar Edit tidak pernah terbuka untuk jadwal dengan tugas tertunda.
+* Aksi "hentikan pengulangan" tetap tidak ikut terkunci.
+
+### Status
+
+Accepted
+
+---
+
 # 5. Keputusan Fitur yang Tidak Masuk MVP
 
 Fitur berikut secara sadar tidak dimasukkan ke dalam MVP Avology V2:
@@ -1087,7 +1321,7 @@ Fitur berikut secara sadar tidak dimasukkan ke dalam MVP Avology V2:
 | Marketplace                   | Tidak relevan untuk scope awal                              |
 | Grading buah A1/A2/A3         | Membutuhkan data panen dan standar grading lebih detail     |
 | Kelompok tani                 | Bukan kebutuhan utama sistem internal MS Farm               |
-| Recurring task otomatis penuh | Terlalu kompleks tanpa scheduler dan notifikasi             |
+| Penjadwal latar dan notifikasi | Rantai jadwal berjalan sendiri lewat jalur baca aplikasi, sehingga proses di luar aplikasi tidak dibutuhkan |
 | Supply chain restoran/warung  | Visi jangka panjang, bukan fitur skripsi MVP                |
 | Permanent delete pohon        | Berisiko merusak histori pohon                              |
 | Custom target SOP             | Menambah kompleksitas database dan form pada MVP            |
@@ -1103,9 +1337,14 @@ Fitur berikut secara sadar tidak dimasukkan ke dalam MVP Avology V2:
 | Pohon individual                           | Tabel `trees` memiliki kode unik per farm                          |
 | Permanent delete pohon tidak masuk MVP     | Tabel `trees` menggunakan `is_archived`                            |
 | Laporan kondisi dan operasional dipisahkan | Tabel `tree_condition_reports` dan `operational_reports` dipisah   |
-| SOP sebagai template                       | Tabel `care_sops` menyimpan interval dan instruksi default         |
-| Target custom SOP tidak digunakan          | `care_sops` tidak membutuhkan field custom target note             |
-| Jadwal semi-otomatis                       | `interval_days` digunakan untuk acuan jadwal                       |
+| Jadwal berulang                            | `care_schedules.repeat_every_days` menyimpan interval pengulangan  |
+| Target baris/kolom dicabut                 | `target_type` efektif hanya `farm`, `tree`, `custom`               |
+| Rantai jadwal berjalan sendiri             | `series_id`, `parent_schedule_id`, dan `date_basis` pada `care_schedules` |
+| Masa toleransi dan status terlewat         | `grace_days` dan `missed_at` pada `care_schedules`, `missed_at` pada `care_tasks` |
+| Penundaan wajib bertanggal                 | `postponed_until` pada `care_activities`, menggeser `care_tasks.due_date` |
+| Aktivitas terjadwal menautkan pohon        | `care_activity_trees` diisi juga oleh jalur penyelesaian tugas     |
+| Tugas dilepas saat keanggotaan berakhir    | `released_at` dan `released_reason` pada `care_tasks`              |
+| Jadwal terkunci hanya oleh hasil kerja selesai | Penjaga pembatalan jadwal memeriksa aktivitas berstatus `completed` |
 | Task bisa dari jadwal atau laporan         | `care_tasks` punya `care_schedule_id` dan `operational_report_id`  |
 | Activity lebih dari satu per task          | `care_activities` menjadi histori aksi task                        |
 | Fase pertumbuhan                           | Tabel `growth_phase_records` dan kolom `current_growth_phase`      |
@@ -1123,7 +1362,9 @@ Fitur berikut secara sadar tidak dimasukkan ke dalam MVP Avology V2:
 | Owner sebagai pengelola utama          | Owner memiliki halaman SOP, jadwal, worker, laporan, dashboard |
 | Tidak ada prediksi panen               | Tidak ada halaman prediksi panen                               |
 | Monitoring fase pertumbuhan            | Ada halaman Growth Monitoring                                  |
-| SOP sebagai template                   | Ada halaman Care SOP dan Create Schedule From SOP              |
+| Rantai jadwal dan masa toleransi        | Form jadwal memuat interval, dasar tanggal penerus, dan masa toleransi |
+| Penundaan bertanggal                    | Form tunda memuat pilihan tanggal rencana pengerjaan ulang     |
+| Tugas dilepas                           | Jadwal tanpa tugas aktif memakai penanda "Belum ada pekerja" yang sudah ada |
 | Laporan operasional                    | Ada halaman laporan operasional dan tindak lanjut              |
 | Worker management                      | Ada halaman Worker Management                                  |
 | Role berbeda                           | Navigasi owner dan worker dipisahkan                           |
@@ -1131,7 +1372,7 @@ Fitur berikut secara sadar tidak dimasukkan ke dalam MVP Avology V2:
 | Dashboard ringkas                      | Dashboard hanya berisi ringkasan penting                       |
 | Rejected dan removed access            | Ada screen minimal untuk worker rejected dan removed           |
 | Permanent delete pohon tidak masuk MVP | UI menggunakan archive/unarchive, bukan delete permanen        |
-| Target custom SOP tidak digunakan      | Form SOP tidak menampilkan target custom                       |
+| Jadwal terkunci hanya oleh hasil kerja selesai | Aksi edit dan batalkan jadwal tetap hidup selama tugasnya baru tertunda |
 
 ---
 
@@ -1143,10 +1384,11 @@ Fitur berikut secara sadar tidak dimasukkan ke dalam MVP Avology V2:
 | Tidak ada backend custom           | Logic frontend harus rapi dan tidak bercampur di screen                      |
 | Role berdasarkan farm_members      | Auth guard dan service perlu membaca membership aktif                        |
 | Worker management                  | Dibutuhkan `memberService` untuk join, approve, reject, remove               |
-| SOP sebagai template               | Dibutuhkan `careSopService`                                                  |
-| Jadwal semi-otomatis               | Dibutuhkan service untuk menghitung acuan jadwal berikutnya                  |
+| Rantai jadwal berjalan sendiri     | Dibutuhkan RPC penyapu yang menandai jadwal terlewat dan membuat penerusnya  |
+| Tugas dilepas saat keanggotaan berakhir | `memberService` melepas tugas terbuka sebelum mencabut keanggotaan      |
 | Task bisa dari jadwal atau laporan | Dibutuhkan service atau RPC untuk membuat task dari sumber berbeda           |
 | Activity lebih dari satu per task  | Dibutuhkan `careActivityService` atau fungsi terkait dalam `careTaskService` |
+| Aktivitas terjadwal menautkan pohon | RPC penyelesaian tugas mengisi jembatan pohon dalam satu transaksi          |
 | Riwayat pohon via view             | Dibutuhkan `historyService` untuk membaca `tree_history_view`                |
 | Dashboard agregasi                 | Dibutuhkan `dashboardService`                                                |
 | Owner melihat profil worker        | `memberService` harus memakai query, view, atau RPC yang sesuai RLS          |
@@ -1159,7 +1401,10 @@ Fitur berikut secara sadar tidak dimasukkan ke dalam MVP Avology V2:
 | -------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | Role owner dan worker dipisah          | Perlu test role access                                                                         |
 | Worker pending/rejected/removed        | Perlu test status membership                                                                   |
-| SOP interval                           | Perlu test acuan jadwal berikutnya                                                             |
+| Rantai jadwal dan masa toleransi       | Perlu test pembuatan penerus, penandaan terlewat, dan rantai yang tetap maju setelah siklus terlewat |
+| Penundaan bertanggal                   | Perlu test penolakan penundaan tanpa tanggal dan pergeseran tenggat                            |
+| Tugas dilepas                          | Perlu test pelepasan pada kedua jalur keluar, penugasan ulang, dan kasus bergabung kembali     |
+| Penguncian jadwal                      | Perlu test bahwa penundaan tidak mengunci jadwal, tetapi hasil kerja selesai tetap mengunci    |
 | Tidak ada prediksi panen               | Perlu test bahwa sistem tidak menampilkan klaim prediksi                                       |
 | Laporan operasional                    | Perlu test create report, update status, task follow-up                                        |
 | Riwayat pohon                          | Perlu test timeline kondisi, fase, dan perawatan                                               |
@@ -1197,7 +1442,7 @@ DL-031 Mengubah Target Jadwal Baris/Kolom Menjadi Area Custom
 Atau:
 
 ```txt
-DL-032 Menunda Edit Profile dari MVP Dasar ke Pengembangan Lanjutan
+DL-040 Menunda Edit Profile dari MVP Dasar ke Pengembangan Lanjutan
 ```
 
 ---
@@ -1240,6 +1485,6 @@ Accepted / Revised / Deprecated / Rejected
 
 Decision log Avology V2 mencatat keputusan-keputusan utama yang menjaga pengembangan sistem tetap fokus pada kebutuhan MVP.
 
-Keputusan penting dalam Avology V2 meliputi reset project, pembatasan scope MVP, penghapusan prediksi panen otomatis, penggantian estimasi panen menjadi monitoring fase, penggunaan SOP sebagai template, penggunaan jadwal semi-otomatis, penambahan laporan operasional, manajemen worker, pemisahan role owner-worker, penggunaan Supabase sebagai backend MVP, penggunaan archive untuk pohon, pembatasan target SOP, dan penguatan growth phase sebagai fitur critical.
+Keputusan penting dalam Avology V2 meliputi reset project, pembatasan scope MVP, penghapusan prediksi panen otomatis, penggantian estimasi panen menjadi monitoring fase, pencabutan fitur SOP perawatan beserta target baris dan kolom, rantai jadwal berulang yang berjalan sendiri beserta masa toleransi keterlambatan, penundaan tugas yang wajib bertanggal, penautan pohon pada realisasi tugas terjadwal, pelepasan tugas saat keanggotaan berakhir, penguncian jadwal yang hanya berlaku bagi hasil kerja yang selesai, penambahan laporan operasional, manajemen worker, pemisahan role owner-worker, penggunaan Supabase sebagai backend MVP, penggunaan archive untuk pohon, dan penguatan growth phase sebagai fitur critical.
 
 Dengan decision log ini, setiap keputusan dalam pengembangan Avology V2 dapat dipertanggungjawabkan secara teknis dan akademik.

@@ -53,7 +53,13 @@ export type CareCategory =
   | 'weeding'
   | 'other';
 
-export type TargetType = 'farm' | 'row' | 'column' | 'tree' | 'custom';
+// 'row' dan 'column' dibuang di migrasi 047. Nilainya masih ada di enum
+// public.target_type (PostgreSQL tidak punya `alter type ... drop value`),
+// tapi ditutup CHECK constraint di kedua tabel, jadi tidak bisa lagi masuk.
+export type TargetType = 'farm' | 'tree' | 'custom';
+
+// Sepadan dengan CHECK care_schedules_date_basis_check (migrasi 048).
+export type ScheduleDateBasis = 'jadwal' | 'realisasi';
 
 export type TaskStatus = 'pending' | 'completed' | 'postponed';
 
@@ -271,13 +277,10 @@ export type OperationalReport = {
 export type CareSchedule = {
   id: UUID;
   farmId: UUID;
-  careSopId: UUID | null;
   title: string;
   category: CareCategory;
   scheduledDate: string;
   targetType: TargetType;
-  targetRow: string | null;
-  targetColumn: string | null;
   targetTreeId: UUID | null;
   customTargetNote: string | null;
   instruction: string | null;
@@ -292,6 +295,16 @@ export type CareSchedule = {
   repeatEveryDays: number | null;
   seriesId: UUID | null;
   parentScheduleId: UUID | null;
+  // Diisi sweep_missed_schedules (migrasi 048) saat siklus jadwal ini
+  // dinyatakan terlewat. Dipakai scheduleTimeBucket untuk mengklasifikasi
+  // jadwal berulang yang belum pernah punya tugas.
+  missedAt: string | null;
+  // Masa toleransi keterlambatan dalam hari (migrasi 048). null = jadwal ini
+  // tidak pernah dinyatakan terlewat.
+  graceDays: number | null;
+  // Dasar perhitungan tanggal penerus rantai (migrasi 048): 'jadwal' memakai
+  // scheduled_date, 'realisasi' memakai tanggal pekerjaan diselesaikan.
+  dateBasis: ScheduleDateBasis;
   createdBy?: UUID;
   createdAt?: string;
   updatedAt?: string | null;
@@ -308,12 +321,14 @@ export type CareTask = {
   category: CareCategory | null;
   instruction: string | null;
   targetType: TargetType;
-  targetRow: string | null;
-  targetColumn: string | null;
   targetTreeId: UUID | null;
   customTargetNote: string | null;
   dueDate: string;
   status: TaskStatus;
+  // Diisi sweep_missed_schedules (migrasi 048) saat tugas melewati masa
+  // toleransi jadwal induknya. Status tugas TIDAK ikut berubah — pekerja masih
+  // boleh mengerjakannya. Tugas dari laporan operasional tidak pernah terisi.
+  missedAt: string | null;
   requiresPhoto: boolean;
   scheduleIsCancelled?: boolean;
   createdAt?: string;
@@ -703,12 +718,18 @@ export type UpdateCareScheduleInput = {
   // field jadwal lain tetap bisa diubah tanpa menyentuh penugasan.
   assignedWorkerId?: UUID | null;
   targetType: TargetType;
-  targetRow?: string | null;
-  targetColumn?: string | null;
   targetTreeId?: UUID | null;
   customTargetNote?: string | null;
   instruction?: string | null;
   requiresPhoto?: boolean;
+  // Masa toleransi (migrasi 048, dapat diubah sejak 049). Presedensinya sama
+  // dengan create_manual_schedule: neverExpires menang, lalu graceDays. Kalau
+  // KEDUANYA tidak dikirim, nilai lama dipertahankan — penyuntingan judul tidak
+  // boleh diam-diam menghapus masa toleransi. Mengirim neverExpires bersama
+  // graceDays DITOLAK, bukan salah satunya menang tanpa jejak.
+  graceDays?: number | null;
+  neverExpires?: boolean;
+  dateBasis?: ScheduleDateBasis;
 };
 
 export type CreateManualScheduleInput = {
@@ -718,8 +739,6 @@ export type CreateManualScheduleInput = {
   scheduledDate: string;
   assignedWorkerId: UUID;
   targetType: TargetType;
-  targetRow?: string | null;
-  targetColumn?: string | null;
   targetTreeId?: UUID | null;
   customTargetNote?: string | null;
   instruction?: string | null;
@@ -790,6 +809,10 @@ export type UpdateTaskRealizationInput = {
   produkSatuan?: SatuanBahan | null;
   proofPhoto?: TaskRealizationProofPhotoInput | null;
   removeExistingProof?: boolean;
+  // Hanya untuk baris yang ditunda. Kalau tidak dikirim, tanggal lama
+  // dipertahankan — membetulkan salah ketik catatan tidak boleh memaksa
+  // pekerja memilih ulang tanggalnya.
+  postponedUntil?: string | null;
 };
 
 export type UpdateTaskRealizationData = {
@@ -800,6 +823,9 @@ export type UpdateTaskRealizationData = {
 export type PostponeTaskInput = {
   taskId: UUID;
   note: string;
+  // Wajib sejak migrasi 049. Harus SETELAH hari ini (WIB); RPC menolak
+  // tanggal hari ini maupun masa lalu.
+  postponedUntil: string;
 };
 
 export type PostponeTaskData = {
@@ -816,12 +842,12 @@ export type ResolveReportWithTaskInput = {
   title: string;
   instruction?: string | null;
   targetType: TargetType;
-  targetRow?: string | null;
-  targetColumn?: string | null;
   targetTreeId?: UUID | null;
   customTargetNote?: string | null;
   requiresPhoto?: boolean;
-  category?: CareCategory | null;
+  // Wajib sejak migrasi 047: care_tasks.category kini NOT NULL dan
+  // create_task_from_operational_report menolak p_category null.
+  category: CareCategory;
   ownerResponseNote?: string | null;
 };
 

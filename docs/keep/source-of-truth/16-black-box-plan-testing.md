@@ -1,12 +1,29 @@
 # Black-box Testing Plan Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Delapan test case `TC-SOP-01`
+> sampai `TC-SOP-08` dan dua test case jadwal-dari-SOP (`TC-SCH-01`, `TC-SCH-02`
+> versi lama) dihapus. Modul "SOP dan Jadwal" menjadi "Jadwal Perawatan" dan
+> `TC-SCH-03`…`TC-SCH-07` dinomori ulang menjadi `TC-SCH-01`…`TC-SCH-05`.
+> Total test case turun dari 104 menjadi **94**. `TC-DASH-08` dan `TC-DATA-01`
+> disunting agar mengacu pada interval pengulangan jadwal. Riwayat keputusannya
+> ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** Sepuluh test case baru ditambahkan:
+> `TC-MEM-10` dan `TC-MEM-11` (pelepasan tugas dan kasus bergabung kembali),
+> `TC-SCH-06` sampai `TC-SCH-08` (rantai jadwal, masa toleransi, jadwal tanpa
+> toleransi), `TC-SCH-09` dan `TC-SCH-10` (penguncian jadwal), `TC-TASK-08`
+> (penundaan tanpa tanggal), serta `TC-HIS-04` dan `TC-HIS-05` (penautan pohon
+> untuk target kebun dan target catatan bebas). Total test case naik dari 94
+> menjadi **104**. Penomoran test case lama tidak bergeser. Riwayat keputusannya
+> ada di `decision-log.md` (DL-034 sampai DL-038).
+
 ## 1. Tujuan Pengujian
 
 Black-box testing digunakan untuk menguji apakah fitur-fitur pada aplikasi Avology V2 berjalan sesuai dengan kebutuhan fungsional yang telah ditentukan.
 
 Pengujian dilakukan dari sisi pengguna tanpa melihat struktur kode program. Fokus pengujian adalah input, proses sistem, dan output yang dihasilkan.
 
-Pengujian ini bertujuan untuk memastikan bahwa fitur utama seperti autentikasi, manajemen kebun, manajemen worker, data pohon, laporan kondisi, laporan operasional, SOP, jadwal, tugas worker, fase pertumbuhan, riwayat pohon, dan dashboard dapat berjalan sesuai rancangan.
+Pengujian ini bertujuan untuk memastikan bahwa fitur utama seperti autentikasi, manajemen kebun, manajemen worker, data pohon, laporan kondisi, laporan operasional, jadwal perawatan, tugas worker, fase pertumbuhan, riwayat pohon, dan dashboard dapat berjalan sesuai rancangan.
 
 ---
 
@@ -20,7 +37,7 @@ Pengujian black-box Avology V2 mencakup modul berikut:
 4. Manajemen data pohon
 5. Laporan kondisi pohon
 6. Laporan operasional kebun
-7. SOP perawatan
+7. Jadwal perawatan
 8. Jadwal perawatan
 9. Tugas worker
 10. Fase pertumbuhan pohon
@@ -376,6 +393,38 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 | Expected Result   | Histori tetap tampil dan tidak hilang                                                |
 | Actual Result     |                                                                                      |
 | Status            |                                                                                      |
+
+---
+
+## TC-MEM-10 Tugas Terbuka Dilepas Saat Worker Dikeluarkan
+
+| Item              | Detail                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| ID Test           | TC-MEM-10                                                                                                 |
+| Modul             | Manajemen Worker                                                                                          |
+| Skenario          | Tugas yang belum dikerjakan dilepas dan jadwalnya dapat ditugaskan ulang                                   |
+| Prasyarat         | Worker active memiliki tugas berstatus belum selesai dari sebuah jadwal                                    |
+| Langkah Pengujian | 1. Owner mengeluarkan worker. 2. Buka Owner Dashboard. 3. Buka Care Schedule Detail. 4. Tugaskan worker lain. |
+| Input             | Worker active dengan satu tugas terbuka                                                                   |
+| Expected Result   | Pengeluaran worker berhasil, tugas tidak lagi terhitung sebagai tunggakan, jadwal terbaca belum punya pekerja, dan penugasan ulang berhasil |
+| Actual Result     |                                                                                                           |
+| Status            |                                                                                                           |
+
+---
+
+## TC-MEM-11 Tugas yang Dilepas Tidak Muncul Lagi Saat Worker Bergabung Kembali
+
+| Item              | Detail                                                                                              |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| ID Test           | TC-MEM-11                                                                                           |
+| Modul             | Manajemen Worker                                                                                    |
+| Skenario          | Tugas lama yang sudah dilepas tidak kembali menjadi tunggakan                                       |
+| Prasyarat         | Worker pernah dikeluarkan dengan tugas terbuka yang dilepas                                         |
+| Langkah Pengujian | 1. Worker mengajukan bergabung kembali. 2. Owner menyetujui. 3. Login sebagai worker. 4. Buka daftar tugas dan dashboard. |
+| Input             | Worker yang sama bergabung kembali ke kebun yang sama                                               |
+| Expected Result   | Tugas lama TIDAK muncul di daftar tugas maupun terhitung di dashboard                               |
+| Actual Result     |                                                                                                     |
+| Status            |                                                                                                     |
 
 ---
 
@@ -753,175 +802,15 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 
 ---
 
-# 10. Test Case SOP dan Jadwal
+# 10. Test Case Jadwal Perawatan
 
-## TC-SOP-01 Owner Membuat SOP Valid
-
-| Item              | Detail                                                                  |
-| ----------------- | ----------------------------------------------------------------------- |
-| ID Test           | TC-SOP-01                                                               |
-| Modul             | SOP Perawatan                                                           |
-| Skenario          | Owner membuat template SOP perawatan                                    |
-| Prasyarat         | Owner active                                                            |
-| Langkah Pengujian | 1. Buka Care SOP List. 2. Tekan Tambah SOP. 3. Isi data SOP. 4. Simpan. |
-| Input             | Nama: Semprot Pencegahan, Kategori: spraying, Interval: 14              |
-| Expected Result   | SOP berhasil dibuat dan muncul di daftar SOP                            |
-| Actual Result     |                                                                         |
-| Status            |                                                                         |
-
----
-
-## TC-SOP-02 Owner Membuat SOP tanpa Nama
-
-| Item              | Detail                                                                |
-| ----------------- | --------------------------------------------------------------------- |
-| ID Test           | TC-SOP-02                                                             |
-| Modul             | SOP Perawatan                                                         |
-| Skenario          | Owner menyimpan SOP tanpa nama                                        |
-| Prasyarat         | Owner berada di Create SOP Screen                                     |
-| Langkah Pengujian | 1. Kosongkan nama SOP. 2. Isi kategori dan interval. 3. Tekan Simpan. |
-| Input             | Nama kosong                                                           |
-| Expected Result   | Sistem menampilkan pesan bahwa nama SOP wajib diisi                   |
-| Actual Result     |                                                                       |
-| Status            |                                                                       |
-
----
-
-## TC-SOP-03 Owner Mengisi Interval 0
-
-| Item              | Detail                                                          |
-| ----------------- | --------------------------------------------------------------- |
-| ID Test           | TC-SOP-03                                                       |
-| Modul             | SOP Perawatan                                                   |
-| Skenario          | Owner mengisi interval SOP dengan nilai 0                       |
-| Prasyarat         | Owner berada di Create SOP Screen                               |
-| Langkah Pengujian | 1. Isi interval dengan 0. 2. Tekan Simpan.                      |
-| Input             | Interval: 0                                                     |
-| Expected Result   | Sistem menampilkan pesan bahwa interval harus lebih dari 0 hari |
-| Actual Result     |                                                                 |
-| Status            |                                                                 |
-
----
-
-## TC-SOP-04 Owner Mengubah SOP
-
-| Item              | Detail                                                                         |
-| ----------------- | ------------------------------------------------------------------------------ |
-| ID Test           | TC-SOP-04                                                                      |
-| Modul             | SOP Perawatan                                                                  |
-| Skenario          | Owner mengubah data SOP                                                        |
-| Prasyarat         | SOP sudah tersedia                                                             |
-| Langkah Pengujian | 1. Buka detail SOP. 2. Tekan Edit. 3. Ubah instruksi atau interval. 4. Simpan. |
-| Input             | Interval diubah dari 14 menjadi 10                                             |
-| Expected Result   | SOP berhasil diperbarui                                                        |
-| Actual Result     |                                                                                |
-| Status            |                                                                                |
-
----
-
-## TC-SOP-05 Owner Menonaktifkan SOP
-
-| Item              | Detail                                    |
-| ----------------- | ----------------------------------------- |
-| ID Test           | TC-SOP-05                                 |
-| Modul             | SOP Perawatan                             |
-| Skenario          | Owner menonaktifkan SOP                   |
-| Prasyarat         | SOP aktif tersedia                        |
-| Langkah Pengujian | 1. Buka detail SOP. 2. Tekan Nonaktifkan. |
-| Input             | SOP aktif                                 |
-| Expected Result   | Status SOP menjadi tidak aktif            |
-| Actual Result     |                                           |
-| Status            |                                           |
-
----
-
-## TC-SOP-06 SOP Belum Memiliki Histori Realisasi
-
-| Item              | Detail                                                                |
-| ----------------- | --------------------------------------------------------------------- |
-| ID Test           | TC-SOP-06                                                             |
-| Modul             | Acuan Jadwal SOP                                                      |
-| Skenario          | Sistem menampilkan status jika SOP belum pernah direalisasikan        |
-| Prasyarat         | SOP baru dibuat dan belum ada tugas selesai                           |
-| Langkah Pengujian | 1. Buka detail SOP. 2. Lihat bagian acuan jadwal berikutnya.          |
-| Input             | SOP tanpa histori                                                     |
-| Expected Result   | Sistem menampilkan status no_history atau belum ada riwayat realisasi |
-| Actual Result     |                                                                       |
-| Status            |                                                                       |
-
----
-
-## TC-SOP-07 Sistem Menghitung Tanggal Berikutnya
-
-| Item              | Detail                                                                     |
-| ----------------- | -------------------------------------------------------------------------- |
-| ID Test           | TC-SOP-07                                                                  |
-| Modul             | Acuan Jadwal SOP                                                           |
-| Skenario          | Sistem menghitung acuan jadwal berikutnya dari interval SOP                |
-| Prasyarat         | SOP memiliki interval dan pernah direalisasikan                            |
-| Langkah Pengujian | 1. Buat tugas dari SOP. 2. Worker menyelesaikan tugas. 3. Buka detail SOP. |
-| Input             | Realisasi terakhir: 1 Juni 2026, interval: 14 hari                         |
-| Expected Result   | Sistem menampilkan acuan jadwal berikutnya: 15 Juni 2026                   |
-| Actual Result     |                                                                            |
-| Status            |                                                                            |
-
----
-
-## TC-SOP-08 Status SOP Overdue
-
-| Item              | Detail                                                            |
-| ----------------- | ----------------------------------------------------------------- |
-| ID Test           | TC-SOP-08                                                         |
-| Modul             | Acuan Jadwal SOP                                                  |
-| Skenario          | Sistem menampilkan status terlambat jika acuan jadwal sudah lewat |
-| Prasyarat         | Acuan jadwal berikutnya lebih kecil dari tanggal hari ini         |
-| Langkah Pengujian | 1. Buka Care SOP List atau Detail.                                |
-| Input             | Acuan jadwal sudah lewat                                          |
-| Expected Result   | Sistem menampilkan status overdue atau terlambat                  |
-| Actual Result     |                                                                   |
-| Status            |                                                                   |
-
----
-
-## TC-SCH-01 Owner Membuat Jadwal dari SOP
-
-| Item              | Detail                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------ |
-| ID Test           | TC-SCH-01                                                                                  |
-| Modul             | Jadwal Perawatan                                                                           |
-| Skenario          | Owner membuat jadwal berdasarkan SOP                                                       |
-| Prasyarat         | SOP aktif tersedia dan worker active tersedia                                              |
-| Langkah Pengujian | 1. Buka detail SOP. 2. Tekan Buat Jadwal. 3. Pilih tanggal, worker, dan target. 4. Simpan. |
-| Input             | SOP spraying, tanggal valid, worker active                                                 |
-| Expected Result   | Jadwal berhasil dibuat                                                                     |
-| Actual Result     |                                                                                            |
-| Status            |                                                                                            |
-
----
-
-## TC-SCH-02 Jadwal dari SOP Membuat Task Worker
-
-| Item              | Detail                                                                                  |
-| ----------------- | --------------------------------------------------------------------------------------- |
-| ID Test           | TC-SCH-02                                                                               |
-| Modul             | Jadwal dan Tugas                                                                        |
-| Skenario          | Sistem membuat task worker dari jadwal berbasis SOP                                     |
-| Prasyarat         | Owner berhasil membuat jadwal dari SOP                                                  |
-| Langkah Pengujian | 1. Buat jadwal dari SOP. 2. Login sebagai worker yang ditugaskan. 3. Buka daftar tugas. |
-| Input             | Jadwal dari SOP                                                                         |
-| Expected Result   | Tugas muncul di daftar worker                                                           |
-| Actual Result     |                                                                                         |
-| Status            |                                                                                         |
-
----
-
-## TC-SCH-03 Owner Membuat Jadwal Manual
+## TC-SCH-01 Owner Membuat Jadwal Manual
 
 | Item              | Detail                                                                             |
 | ----------------- | ---------------------------------------------------------------------------------- |
-| ID Test           | TC-SCH-03                                                                          |
+| ID Test           | TC-SCH-01 |
 | Modul             | Jadwal Perawatan                                                                   |
-| Skenario          | Owner membuat jadwal manual tanpa SOP                                              |
+| Skenario          | Owner membuat jadwal perawatan baru |
 | Prasyarat         | Owner active dan worker active tersedia                                            |
 | Langkah Pengujian | 1. Buka Care Schedule List. 2. Tekan Jadwal Manual. 3. Isi data jadwal. 4. Simpan. |
 | Input             | Judul: Bersihkan saluran air, Target: custom                                       |
@@ -931,11 +820,11 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 
 ---
 
-## TC-SCH-04 Jadwal Manual Membuat Task Worker
+## TC-SCH-02 Jadwal Manual Membuat Task Worker
 
 | Item              | Detail                                                                         |
 | ----------------- | ------------------------------------------------------------------------------ |
-| ID Test           | TC-SCH-04                                                                      |
+| ID Test           | TC-SCH-02 |
 | Modul             | Jadwal dan Tugas                                                               |
 | Skenario          | Sistem membuat task worker dari jadwal manual                                  |
 | Prasyarat         | Jadwal manual berhasil dibuat                                                  |
@@ -947,11 +836,11 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 
 ---
 
-## TC-SCH-05 Target Jadwal Tree Dipilih
+## TC-SCH-03 Target Jadwal Tree Dipilih
 
 | Item              | Detail                                                                |
 | ----------------- | --------------------------------------------------------------------- |
-| ID Test           | TC-SCH-05                                                             |
+| ID Test           | TC-SCH-03 |
 | Modul             | Target Jadwal                                                         |
 | Skenario          | Owner membuat jadwal dengan target pohon tertentu                     |
 | Prasyarat         | Data pohon tersedia                                                   |
@@ -963,11 +852,11 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 
 ---
 
-## TC-SCH-06 Target Custom Jadwal Manual tanpa Catatan
+## TC-SCH-04 Target Custom Jadwal Manual tanpa Catatan
 
 | Item              | Detail                                                              |
 | ----------------- | ------------------------------------------------------------------- |
-| ID Test           | TC-SCH-06                                                           |
+| ID Test           | TC-SCH-04 |
 | Modul             | Target Jadwal                                                       |
 | Skenario          | Owner membuat jadwal manual dengan target custom tanpa catatan      |
 | Prasyarat         | Owner berada di Create Manual Schedule Screen                       |
@@ -979,11 +868,11 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 
 ---
 
-## TC-SCH-07 Worker Melihat Tugas dari Jadwal
+## TC-SCH-05 Worker Melihat Tugas dari Jadwal
 
 | Item              | Detail                                                      |
 | ----------------- | ----------------------------------------------------------- |
-| ID Test           | TC-SCH-07                                                   |
+| ID Test           | TC-SCH-05 |
 | Modul             | Jadwal dan Tugas                                            |
 | Skenario          | Worker melihat tugas yang berasal dari jadwal               |
 | Prasyarat         | Owner sudah membuat jadwal dan task untuk worker            |
@@ -992,6 +881,86 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 | Expected Result   | Tugas dari jadwal tampil di daftar tugas                    |
 | Actual Result     |                                                             |
 | Status            |                                                             |
+
+---
+
+## TC-SCH-06 Jadwal Berulang Membentuk Penerus Setelah Tugas Selesai
+
+| Item              | Detail                                                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------- |
+| ID Test           | TC-SCH-06                                                                                           |
+| Modul             | Jadwal dan Tugas                                                                                    |
+| Skenario          | Sistem membuat jadwal penerus tanpa konfirmasi owner                                                |
+| Prasyarat         | Jadwal berulang dengan interval terisi dan worker masih aktif                                       |
+| Langkah Pengujian | 1. Selesaikan tugas sebagai worker assigned. 2. Login sebagai owner. 3. Buka Care Schedule List.     |
+| Input             | Interval pengulangan 14 hari, dasar tanggal realisasi                                               |
+| Expected Result   | Jadwal penerus lahir dengan tanggal = tanggal realisasi + 14 hari, beserta tugasnya                 |
+| Actual Result     |                                                                                                     |
+| Status            |                                                                                                     |
+
+---
+
+## TC-SCH-07 Jadwal Melewati Masa Toleransi Dinyatakan Terlewat
+
+| Item              | Detail                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------ |
+| ID Test           | TC-SCH-07                                                                                       |
+| Modul             | Jadwal dan Tugas                                                                                |
+| Skenario          | Siklus yang tidak dikerjakan ditutup sebagai terlewat dan rantainya tetap maju                  |
+| Prasyarat         | Jadwal berulang dengan masa toleransi terisi dan tanggalnya sudah lewat melebihi toleransi      |
+| Langkah Pengujian | 1. Login sebagai owner. 2. Buka Care Schedule List sehingga penyapu berjalan.                    |
+| Input             | Masa toleransi 3 hari, tanggal jadwal 4 hari lalu                                                |
+| Expected Result   | Jadwal ditandai terlewat, dan jadwal penerus tetap lahir                                        |
+| Actual Result     |                                                                                                 |
+| Status            |                                                                                                 |
+
+---
+
+## TC-SCH-08 Jadwal tanpa Masa Toleransi Tidak Pernah Terlewat
+
+| Item              | Detail                                                                        |
+| ----------------- | ------------------------------------------------------------------------------ |
+| ID Test           | TC-SCH-08                                                                     |
+| Modul             | Jadwal dan Tugas                                                              |
+| Skenario          | Jadwal tanpa masa toleransi tetap menunggu sampai dikerjakan                  |
+| Prasyarat         | Jadwal berulang tanpa masa toleransi, tanggalnya sudah lewat jauh             |
+| Langkah Pengujian | 1. Login sebagai owner. 2. Buka Care Schedule List sehingga penyapu berjalan.  |
+| Input             | Masa toleransi kosong                                                         |
+| Expected Result   | Jadwal TIDAK ditandai terlewat dan tidak ada penerus yang lahir               |
+| Actual Result     |                                                                               |
+| Status            |                                                                               |
+
+---
+
+## TC-SCH-09 Jadwal dengan Tugas Tertunda Masih Dapat Dibatalkan
+
+| Item              | Detail                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| ID Test           | TC-SCH-09                                                                                    |
+| Modul             | Jadwal dan Tugas                                                                             |
+| Skenario          | Penundaan tidak mengunci jadwal                                                              |
+| Prasyarat         | Tugas dari jadwal sudah ditunda worker                                                       |
+| Langkah Pengujian | 1. Login sebagai owner. 2. Buka Care Schedule Detail. 3. Buka Kelola jadwal. 4. Batalkan.     |
+| Input             | Jadwal dengan satu tugas berstatus tertunda                                                  |
+| Expected Result   | Aksi edit dan batalkan aktif, dan pembatalan berhasil                                        |
+| Actual Result     |                                                                                              |
+| Status            |                                                                                              |
+
+---
+
+## TC-SCH-10 Jadwal dengan Hasil Kerja Selesai Tidak Dapat Dibatalkan
+
+| Item              | Detail                                                                          |
+| ----------------- | --------------------------------------------------------------------------------- |
+| ID Test           | TC-SCH-10                                                                       |
+| Modul             | Jadwal dan Tugas                                                                |
+| Skenario          | Penguncian jadwal tetap berlaku untuk pekerjaan yang benar-benar dilakukan      |
+| Prasyarat         | Tugas dari jadwal sudah diselesaikan worker                                     |
+| Langkah Pengujian | 1. Login sebagai owner. 2. Buka Care Schedule Detail. 3. Buka Kelola jadwal.     |
+| Input             | Jadwal dengan satu tugas berstatus selesai                                      |
+| Expected Result   | Aksi edit dan batalkan mati disertai keterangan jadwal sudah punya hasil kerja  |
+| Actual Result     |                                                                                 |
+| Status            |                                                                                 |
 
 ---
 
@@ -1106,6 +1075,22 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 | Expected Result   | Owner dapat melihat daftar tugas dalam kebunnya       |
 | Actual Result     |                                                       |
 | Status            |                                                       |
+
+---
+
+## TC-TASK-08 Worker Menunda Tugas tanpa Tanggal
+
+| Item              | Detail                                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| ID Test           | TC-TASK-08                                                                              |
+| Modul             | Tugas Worker                                                                            |
+| Skenario          | Penundaan tanpa tanggal rencana pengerjaan ditolak                                      |
+| Prasyarat         | Worker memiliki tugas berstatus belum selesai                                           |
+| Langkah Pengujian | 1. Login sebagai worker. 2. Buka detail tugas. 3. Tekan Tunda. 4. Kosongkan tanggal. 5. Simpan. |
+| Input             | Tanggal penundaan kosong, catatan terisi                                                |
+| Expected Result   | Sistem menolak dan menampilkan pesan bahwa tanggal penundaan wajib diisi                |
+| Actual Result     |                                                                                         |
+| Status            |                                                                                         |
 
 ---
 
@@ -1289,6 +1274,38 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 
 ---
 
+## TC-HIS-04 Perawatan Bertarget Seluruh Kebun Muncul di Riwayat Setiap Pohon
+
+| Item              | Detail                                                                                                  |
+| ----------------- | --------------------------------------------------------------------------------------------------------- |
+| ID Test           | TC-HIS-04                                                                                               |
+| Modul             | Riwayat Pohon                                                                                           |
+| Skenario          | Realisasi tugas bertarget kebun menautkan seluruh pohon yang belum diarsipkan                           |
+| Prasyarat         | Kebun memiliki beberapa pohon aktif dan minimal satu pohon terarsip                                     |
+| Langkah Pengujian | 1. Buat task dengan target seluruh kebun. 2. Worker menyelesaikan task. 3. Buka Tree Detail tiap pohon. |
+| Input             | Task completed dengan target farm                                                                       |
+| Expected Result   | Riwayat perawatan muncul pada setiap pohon aktif, dan TIDAK muncul pada pohon terarsip                  |
+| Actual Result     |                                                                                                         |
+| Status            |                                                                                                         |
+
+---
+
+## TC-HIS-05 Perawatan Bertarget Catatan Bebas Tidak Menautkan Pohon
+
+| Item              | Detail                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| ID Test           | TC-HIS-05                                                                                 |
+| Modul             | Riwayat Pohon                                                                             |
+| Skenario          | Realisasi tugas bertarget catatan bebas tidak masuk riwayat pohon mana pun                |
+| Prasyarat         | Kebun memiliki pohon aktif                                                                |
+| Langkah Pengujian | 1. Buat task dengan target catatan bebas. 2. Worker menyelesaikan task. 3. Buka Tree Detail. |
+| Input             | Task completed dengan target custom                                                       |
+| Expected Result   | Penyelesaian tugas berhasil, dan tidak ada pohon yang menampilkan riwayat perawatan itu   |
+| Actual Result     |                                                                                           |
+| Status            |                                                                                           |
+
+---
+
 # 14. Test Case Dashboard
 
 ## TC-DASH-01 Owner Membuka Dashboard
@@ -1403,17 +1420,17 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 
 ---
 
-## TC-DASH-08 Jumlah SOP Overdue Tampil Benar
+## TC-DASH-08 Jumlah Jadwal Overdue Tampil Benar
 
 | Item              | Detail                                                                             |
 | ----------------- | ---------------------------------------------------------------------------------- |
 | ID Test           | TC-DASH-08                                                                         |
 | Modul             | Dashboard Owner                                                                    |
-| Skenario          | Dashboard menampilkan SOP yang terlambat                                           |
-| Prasyarat         | Ada SOP dengan acuan jadwal berikutnya sudah lewat                                 |
-| Langkah Pengujian | 1. Buat SOP dengan interval. 2. Buat dan selesaikan tugas lama. 3. Buka dashboard. |
-| Input             | SOP overdue                                                                        |
-| Expected Result   | Jumlah SOP overdue tampil sesuai data                                              |
+| Skenario          | Dashboard menampilkan jadwal yang terlambat |
+| Prasyarat         | Ada jadwal dengan acuan berikutnya sudah lewat |
+| Langkah Pengujian | 1. Buat jadwal berulang. 2. Selesaikan tugasnya. 3. Buka dashboard. |
+| Input             | jadwal overdue |
+| Expected Result   | Jumlah jadwal overdue tampil sesuai data |
 | Actual Result     |                                                                                    |
 | Status            |                                                                                    |
 
@@ -1695,15 +1712,15 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 
 ---
 
-## TC-DATA-01 Interval SOP Menggunakan Satuan Hari
+## TC-DATA-01 Interval Pengulangan Menggunakan Satuan Hari
 
 | Item              | Detail                                                   |
 | ----------------- | -------------------------------------------------------- |
 | ID Test           | TC-DATA-01                                               |
 | Modul             | Konsistensi Data                                         |
-| Skenario          | Sistem menyimpan interval SOP dengan satuan hari         |
-| Prasyarat         | Owner membuat SOP                                        |
-| Langkah Pengujian | 1. Isi interval SOP. 2. Simpan SOP. 3. Lihat detail SOP. |
+| Skenario          | Sistem menyimpan interval pengulangan dengan satuan hari |
+| Prasyarat         | Owner membuat jadwal berulang |
+| Langkah Pengujian | 1. Isi interval pengulangan. 2. Simpan jadwal. 3. Lihat detail jadwal. |
 | Input             | Interval: 14                                             |
 | Expected Result   | Interval tersimpan sebagai 14 hari                       |
 | Actual Result     |                                                          |
@@ -1764,14 +1781,14 @@ Kolom **Actual Result** dan **Status** diisi setelah pengujian dilakukan pada ap
 | Modul                     | Jumlah Test Case |
 | ------------------------- | ---------------: |
 | Autentikasi               |                6 |
-| Farm dan Membership       |               13 |
+| Farm dan Membership       |               15 |
 | Manajemen Pohon           |                9 |
 | Laporan Kondisi Pohon     |                6 |
 | Laporan Operasional Kebun |                8 |
-| SOP dan Jadwal            |               15 |
-| Tugas Worker              |                7 |
+| Jadwal Perawatan          |               10 |
+| Tugas Worker              |                8 |
 | Fase Pertumbuhan          |                8 |
-| Riwayat Pohon             |                3 |
+| Riwayat Pohon             |                5 |
 | Dashboard                 |               11 |
 | Role dan Akses            |                7 |
 | UX dan Data               |               11 |
@@ -1790,7 +1807,7 @@ Setelah pengujian dilakukan, hasilnya dapat direkap dengan format berikut:
 | Manajemen Pohon           |                9 |      |      |         |                     |
 | Laporan Kondisi Pohon     |                6 |      |      |         |                     |
 | Laporan Operasional Kebun |                8 |      |      |         |                     |
-| SOP dan Jadwal            |               15 |      |      |         |                     |
+| Jadwal Perawatan          |                5 |      |      |         |                     |
 | Tugas Worker              |                7 |      |      |         |                     |
 | Fase Pertumbuhan          |                8 |      |      |         |                     |
 | Riwayat Pohon             |                3 |      |      |         |                     |
@@ -1811,6 +1828,6 @@ Persentase Berhasil = (Jumlah Pass / Total Test Case) × 100%
 
 Black-box testing plan Avology V2 dirancang untuk memastikan bahwa seluruh fitur MVP berjalan sesuai kebutuhan fungsional dan non-fungsional.
 
-Pengujian mencakup 102 test case yang tersebar pada modul autentikasi, kebun, worker, pohon, laporan, SOP, jadwal, tugas, fase pertumbuhan, riwayat, dashboard, role access, UX, dan konsistensi data.
+Pengujian mencakup 94 test case yang tersebar pada modul autentikasi, kebun, worker, pohon, laporan, jadwal perawatan, tugas, fase pertumbuhan, riwayat, dashboard, role access, UX, dan konsistensi data.
 
 Hasil pengujian ini nantinya dapat digunakan sebagai dasar pembahasan pada Bab 4 untuk menunjukkan bahwa sistem telah diuji berdasarkan skenario penggunaan yang sesuai dengan kebutuhan pengguna dan scope MVP.

@@ -1,5 +1,20 @@
 # User Stories Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Fitur SOP perawatan dan target
+> jadwal berupa **baris**/**kolom** sudah dicabut dari sistem. **US-21**, **US-22**,
+> **US-23**, dan **US-25** dihapus; nomornya sengaja TIDAK dipakai ulang agar
+> penomoran US lain tidak bergeser dan rujukan di `15-traceability-matrix.md`
+> tetap sahih. US-24, US-26, dan US-27 disunting isinya. Istilah "SOP" pada
+> Dasar Wawancara US-06 mengacu pada praktik kerja di lapangan, bukan fitur
+> aplikasi. Riwayat keputusannya ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** **US-09**, **US-30**, dan **US-31**
+> disunting isinya. **US-24** berubah judul menjadi "Sistem Melanjutkan Jadwal
+> Berulang" karena sistem kini membuat jadwal penerus sendiri, bukan sekadar
+> menampilkan acuan. Tidak ada US baru maupun US yang dihapus, sehingga rujukan
+> di `15-traceability-matrix.md` tetap sahih. Riwayat keputusannya ada di
+> `decision-log.md` (DL-034 sampai DL-038).
+
 ## Format Prioritas
 
 User story dalam Avology V2 menggunakan prioritas berikut:
@@ -278,6 +293,9 @@ Pekerja kebun dapat berubah, sehingga owner membutuhkan kontrol terhadap anggota
 * Status worker berubah menjadi removed.
 * Worker removed tidak dapat mengakses data kebun.
 * Riwayat tugas dan laporan worker tetap tersimpan.
+* Tugas terbuka milik worker itu dilepas dan berhenti dihitung sebagai tunggakan.
+* Jadwal yang tugasnya dilepas kembali terbaca sebagai jadwal tanpa pekerja dan dapat ditugaskan ulang.
+* Aturan yang sama berlaku ketika worker keluar sendiri dari kebun.
 
 ---
 
@@ -619,43 +637,11 @@ Owner membutuhkan kemampuan untuk bereaksi terhadap laporan lapangan, misalnya k
 
 ---
 
-# 6. SOP Perawatan
+# 6. Pengulangan Jadwal Perawatan
 
-## US-21 Owner Membuat SOP Perawatan
+## US-24 Sistem Melanjutkan Jadwal Berulang
 
-Sebagai owner, saya ingin membuat SOP perawatan agar instruksi dan interval perawatan dapat digunakan sebagai template jadwal.
-
-### Aktor
-
-* Owner
-
-### Requirement Terkait
-
-* FR-13 SOP Perawatan
-
-### Prioritas
-
-NAT 3 / Critical
-
-### Dasar Wawancara
-
-Pemilik kebun membutuhkan sistem yang membantu menjaga jadwal treatment seperti penyemprotan, pemupukan, penyiraman, dan pengendalian gulma.
-
-### Acceptance Criteria
-
-* Owner dapat membuat SOP perawatan.
-* Owner dapat mengisi nama SOP.
-* Owner dapat memilih kategori SOP.
-* Owner dapat mengisi interval hari.
-* Owner dapat mengisi instruksi default.
-* Owner dapat menentukan target default.
-* Sistem menyimpan SOP sebagai template aktif.
-
----
-
-## US-22 Owner Mengubah SOP Perawatan
-
-Sebagai owner, saya ingin mengubah SOP perawatan agar template tetap sesuai dengan kebutuhan operasional kebun.
+Sebagai owner, saya ingin sistem melanjutkan sendiri jadwal perawatan berulang agar treatment rutin tidak berhenti hanya karena saya lupa membuat jadwal berikutnya.
 
 ### Aktor
 
@@ -663,64 +649,7 @@ Sebagai owner, saya ingin mengubah SOP perawatan agar template tetap sesuai deng
 
 ### Requirement Terkait
 
-* FR-13 SOP Perawatan
-
-### Prioritas
-
-NAT 3 / Critical
-
-### Dasar Wawancara
-
-Treatment kebun dapat berubah berdasarkan kondisi hama, penyakit, pupuk, atau pengalaman lapangan.
-
-### Acceptance Criteria
-
-* Owner dapat membuka detail SOP.
-* Owner dapat mengubah data SOP.
-* Sistem menyimpan perubahan SOP.
-* Perubahan SOP digunakan untuk jadwal baru berikutnya.
-
----
-
-## US-23 Owner Menonaktifkan SOP
-
-Sebagai owner, saya ingin menonaktifkan SOP agar template yang sudah tidak digunakan tidak muncul sebagai pilihan utama.
-
-### Aktor
-
-* Owner
-
-### Requirement Terkait
-
-* FR-13 SOP Perawatan
-
-### Prioritas
-
-NAT 2 / Standard
-
-### Dasar Wawancara
-
-Tidak semua treatment digunakan terus-menerus, sehingga owner perlu mengelola SOP yang aktif dan tidak aktif.
-
-### Acceptance Criteria
-
-* Owner dapat mengubah status SOP menjadi tidak aktif.
-* SOP tidak aktif tidak muncul sebagai pilihan utama saat membuat jadwal.
-* Riwayat jadwal lama yang menggunakan SOP tersebut tetap tersimpan.
-
----
-
-## US-24 Sistem Menampilkan Acuan Jadwal Berikutnya dari SOP
-
-Sebagai owner, saya ingin melihat acuan jadwal berikutnya berdasarkan interval SOP agar saya tidak lupa melakukan treatment rutin.
-
-### Aktor
-
-* Owner
-
-### Requirement Terkait
-
-* FR-17 Acuan Jadwal Berikutnya Berdasarkan Interval SOP
+* FR-17 Acuan Jadwal Berikutnya Berdasarkan Interval Pengulangan
 
 ### Prioritas
 
@@ -732,51 +661,21 @@ Pemilik mengakui treatment dapat mundur karena tidak ada pencatatan tanggal trea
 
 ### Acceptance Criteria
 
-* Sistem membaca interval hari dari SOP.
-* Sistem membaca tanggal realisasi terakhir dari SOP terkait.
-* Sistem menghitung acuan tanggal berikutnya.
-* Sistem menampilkan status belum jatuh tempo, jatuh tempo hari ini, atau terlambat.
-* Sistem tidak otomatis membuat tugas tanpa konfirmasi owner.
+* Sistem membaca interval pengulangan hari dari jadwal.
+* Owner dapat memilih dasar perhitungan tanggal penerus: tanggal jadwal atau tanggal realisasi.
+* Sistem menghitung tanggal penerus dan membuat jadwalnya sendiri begitu siklus berjalan ditutup.
+* Owner dapat menentukan masa toleransi keterlambatan; jadwal tanpa masa toleransi tidak pernah dinyatakan terlewat.
+* Jadwal yang melewati masa toleransi ditandai terlewat, dan rantainya tetap berlanjut ke siklus berikutnya.
+* Sistem menampilkan status belum jatuh tempo, jatuh tempo hari ini, terlambat, atau terlewat.
+* Owner dapat menghentikan pengulangan tanpa membatalkan jadwal yang sedang berjalan.
 
 ---
 
 # 7. Jadwal Perawatan dan Tugas Worker
 
-## US-25 Owner Membuat Jadwal dari SOP
-
-Sebagai owner, saya ingin membuat jadwal perawatan dari SOP agar instruksi dan kategori perawatan dapat terisi secara otomatis dari template.
-
-### Aktor
-
-* Owner
-
-### Requirement Terkait
-
-* FR-14 Jadwal Perawatan dari SOP
-* FR-16 Target Jadwal Perawatan
-* FR-18 Pembuatan Tugas Worker
-
-### Prioritas
-
-NAT 3 / Critical
-
-### Dasar Wawancara
-
-SOP perawatan seperti penyemprotan, pemupukan, penyiraman, dan pengendalian gulma perlu dijalankan konsisten.
-
-### Acceptance Criteria
-
-* Owner dapat memilih SOP saat membuat jadwal.
-* Sistem mengisi kategori dan instruksi berdasarkan SOP.
-* Owner dapat menentukan tanggal, target, dan worker.
-* Owner dapat mengubah instruksi sebelum menyimpan jadwal.
-* Sistem membuat tugas untuk worker.
-
----
-
 ## US-26 Owner Membuat Jadwal Manual
 
-Sebagai owner, saya ingin membuat jadwal manual agar pekerjaan yang tidak sesuai SOP tetap dapat diberikan kepada worker.
+Sebagai owner, saya ingin membuat jadwal perawatan agar pekerjaan lapangan dapat diberikan kepada worker.
 
 ### Aktor
 
@@ -798,7 +697,7 @@ Operasional kebun tidak selalu berupa pekerjaan rutin, sehingga owner membutuhka
 
 ### Acceptance Criteria
 
-* Owner dapat membuat jadwal tanpa memilih SOP.
+* Owner dapat membuat jadwal perawatan baru.
 * Owner dapat menentukan kategori pekerjaan.
 * Owner dapat mengisi instruksi.
 * Owner dapat memilih tanggal, target, dan worker.
@@ -829,8 +728,7 @@ Setiap pohon atau area kebun dapat memiliki kebutuhan berbeda, sehingga perawata
 ### Acceptance Criteria
 
 * Owner dapat memilih target seluruh kebun.
-* Owner dapat memilih target baris tertentu.
-* Owner dapat memilih target kolom tertentu.
+* Owner dapat memilih target khusus berupa catatan bebas.
 * Owner dapat memilih target pohon tertentu.
 * Target tersimpan pada jadwal dan tugas.
 
@@ -925,13 +823,15 @@ Pemilik membutuhkan pencatatan tanggal treatment agar jadwal berikutnya tidak mu
 * Sistem menyimpan tanggal realisasi.
 * Sistem menyimpan worker pelaksana.
 * Sistem memperbarui status tugas.
-* Realisasi masuk ke riwayat perawatan.
+* Sistem menautkan pohon yang dirawat sesuai target tugas: satu pohon untuk target pohon, seluruh pohon kebun yang belum diarsipkan untuk target kebun, dan tidak menautkan apa pun untuk target berupa catatan bebas.
+* Realisasi masuk ke riwayat perawatan dan ke riwayat setiap pohon yang tertaut.
+* Satu tugas hanya dapat diselesaikan sekali.
 
 ---
 
 ## US-31 Worker Menunda Tugas
 
-Sebagai worker, saya ingin menandai tugas sebagai tertunda agar owner mengetahui pekerjaan yang belum bisa diselesaikan.
+Sebagai worker, saya ingin menandai tugas sebagai tertunda beserta tanggal rencana pengerjaannya agar owner mengetahui pekerjaan yang belum bisa diselesaikan dan kapan saya akan mengerjakannya.
 
 ### Aktor
 
@@ -952,9 +852,12 @@ Kondisi lapangan dapat membuat pekerjaan tidak selalu selesai tepat waktu, sehin
 ### Acceptance Criteria
 
 * Worker dapat menandai tugas sebagai tertunda.
-* Worker dapat menambahkan alasan atau catatan singkat.
+* Worker wajib memilih tanggal rencana pengerjaan ulang.
+* Worker wajib menambahkan alasan atau catatan singkat.
 * Sistem memperbarui status tugas menjadi tertunda.
-* Owner dapat melihat tugas yang tertunda.
+* Sistem menggeser tenggat tugas ke tanggal penundaan, sehingga masa toleransi dihitung ulang dari tanggal itu.
+* Owner dapat melihat tugas yang tertunda beserta tanggal rencananya.
+* Owner tetap dapat mengedit maupun membatalkan jadwal yang tugasnya tertunda.
 
 ---
 
@@ -1149,7 +1052,7 @@ Dashboard owner menampilkan:
 * worker pending
 * pohon berbunga
 * pohon berbuah
-* SOP jatuh tempo atau terlambat
+* jadwal jatuh tempo atau terlambat
 
 ---
 
@@ -1212,7 +1115,6 @@ Owner bertanggung jawab mengambil keputusan dan mengawasi operasional kebun.
 * Owner dapat mengelola kebun.
 * Owner dapat mengelola worker.
 * Owner dapat mengelola pohon.
-* Owner dapat mengelola SOP.
 * Owner dapat membuat jadwal.
 * Owner dapat melihat laporan.
 * Owner dapat melihat dashboard owner.
@@ -1248,7 +1150,6 @@ Aplikasi harus sederhana karena worker tidak akan menggunakan sistem jika input 
 * Worker dapat mencatat kondisi pohon.
 * Worker dapat mencatat fase pohon.
 * Worker dapat membuat laporan operasional.
-* Worker tidak dapat mengelola SOP.
 * Worker tidak dapat menghapus worker.
 * Worker tidak dapat menghapus kebun.
 
@@ -1278,11 +1179,7 @@ Aplikasi harus sederhana karena worker tidak akan menggunakan sistem jika input 
 | US-18 | Owner Melihat Laporan Operasional Kebun             | Owner         | NAT 3     |
 | US-19 | Owner Mengubah Status Laporan Operasional           | Owner         | NAT 3     |
 | US-20 | Owner Membuat Tugas dari Laporan Operasional        | Owner         | NAT 3     |
-| US-21 | Owner Membuat SOP Perawatan                         | Owner         | NAT 3     |
-| US-22 | Owner Mengubah SOP Perawatan                        | Owner         | NAT 3     |
-| US-23 | Owner Menonaktifkan SOP                             | Owner         | NAT 2     |
-| US-24 | Sistem Menampilkan Acuan Jadwal Berikutnya dari SOP | Owner         | NAT 3     |
-| US-25 | Owner Membuat Jadwal dari SOP                       | Owner         | NAT 3     |
+| US-24 | Sistem Melanjutkan Jadwal Berulang | Owner | NAT 3 |
 | US-26 | Owner Membuat Jadwal Manual                         | Owner         | NAT 2     |
 | US-27 | Owner Menentukan Target Jadwal                      | Owner         | NAT 3     |
 | US-28 | Worker Melihat Daftar Tugas                         | Worker        | NAT 3     |

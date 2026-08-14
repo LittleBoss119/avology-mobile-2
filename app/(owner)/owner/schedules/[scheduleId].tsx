@@ -768,11 +768,24 @@ function getScheduleTone(schedule: CareScheduleDetail): 'danger' | 'muted' | 'su
   return 'muted';
 }
 
+// Menentukan `isLocked`, yang mematikan "Edit jadwal" DAN "Batalkan jadwal" di
+// sheet Kelola jadwal — jadi inilah aturan yang benar-benar terlihat di
+// perangkat, bukan penjaga di sisi database.
+//
+// Sejak migrasi 052: hanya aktivitas ber-status 'completed' yang mengunci.
+// Baris 'postponed' dulu ikut mengunci, sehingga tugas yang ditunda pekerja
+// membuat owner kehabisan aksi sama sekali — tidak bisa mengedit, tidak bisa
+// membatalkan, padahal pekerjaannya justru belum terjadi.
+//
+// Ini cerminan penjaga di cancel_care_schedule dan di
+// getScheduleEditEligibilityFromDetail. Ketiganya harus bergerak bersama.
 function scheduleHasWorkResult(
   schedule: CareScheduleDetail,
   taskDetailMap: Record<string, CareTaskDetail>
 ): boolean {
-  return schedule.tasks.some((task) => (taskDetailMap[task.id]?.activities.length ?? 0) > 0);
+  return schedule.tasks.some((task) =>
+    (taskDetailMap[task.id]?.activities ?? []).some((activity) => activity.status === 'completed')
+  );
 }
 
 function formatScheduleWorkers(

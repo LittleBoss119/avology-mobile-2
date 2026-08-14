@@ -1,5 +1,24 @@
 # Kebutuhan Fungsional dan Non-Fungsional Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Fitur SOP perawatan dan target
+> jadwal berupa **baris**/**kolom** sudah dicabut dari sistem.
+> **FR-13** (SOP Perawatan) dan **FR-14** (Jadwal Perawatan dari SOP) dihapus,
+> dan nomornya sengaja TIDAK dipakai ulang agar penomoran FR lain tidak bergeser
+> dan rujukan di `15-traceability-matrix.md`, `16-black-box-plan-testing.md`,
+> serta `17-uat-plan.md` tetap sahih. FR-16 dan FR-17 disunting isinya.
+> Catatan: "baris" dan "kolom" pada FR-07 dan FR-08 adalah atribut **posisi
+> pohon** (`trees.row_position` / `column_position`) yang masih ada dan tidak
+> terpengaruh. Riwayat keputusannya ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** **FR-06**, **FR-15**, **FR-17**,
+> **FR-20**, dan **FR-21** disunting isinya, dan **NFR-08** diperluas. Tidak ada
+> FR baru maupun FR yang dihapus, sehingga seluruh rujukan di
+> `15-traceability-matrix.md`, `16-black-box-plan-testing.md`, dan
+> `17-uat-plan.md` tetap sahih. Perubahan terbesar ada di FR-17: sistem kini
+> membuat jadwal penerus sendiri, mengenal masa toleransi keterlambatan, dan
+> menandai jadwal terlewat. Riwayat keputusannya ada di `decision-log.md`
+> (DL-034 sampai DL-038).
+
 ## 1. Kebutuhan Fungsional
 
 Kebutuhan fungsional menjelaskan fungsi utama yang harus disediakan oleh sistem Avology V2. Kebutuhan ini diturunkan dari hasil wawancara dengan pemilik kebun MS Farm dan scope MVP yang telah ditentukan.
@@ -48,7 +67,7 @@ Sistem harus memungkinkan owner membuat dan mengelola data kebun sebagai ruang k
 
 * Owner dapat membuat data kebun.
 * Sistem menyimpan informasi dasar kebun.
-* Data pohon, pekerja, jadwal, tugas, SOP, dan laporan terhubung dengan kebun tertentu.
+* Data pohon, pekerja, jadwal, tugas, dan laporan terhubung dengan kebun tertentu.
 
 ### Prioritas:
 
@@ -98,8 +117,11 @@ Sistem harus memungkinkan owner mengelola pekerja yang tergabung dalam kebun.
 * Owner dapat melihat daftar worker.
 * Owner dapat melihat status worker.
 * Owner dapat menghapus atau mengeluarkan worker aktif dari kebun.
+* Worker dapat keluar sendiri dari kebun.
 * Worker yang dikeluarkan tidak dapat lagi mengakses data kebun.
 * Riwayat tugas dan laporan worker tetap tersimpan meskipun worker dikeluarkan.
+* Saat keanggotaan berhenti aktif, tugas terbuka milik worker itu dilepas: tugasnya berhenti dihitung sebagai tunggakan, sedangkan jadwalnya tetap hidup.
+* Jadwal yang tugasnya dilepas dapat ditugaskan kembali kepada worker aktif lain.
 
 ### Prioritas:
 
@@ -215,44 +237,9 @@ Critical
 
 ---
 
-## FR-13 SOP Perawatan
-
-Sistem harus memungkinkan owner membuat template SOP perawatan sebagai standar pembuatan jadwal dan tugas.
-
-### Rincian:
-
-* Owner dapat membuat SOP perawatan.
-* Owner dapat mengubah SOP perawatan.
-* Owner dapat mengaktifkan atau menonaktifkan SOP.
-* Data SOP mencakup nama SOP, kategori perawatan, interval hari, instruksi default, target default, dan status aktif.
-* Kategori SOP mencakup penyiraman, pemupukan, penyemprotan, pengendalian gulma, dan lainnya.
-
-### Prioritas:
-
-Critical
-
----
-
-## FR-14 Jadwal Perawatan dari SOP
-
-Sistem harus memungkinkan owner membuat jadwal perawatan berdasarkan SOP yang sudah dibuat.
-
-### Rincian:
-
-* Owner dapat memilih SOP saat membuat jadwal.
-* Sistem mengisi kategori dan instruksi jadwal berdasarkan SOP.
-* Owner dapat mengubah tanggal, target, worker, dan instruksi sebelum jadwal disimpan.
-* Jadwal dari SOP menghasilkan tugas untuk worker.
-
-### Prioritas:
-
-Critical
-
----
-
 ## FR-15 Jadwal Perawatan Manual
 
-Sistem harus memungkinkan owner membuat jadwal perawatan tanpa menggunakan SOP.
+Sistem harus memungkinkan owner membuat jadwal perawatan.
 
 ### Rincian:
 
@@ -262,6 +249,9 @@ Sistem harus memungkinkan owner membuat jadwal perawatan tanpa menggunakan SOP.
 * Owner dapat menentukan target jadwal.
 * Owner dapat menulis instruksi perawatan.
 * Owner dapat memilih worker yang bertugas.
+* Owner dapat mengedit maupun membatalkan jadwal selama jadwal itu belum memiliki hasil kerja berstatus selesai.
+* Tugas yang ditunda worker tidak mengunci jadwal, karena penundaan berarti pekerjaannya belum dilakukan.
+* Owner dapat menugaskan worker ke jadwal yang belum memiliki tugas aktif.
 
 ### Prioritas:
 
@@ -276,9 +266,8 @@ Sistem harus memungkinkan owner menentukan target jadwal perawatan.
 ### Rincian:
 
 * Target jadwal dapat berupa seluruh kebun.
-* Target jadwal dapat berupa baris tertentu.
-* Target jadwal dapat berupa kolom tertentu.
 * Target jadwal dapat berupa pohon tertentu.
+* Target jadwal dapat berupa target khusus berupa catatan bebas.
 * Target jadwal digunakan untuk menentukan cakupan pekerjaan worker.
 
 ### Prioritas:
@@ -287,17 +276,22 @@ Critical
 
 ---
 
-## FR-17 Acuan Jadwal Berikutnya Berdasarkan Interval SOP
+## FR-17 Acuan Jadwal Berikutnya Berdasarkan Interval Pengulangan
 
-Sistem harus menghitung acuan jadwal perawatan berikutnya berdasarkan interval SOP.
+Sistem harus membentuk jadwal perawatan berikutnya berdasarkan interval pengulangan jadwal.
 
 ### Rincian:
 
-* SOP menyimpan interval dalam satuan hari.
-* Sistem melihat tanggal realisasi terakhir dari SOP terkait.
-* Sistem menghitung acuan jadwal berikutnya menggunakan rumus: tanggal realisasi terakhir + interval SOP.
-* Sistem menampilkan status jadwal berikutnya, seperti belum jatuh tempo, jatuh tempo hari ini, atau terlambat.
-* Sistem tidak membuat tugas berulang otomatis tanpa konfirmasi owner.
+* Jadwal menyimpan interval pengulangan dalam satuan hari.
+* Owner menentukan dasar perhitungan tanggal penerus: dari tanggal jadwal, atau dari tanggal realisasi.
+* Sistem menghitung tanggal penerus menggunakan rumus: tanggal dasar terpilih + interval pengulangan.
+* Sistem membuat jadwal penerus sendiri begitu satu siklus ditutup, tanpa menunggu konfirmasi owner.
+* Jadwal menyimpan masa toleransi keterlambatan dalam satuan hari. Jadwal tanpa masa toleransi tidak pernah dinyatakan terlewat.
+* Jadwal yang melewati tanggal jatuh tempo ditambah masa toleransi dinyatakan terlewat, dan rantainya tetap dilanjutkan ke siklus berikutnya.
+* Sistem menampilkan status jadwal: belum jatuh tempo, jatuh tempo hari ini, terlambat, atau terlewat.
+* Penerus jadwal hanya dibuat bila pekerjanya masih aktif; bila tidak, penerusnya lahir sebagai jadwal tanpa tugas yang menunggu penugasan owner.
+* Owner dapat menghentikan pengulangan tanpa membatalkan jadwal yang sedang berjalan.
+* Perhitungan penerus dan penandaan terlewat dijalankan saat aplikasi membaca data, bukan oleh penjadwal yang berjalan di luar aplikasi.
 
 ### Prioritas:
 
@@ -347,10 +341,14 @@ Sistem harus memungkinkan worker memperbarui status tugas yang dikerjakan.
 ### Rincian:
 
 * Worker dapat menandai tugas sebagai selesai.
-* Worker dapat menandai tugas sebagai tertunda.
+* Worker dapat menandai tugas sebagai tertunda dengan menyebut tanggal rencana pengerjaan ulang.
+* Tanggal penundaan wajib diisi; penundaan tanpa tanggal ditolak sistem.
+* Tenggat tugas ikut bergeser ke tanggal penundaan, sehingga masa toleransi dihitung ulang dari tanggal tersebut.
 * Worker dapat menambahkan catatan singkat.
+* Catatan wajib diisi pada realisasi berupa penundaan.
 * Sistem menyimpan tanggal realisasi tugas.
 * Sistem menyimpan worker pelaksana tugas.
+* Satu tugas hanya dapat diselesaikan satu kali; perbaikan catatan dilakukan lewat jalur perbaikan, bukan dengan mencatat ulang.
 
 ### Prioritas:
 
@@ -365,8 +363,11 @@ Sistem harus menyimpan riwayat realisasi perawatan yang telah dilakukan.
 ### Rincian:
 
 * Sistem menyimpan riwayat tugas yang selesai atau tertunda.
-* Jika tugas berkaitan dengan pohon tertentu, aktivitas masuk ke riwayat pohon.
-* Jika tugas berkaitan dengan area atau kebun, aktivitas masuk ke riwayat operasional kebun.
+* Saat tugas diselesaikan, sistem menautkan pohon yang dirawat ke aktivitas tersebut.
+* Target pohon tertentu menautkan satu pohon; target seluruh kebun menautkan semua pohon kebun yang belum diarsipkan; target khusus berupa catatan bebas tidak menautkan pohon.
+* Pohon ditentukan pada saat penyelesaian tugas, bukan pada saat jadwal dibuat, agar tautannya mencerminkan pohon yang benar-benar ada saat pekerjaan dilakukan.
+* Aktivitas yang tertaut pohon muncul di riwayat setiap pohon terkait.
+* Aktivitas yang tidak tertaut pohon tetap tercatat sebagai riwayat kerja kebun.
 * Riwayat dapat digunakan owner untuk mengevaluasi pelaksanaan perawatan.
 
 ### Prioritas:
@@ -445,7 +446,7 @@ Dashboard owner menampilkan:
 * worker pending
 * pohon dalam fase berbunga
 * pohon dalam fase berbuah
-* SOP jatuh tempo atau terlambat
+* jadwal jatuh tempo atau terlambat
 
 ### Prioritas:
 
@@ -479,11 +480,10 @@ Sistem harus membatasi akses fitur berdasarkan role pengguna.
 
 ### Rincian:
 
-* Owner dapat mengelola kebun, pekerja, pohon, SOP, jadwal, laporan, dan dashboard owner.
+* Owner dapat mengelola kebun, pekerja, pohon, jadwal, laporan, dan dashboard owner.
 * Worker dapat melihat tugas, menyelesaikan tugas, mencatat kondisi pohon, mencatat fase pohon, dan membuat laporan operasional.
 * Worker tidak dapat menghapus data kebun.
 * Worker tidak dapat menghapus worker lain.
-* Worker tidak dapat mengelola SOP.
 * Worker tidak dapat membuat jadwal utama kecuali tugas atau laporan yang diperbolehkan sistem.
 
 ### Prioritas:
@@ -646,14 +646,19 @@ Sistem harus memberikan fleksibilitas kepada owner dalam membuat jadwal perawata
 
 ### Rincian:
 
-* Jadwal dapat dibuat dari SOP.
 * Jadwal dapat dibuat manual.
 * Owner dapat mengubah tanggal, target, worker, dan instruksi sebelum jadwal disimpan.
-* Sistem tidak memaksa owner mengikuti interval SOP secara kaku.
+* Owner masih dapat mengedit maupun membatalkan jadwal setelah disimpan, selama belum ada hasil kerja yang selesai.
+* Sistem tidak memaksa owner mengikuti interval pengulangan secara kaku.
+* Owner dapat menghentikan pengulangan kapan saja tanpa membatalkan jadwal yang sedang berjalan.
+* Worker dapat menggeser tenggat pekerjaan lewat penundaan bertanggal, tanpa perlu menunggu owner.
+* Masa toleransi keterlambatan ditentukan per jadwal, dan jadwal tanpa masa toleransi tidak pernah dinyatakan terlewat.
 
 ### Dasar:
 
 Operasional kebun dipengaruhi kondisi lapangan, sehingga jadwal tidak selalu bisa berjalan sepenuhnya otomatis.
+
+Pengulangan memang berjalan sendiri, tetapi kelonggarannya dijaga di tiga titik: owner menentukan masa toleransi, worker dapat menggeser tenggat lewat penundaan, dan owner dapat menghentikan rantai kapan saja.
 
 ### Prioritas:
 
@@ -800,11 +805,9 @@ Standard
 | FR-10 | Riwayat Kondisi Pohon                            | Critical  |
 | FR-11 | Laporan Operasional Kebun                        | Critical  |
 | FR-12 | Tindak Lanjut Laporan Operasional                | Critical  |
-| FR-13 | SOP Perawatan                                    | Critical  |
-| FR-14 | Jadwal Perawatan dari SOP                        | Critical  |
 | FR-15 | Jadwal Perawatan Manual                          | Standard  |
 | FR-16 | Target Jadwal Perawatan                          | Critical  |
-| FR-17 | Acuan Jadwal Berikutnya Berdasarkan Interval SOP | Critical  |
+| FR-17 | Acuan Jadwal Berikutnya Berdasarkan Interval Pengulangan | Critical |
 | FR-18 | Pembuatan Tugas Worker                           | Critical  |
 | FR-19 | Daftar Tugas Worker                              | Critical  |
 | FR-20 | Realisasi Tugas Worker                           | Critical  |

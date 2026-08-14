@@ -41,10 +41,11 @@ import {
   uploadTaskProofPhoto,
 } from './photoAttachmentService';
 import type { TaskProofPhoto } from '../types/media';
+import { sweepMissedSchedules } from './missedScheduleSweep';
 import { fail, ok } from '../utils/serviceResult';
 
 const CARE_TASK_SELECT =
-  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_row, target_column, target_tree_id, custom_target_note, due_date, status, requires_photo, created_at, updated_at';
+  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_tree_id, custom_target_note, due_date, status, missed_at, requires_photo, created_at, updated_at';
 
 type CareTaskRow = {
   id: string;
@@ -57,12 +58,11 @@ type CareTaskRow = {
   category: CareCategory | null;
   instruction: string | null;
   target_type: TargetType;
-  target_row: string | null;
-  target_column: string | null;
   target_tree_id: string | null;
   custom_target_note: string | null;
   due_date: string;
   status: TaskStatus;
+  missed_at?: string | null;
   requires_photo: boolean | null;
   created_at?: string;
   updated_at?: string | null;
@@ -105,11 +105,18 @@ export async function getWorkerTasks(
     return fail(accessResult.error);
   }
 
+  await sweepMissedSchedules(input.farmId);
+
   const { data, error } = await supabase
     .from('care_tasks')
     .select(CARE_TASK_SELECT)
     .eq('farm_id', input.farmId)
     .eq('assigned_to', userIdResult.data)
+    // Tugas yang dilepas saat pekerja ini pernah keluar dari kebun (migrasi
+    // 051) tidak boleh muncul kembali kalau ia bergabung lagi. Baris
+    // keanggotaannya dipakai ulang oleh request_join_farm, jadi user_id-nya
+    // sama persis dan tugas lamanya akan lolos RLS begitu ia aktif kembali.
+    .is('released_at', null)
     .order('due_date', { ascending: true })
     .order('created_at', { ascending: false })
     .returns<CareTaskRow[]>();
@@ -140,6 +147,11 @@ export async function getFarmTasks(
     .from('care_tasks')
     .select(CARE_TASK_SELECT)
     .eq('farm_id', input.farmId)
+    // Tugas yang dilepas (migrasi 051) dibuang dari daftar tugas owner dengan
+    // alasan yang sama seperti di layar Jadwal: ia akan terbaca sebagai
+    // tunggakan atas nama orang yang sudah tidak ada di kebun ini, dan itulah
+    // gejala yang diperbaiki 051.
+    .is('released_at', null)
     .order('due_date', { ascending: true })
     .order('created_at', { ascending: false })
     .returns<CareTaskRow[]>();
@@ -226,6 +238,11 @@ export async function getOperationalReportFollowUpTasks(
     .from('care_tasks')
     .select(CARE_TASK_SELECT)
     .eq('operational_report_id', reportId)
+    // Sejalan dengan getExistingActiveFollowUpTask di bawah, yang sejak migrasi
+    // 051 tidak lagi menganggap tugas terlepas sebagai tindak lanjut aktif.
+    // Kalau daftar ini tetap menampilkannya, owner melihat dua tugas tindak
+    // lanjut untuk satu laporan padahal hanya satu yang hidup.
+    .is('released_at', null)
     .order('due_date', { ascending: true })
     .order('created_at', { ascending: false })
     .returns<CareTaskRow[]>();
@@ -314,10 +331,14 @@ export async function resolveReportWithTask(
     return fail(title);
   }
 
+  // Kategori wajib sejak migrasi 047. Ditolak di sini supaya pesannya terbaca;
+  // tanpa ini pemanggil hanya melihat exception mentah dari RPC.
+  if (!input.category) {
+    return fail(new Error('Kategori perawatan wajib dipilih.'));
+  }
+
   const target = normalizeTaskTarget({
     customTargetNote: input.customTargetNote,
-    targetColumn: input.targetColumn,
-    targetRow: input.targetRow,
     targetTreeId: input.targetTreeId,
     targetType: input.targetType,
   });
@@ -359,7 +380,7 @@ export async function resolveReportWithTask(
 
   const { data, error } = await supabase.rpc('create_task_from_operational_report', {
     p_assigned_worker_id: workerId,
-    p_category: input.category ?? null,
+    p_category: input.category,
     p_custom_target_note: target.customTargetNote,
     p_due_date: dueDate,
     p_instruction: normalizeOptionalText(input.instruction),
@@ -370,8 +391,6 @@ export async function resolveReportWithTask(
         ? null
         : input.ownerResponseNote.trim(),
     p_requires_photo: input.requiresPhoto ?? false,
-    p_target_column: target.targetColumn,
-    p_target_row: target.targetRow,
     p_target_tree_id: target.targetTreeId,
     p_target_type: target.targetType,
     p_title: title,
@@ -438,8 +457,15 @@ export async function postponeTask(
     return fail(new Error('Catatan penundaan wajib diisi.'));
   }
 
+  const postponedUntil = normalizeOptionalText(input.postponedUntil);
+
+  if (!postponedUntil) {
+    return fail(new Error('Tanggal penundaan wajib diisi.'));
+  }
+
   const { data, error } = await supabase.rpc('postpone_task', {
     p_note: note,
+    p_postponed_until: postponedUntil,
     p_task_id: input.taskId,
   });
 
@@ -735,6 +761,17 @@ async function getExistingActiveFollowUpTask(
     .select('id, status, title')
     .eq('operational_report_id', operationalReportId)
     .in('status', ['pending', 'postponed'])
+    // Defensif saja: tugas tindak lanjut laporan punya care_schedule_id NULL,
+    // dan sweep_missed_schedules (migrasi 048) hanya menandai tugas yang
+    // ter-join ke sebuah jadwal — jadi baris di sini tidak pernah terlewat.
+    // Filter dipasang agar tetap benar seandainya suatu saat ada tugas yang
+    // punya kedua sumber sekaligus.
+    .is('missed_at', null)
+    // Bukan defensif: tugas tindak lanjut laporan IKUT dilepas saat pekerjanya
+    // keluar (migrasi 051). Tanpa baris ini, klien tetap melaporkan "sudah ada
+    // tindak lanjut aktif" dan menghalangi owner sebelum RPC-nya sempat
+    // dipanggil — padahal penjaga di sisi database sudah dilonggarkan.
+    .is('released_at', null)
     .limit(1)
     .maybeSingle<ExistingFollowUpTaskRow>();
 
@@ -906,6 +943,7 @@ function mapCareTask(
     createdAt: row.created_at,
     customTargetNote: row.custom_target_note,
     dueDate: row.due_date,
+    missedAt: row.missed_at ?? null,
     farmId: row.farm_id,
     id: row.id,
     instruction: row.instruction,
@@ -913,8 +951,6 @@ function mapCareTask(
     requiresPhoto: row.requires_photo ?? false,
     scheduleIsCancelled: options.scheduleIsCancelled,
     status: row.status,
-    targetColumn: row.target_column,
-    targetRow: row.target_row,
     targetTreeId: row.target_tree_id,
     targetType: row.target_type,
     title: row.title,
@@ -949,15 +985,11 @@ function normalizeTaskDate(value: string): string | Error {
 
 function normalizeTaskTarget(input: {
   targetType: TargetType | string | null | undefined;
-  targetRow?: string | null;
-  targetColumn?: string | null;
   targetTreeId?: string | null;
   customTargetNote?: string | null;
 }):
   | {
       targetType: TargetType;
-      targetRow: string | null;
-      targetColumn: string | null;
       targetTreeId: string | null;
       customTargetNote: string | null;
     }
@@ -966,49 +998,17 @@ function normalizeTaskTarget(input: {
     return new Error('Target tugas wajib dipilih.');
   }
 
-  if (!['farm', 'row', 'column', 'tree', 'custom'].includes(input.targetType)) {
+  // Lihat catatan yang sama di normalizeManualTarget (careScheduleService):
+  // 'row'/'column' ditutup CHECK di database sejak migrasi 047.
+  if (!['farm', 'tree', 'custom'].includes(input.targetType)) {
     return new Error('Target tugas tidak valid.');
   }
 
   if (input.targetType === 'farm') {
     return {
       customTargetNote: null,
-      targetColumn: null,
-      targetRow: null,
       targetTreeId: null,
       targetType: 'farm',
-    };
-  }
-
-  if (input.targetType === 'row') {
-    const row = normalizeOptionalText(input.targetRow);
-
-    if (!row) {
-      return new Error('Baris target wajib diisi.');
-    }
-
-    return {
-      customTargetNote: null,
-      targetColumn: null,
-      targetRow: row,
-      targetTreeId: null,
-      targetType: 'row',
-    };
-  }
-
-  if (input.targetType === 'column') {
-    const column = normalizeOptionalText(input.targetColumn);
-
-    if (!column) {
-      return new Error('Kolom target wajib diisi.');
-    }
-
-    return {
-      customTargetNote: null,
-      targetColumn: column,
-      targetRow: null,
-      targetTreeId: null,
-      targetType: 'column',
     };
   }
 
@@ -1021,8 +1021,6 @@ function normalizeTaskTarget(input: {
 
     return {
       customTargetNote: null,
-      targetColumn: null,
-      targetRow: null,
       targetTreeId: treeId,
       targetType: 'tree',
     };
@@ -1036,8 +1034,6 @@ function normalizeTaskTarget(input: {
 
   return {
     customTargetNote,
-    targetColumn: null,
-    targetRow: null,
     targetTreeId: null,
     targetType: 'custom',
   };

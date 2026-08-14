@@ -321,7 +321,12 @@ function buildTaskSections(
   const byDate = new Map<string, CareTask[]>();
 
   for (const task of tasks) {
-    if (buckets[task.id] === 'overdue') {
+    // Lihat catatan yang sama di layar jadwal owner: 'missed' (migrasi 048)
+    // sementara ikut section "Terlambat" supaya tampilan tidak berubah sebelum
+    // tahap polish UI.
+    const bucket = buckets[task.id];
+
+    if (bucket === 'overdue' || bucket === 'missed') {
       overdue.push(task);
       continue;
     }

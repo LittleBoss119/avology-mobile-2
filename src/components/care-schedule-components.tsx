@@ -34,8 +34,6 @@ export type ManualScheduleFormValues = {
   repeatEveryDays: string;
   requiresPhoto: boolean;
   scheduledDate: string;
-  targetColumn: string;
-  targetRow: string;
   targetTreeId: string;
   targetType: TargetType;
   title: string;
@@ -49,8 +47,6 @@ export const REPEAT_EVERY_DAYS_MAX = 365;
 
 export const careScheduleTargetOptions: TargetType[] = [
   'farm',
-  'row',
-  'column',
   'tree',
   'custom',
 ];
@@ -166,8 +162,6 @@ export function ManualScheduleForm({
     onChange({
       ...values,
       customTargetNote: targetType === 'custom' ? values.customTargetNote : '',
-      targetColumn: targetType === 'column' ? values.targetColumn : '',
-      targetRow: targetType === 'row' ? values.targetRow : '',
       targetTreeId: targetType === 'tree' ? values.targetTreeId : '',
       targetType,
     });
@@ -178,8 +172,6 @@ export function ManualScheduleForm({
   }
 
   const showTargetDetail =
-    values.targetType === 'row' ||
-    values.targetType === 'column' ||
     values.targetType === 'tree' ||
     values.targetType === 'custom';
 
@@ -243,24 +235,6 @@ export function ManualScheduleForm({
 
       {showTargetDetail ? (
         <View onLayout={reportLayout('targetDetail')}>
-          {values.targetType === 'row' ? (
-            <FormTextField
-              error={errors?.targetDetail}
-              label="Baris *"
-              onChangeText={(value) => updateValue('targetRow', value)}
-              placeholder="Contoh: A"
-              value={values.targetRow}
-            />
-          ) : null}
-          {values.targetType === 'column' ? (
-            <FormTextField
-              error={errors?.targetDetail}
-              label="Kolom *"
-              onChangeText={(value) => updateValue('targetColumn', value)}
-              placeholder="Contoh: 1"
-              value={values.targetColumn}
-            />
-          ) : null}
           {values.targetType === 'tree' ? (
             <FormChipGroup
               emptyText="Belum ada pohon aktif. Tambahkan pohon dulu."
@@ -339,11 +313,7 @@ export function validateScheduleForm(values: ManualScheduleFormValues): Schedule
     errors.targetType = 'Pilih target.';
   }
 
-  if (values.targetType === 'row' && !values.targetRow.trim()) {
-    errors.targetDetail = 'Baris wajib diisi.';
-  } else if (values.targetType === 'column' && !values.targetColumn.trim()) {
-    errors.targetDetail = 'Kolom wajib diisi.';
-  } else if (values.targetType === 'tree' && !values.targetTreeId.trim()) {
+  if (values.targetType === 'tree' && !values.targetTreeId.trim()) {
     errors.targetDetail = 'Pohon wajib dipilih.';
   } else if (values.targetType === 'custom' && !values.customTargetNote.trim()) {
     errors.targetDetail = 'Target khusus wajib diisi.';
@@ -414,14 +384,6 @@ export function clearResolvedScheduleFormErrors(
 }
 
 function isTargetDetailValid(values: ManualScheduleFormValues): boolean {
-  if (values.targetType === 'row') {
-    return Boolean(values.targetRow.trim());
-  }
-
-  if (values.targetType === 'column') {
-    return Boolean(values.targetColumn.trim());
-  }
-
   if (values.targetType === 'tree') {
     return Boolean(values.targetTreeId.trim());
   }
@@ -664,7 +626,7 @@ function FormChip({
   );
 }
 
-function FormDateField({
+export function FormDateField({
   error,
   label,
   onChangeDate,
@@ -833,21 +795,11 @@ function ProofOptionButton({
 
 export function formatCareTarget(input: {
   customTargetNote: string | null;
-  targetColumn: string | null;
-  targetRow: string | null;
   targetTreeId: string | null;
   targetType: TargetType;
 }): string {
   if (input.targetType === 'farm') {
     return 'Seluruh kebun';
-  }
-
-  if (input.targetType === 'row') {
-    return `Baris ${input.targetRow ?? '-'}`;
-  }
-
-  if (input.targetType === 'column') {
-    return `Kolom ${input.targetColumn ?? '-'}`;
   }
 
   if (input.targetType === 'tree') {

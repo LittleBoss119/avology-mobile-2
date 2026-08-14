@@ -109,6 +109,81 @@ export function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Tanggal relatif terhadap hari ini, dalam UTC.
+//
+// PERINGATAN ZONA WAKTU: seluruh perbandingan tanggal di database memakai
+// Asia/Jakarta (lihat today_wib pada sweep_missed_schedules dan postpone_task),
+// sementara fungsi ini memakai UTC. Selisihnya paling banyak satu hari.
+// Karena itu offset yang dipakai stage 10-13 sengaja BESAR (-30, +3, +21):
+// pergeseran satu hari tidak boleh sampai membalik hasil assertion. Jangan
+// memakai offset -1 atau +1 untuk menguji batas.
+export function isoDateOffset(days) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+export async function signUpActor({ runId, label, fullName, phone }) {
+  const email = uniqueEmail(label, runId);
+  const { client, user } = await createUserWithProfile({ email, fullName, phone });
+
+  return { client, email, fullName, phone, userId: user.id };
+}
+
+export async function createFarmWithOwner(stage, owner, { name, location, areaSize }) {
+  const farmId = await expectSuccess(
+    stage,
+    `owner creates farm ${name}`,
+    owner.client.rpc('create_farm_with_owner', {
+      p_name: name,
+      p_location: location,
+      p_area_size: areaSize,
+    }),
+    'Check create_farm_with_owner(p_name, p_location, p_area_size).'
+  );
+
+  return getSingle(
+    stage,
+    `owner reads join code of ${name}`,
+    owner.client.from('farms').select('id, name, join_code').eq('id', farmId).single(),
+    'Active owner should be able to read their own farm.'
+  );
+}
+
+// Satu kebun berisi satu owner dan satu pekerja aktif, seluruhnya dibuat baru.
+//
+// Stage 10-13 SENGAJA tidak memakai kebun bersama milik stage 01: keempatnya
+// menulis tugas terlewat, tugas terlepas, dan rantai jadwal yang akan mengotori
+// hitungan tunggakan yang diperiksa stage 06.
+export async function createIsolatedFarmWithWorker(stage, { runId, slug, workerPhone = '081999000001' }) {
+  const owner = await signUpActor({
+    runId,
+    label: `avology-${slug}-owner`,
+    fullName: `Owner ${slug} ${runId}`,
+    phone: '081999000000',
+  });
+
+  const farm = await createFarmWithOwner(stage, owner, {
+    name: `Kebun ${slug} ${runId}`,
+    location: `Lokasi ${slug}`,
+    areaSize: 1000,
+  });
+
+  const worker = await signUpActor({
+    runId,
+    label: `avology-${slug}-worker`,
+    fullName: `Worker ${slug} ${runId}`,
+    phone: workerPhone,
+  });
+
+  const membershipId = firstRpcRow(
+    await joinWorkerToFarm(stage, worker.client, farm.join_code)
+  );
+  await approveWorker(stage, owner.client, membershipId);
+
+  return { owner, worker: { ...worker, membershipId }, farm };
+}
+
 export function loadState() {
   try {
     return JSON.parse(readFileSync(STATE_FILE_PATH, 'utf8'));

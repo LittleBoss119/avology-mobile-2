@@ -1,5 +1,28 @@
 # SQL Schema Draft Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Tabel `care_sops` beserta constraint,
+> trigger, index, dan RLS policy-nya dihapus; kolom `target_row`/`target_column`
+> dibuang dari `care_schedules` dan `care_tasks`; `care_tasks.category` menjadi
+> `not null`; `care_schedules.repeat_every_days` ditambahkan. Constraint target
+> ditulis ulang untuk tiga cabang (`farm`, `tree`, `custom`) dan ditambah
+> `*_target_type_allowed_check`. Penomoran bab dirapatkan.
+>
+> Enum `target_type` di bab 4.8 SENGAJA dibiarkan memuat `row` dan `column`:
+> PostgreSQL tidak punya `alter type ... drop value`, jadi draft ini tetap
+> mencerminkan tipe yang benar-benar ada di database. Penutupannya lewat CHECK.
+> Kolom `row_position`/`column_position` pada `trees` tidak terpengaruh.
+> Riwayat keputusannya ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** `care_schedules` bertambah kolom
+> rantai dan masa toleransi, `care_tasks` bertambah penanda terlewat dan
+> pelepasan, `care_activities` bertambah `postponed_until`, dan tabel jembatan
+> `care_activity_trees` ditambahkan sebagai sub-bab pada bab 14 — tabel itu sudah
+> ada di database sejak migrasi 025 tetapi belum pernah masuk draft ini.
+> `tree_history_view` di bab 22 ditulis ulang agar mengambil pohon dari jembatan
+> tersebut, sehingga perawatan bertarget seluruh kebun tidak lagi hilang dari
+> riwayat pohon. Penomoran bab TIDAK bergeser. Riwayat keputusannya ada di
+> `decision-log.md` (DL-034 sampai DL-038).
+
 ## 1. Tujuan SQL Schema Draft
 
 Dokumen ini berisi rancangan awal SQL untuk implementasi database Avology V2 menggunakan Supabase/PostgreSQL.
@@ -460,112 +483,54 @@ execute function public.set_updated_at();
 
 ---
 
-# 12. Tabel Care SOPs
-
-```sql
-create table if not exists public.care_sops (
-  id uuid primary key default gen_random_uuid(),
-  farm_id uuid not null references public.farms(id) on delete cascade,
-  name text not null,
-  category care_category not null,
-  interval_days integer,
-  default_instruction text,
-  default_target_type target_type not null default 'farm',
-  default_target_row text,
-  default_target_column text,
-  default_target_tree_id uuid references public.trees(id) on delete set null,
-  is_active boolean not null default true,
-  created_by uuid not null references public.profiles(id) on delete restrict,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz
-);
-```
-
-## Constraint SOP
-
-```sql
-alter table public.care_sops
-drop constraint if exists care_sops_interval_days_check;
-
-alter table public.care_sops
-add constraint care_sops_interval_days_check
-check (interval_days is null or interval_days > 0);
-```
-
-```sql
-alter table public.care_sops
-drop constraint if exists care_sops_default_target_check;
-
-alter table public.care_sops
-add constraint care_sops_default_target_check
-check (
-  (
-    default_target_type = 'farm'
-    and default_target_row is null
-    and default_target_column is null
-    and default_target_tree_id is null
-  )
-  or
-  (
-    default_target_type = 'row'
-    and default_target_row is not null
-    and default_target_column is null
-    and default_target_tree_id is null
-  )
-  or
-  (
-    default_target_type = 'column'
-    and default_target_row is null
-    and default_target_column is not null
-    and default_target_tree_id is null
-  )
-  or
-  (
-    default_target_type = 'tree'
-    and default_target_row is null
-    and default_target_column is null
-    and default_target_tree_id is not null
-  )
-);
-```
-
-`care_sops.default_target_type` tidak menggunakan `custom` pada MVP. Target `custom` hanya berlaku untuk jadwal atau tugas manual yang menyimpan `custom_target_note`.
-
-## Trigger Updated At
-
-```sql
-drop trigger if exists set_care_sops_updated_at
-on public.care_sops;
-
-create trigger set_care_sops_updated_at
-before update on public.care_sops
-for each row
-execute function public.set_updated_at();
-```
-
----
-
-# 13. Tabel Care Schedules
+# 12. Tabel Care Schedules
 
 ```sql
 create table if not exists public.care_schedules (
   id uuid primary key default gen_random_uuid(),
   farm_id uuid not null references public.farms(id) on delete cascade,
-  care_sop_id uuid references public.care_sops(id) on delete set null,
   title text not null,
   category care_category not null,
   scheduled_date date not null,
   target_type target_type not null,
-  target_row text,
-  target_column text,
   target_tree_id uuid references public.trees(id) on delete set null,
   custom_target_note text,
   instruction text,
+  repeat_every_days integer,
+  date_basis text not null default 'jadwal',
+  grace_days integer,
+  missed_at timestamptz,
+  series_id uuid,
+  parent_schedule_id uuid references public.care_schedules(id) on delete set null,
+  is_cancelled boolean not null default false,
+  cancelled_at timestamptz,
+  cancelled_by uuid references public.profiles(id) on delete set null,
+  cancel_reason text,
   created_by uuid not null references public.profiles(id) on delete restrict,
   created_at timestamptz not null default now(),
   updated_at timestamptz
 );
 ```
+
+## Constraint Rantai dan Masa Toleransi
+
+```sql
+alter table public.care_schedules
+drop constraint if exists care_schedules_date_basis_check;
+
+alter table public.care_schedules
+add constraint care_schedules_date_basis_check
+check (date_basis in ('jadwal', 'realisasi'));
+
+alter table public.care_schedules
+drop constraint if exists care_schedules_grace_days_check;
+
+alter table public.care_schedules
+add constraint care_schedules_grace_days_check
+check (grace_days is null or grace_days >= 0);
+```
+
+Nilai `grace_days = 0` sah dan berarti jadwal dinyatakan terlewat begitu tanggalnya lewat. Nilai NULL berarti jadwal tidak pernah dinyatakan terlewat.
 
 ## Constraint Target Jadwal
 
@@ -578,42 +543,47 @@ add constraint care_schedules_target_check
 check (
   (
     target_type = 'farm'
-    and target_row is null
-    and target_column is null
-    and target_tree_id is null
-    and custom_target_note is null
-  )
-  or
-  (
-    target_type = 'row'
-    and target_row is not null
-    and target_column is null
-    and target_tree_id is null
-    and custom_target_note is null
-  )
-  or
-  (
-    target_type = 'column'
-    and target_row is null
-    and target_column is not null
     and target_tree_id is null
     and custom_target_note is null
   )
   or
   (
     target_type = 'tree'
-    and target_row is null
-    and target_column is null
     and target_tree_id is not null
     and custom_target_note is null
   )
   or
   (
     target_type = 'custom'
-    and care_sop_id is null
+    and target_tree_id is null
     and custom_target_note is not null
   )
 );
+```
+
+## Constraint Nilai Target Type
+
+Nilai `row` dan `column` masih ada di tipe enum `target_type` karena PostgreSQL
+tidak menyediakan `alter type ... drop value`. Keduanya ditutup lewat CHECK.
+
+```sql
+alter table public.care_schedules
+drop constraint if exists care_schedules_target_type_allowed_check;
+
+alter table public.care_schedules
+add constraint care_schedules_target_type_allowed_check
+check (target_type in ('farm', 'tree', 'custom'));
+```
+
+## Constraint Interval Pengulangan
+
+```sql
+alter table public.care_schedules
+drop constraint if exists care_schedules_repeat_every_days_check;
+
+alter table public.care_schedules
+add constraint care_schedules_repeat_every_days_check
+check (repeat_every_days is null or repeat_every_days > 0);
 ```
 
 ## Trigger Updated At
@@ -630,7 +600,7 @@ execute function public.set_updated_at();
 
 ---
 
-# 14. Tabel Care Tasks
+# 13. Tabel Care Tasks
 
 ```sql
 create table if not exists public.care_tasks (
@@ -641,19 +611,39 @@ create table if not exists public.care_tasks (
   assigned_to uuid not null references public.profiles(id) on delete restrict,
   assigned_by uuid not null references public.profiles(id) on delete restrict,
   title text not null,
-  category care_category,
+  category care_category not null,
   instruction text,
   target_type target_type not null,
-  target_row text,
-  target_column text,
   target_tree_id uuid references public.trees(id) on delete set null,
   custom_target_note text,
   due_date date not null,
   status task_status not null default 'pending',
+  missed_at timestamptz,
+  released_at timestamptz,
+  released_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz
 );
 ```
+
+## Constraint Pelepasan Tugas
+
+```sql
+alter table public.care_tasks
+drop constraint if exists care_tasks_released_pair_check;
+
+alter table public.care_tasks
+add constraint care_tasks_released_pair_check
+check (
+  (released_at is null and released_reason is null)
+  or (
+    released_at is not null
+    and released_reason in ('removed_by_owner', 'left_by_worker')
+  )
+);
+```
+
+Kosakata `released_reason` sengaja sama persis dengan `farm_members.removed_reason` pada kedua jalur keluar, sehingga sebab di tabel tugas dan sebab di tabel keanggotaan dapat dipadankan tanpa tabel penerjemah.
 
 ## Constraint Sumber Tugas
 
@@ -680,41 +670,33 @@ add constraint care_tasks_target_check
 check (
   (
     target_type = 'farm'
-    and target_row is null
-    and target_column is null
-    and target_tree_id is null
-    and custom_target_note is null
-  )
-  or
-  (
-    target_type = 'row'
-    and target_row is not null
-    and target_column is null
-    and target_tree_id is null
-    and custom_target_note is null
-  )
-  or
-  (
-    target_type = 'column'
-    and target_row is null
-    and target_column is not null
     and target_tree_id is null
     and custom_target_note is null
   )
   or
   (
     target_type = 'tree'
-    and target_row is null
-    and target_column is null
     and target_tree_id is not null
     and custom_target_note is null
   )
   or
   (
     target_type = 'custom'
+    and target_tree_id is null
     and custom_target_note is not null
   )
 );
+```
+
+## Constraint Nilai Target Type
+
+```sql
+alter table public.care_tasks
+drop constraint if exists care_tasks_target_type_allowed_check;
+
+alter table public.care_tasks
+add constraint care_tasks_target_type_allowed_check
+check (target_type in ('farm', 'tree', 'custom'));
 ```
 
 ## Trigger Updated At
@@ -731,7 +713,7 @@ execute function public.set_updated_at();
 
 ---
 
-# 15. Tabel Care Activities
+# 14. Tabel Care Activities
 
 ```sql
 create table if not exists public.care_activities (
@@ -741,7 +723,22 @@ create table if not exists public.care_activities (
   performed_by uuid not null references public.profiles(id) on delete restrict,
   status activity_status not null,
   note text,
+  postponed_until date,
   performed_at timestamptz not null default now()
+);
+```
+
+## Constraint Tanggal Penundaan
+
+```sql
+alter table public.care_activities
+drop constraint if exists care_activities_postponed_until_check;
+
+alter table public.care_activities
+add constraint care_activities_postponed_until_check
+check (
+  (status = 'postponed' and postponed_until is not null)
+  or (status = 'completed' and postponed_until is null)
 );
 ```
 
@@ -777,7 +774,38 @@ execute function public.sync_task_status_from_activity();
 
 ---
 
-# 16. Tabel Growth Phase Records
+## Tabel Jembatan Care Activity Trees
+
+Pohon yang dirawat tidak disimpan sebagai kolom pada `care_activities`, melainkan pada tabel jembatan berikut. Satu perawatan dapat berdampak pada banyak pohon sekaligus, sehingga hubungannya banyak-ke-banyak.
+
+```sql
+create table if not exists public.care_activity_trees (
+  care_activity_id uuid not null
+    references public.care_activities(id) on delete cascade,
+  tree_id uuid not null
+    references public.trees(id) on delete cascade,
+  constraint care_activity_trees_pkey primary key (care_activity_id, tree_id)
+);
+```
+
+Jembatan diisi saat aktivitas dibuat, dari dua jalur:
+
+1. **Pencatatan inisiatif** — pelaku memilih sendiri pohon yang dirawat.
+2. **Realisasi tugas terjadwal** — pohon diturunkan dari target tugas saat tugas diselesaikan:
+
+```txt
+target_type = 'tree'   -> satu baris, dari care_tasks.target_tree_id
+target_type = 'farm'   -> seluruh pohon kebun dengan is_archived = false
+target_type = 'custom' -> tidak ada pohon yang ditautkan
+```
+
+Pohon diresolusi pada saat penyelesaian tugas, bukan saat jadwal dibuat, agar tautannya mencerminkan pohon yang benar-benar ada ketika pekerjaan dilakukan.
+
+Tabel ini hanya menerima `select` dan `insert`. Tanpa `update` dan `delete`, tautan yang sudah terbentuk tidak dapat dikoreksi; satu-satunya cara menghapusnya adalah menghapus aktivitas induknya, yang akan ikut menghapus tautannya lewat `on delete cascade`.
+
+---
+
+# 15. Tabel Growth Phase Records
 
 ```sql
 create table if not exists public.growth_phase_records (
@@ -823,7 +851,7 @@ execute function public.sync_tree_current_growth_phase();
 
 ---
 
-# 17. Function Membuat Join Code
+# 16. Function Membuat Join Code
 
 Function ini menghasilkan kode bergabung sederhana untuk kebun.
 
@@ -862,7 +890,7 @@ Namun untuk MVP, kode 8 karakter sudah cukup sebagai draft awal. Tidak perlu men
 
 ---
 
-# 18. Function Membuat Kebun dan Owner Membership
+# 17. Function Membuat Kebun dan Owner Membership
 
 Function ini membuat kebun sekaligus menambahkan pembuat kebun sebagai owner aktif.
 
@@ -925,7 +953,7 @@ $$;
 
 ---
 
-# 19. Function Request Join Farm
+# 18. Function Request Join Farm
 
 Function ini digunakan worker untuk mengajukan bergabung ke kebun berdasarkan join code.
 
@@ -994,7 +1022,7 @@ $$;
 
 ---
 
-# 20. Function Approve Worker
+# 19. Function Approve Worker
 
 ```sql
 create or replace function public.approve_worker(
@@ -1044,7 +1072,7 @@ $$;
 
 ---
 
-# 21. Function Reject Worker
+# 20. Function Reject Worker
 
 ```sql
 create or replace function public.reject_worker(
@@ -1093,7 +1121,7 @@ $$;
 
 ---
 
-# 22. Function Remove Worker
+# 21. Function Remove Worker
 
 ```sql
 create or replace function public.remove_worker(
@@ -1142,7 +1170,7 @@ $$;
 
 ---
 
-# 23. View Tree History
+# 22. View Tree History
 
 View ini menampilkan riwayat pohon dari gabungan laporan kondisi, fase pertumbuhan, dan aktivitas perawatan.
 
@@ -1174,27 +1202,31 @@ from public.growth_phase_records gpr
 union all
 
 select
-  ct.target_tree_id as tree_id,
+  cat.tree_id,
   ca.farm_id,
   'care'::text as history_type,
-  ct.title as title,
+  coalesce(ct.title, 'Perawatan inisiatif') as title,
   ca.note as description,
   ca.performed_by as actor_id,
   ca.performed_at as happened_at
 from public.care_activities ca
-join public.care_tasks ct
-  on ct.id = ca.care_task_id
-where ct.target_type = 'tree'
-  and ct.target_tree_id is not null;
+join public.care_activity_trees cat
+  on cat.care_activity_id = ca.id
+left join public.care_tasks ct
+  on ct.id = ca.care_task_id;
 ```
 
 ## Catatan
 
-View ini hanya menampilkan aktivitas perawatan yang targetnya langsung pohon tertentu. Jika targetnya baris, kolom, atau seluruh kebun, aktivitas itu tidak masuk ke riwayat pohon individual kecuali nanti dibuat mapping target area ke daftar pohon. Jangan maksa semua hal jadi sempurna di MVP, nanti MVP-nya lulus kuliah lebih dulu dari lu.
+Pohon diambil dari jembatan `care_activity_trees`, bukan dari target pohon pada `care_tasks`. Akibatnya satu perawatan yang menyasar seluruh kebun muncul di riwayat SETIAP pohon yang terdampak, bukan hilang seperti pada rancangan sebelumnya.
+
+`join` ke `care_tasks` sengaja `left join`: aktivitas dari pencatatan inisiatif tidak punya tugas induk, dan `inner join` akan membuang seluruh catatan inisiatif dari riwayat.
+
+Perawatan bertarget catatan bebas tetap tidak muncul di riwayat pohon mana pun. Targetnya memang tidak menunjuk pohon, sehingga tidak ada yang bisa ditautkan.
 
 ---
 
-# 24. Index
+# 23. Index
 
 ```sql
 create index if not exists idx_farm_members_farm_user
@@ -1221,8 +1253,6 @@ on public.tree_condition_reports(tree_id, reported_at desc);
 create index if not exists idx_operational_reports_farm_status
 on public.operational_reports(farm_id, status);
 
-create index if not exists idx_care_sops_farm_active
-on public.care_sops(farm_id, is_active);
 
 create index if not exists idx_care_schedules_farm_date
 on public.care_schedules(farm_id, scheduled_date);
@@ -1233,16 +1263,34 @@ on public.care_tasks(assigned_to, due_date);
 create index if not exists idx_care_tasks_farm_status
 on public.care_tasks(farm_id, status);
 
+create index if not exists idx_care_tasks_open_not_missed
+on public.care_tasks(farm_id, due_date)
+where missed_at is null
+  and released_at is null
+  and status in ('pending', 'postponed');
+
 create index if not exists idx_care_activities_task
 on public.care_activities(care_task_id);
+
+create index if not exists idx_care_activities_task_latest
+on public.care_activities(care_task_id, performed_at desc, id desc);
+
+create index if not exists idx_care_activity_trees_tree_id
+on public.care_activity_trees(tree_id);
 
 create index if not exists idx_growth_phase_records_tree_recorded_at
 on public.growth_phase_records(tree_id, recorded_at desc);
 ```
 
+`idx_care_tasks_open_not_missed` sengaja parsial. Predikatnya adalah definisi "tugas terbuka" yang dipakai penyapu jadwal terlewat dan seluruh penghitung tunggakan, sehingga tugas yang sudah selesai, sudah terlewat, atau sudah dilepas tidak ikut dipindai.
+
+`idx_care_activities_task_latest` mengikuti urutan `order by performed_at desc, id desc` yang dipakai saat mencari realisasi terakhir sebuah tugas. Kolom `id` wajib ikut sebagai pemecah seri; tanpa itu, dua realisasi dengan `performed_at` identik membuat "yang terakhir" tidak deterministik.
+
+`idx_care_activity_trees_tree_id` melayani arah baca "riwayat perawatan pohon ini". Arah sebaliknya sudah tertutup primary key jembatan.
+
 ---
 
-# 25. Helper Function untuk RLS
+# 24. Helper Function untuk RLS
 
 RLS akan lebih bersih jika memakai helper function. Tanpa helper, policy akan panjang seperti surat permintaan maaf kepada database.
 
@@ -1353,7 +1401,7 @@ Function ini memungkinkan owner melihat profil dasar worker aktif dalam farm yan
 
 ---
 
-# 26. Enable RLS
+# 25. Enable RLS
 
 ```sql
 alter table public.profiles enable row level security;
@@ -1362,7 +1410,6 @@ alter table public.farm_members enable row level security;
 alter table public.trees enable row level security;
 alter table public.tree_condition_reports enable row level security;
 alter table public.operational_reports enable row level security;
-alter table public.care_sops enable row level security;
 alter table public.care_schedules enable row level security;
 alter table public.care_tasks enable row level security;
 alter table public.care_activities enable row level security;
@@ -1371,9 +1418,9 @@ alter table public.growth_phase_records enable row level security;
 
 ---
 
-# 27. Draft RLS Policies
+# 26. Draft RLS Policies
 
-## 27.1 Profiles
+## 26.1 Profiles
 
 Pengguna dapat melihat profilnya sendiri. Owner aktif dapat melihat profil dasar worker aktif dalam farm yang sama.
 
@@ -1404,7 +1451,7 @@ with check (id = auth.uid());
 
 ---
 
-## 27.2 Farms
+## 26.2 Farms
 
 Owner dan worker aktif dapat melihat data kebun tempat mereka tergabung.
 
@@ -1443,7 +1490,7 @@ Catatan: insert kebun disarankan melalui function `create_farm_with_owner()`.
 
 ---
 
-## 27.3 Farm Members
+## 26.3 Farm Members
 
 Anggota aktif dapat melihat daftar member pada kebunnya.
 
@@ -1482,7 +1529,7 @@ Catatan: proses request join, approve, reject, dan remove worker lebih aman dila
 
 ---
 
-## 27.4 Trees
+## 26.4 Trees
 
 Anggota aktif dapat melihat data pohon.
 
@@ -1532,7 +1579,7 @@ with check (
 
 ---
 
-## 27.5 Tree Condition Reports
+## 26.5 Tree Condition Reports
 
 Anggota aktif dapat melihat laporan kondisi pohon.
 
@@ -1567,7 +1614,7 @@ with check (
 
 ---
 
-## 27.6 Operational Reports
+## 26.6 Operational Reports
 
 Owner dan worker aktif dapat melihat laporan operasional kebun.
 
@@ -1620,58 +1667,9 @@ with check (
 
 ---
 
-## 27.7 Care SOPs
-
-Anggota aktif dapat melihat SOP.
-
-```sql
-drop policy if exists "Active members can view care sops"
-on public.care_sops;
-
-create policy "Active members can view care sops"
-on public.care_sops
-for select
-to authenticated
-using (
-  public.is_active_farm_member(farm_id, auth.uid())
-);
-```
-
-Owner aktif dapat mengelola SOP.
-
-```sql
-drop policy if exists "Active owner can insert care sops"
-on public.care_sops;
-
-create policy "Active owner can insert care sops"
-on public.care_sops
-for insert
-to authenticated
-with check (
-  public.is_active_owner(farm_id, auth.uid())
-  and created_by = auth.uid()
-);
-```
-
-```sql
-drop policy if exists "Active owner can update care sops"
-on public.care_sops;
-
-create policy "Active owner can update care sops"
-on public.care_sops
-for update
-to authenticated
-using (
-  public.is_active_owner(farm_id, auth.uid())
-)
-with check (
-  public.is_active_owner(farm_id, auth.uid())
-);
-```
-
 ---
 
-## 27.8 Care Schedules
+## 26.7 Care Schedules
 
 Anggota aktif dapat melihat jadwal.
 
@@ -1722,7 +1720,7 @@ with check (
 
 ---
 
-## 27.9 Care Tasks
+## 26.8 Care Tasks
 
 Owner aktif dapat melihat semua tugas pada kebunnya. Worker aktif hanya melihat tugas miliknya.
 
@@ -1787,7 +1785,7 @@ with check (
 
 ---
 
-## 27.10 Care Activities
+## 26.9 Care Activities
 
 Owner aktif dapat melihat aktivitas pada kebunnya. Worker aktif dapat melihat aktivitas tugas miliknya.
 
@@ -1833,7 +1831,7 @@ with check (
 
 ---
 
-## 27.11 Growth Phase Records
+## 26.10 Growth Phase Records
 
 Anggota aktif dapat melihat catatan fase.
 
@@ -1868,7 +1866,7 @@ with check (
 
 ---
 
-# 28. Catatan RLS Penting
+# 27. Catatan RLS Penting
 
 RLS di atas adalah draft awal. Saat implementasi, beberapa operasi sebaiknya tidak dilakukan langsung dengan `insert` atau `update` dari frontend, tetapi melalui RPC function agar validasi lebih aman.
 
@@ -1879,7 +1877,7 @@ Operasi yang sebaiknya memakai RPC:
 3. Approve worker
 4. Reject worker
 5. Remove worker
-6. Membuat jadwal dari SOP sekaligus membuat tugas
+6. Membuat jadwal perawatan sekaligus membuat tugas
 7. Worker menyelesaikan tugas sekaligus membuat activity
 8. Worker menunda tugas sekaligus membuat activity
 
@@ -1887,7 +1885,7 @@ Kalau semua dilempar langsung dari frontend, nanti aplikasi bisa terlihat jalan,
 
 ---
 
-# 29. Urutan Eksekusi SQL yang Disarankan
+# 28. Urutan Eksekusi SQL yang Disarankan
 
 Eksekusi SQL sebaiknya bertahap:
 
@@ -1900,22 +1898,21 @@ Eksekusi SQL sebaiknya bertahap:
 7. Tabel `trees`
 8. Tabel `tree_condition_reports`
 9. Tabel `operational_reports`
-10. Tabel `care_sops`
-11. Tabel `care_schedules`
-12. Tabel `care_tasks`
-13. Tabel `care_activities`
-14. Tabel `growth_phase_records`
-15. Trigger sinkronisasi
-16. Function join code dan membership
-17. View `tree_history_view`
-18. Index
-19. Helper function RLS, termasuk `can_view_profile`
-20. Enable RLS
-21. Policies
+10. Tabel `care_schedules`
+11. Tabel `care_tasks`
+12. Tabel `care_activities`
+13. Tabel `growth_phase_records`
+14. Trigger sinkronisasi
+15. Function join code dan membership
+16. View `tree_history_view`
+17. Index
+18. Helper function RLS, termasuk `can_view_profile`
+19. Enable RLS
+20. Policies
 
 ---
 
-# 30. Batasan SQL Draft MVP
+# 29. Batasan SQL Draft MVP
 
 SQL schema draft ini belum mencakup:
 
@@ -1939,7 +1936,7 @@ Fitur-fitur tersebut disimpan untuk pengembangan lanjutan setelah MVP utama stab
 
 ---
 
-# 31. Ringkasan Keputusan SQL Draft
+# 30. Ringkasan Keputusan SQL Draft
 
 1. Sistem menggunakan Supabase Auth untuk autentikasi.
 2. Profil pengguna disimpan di `profiles`.
@@ -1947,14 +1944,13 @@ Fitur-fitur tersebut disimpan untuk pengembangan lanjutan setelah MVP utama stab
 4. Data pohon disimpan secara individual di `trees`.
 5. Riwayat kondisi pohon disimpan di `tree_condition_reports`.
 6. Laporan umum kebun disimpan di `operational_reports`.
-7. SOP disimpan sebagai template standar di `care_sops`.
-8. Jadwal perawatan disimpan di `care_schedules`.
-9. Tugas worker disimpan di `care_tasks`.
-10. Realisasi tugas disimpan di `care_activities`.
-11. Fase pertumbuhan disimpan di `growth_phase_records`.
-12. Riwayat pohon dibentuk melalui `tree_history_view`.
-13. Worker yang dikeluarkan diberi status `removed`.
-14. Pohon tidak aktif menggunakan `is_archived`.
-15. SOP interval digunakan sebagai acuan jadwal berikutnya.
-16. Tugas tidak dibuat otomatis penuh tanpa konfirmasi owner.
-17. RLS digunakan untuk membatasi akses berdasarkan role dan status anggota kebun.
+7. Jadwal perawatan disimpan di `care_schedules`.
+8. Tugas worker disimpan di `care_tasks`.
+9. Realisasi tugas disimpan di `care_activities`.
+10. Fase pertumbuhan disimpan di `growth_phase_records`.
+11. Riwayat pohon dibentuk melalui `tree_history_view`.
+12. Worker yang dikeluarkan diberi status `removed`.
+13. Pohon tidak aktif menggunakan `is_archived`.
+14. Interval pengulangan jadwal membentuk rantai jadwal penerus.
+15. Penerus jadwal dan penandaan terlewat dihitung pada jalur baca aplikasi, tanpa penjadwal latar.
+16. RLS digunakan untuk membatasi akses berdasarkan role dan status anggota kebun.

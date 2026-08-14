@@ -9,6 +9,7 @@ import {
   expectSuccess,
   firstRpcRow,
   getSingle,
+  isoDateOffset,
   mergeState,
   requireState,
   runStage,
@@ -33,65 +34,37 @@ await runStage(STAGE, async () => {
   const { client: ownerClient } = await createSignedInClient(state.ownerEmail, state.password);
   const { client: workerClient } = await createSignedInClient(state.workerEmail, state.password);
 
-  await expectFailure(
+  // Subjek alur postpone -> complete di bawah: jadwal manual bertarget POHON.
+  // Peran ini dulu dipegang jadwal turunan SOP; care_sops dan
+  // create_schedule_from_sop dilepas di migrasi 046, berikut blok uji khusus
+  // SOP yang dulu ada di sini.
+  //
+  // Targetnya WAJIB 'tree' dengan state.treeId: assertion tree_history_view di
+  // akhir stage ini memeriksa adanya baris care untuk pohon tersebut, dan itu
+  // hanya terbentuk kalau tugasnya benar-benar tertaut ke pohon. Jadwal
+  // manual bertarget 'custom' di bawah TIDAK bisa menggantikan peran ini.
+  const treeScheduleRows = await expectSuccess(
     STAGE,
-    'SOP default target cannot be custom',
-    ownerClient
-      .from('care_sops')
-      .insert({
-        farm_id: state.farmId,
-        name: `Invalid Custom SOP ${state.runId}`,
-        category: 'watering',
-        interval_days: 7,
-        default_instruction: 'Invalid SOP',
-        default_target_type: 'custom',
-        created_by: state.ownerId,
-      }),
-    'care_sops_default_target_check should reject default_target_type custom.'
-  );
-
-  const sop = await getSingle(
-    STAGE,
-    'owner creates valid care_sop',
-    ownerClient
-      .from('care_sops')
-      .insert({
-        farm_id: state.farmId,
-        name: `Tree Care SOP ${state.runId}`,
-        category: 'watering',
-        interval_days: 7,
-        default_instruction: 'Water selected tree',
-        default_target_type: 'tree',
-        default_target_tree_id: state.treeId,
-        created_by: state.ownerId,
-      })
-      .select('id, name, default_target_type')
-      .single(),
-    'Active owner should be able to create valid care_sops.'
-  );
-
-  const sopScheduleRows = await expectSuccess(
-    STAGE,
-    'owner creates schedule from SOP',
-    ownerClient.rpc('create_schedule_from_sop', {
+    'owner creates manual schedule targeting a tree',
+    ownerClient.rpc('create_manual_schedule', {
       p_farm_id: state.farmId,
-      p_care_sop_id: sop.id,
+      p_title: `Tree Care Task ${state.runId}`,
+      p_category: 'watering',
       p_scheduled_date: todayIso(),
       p_assigned_worker_id: state.workerId,
       p_target_type: 'tree',
-      p_target_row: null,
-      p_target_column: null,
       p_target_tree_id: state.treeId,
+      p_custom_target_note: null,
       p_instruction: 'Water the test tree',
     }),
-    'Check create_schedule_from_sop signature and active worker assignment validation.'
+    'Check create_manual_schedule signature and active worker assignment validation.'
   );
-  const sopSchedule = firstRpcRow(sopScheduleRows);
+  const treeSchedule = firstRpcRow(treeScheduleRows);
   assertCondition(
     STAGE,
-    'schedule from SOP returns schedule_id and task_id',
-    Boolean(sopSchedule?.schedule_id && sopSchedule?.task_id),
-    'create_schedule_from_sop did not return schedule_id/task_id.',
+    'manual tree schedule returns schedule_id and task_id',
+    Boolean(treeSchedule?.schedule_id && treeSchedule?.task_id),
+    'create_manual_schedule did not return schedule_id/task_id.',
     'Check RPC return table definition.'
   );
 
@@ -105,8 +78,6 @@ await runStage(STAGE, async () => {
       p_scheduled_date: todayIso(),
       p_assigned_worker_id: state.workerId,
       p_target_type: 'custom',
-      p_target_row: null,
-      p_target_column: null,
       p_target_tree_id: null,
       p_custom_target_note: null,
       p_instruction: 'Invalid custom target',
@@ -124,8 +95,6 @@ await runStage(STAGE, async () => {
       p_scheduled_date: todayIso(),
       p_assigned_worker_id: state.workerId,
       p_target_type: 'custom',
-      p_target_row: null,
-      p_target_column: null,
       p_target_tree_id: null,
       p_custom_target_note: 'Manual custom target for database test',
       p_instruction: 'Handle manual custom task',
@@ -154,8 +123,6 @@ await runStage(STAGE, async () => {
       p_scheduled_date: todayIso(),
       p_assigned_worker_id: secondWorker.userId,
       p_target_type: 'farm',
-      p_target_row: null,
-      p_target_column: null,
       p_target_tree_id: null,
       p_custom_target_note: null,
       p_instruction: 'Task for another worker',
@@ -193,10 +160,15 @@ await runStage(STAGE, async () => {
     STAGE,
     'worker postpones task',
     workerClient.rpc('postpone_task', {
-      p_task_id: sopSchedule.task_id,
+      p_task_id: treeSchedule.task_id,
       p_note: 'Need more water supply',
+      // WAJIB sejak migrasi 049. Ketiga parameter postpone_task tidak punya
+      // default, jadi pemanggilan dua-argumen yang dulu ada di sini gagal
+      // dengan PGRST202 sejak 049 dijalankan. Tanggalnya harus SETELAH hari
+      // ini -- menunda ke hari ini atau ke masa lalu ditolak RPC.
+      p_postponed_until: isoDateOffset(3),
     }),
-    'Check postpone_task(p_task_id uuid, p_note text), active worker status, and task assignment.'
+    'Check postpone_task(p_task_id uuid, p_note text, p_postponed_until date), active worker status, and task assignment.'
   );
   assertCondition(STAGE, 'postpone_task returns activity id', Boolean(postponedActivityId),
     'postpone_task should return care_activities.id.',
@@ -205,7 +177,7 @@ await runStage(STAGE, async () => {
   const taskAfterPostpone = await getSingle(
     STAGE,
     'care_tasks status follows postponed activity',
-    ownerClient.from('care_tasks').select('id, status').eq('id', sopSchedule.task_id).single(),
+    ownerClient.from('care_tasks').select('id, status').eq('id', treeSchedule.task_id).single(),
     'sync_task_status_from_activity trigger should update care_tasks.status.'
   );
   assertEqual(STAGE, 'task status is postponed', taskAfterPostpone.status, 'postponed',
@@ -215,7 +187,7 @@ await runStage(STAGE, async () => {
     STAGE,
     'worker completes task',
     workerClient.rpc('complete_task', {
-      p_task_id: sopSchedule.task_id,
+      p_task_id: treeSchedule.task_id,
       p_note: 'Task completed after postponement',
     }),
     'Check complete_task(p_task_id uuid, p_note text), active worker status, and task assignment.'
@@ -230,7 +202,7 @@ await runStage(STAGE, async () => {
     ownerClient
       .from('care_activities')
       .select('id, status')
-      .eq('care_task_id', sopSchedule.task_id)
+      .eq('care_task_id', treeSchedule.task_id)
       .order('performed_at', { ascending: true }),
     'care_tasks to care_activities should support 0..N activities.'
   );
@@ -247,7 +219,7 @@ await runStage(STAGE, async () => {
   const taskAfterComplete = await getSingle(
     STAGE,
     'care_tasks status follows latest completed activity',
-    ownerClient.from('care_tasks').select('id, status').eq('id', sopSchedule.task_id).single(),
+    ownerClient.from('care_tasks').select('id, status').eq('id', treeSchedule.task_id).single(),
     'sync_task_status_from_activity trigger should update care_tasks.status from latest activity.'
   );
   assertEqual(STAGE, 'task status is completed', taskAfterComplete.status, 'completed',
@@ -267,10 +239,13 @@ await runStage(STAGE, async () => {
     'Check tree_history_view care union and target_tree_id.'
   );
 
+  // sopId / sopScheduleId / sopTaskId dibuang bersama fitur SOP. Ketiganya
+  // tidak pernah dibaca stage mana pun, jadi penghapusannya tidak memutus
+  // dependensi antar-stage; nilai basi di .db-test-state.local.json akan
+  // tertimpa pada run berikutnya.
   mergeState({
-    sopId: sop.id,
-    sopScheduleId: sopSchedule.schedule_id,
-    sopTaskId: sopSchedule.task_id,
+    treeScheduleId: treeSchedule.schedule_id,
+    treeTaskId: treeSchedule.task_id,
     manualScheduleId: manualSchedule.schedule_id,
     manualTaskId: manualSchedule.task_id,
     otherWorkerId: secondWorker.userId,

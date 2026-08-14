@@ -1,5 +1,22 @@
 # Data Model dan ERD Konseptual Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Entitas **CareSOP** beserta relasi
+> Farm–CareSOP dan CareSOP–CareSchedule dihapus, begitu juga atribut
+> `target_row`/`target_column` pada CareSchedule dan CareTask serta nilai target
+> `row`/`column`. Penomoran entitas dan relasi dirapatkan karena tidak dirujuk
+> dokumen lain. Atribut `row_position`/`column_position` pada entitas **Tree**
+> TIDAK terpengaruh — itu posisi fisik pohon, bukan target jadwal. Riwayat
+> keputusannya ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** Entitas **CareSchedule** bertambah
+> atribut rantai dan masa toleransi, **CareTask** bertambah penanda terlewat dan
+> pelepasan, dan **CareActivity** bertambah tanggal penundaan. Entitas baru
+> **CareActivityTree** ditambahkan sebagai jembatan aktivitas–pohon; jembatan ini
+> sebenarnya sudah ada di database sejak migrasi 025 tetapi belum pernah masuk
+> dokumen, dan migrasi 050 membuatnya menjadi satu-satunya jalan aktivitas
+> perawatan masuk ke riwayat pohon. Riwayat keputusannya ada di
+> `decision-log.md` (DL-034 sampai DL-038).
+
 ## 1. Tujuan Data Model
 
 Data model digunakan untuk menjelaskan struktur data utama yang dibutuhkan dalam sistem Avology V2. Model ini diturunkan dari MVP Scope, kebutuhan fungsional, user story, use case, dan activity diagram yang telah disusun sebelumnya.
@@ -17,8 +34,8 @@ Perancangan data Avology V2 menggunakan prinsip berikut:
 3. Data pohon dicatat secara individual.
 4. Kondisi, fase, dan perawatan pohon disimpan sebagai riwayat.
 5. Worker yang dikeluarkan tidak dihapus permanen agar histori tugas dan laporan tetap dapat dilacak.
-6. SOP digunakan sebagai template standar perawatan, bukan dokumen panjang.
-7. Interval SOP digunakan sebagai acuan jadwal berikutnya, bukan sebagai recurring task otomatis penuh.
+6. Jadwal perawatan dibuat manual oleh owner, tanpa template terpisah.
+7. Interval pengulangan pada jadwal digunakan sebagai acuan jadwal berikutnya, bukan sebagai recurring task otomatis penuh.
 8. Laporan operasional kebun dipisahkan dari laporan kondisi pohon.
 9. Tugas worker dapat berasal dari jadwal perawatan atau laporan operasional.
 10. Dashboard tidak menyimpan data terpisah, tetapi mengambil ringkasan dari data yang sudah ada.
@@ -212,30 +229,32 @@ OperationalReport dipisahkan dari TreeConditionReport karena tidak semua kejadia
 
 ---
 
-## 3.7 CareSOP
+## 3.7 CareSchedule
 
-Entitas **CareSOP** merepresentasikan template standar perawatan kebun.
+Entitas **CareSchedule** merepresentasikan jadwal perawatan yang dibuat owner.
 
 ### Atribut Utama
 
-| Atribut             | Keterangan                    |
-| ------------------- | ----------------------------- |
-| care_sop_id         | Identitas unik SOP            |
-| farm_id             | Kebun terkait                 |
-| name                | Nama SOP                      |
-| category            | Kategori perawatan            |
-| interval_days       | Interval perawatan dalam hari |
-| default_instruction | Instruksi default             |
-| default_target_type | Target default SOP            |
-| default_target_row  | Target baris default          |
-| default_target_column | Target kolom default        |
-| default_target_tree_id | Target pohon default       |
-| is_active           | Status aktif SOP              |
-| created_by          | Owner yang membuat SOP        |
-| created_at          | Tanggal SOP dibuat            |
-| updated_at          | Tanggal SOP diperbarui        |
-
-Default target SOP hanya menggunakan target terstruktur: farm, row, column, atau tree. Target `custom` tidak digunakan pada `care_sops` dalam MVP.
+| Atribut          | Keterangan                                   |
+| ---------------- | -------------------------------------------- |
+| care_schedule_id | Identitas unik jadwal                        |
+| farm_id          | Kebun terkait                                |
+| title            | Judul jadwal                                 |
+| category         | Kategori jadwal                              |
+| scheduled_date   | Tanggal jadwal                               |
+| target_type      | Jenis target jadwal                          |
+| target_tree_id   | Target pohon, jika target berupa pohon       |
+| custom_target_note | Catatan target custom, khusus jadwal atau tugas tindak lanjut yang dibuat manual oleh owner |
+| instruction      | Instruksi perawatan                          |
+| repeat_every_days | Interval pengulangan dalam hari, kosong jika jadwal sekali jalan |
+| date_basis       | Dasar perhitungan tanggal penerus: `jadwal` atau `realisasi` |
+| grace_days       | Masa toleransi keterlambatan dalam hari, kosong jika jadwal tidak pernah dinyatakan terlewat |
+| missed_at        | Waktu jadwal dinyatakan terlewat, kosong jika belum terlewat |
+| series_id        | Penanda satu rantai pengulangan, sama untuk seluruh siklus dalam rantai |
+| parent_schedule_id | Jadwal pendahulu dalam rantai, kosong pada siklus pertama |
+| is_cancelled     | Penanda jadwal dibatalkan owner               |
+| created_by       | Owner yang membuat jadwal                    |
+| created_at       | Tanggal jadwal dibuat                        |
 
 ### Nilai Category
 
@@ -247,61 +266,32 @@ Default target SOP hanya menggunakan target terstruktur: farm, row, column, atau
 | weeding     | Pengendalian gulma |
 | other       | Lainnya            |
 
-### Nilai Default Target Type
-
-| Target | Keterangan     |
-| ------ | -------------- |
-| farm   | Seluruh kebun  |
-| row    | Baris tertentu |
-| column | Kolom tertentu |
-| tree   | Pohon tertentu |
-
-### Catatan
-
-CareSOP bukan dokumen panjang. CareSOP adalah template yang menyimpan kategori, interval, instruksi, dan target default agar owner dapat membuat jadwal perawatan secara lebih konsisten.
-
----
-
-## 3.8 CareSchedule
-
-Entitas **CareSchedule** merepresentasikan jadwal perawatan yang dibuat owner.
-
-### Atribut Utama
-
-| Atribut          | Keterangan                                   |
-| ---------------- | -------------------------------------------- |
-| care_schedule_id | Identitas unik jadwal                        |
-| farm_id          | Kebun terkait                                |
-| care_sop_id      | SOP yang digunakan, boleh kosong jika manual |
-| title            | Judul jadwal                                 |
-| category         | Kategori jadwal                              |
-| scheduled_date   | Tanggal jadwal                               |
-| target_type      | Jenis target jadwal                          |
-| target_row       | Target baris, jika target berupa baris       |
-| target_column    | Target kolom, jika target berupa kolom       |
-| target_tree_id   | Target pohon, jika target berupa pohon       |
-| custom_target_note | Catatan target custom, khusus jadwal manual atau tugas tindak lanjut yang dibuat manual oleh owner |
-| instruction      | Instruksi perawatan                          |
-| created_by       | Owner yang membuat jadwal                    |
-| created_at       | Tanggal jadwal dibuat                        |
-
 ### Nilai Target Type
 
 | Target | Keterangan     |
 | ------ | -------------- |
 | farm   | Seluruh kebun  |
-| row    | Baris tertentu |
-| column | Kolom tertentu |
 | tree   | Pohon tertentu |
-| custom | Target bebas untuk jadwal manual atau task tindak lanjut |
+| custom | Target bebas berupa catatan, untuk jadwal atau task tindak lanjut |
+
+### Nilai Date Basis
+
+| Nilai     | Keterangan                                          |
+| --------- | --------------------------------------------------- |
+| jadwal    | Tanggal penerus dihitung dari `scheduled_date`      |
+| realisasi | Tanggal penerus dihitung dari tanggal pekerjaan dilakukan |
 
 ### Catatan
 
-Jadwal dapat dibuat dari SOP atau dibuat manual. Jika jadwal dibuat dari SOP, beberapa data seperti kategori dan instruksi dapat otomatis terisi dari template SOP.
+Siklus pertama sebuah jadwal dibuat manual oleh owner, lengkap dengan kategori dan instruksinya. Jadwal dapat menyimpan interval pengulangan; jika terisi, sistem membentuk sendiri jadwal penerusnya begitu siklus berjalan ditutup — baik karena tugasnya diselesaikan maupun karena siklusnya dinyatakan terlewat.
+
+Seluruh siklus dalam satu rantai berbagi `series_id` yang sama, dan setiap penerus menunjuk pendahulunya lewat `parent_schedule_id`. Dalam satu rantai hanya boleh ada satu jadwal yang terbuka pada satu waktu.
+
+`grace_days` menentukan berapa lama keterlambatan masih ditoleransi sebelum siklus dinyatakan terlewat. Jadwal tanpa `grace_days` tidak pernah dinyatakan terlewat dan akan menunggu selamanya sampai dikerjakan.
 
 ---
 
-## 3.9 CareTask
+## 3.8 CareTask
 
 Entitas **CareTask** merepresentasikan tugas yang diberikan kepada worker berdasarkan jadwal perawatan atau tindak lanjut laporan operasional.
 
@@ -318,12 +308,13 @@ Entitas **CareTask** merepresentasikan tugas yang diberikan kepada worker berdas
 | title                 | Judul tugas                                                   |
 | instruction           | Instruksi tugas                                               |
 | target_type           | Jenis target tugas                                            |
-| target_row            | Target baris, jika target berupa baris                        |
-| target_column         | Target kolom, jika target berupa kolom                        |
 | target_tree_id        | Target pohon, jika target berupa pohon                        |
 | custom_target_note    | Catatan target custom, jika target berupa custom pada tugas manual atau tindak lanjut |
-| due_date              | Tanggal pelaksanaan tugas                                     |
+| due_date              | Tanggal pelaksanaan tugas, ikut bergeser saat tugas ditunda    |
 | status                | Status tugas                                                  |
+| missed_at             | Waktu tugas dinyatakan terlewat, kosong jika belum terlewat    |
+| released_at           | Waktu tugas dilepas karena pekerjanya berhenti aktif, kosong jika masih melekat |
+| released_reason       | Sebab pelepasan: `removed_by_owner` atau `left_by_worker`      |
 | created_at            | Tanggal tugas dibuat                                          |
 | updated_at            | Tanggal tugas diperbarui                                      |
 
@@ -344,9 +335,13 @@ CareTask dapat berasal dari dua sumber:
 
 Dengan desain ini, tugas worker tidak hanya terbatas pada perawatan pohon, tetapi juga bisa mencakup perbaikan lahan, pengecekan stok, atau tindak lanjut kejadian lapangan.
 
+`missed_at` dan `released_at` bukan nilai status, melainkan penanda terpisah. Keduanya sengaja tidak menumpang pada `status` karena sebabnya berbeda dan tidak boleh tertukar: **terlewat** berarti tenggat beserta masa toleransinya habis, sedangkan **dilepas** berarti pekerjanya berhenti aktif sehingga tugas itu tidak lagi menjadi tanggungan siapa pun. Tugas yang dilepas tidak pernah dinyatakan terlewat, dan sebaliknya.
+
+Tugas yang sudah dilepas tidak dihitung sebagai tunggakan di dashboard maupun daftar tugas, dan tidak lagi menghalangi jadwalnya ditugaskan ulang.
+
 ---
 
-## 3.10 CareActivity
+## 3.9 CareActivity
 
 Entitas **CareActivity** merepresentasikan realisasi dari tugas worker.
 
@@ -360,6 +355,7 @@ Entitas **CareActivity** merepresentasikan realisasi dari tugas worker.
 | performed_by     | Worker yang merealisasikan tugas |
 | status           | Status realisasi                 |
 | note             | Catatan realisasi                |
+| postponed_until  | Tanggal rencana pengerjaan ulang, wajib terisi pada realisasi tertunda dan wajib kosong pada realisasi selesai |
 | performed_at     | Tanggal realisasi                |
 
 ### Nilai Status
@@ -371,7 +367,37 @@ Entitas **CareActivity** merepresentasikan realisasi dari tugas worker.
 
 ### Catatan
 
-CareActivity digunakan untuk menyimpan bukti realisasi tugas. Jika tugas berkaitan dengan pohon tertentu, aktivitas dapat muncul dalam riwayat pohon melalui `target_tree_id` pada CareTask. CareActivity tidak menyimpan `tree_id` langsung pada MVP.
+CareActivity digunakan untuk menyimpan bukti realisasi tugas. Satu tugas dapat memiliki lebih dari satu aktivitas, misalnya ditunda lebih dulu lalu diselesaikan di hari lain.
+
+Pohon yang dirawat TIDAK disimpan pada CareActivity, melainkan pada entitas jembatan **CareActivityTree**. Satu perawatan dapat berdampak pada banyak pohon sekaligus, sehingga hubungannya banyak-ke-banyak dan tidak dapat diwakili satu kolom.
+
+Penundaan wajib menyebut `postponed_until`. Tanggal itu juga menggeser `due_date` tugas induknya, sehingga masa toleransi jadwal dihitung ulang dari tanggal baru tersebut.
+
+---
+
+## 3.10 CareActivityTree
+
+Entitas **CareActivityTree** merupakan jembatan yang mencatat pohon mana saja yang terdampak oleh satu aktivitas perawatan.
+
+### Atribut Utama
+
+| Atribut          | Keterangan                        |
+| ---------------- | --------------------------------- |
+| care_activity_id | Aktivitas perawatan terkait       |
+| tree_id          | Pohon yang terdampak aktivitas    |
+
+Pasangan `care_activity_id` dan `tree_id` bersifat unik: satu pohon hanya dapat tertaut sekali pada satu aktivitas.
+
+### Catatan
+
+Jembatan ini terisi dari dua jalur:
+
+1. **Pencatatan inisiatif** — pelaku memilih sendiri pohon yang dirawat.
+2. **Realisasi tugas terjadwal** — pohon diturunkan dari target tugas saat tugas diselesaikan: target pohon menautkan satu pohon, target seluruh kebun menautkan semua pohon kebun yang belum diarsipkan, dan target khusus berupa catatan bebas tidak menautkan pohon sama sekali.
+
+Pohon ditentukan pada saat penyelesaian tugas, bukan pada saat jadwal dibuat. Jadwal berulang dapat lahir jauh sebelum dikerjakan dan daftar pohon kebun berubah di antaranya, sehingga penentuan di akhir membuat tautan mencerminkan pohon yang benar-benar ada saat pekerjaan dilakukan.
+
+Riwayat perawatan sebuah pohon dibaca melalui jembatan ini, bukan melalui target pada CareTask.
 
 ---
 
@@ -479,35 +505,21 @@ Artinya, laporan operasional selalu berkaitan dengan satu kebun, tetapi tidak se
 
 ---
 
-## 4.6 Farm dan CareSOP
+## 4.6 Farm dan CareSchedule
 
-Satu Farm memiliki banyak CareSOP.
-
-Relasi:
-
-```txt
-Farm 1..N CareSOP
-```
-
-Artinya, SOP dibuat untuk kebutuhan operasional satu kebun tertentu.
-
----
-
-## 4.7 CareSOP dan CareSchedule
-
-Satu CareSOP dapat digunakan oleh banyak CareSchedule.
+Satu Farm memiliki banyak CareSchedule.
 
 Relasi:
 
 ```txt
-CareSOP 1..N CareSchedule
+Farm 1..N CareSchedule
 ```
 
-Artinya, satu template SOP dapat digunakan berulang untuk membuat jadwal perawatan. CareSchedule tetap dapat dibuat tanpa SOP, sehingga relasi ini bersifat opsional pada sisi CareSchedule.
+Artinya, jadwal perawatan dibuat untuk kebutuhan operasional satu kebun tertentu.
 
 ---
 
-## 4.8 CareSchedule dan CareTask
+## 4.7 CareSchedule dan CareTask
 
 Satu CareSchedule dapat menghasilkan satu atau lebih CareTask.
 
@@ -521,7 +533,7 @@ Artinya, satu jadwal dapat menghasilkan tugas untuk worker.
 
 ---
 
-## 4.9 OperationalReport dan CareTask
+## 4.8 OperationalReport dan CareTask
 
 Satu OperationalReport dapat menghasilkan nol atau lebih CareTask.
 
@@ -535,7 +547,7 @@ Artinya, laporan operasional tidak selalu harus ditindaklanjuti dengan tugas, te
 
 ---
 
-## 4.10 CareTask dan CareActivity
+## 4.9 CareTask dan CareActivity
 
 Satu CareTask dapat memiliki nol atau banyak CareActivity.
 
@@ -549,21 +561,24 @@ Artinya, tugas yang belum dikerjakan belum memiliki aktivitas. Setelah worker me
 
 ---
 
-## 4.11 Tree dan CareActivity
+## 4.10 Tree dan CareActivity melalui CareActivityTree
 
-Satu Tree dapat memiliki banyak CareActivity secara tidak langsung melalui target pohon pada CareTask.
+Satu Tree dapat terdampak banyak CareActivity, dan satu CareActivity dapat berdampak pada banyak Tree sekaligus.
 
 Relasi:
 
 ```txt
-Tree 1..N CareActivity
+CareActivity 1..N CareActivityTree
+Tree         1..N CareActivityTree
 ```
 
-Namun relasi ini bersifat turunan, bukan foreign key langsung di CareActivity. Dalam MVP, CareActivity tidak menyimpan `tree_id`; riwayat pohon mengambil aktivitas perawatan melalui `CareTask.target_tree_id`.
+Relasi banyak-ke-banyak ini diwakili entitas jembatan **CareActivityTree**, bukan kolom `tree_id` pada CareActivity. Satu penyemprotan yang menyasar seluruh kebun harus dapat muncul di riwayat setiap pohon yang benar-benar disemprot, dan itu tidak dapat dinyatakan oleh satu kolom tunggal.
+
+Jembatan diisi saat aktivitas dibuat: pada pencatatan inisiatif pelaku memilih pohonnya sendiri, sedangkan pada realisasi tugas terjadwal pohon diturunkan dari target tugas. Riwayat pohon membaca aktivitas perawatan melalui jembatan ini, bukan melalui `CareTask.target_tree_id`.
 
 ---
 
-## 4.12 Tree dan GrowthPhaseRecord
+## 4.11 Tree dan GrowthPhaseRecord
 
 Satu Tree memiliki banyak GrowthPhaseRecord.
 
@@ -586,13 +601,13 @@ Artinya, setiap perubahan fase pohon dicatat sebagai riwayat.
 | Farm              | 1..N   | Tree                | Kebun memiliki banyak pohon               |
 | Tree              | 1..N   | TreeConditionReport | Pohon memiliki banyak laporan kondisi     |
 | Farm              | 1..N   | OperationalReport   | Kebun memiliki banyak laporan operasional |
-| Farm              | 1..N   | CareSOP             | Kebun memiliki banyak SOP                 |
-| CareSOP           | 0..N   | CareSchedule        | SOP dapat digunakan pada banyak jadwal    |
 | Farm              | 1..N   | CareSchedule        | Kebun memiliki banyak jadwal              |
 | CareSchedule      | 1..N   | CareTask            | Jadwal menghasilkan tugas                 |
 | OperationalReport | 0..N   | CareTask            | Laporan dapat menghasilkan tugas          |
 | CareTask          | 0..N   | CareActivity        | Tugas dapat belum punya atau punya banyak realisasi |
-| Tree              | 0..N   | CareActivity        | Pohon dapat memiliki riwayat perawatan melalui target pohon pada CareTask |
+| CareSchedule      | 0..1   | CareSchedule        | Jadwal berulang menunjuk pendahulunya dalam satu rantai |
+| CareActivity      | 0..N   | CareActivityTree    | Aktivitas dapat menautkan banyak pohon    |
+| Tree              | 0..N   | CareActivityTree    | Pohon dapat terdampak banyak aktivitas    |
 | Tree              | 1..N   | GrowthPhaseRecord   | Pohon memiliki riwayat fase               |
 
 ---
@@ -608,12 +623,13 @@ erDiagram
     FARM ||--o{ TREE : has
     TREE ||--o{ TREE_CONDITION_REPORT : has
     FARM ||--o{ OPERATIONAL_REPORT : has
-    FARM ||--o{ CARE_SOP : has
-    CARE_SOP ||--o{ CARE_SCHEDULE : used_in
     FARM ||--o{ CARE_SCHEDULE : has
     CARE_SCHEDULE ||--o{ CARE_TASK : generates
     OPERATIONAL_REPORT ||--o{ CARE_TASK : may_generate
     CARE_TASK ||--o{ CARE_ACTIVITY : realized_as
+    CARE_SCHEDULE ||--o| CARE_SCHEDULE : chains_to
+    CARE_ACTIVITY ||--o{ CARE_ACTIVITY_TREE : affects
+    TREE ||--o{ CARE_ACTIVITY_TREE : affected_by
     TREE ||--o{ GROWTH_PHASE_RECORD : has
 
     USER {
@@ -681,36 +697,23 @@ erDiagram
         datetime updated_at
     }
 
-    CARE_SOP {
-        string care_sop_id PK
-        string farm_id FK
-        string name
-        string category
-        int interval_days
-        string default_instruction
-        string default_target_type
-        string default_target_row
-        string default_target_column
-        string default_target_tree_id FK
-        boolean is_active
-        string created_by FK
-        datetime created_at
-        datetime updated_at
-    }
-
     CARE_SCHEDULE {
         string care_schedule_id PK
         string farm_id FK
-        string care_sop_id FK
         string title
         string category
         date scheduled_date
         string target_type
-        string target_row
-        string target_column
         string target_tree_id FK
         string custom_target_note
         string instruction
+        int repeat_every_days
+        string date_basis
+        int grace_days
+        datetime missed_at
+        string series_id
+        string parent_schedule_id FK
+        boolean is_cancelled
         string created_by FK
         datetime created_at
     }
@@ -723,14 +726,16 @@ erDiagram
         string assigned_to FK
         string assigned_by FK
         string title
+        string category
         string instruction
         string target_type
-        string target_row
-        string target_column
         string target_tree_id FK
         string custom_target_note
         date due_date
         string status
+        datetime missed_at
+        datetime released_at
+        string released_reason
         datetime created_at
         datetime updated_at
     }
@@ -742,7 +747,13 @@ erDiagram
         string performed_by FK
         string status
         string note
+        date postponed_until
         datetime performed_at
+    }
+
+    CARE_ACTIVITY_TREE {
+        string care_activity_id FK
+        string tree_id FK
     }
 
     GROWTH_PHASE_RECORD {
@@ -768,10 +779,10 @@ Jika ERD harus dibuat dengan notasi Chen, maka entitas utama yang perlu digambar
 4. Tree
 5. TreeConditionReport
 6. OperationalReport
-7. CareSOP
-8. CareSchedule
-9. CareTask
-10. CareActivity
+7. CareSchedule
+8. CareTask
+9. CareActivity
+10. CareActivityTree
 11. GrowthPhaseRecord
 
 Relasi Chen yang perlu digambar:
@@ -781,16 +792,15 @@ Relasi Chen yang perlu digambar:
 3. Farm memiliki Tree
 4. Tree memiliki TreeConditionReport
 5. Farm memiliki OperationalReport
-6. Farm memiliki CareSOP
-7. CareSOP digunakan pada CareSchedule
-8. Farm memiliki CareSchedule
-9. CareSchedule menghasilkan CareTask
-10. OperationalReport dapat menghasilkan CareTask
-11. CareTask direalisasikan menjadi CareActivity
-12. Tree memiliki CareActivity
-13. Tree memiliki GrowthPhaseRecord
+6. Farm memiliki CareSchedule
+7. CareSchedule menghasilkan CareTask
+8. OperationalReport dapat menghasilkan CareTask
+9. CareTask direalisasikan menjadi CareActivity
+10. CareActivity berdampak pada Tree melalui CareActivityTree
+11. CareSchedule berulang menunjuk CareSchedule pendahulunya
+12. Tree memiliki GrowthPhaseRecord
 
-Dalam Chen ERD, entitas **FarmMember** dapat diposisikan sebagai entitas asosiatif antara User dan Farm karena menyimpan atribut tambahan seperti role dan status.
+Dalam Chen ERD, entitas **FarmMember** dapat diposisikan sebagai entitas asosiatif antara User dan Farm karena menyimpan atribut tambahan seperti role dan status. Dengan alasan yang sama, **CareActivityTree** adalah entitas asosiatif antara CareActivity dan Tree.
 
 ---
 
@@ -804,7 +814,6 @@ Dashboard owner dan worker tidak dibuat sebagai tabel tersendiri. Dashboard hany
 * TreeConditionReport
 * OperationalReport
 * FarmMember
-* CareSOP
 * CareSchedule
 * CareTask
 * GrowthPhaseRecord
@@ -835,18 +844,23 @@ Contoh:
 
 * Worker dikeluarkan menggunakan status removed.
 * Pohon tidak aktif menggunakan is_archived.
-* SOP tidak digunakan menggunakan is_active = false.
 * Laporan dan aktivitas tetap disimpan sebagai histori.
 
 ---
 
-## 8.4 SOP Tidak Membuat Tugas Otomatis Penuh
+## 8.4 Pengulangan Jadwal Berjalan sebagai Rantai, Tanpa Penjadwal Latar
 
-CareSOP hanya menyimpan interval dan template. Sistem menghitung acuan jadwal berikutnya berdasarkan:
+CareSchedule menyimpan interval pengulangan pada atribut `repeat_every_days`. Bila terisi, sistem membentuk sendiri jadwal penerusnya begitu siklus berjalan ditutup. Tanggal penerus dihitung dari:
 
-tanggal realisasi terakhir + interval SOP
+tanggal dasar terpilih + interval pengulangan
 
-Namun, sistem tidak membuat tugas berulang otomatis tanpa konfirmasi owner.
+dengan tanggal dasar ditentukan atribut `date_basis`: tanggal jadwal, atau tanggal pekerjaan benar-benar dilakukan.
+
+Siklus dapat ditutup karena dua sebab: tugasnya diselesaikan, atau siklusnya dinyatakan terlewat setelah melewati `grace_days`. Keduanya menghasilkan penerus, sehingga satu siklus yang tidak dikerjakan tidak menghentikan seluruh rantai.
+
+Meski begitu, sistem tetap tidak memakai penjadwal yang berjalan di luar aplikasi. Pembentukan penerus dan penandaan terlewat dihitung saat aplikasi membaca data, sehingga MVP tidak membutuhkan background job maupun push notification.
+
+Penerus hanya membawa tugas jika pekerja pada siklus sebelumnya masih aktif. Jika tidak, penerusnya lahir sebagai jadwal tanpa tugas yang menunggu owner menugaskan pekerja.
 
 ---
 
@@ -870,7 +884,6 @@ Pemisahan ini penting agar data tidak tercampur. Karena pohon sakit dan cangkul 
 | Tree                | Menyimpan data pohon individual          |
 | TreeConditionReport | Menyimpan laporan kondisi pohon          |
 | OperationalReport   | Menyimpan laporan operasional kebun      |
-| CareSOP             | Menyimpan template standar perawatan     |
 | CareSchedule        | Menyimpan jadwal perawatan               |
 | CareTask            | Menyimpan tugas worker                   |
 | CareActivity        | Menyimpan realisasi tugas                |

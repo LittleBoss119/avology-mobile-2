@@ -191,8 +191,6 @@ await runStage(STAGE, async () => {
       p_scheduled_date: todayIso(),
       p_assigned_worker_id: state.workerId,
       p_target_type: 'farm',
-      p_target_row: null,
-      p_target_column: null,
       p_target_tree_id: null,
       p_custom_target_note: null,
       p_instruction: 'Cancellable schedule database test',

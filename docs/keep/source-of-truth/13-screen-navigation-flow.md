@@ -1,5 +1,22 @@
 # Screen Inventory dan Navigation Flow Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Empat halaman SOP (Care SOP List,
+> Care SOP Detail, Create Care SOP, Edit Care SOP) dan Create Schedule From SOP
+> dihapus dari inventory, navigasi, daftar komponen, dan diagram struktur.
+> Area "Owner SOP and Schedule" menjadi "Owner Schedule Area" dengan penomoran
+> dirapatkan; flow "Membuat SOP" dan "Membuat Jadwal dari SOP" digabung menjadi
+> satu flow "Membuat Jadwal Perawatan". Input **baris** dan **kolom** pada
+> Create/Edit Tree TIDAK terpengaruh — itu posisi pohon, bukan target jadwal.
+> Riwayat keputusannya ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** Care Schedule Detail, Create Manual
+> Schedule, dan Worker Task Detail disunting isinya: pengaturan pengulangan dan
+> masa toleransi, penanda terlewat, aksi kelola jadwal, serta input tanggal
+> penundaan. Tidak ada halaman baru maupun halaman yang dihapus, dan tidak ada
+> chip, filter, atau label baru — jadwal yang tugasnya dilepas memakai penanda
+> "Belum ada pekerja" yang sudah ada. Riwayat keputusannya ada di
+> `decision-log.md` (DL-034 sampai DL-038).
+
 ## 1. Tujuan Screen Inventory dan Navigation Flow
 
 Screen inventory digunakan untuk menentukan daftar halaman yang dibutuhkan dalam aplikasi Avology V2 berdasarkan MVP Scope, kebutuhan fungsional, user story, use case, activity diagram, data model, dan service layer.
@@ -302,7 +319,7 @@ Menampilkan ringkasan kondisi kebun untuk pengambilan keputusan cepat.
 * Worker pending
 * Pohon berbunga
 * Pohon berbuah
-* SOP jatuh tempo atau terlambat
+* jadwal jatuh tempo atau terlambat
 
 ### Aktor
 
@@ -318,7 +335,7 @@ Menampilkan ringkasan kondisi kebun untuk pengambilan keputusan cepat.
 * Ke Task List Screen
 * Ke Operational Report List Screen
 * Ke Worker Management Screen
-* Ke Care SOP List Screen
+* Ke Care Schedule List Screen
 * Ke Growth Monitoring Screen
 
 ---
@@ -629,118 +646,9 @@ Owner membuat tugas tindak lanjut berdasarkan laporan operasional.
 
 ---
 
-# 9. Owner SOP and Schedule Area
+# 9. Owner Schedule Area
 
-## 9.1 Care SOP List Screen
-
-### Fungsi
-
-Owner melihat daftar SOP perawatan.
-
-### Isi Utama
-
-* Daftar SOP aktif
-* Daftar SOP tidak aktif jika dibutuhkan
-* Kategori SOP
-* Interval hari
-* Status acuan jadwal berikutnya
-* Tombol tambah SOP
-
-### Aktor
-
-* Owner
-
-### Service Terkait
-
-* `getCareSOPs`
-* `getCareSOPNextScheduleReference`
-
----
-
-## 9.2 Care SOP Detail Screen
-
-### Fungsi
-
-Owner melihat detail SOP dan acuan jadwal berikutnya.
-
-### Isi Utama
-
-* Nama SOP
-* Kategori
-* Interval hari
-* Instruksi default
-* Target default
-* Status aktif
-* Realisasi terakhir
-* Acuan jadwal berikutnya
-* Status jatuh tempo
-* Tombol buat jadwal dari SOP
-* Tombol edit SOP
-* Tombol aktif/nonaktif
-
-### Aktor
-
-* Owner
-
-### Service Terkait
-
-* `getCareSOPDetail`
-* `getCareSOPNextScheduleReference`
-* `setCareSOPActiveStatus`
-
----
-
-## 9.3 Create Care SOP Screen
-
-### Fungsi
-
-Owner membuat SOP perawatan baru.
-
-### Isi Utama
-
-* Input nama SOP
-* Pilihan kategori
-* Input interval hari
-* Input instruksi default
-* Pilihan target default
-* Tombol simpan
-
-### Aktor
-
-* Owner
-
-### Service Terkait
-
-* `createCareSOP`
-
----
-
-## 9.4 Edit Care SOP Screen
-
-### Fungsi
-
-Owner mengubah SOP perawatan.
-
-### Isi Utama
-
-* Input nama SOP
-* Pilihan kategori
-* Input interval hari
-* Input instruksi default
-* Pilihan target default
-* Tombol simpan perubahan
-
-### Aktor
-
-* Owner
-
-### Service Terkait
-
-* `updateCareSOP`
-
----
-
-## 9.5 Care Schedule List Screen
+## 9.1 Care Schedule List Screen
 
 ### Fungsi
 
@@ -751,7 +659,7 @@ Owner melihat daftar jadwal perawatan.
 * Filter tanggal
 * Filter kategori
 * Daftar jadwal
-* Tombol buat jadwal dari SOP
+* Tombol buat jadwal
 * Tombol buat jadwal manual
 
 ### Aktor
@@ -764,7 +672,7 @@ Owner melihat daftar jadwal perawatan.
 
 ---
 
-## 9.6 Care Schedule Detail Screen
+## 9.2 Care Schedule Detail Screen
 
 ### Fungsi
 
@@ -777,8 +685,11 @@ Owner melihat detail jadwal perawatan.
 * Tanggal jadwal
 * Target
 * Instruksi
-* SOP terkait jika ada
+* Interval pengulangan dan masa toleransi, jika jadwal berulang
+* Status jadwal, termasuk penanda terlewat dan penanda dibatalkan
 * Tugas worker yang dihasilkan
+* Penanda "Belum ada pekerja" jika jadwal belum punya tugas aktif
+* Aksi kelola jadwal: edit, hentikan pengulangan, dan batalkan jadwal
 
 ### Aktor
 
@@ -787,43 +698,27 @@ Owner melihat detail jadwal perawatan.
 ### Service Terkait
 
 * `getCareScheduleDetail`
+* `getScheduleEditEligibility`
 * `getFarmTasks`
+* `assignWorkerToSchedule`
+* `cancelCareSchedule`
+* `stopScheduleRepeat`
+
+### Catatan
+
+Aksi edit dan batalkan dimatikan hanya jika jadwal sudah punya hasil kerja berstatus selesai, atau jadwalnya sudah dibatalkan. Tugas yang sedang tertunda TIDAK mematikan kedua aksi itu.
+
+Aksi hentikan pengulangan sengaja tidak ikut dimatikan: jadwal yang sudah dikerjakan justru saat paling wajar bagi owner untuk memutus rantainya.
+
+Tugas yang sudah dilepas tidak ditampilkan di layar ini. Jadwal yang seluruh tugasnya dilepas karena itu terbaca sebagai jadwal tanpa pekerja dan dapat ditugaskan ulang.
 
 ---
 
-## 9.7 Create Schedule From SOP Screen
+## 9.3 Create Manual Schedule Screen
 
 ### Fungsi
 
-Owner membuat jadwal dari SOP.
-
-### Isi Utama
-
-* SOP yang dipilih
-* Acuan tanggal berikutnya
-* Input tanggal jadwal
-* Pilihan worker
-* Pilihan target
-* Instruksi dari SOP
-* Tombol buat jadwal dan tugas
-
-### Aktor
-
-* Owner
-
-### Service Terkait
-
-* `createScheduleFromSOP`
-* `getCareSOPDetail`
-* `getActiveWorkers`
-
----
-
-## 9.8 Create Manual Schedule Screen
-
-### Fungsi
-
-Owner membuat jadwal manual tanpa SOP.
+Owner membuat jadwal perawatan baru.
 
 ### Isi Utama
 
@@ -833,6 +728,9 @@ Owner membuat jadwal manual tanpa SOP.
 * Pilihan worker
 * Pilihan target
 * Instruksi
+* Input interval pengulangan
+* Pilihan dasar tanggal penerus: tanggal jadwal atau tanggal realisasi
+* Input masa toleransi keterlambatan
 * Tombol buat jadwal dan tugas
 
 ### Aktor
@@ -963,10 +861,12 @@ Worker melihat detail tugas dan memperbarui statusnya.
 * Tanggal tugas
 * Target tugas
 * Instruksi
-* Status tugas
+* Status tugas, termasuk penanda terlewat
 * Tombol selesai
 * Tombol tunda
-* Input catatan singkat
+* Input tanggal rencana pengerjaan ulang, wajib diisi saat menunda
+* Input catatan singkat, wajib diisi saat menunda
+* Riwayat hasil kerja tugas tersebut
 
 ### Aktor
 
@@ -1227,7 +1127,6 @@ Owner Tabs
 
 * Care Schedule List Screen
 * Care Schedule Detail Screen
-* Create Schedule From SOP Screen
 * Create Manual Schedule Screen
 * Owner Task List Screen
 * Owner Task Detail Screen
@@ -1242,10 +1141,6 @@ Owner Tabs
 
 * Farm Detail Screen
 * Worker Management Screen
-* Care SOP List Screen
-* Care SOP Detail Screen
-* Create Care SOP Screen
-* Edit Care SOP Screen
 * Profile Screen
 * Edit Profile Screen
 
@@ -1451,62 +1346,22 @@ Pilih tindakan:
 
 ---
 
-## 15.7 Flow Owner Membuat SOP
-
-```txt
-Owner Tab Kebun/Profile
-↓
-Care SOP List
-↓
-Create Care SOP
-↓
-Isi nama SOP, kategori, interval, instruksi, target default
-↓
-Simpan SOP
-↓
-SOP muncul di Care SOP List
-```
-
----
-
-## 15.8 Flow Owner Membuat Jadwal dari SOP
-
-```txt
-Owner Tab Jadwal / Care SOP Detail
-↓
-Pilih SOP
-↓
-Sistem menampilkan acuan jadwal berikutnya
-↓
-Owner memilih Buat Jadwal dari SOP
-↓
-Create Schedule From SOP
-↓
-Sistem mengisi kategori dan instruksi dari SOP
-↓
-Owner memilih tanggal, worker, target, instruksi
-↓
-Simpan jadwal
-↓
-Sistem membuat Care Schedule
-↓
-Sistem membuat Care Task
-↓
-Worker melihat tugas di Worker Task List
-```
-
----
-
-## 15.9 Flow Owner Membuat Jadwal Manual
+## 15.7 Flow Owner Membuat Jadwal Perawatan
 
 ```txt
 Owner Tab Jadwal
 ↓
 Care Schedule List
 ↓
+Owner memilih Buat Jadwal
+↓
 Create Manual Schedule
 ↓
-Isi judul, kategori, tanggal, worker, target, instruksi
+Owner mengisi judul, kategori, instruksi
+↓
+Owner memilih tanggal, worker, target
+↓
+Owner mengisi interval pengulangan jika jadwal berulang
 ↓
 Simpan jadwal
 ↓
@@ -1519,7 +1374,7 @@ Worker melihat tugas di Worker Task List
 
 ---
 
-## 15.10 Flow Worker Merealisasikan Tugas
+## 15.8 Flow Worker Merealisasikan Tugas
 
 ```txt
 Worker Dashboard / Tab Tugas
@@ -1548,7 +1403,7 @@ Pilih aksi:
 
 ---
 
-## 15.11 Flow Owner Mengelola Worker
+## 15.9 Flow Owner Mengelola Worker
 
 ```txt
 Owner Tab Kebun/Profile
@@ -1593,9 +1448,6 @@ Karena MVP tetap harus realistis, halaman dapat diprioritaskan dalam beberapa le
 | Worker Task List         | Worker        |
 | Worker Task Detail       | Worker        |
 | Care Schedule List       | Owner         |
-| Create Schedule From SOP | Owner         |
-| Care SOP List            | Owner         |
-| Create Care SOP          | Owner         |
 | Create Growth Phase Record | Owner, Worker |
 | Growth Monitoring        | Owner         |
 | Profile                  | Owner, Worker |
@@ -1614,8 +1466,6 @@ Karena MVP tetap harus realistis, halaman dapat diprioritaskan dalam beberapa le
 | Create Operational Report           | Worker        |
 | Create Task From Operational Report | Owner         |
 | Create Manual Schedule              | Owner         |
-| Care SOP Detail                     | Owner         |
-| Edit Care SOP                       | Owner         |
 | Owner Task List                     | Owner         |
 | Owner Task Detail                   | Owner         |
 | Tree History Full Screen            | Owner, Worker |
@@ -1660,7 +1510,6 @@ Agar UI tidak dibuat ulang seperti manusia yang baru pertama kali menemukan tomb
 | `TreeCard`            | Card daftar pohon           |
 | `TaskCard`            | Card daftar tugas           |
 | `ReportCard`          | Card laporan operasional    |
-| `SOPCard`             | Card SOP                    |
 | `WorkerCard`          | Card pekerja                |
 | `DashboardStatCard`   | Card statistik dashboard    |
 | `HistoryTimelineItem` | Item timeline riwayat pohon |
@@ -1738,18 +1587,13 @@ Halaman-halaman ini berada di luar scope MVP. Menaruhnya sekarang hanya akan mem
 10. Operational Report List
 11. Operational Report Detail
 12. Create Task From Operational Report
-13. Care SOP List
-14. Care SOP Detail
-15. Create Care SOP
-16. Edit Care SOP
-17. Care Schedule List
-18. Care Schedule Detail
-19. Create Schedule From SOP
-20. Create Manual Schedule
-21. Owner Task List
-22. Owner Task Detail
-23. Profile
-24. Edit Profile
+13. Care Schedule List
+14. Care Schedule Detail
+15. Create Manual Schedule
+16. Owner Task List
+17. Owner Task Detail
+18. Profile
+19. Edit Profile
 
 ## Worker
 
@@ -1786,7 +1630,6 @@ Owner
 ├── Jadwal
 │   ├── Care Schedule List
 │   ├── Care Schedule Detail
-│   ├── Create Schedule From SOP
 │   ├── Create Manual Schedule
 │   ├── Owner Task List
 │   └── Owner Task Detail
@@ -1796,10 +1639,6 @@ Owner
 │   └── Create Task From Report
 └── Kebun/Profile
     ├── Worker Management
-    ├── Care SOP List
-    ├── Care SOP Detail
-    ├── Create Care SOP
-    ├── Edit Care SOP
     ├── Farm Detail
     └── Profile
 ```

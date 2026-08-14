@@ -1,5 +1,20 @@
 # MVP Scope Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Fitur SOP perawatan sebagai
+> template (tabel `care_sops`) dan target jadwal berupa **baris**/**kolom**
+> sudah dicabut dari sistem. Bagian yang menspesifikasikan keduanya dihapus dari
+> dokumen ini. Istilah "SOP" yang masih muncul di bagian latar belakang mengacu
+> pada praktik operasional di lapangan sebagaimana temuan wawancara, bukan pada
+> fitur aplikasi yang dicabut. Riwayat keputusannya ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** Pengulangan jadwal tidak lagi
+> menunggu konfirmasi owner: rantai jadwal membuat penerusnya sendiri. Jadwal
+> kini mengenal masa toleransi keterlambatan dan status **terlewat**, penundaan
+> tugas wajib menyebut tanggal, realisasi tugas terjadwal menautkan pohon yang
+> dirawat, tugas terbuka dilepas ketika pekerjanya berhenti aktif, dan jadwal
+> hanya terkunci oleh hasil kerja yang benar-benar selesai. Riwayat
+> keputusannya ada di `decision-log.md` (DL-034 sampai DL-038).
+
 ## Fokus Utama MVP
 
 Avology V2 difokuskan sebagai aplikasi mobile sistem informasi operasional kebun alpukat yang membantu pemilik dan pekerja kebun dalam mencatat data pohon, memantau kondisi kebun, mengelola jadwal perawatan, menjalankan tugas pekerja, mencatat fase pertumbuhan, serta menyediakan dashboard monitoring bagi pemilik kebun.
@@ -24,7 +39,7 @@ MVP ini berangkat dari permasalahan utama di MS Farm, yaitu belum adanya pencata
 
 Fitur ini digunakan untuk membedakan hak akses antara pemilik kebun dan pekerja kebun.
 
-Owner memiliki akses untuk mengelola data utama kebun, pekerja, pohon, jadwal, SOP, laporan, dan dashboard. Worker memiliki akses untuk melihat tugas, menyelesaikan tugas, melaporkan kondisi pohon, dan membuat laporan operasional kebun.
+Owner memiliki akses untuk mengelola data utama kebun, pekerja, pohon, jadwal, laporan, dan dashboard. Worker memiliki akses untuk melihat tugas, menyelesaikan tugas, melaporkan kondisi pohon, dan membuat laporan operasional kebun.
 
 ---
 
@@ -58,12 +73,17 @@ Fitur ini digunakan untuk membentuk ruang kerja utama dalam aplikasi, sehingga d
 * Owner menerima worker pending
 * Owner menolak worker pending
 * Owner menghapus atau mengeluarkan worker aktif dari kebun
+* Worker dapat keluar sendiri dari kebun
+* Tugas terbuka milik worker yang berhenti aktif dilepas otomatis, sehingga
+  jadwalnya dapat ditugaskan kembali kepada worker lain
 
 ### Tujuan
 
 Fitur ini digunakan agar owner dapat mengelola anggota kebun. Jika worker sudah tidak bekerja atau tidak lagi terlibat dalam operasional kebun, owner dapat menghapus akses worker dari kebun.
 
 Penghapusan worker sebaiknya tidak dilakukan dengan delete permanen, tetapi dengan mengubah status worker menjadi removed agar riwayat tugas dan laporan yang pernah dibuat tetap dapat dilacak.
+
+Ketika keanggotaan berhenti aktif — baik karena dikeluarkan owner maupun karena worker keluar sendiri — tugas yang belum dikerjakan tidak boleh ikut tertinggal atas nama orang yang sudah tidak ada di kebun. Tugas seperti itu dilepas: pekerjaannya berhenti dihitung sebagai tunggakan, sedangkan jadwalnya tetap hidup dan muncul kembali sebagai jadwal yang belum punya pekerja.
 
 ---
 
@@ -152,96 +172,79 @@ Fitur ini penting karena owner tidak selalu berada di kebun dan membutuhkan info
 
 ---
 
-## 7. SOP Perawatan sebagai Template Standar
+## 7. Jadwal Perawatan Manual
 
 ### Fitur Masuk MVP
 
-* Owner membuat template SOP perawatan
-* Owner mengubah template SOP
-* Owner mengaktifkan atau menonaktifkan SOP
-* Data SOP mencakup:
-
-  * nama SOP
-  * kategori perawatan
-  * interval hari
-  * instruksi default
-  * target default
-  * status aktif/tidak aktif
-
-### Kategori SOP
-
-* Penyiraman
-* Pemupukan
-* Penyemprotan
-* Pengendalian gulma
-* Lainnya
-
-### Tujuan
-
-SOP dalam Avology V2 tidak diposisikan sebagai dokumen prosedur panjang, tetapi sebagai template standar perawatan yang membantu owner membuat jadwal dan tugas secara lebih konsisten.
-
-SOP digunakan untuk menyimpan instruksi dan interval perawatan, sehingga owner tidak perlu menulis instruksi berulang setiap kali membuat jadwal.
-
----
-
-## 8. Jadwal Perawatan Berbasis SOP dan Manual
-
-### Fitur Masuk MVP
-
-* Owner membuat jadwal dari SOP
-* Owner membuat jadwal manual tanpa SOP
+* Owner membuat jadwal perawatan
+* Owner menentukan kategori perawatan
 * Owner menentukan tanggal jadwal
 * Owner menentukan target jadwal:
 
   * seluruh kebun
-  * baris tertentu
-  * kolom tertentu
   * pohon tertentu
+  * target khusus berupa catatan bebas
 * Owner memilih worker yang bertugas
 * Jadwal menghasilkan tugas untuk worker
 * Jadwal dapat menyimpan instruksi perawatan
+* Owner dapat mengedit atau membatalkan jadwal selama belum ada hasil kerja
+  yang selesai
+* Owner dapat menugaskan ulang jadwal yang belum punya tugas aktif
 
 ### Tujuan
 
 Fitur ini digunakan untuk mengubah rencana perawatan menjadi tugas yang dapat dikerjakan worker.
 
-Jadwal dapat dibuat dari SOP agar instruksi dan kategori perawatan otomatis terisi berdasarkan template, tetapi owner tetap memiliki fleksibilitas untuk membuat jadwal manual jika pekerjaan tidak sesuai SOP tertentu.
+Setiap jadwal dibuat sendiri oleh owner, lengkap dengan kategori dan instruksinya, tanpa bergantung pada template apa pun.
+
+Jadwal dikunci hanya oleh hasil kerja yang benar-benar selesai. Yang dilindungi penguncian itu adalah riwayat: begitu pekerjaan dilakukan, mengubah jadwalnya membuat catatan lama berbicara tentang perintah yang tidak pernah diberikan. Tugas yang ditunda tidak membawa risiko itu karena pekerjaannya justru belum terjadi, sehingga jadwalnya tetap dapat diedit maupun dibatalkan.
 
 ---
 
-## 9. Interval SOP dan Acuan Jadwal Berikutnya
+## 8. Interval Pengulangan, Rantai Jadwal, dan Masa Toleransi
 
 ### Fitur Masuk MVP
 
-* SOP menyimpan interval perawatan dalam satuan hari
+* Jadwal dapat menyimpan interval pengulangan dalam satuan hari
 
-* Sistem melihat tanggal realisasi terakhir dari SOP terkait
+* Jadwal berulang membentuk rantai: begitu satu siklus ditutup, sistem membuat
+  jadwal penerusnya sendiri tanpa menunggu konfirmasi owner
 
-* Sistem menghitung acuan jadwal berikutnya berdasarkan:
+* Owner menentukan dasar perhitungan tanggal penerus:
 
-  tanggal realisasi terakhir + interval SOP
+  * dasar **jadwal** — tanggal penerus dihitung dari tanggal jadwal
+  * dasar **realisasi** — tanggal penerus dihitung dari tanggal pekerjaan
+    benar-benar dilakukan
 
-* Sistem menampilkan status jadwal berikutnya, misalnya:
+* Jadwal dapat menyimpan masa toleransi keterlambatan dalam satuan hari.
+  Tanpa masa toleransi, jadwal tidak pernah dinyatakan terlewat
+
+* Sistem menampilkan status jadwal:
 
   * belum jatuh tempo
   * jatuh tempo hari ini
   * terlambat
+  * terlewat
 
-* Owner dapat membuat jadwal berikutnya berdasarkan acuan tersebut
+* Jadwal yang melewati masa toleransi dinyatakan **terlewat**, dan rantainya
+  tetap berjalan ke siklus berikutnya
 
-* Sistem tidak otomatis membuat tugas tanpa konfirmasi owner
+* Owner dapat menghentikan pengulangan tanpa membatalkan jadwal yang sedang
+  berjalan
 
 ### Tujuan
 
 Fitur ini digunakan untuk membantu owner menjaga konsistensi perawatan tanpa harus mengingat sendiri tanggal treatment terakhir.
 
-Mekanisme ini bersifat semi-otomatis. Sistem membantu menghitung acuan jadwal berikutnya, tetapi owner tetap meninjau dan membuat jadwal/tugas secara sadar.
+Rantai jadwal dijalankan sistem, bukan owner. Pilihan ini diambil setelah terlihat bahwa perawatan berulang yang menunggu konfirmasi akan berhenti diam-diam begitu owner lupa satu siklus, dan justru siklus yang terlupakan itulah yang paling perlu dijaga.
 
-Fitur ini dipilih agar MVP tetap realistis dan tidak membutuhkan sistem background scheduler atau push notification yang kompleks.
+Masa toleransi menjawab persoalan turunannya: tanpa batas waktu, satu siklus yang tidak dikerjakan akan menahan seluruh rantai selamanya. Dengan masa toleransi, siklus yang lewat ditutup sebagai terlewat dan penerusnya tetap lahir, sehingga perawatan berikutnya tidak ikut hilang.
+
+MVP ini tetap tidak memakai background scheduler maupun push notification. Penerus jadwal dan penandaan terlewat dihitung saat aplikasi dibuka, pada jalur baca yang memang sudah berjalan, sehingga tidak dibutuhkan proses yang hidup di luar aplikasi.
 
 ---
 
-## 10. Tugas Worker
+## 9. Tugas Worker
 
 ### Fitur Masuk MVP
 
@@ -249,13 +252,19 @@ Fitur ini dipilih agar MVP tetap realistis dan tidak membutuhkan sistem backgrou
 * Worker melihat tugas hari ini
 * Worker melihat detail tugas
 * Worker menandai tugas sebagai selesai
-* Worker menandai tugas sebagai tertunda
+* Worker menandai tugas sebagai tertunda dengan menyebut tanggal rencana
+  pengerjaan ulang
 * Worker menambahkan catatan singkat saat menyelesaikan atau menunda tugas
+* Tenggat tugas ikut bergeser ke tanggal penundaan, sehingga masa toleransi
+  dihitung ulang dari tanggal baru itu
 * Status tugas dapat berupa:
 
   * belum selesai
   * selesai
   * tertunda
+* Di samping status tersebut, tugas dapat ditandai **terlewat** bila melewati
+  masa toleransi jadwalnya, dan **dilepas** bila pekerjanya berhenti aktif.
+  Keduanya bukan nilai status, melainkan penanda terpisah
 
 ### Tujuan
 
@@ -265,7 +274,7 @@ Tugas worker menjadi penghubung antara rencana perawatan dan realisasi di lapang
 
 ---
 
-## 11. Realisasi Perawatan dan Riwayat Aktivitas
+## 10. Realisasi Perawatan dan Riwayat Aktivitas
 
 ### Fitur Masuk MVP
 
@@ -277,8 +286,14 @@ Tugas worker menjadi penghubung antara rencana perawatan dan realisasi di lapang
   * status realisasi
   * tanggal realisasi
   * catatan singkat
-* Jika tugas berkaitan dengan pohon tertentu, aktivitas masuk ke riwayat pohon
-* Jika tugas berkaitan dengan kebun atau area, aktivitas masuk ke riwayat operasional kebun
+  * tanggal rencana pengerjaan ulang, khusus untuk realisasi berupa penundaan
+* Saat tugas diselesaikan, sistem menautkan pohon yang dirawat ke aktivitas itu:
+
+  * target pohon tertentu — pohon itu saja
+  * target seluruh kebun — semua pohon kebun yang belum diarsipkan
+  * target khusus berupa catatan bebas — tidak ada pohon yang ditautkan
+* Aktivitas yang tertaut pohon masuk ke riwayat pohon terkait
+* Aktivitas yang tidak tertaut pohon tetap tercatat sebagai riwayat kerja kebun
 
 ### Tujuan
 
@@ -286,9 +301,11 @@ Fitur ini digunakan untuk mencatat apakah tugas benar-benar dilakukan atau tidak
 
 Riwayat realisasi penting untuk membantu owner mengevaluasi disiplin perawatan dan mengetahui treatment apa yang pernah diberikan.
 
+Pohon ditautkan pada saat tugas diselesaikan, bukan pada saat jadwal dibuat. Jadwal berulang bisa lahir jauh sebelum dikerjakan dan daftar pohon kebun berubah di antaranya, sehingga tautan yang dibentuk di akhir mencerminkan pohon yang benar-benar ada ketika pekerjaan dilakukan.
+
 ---
 
-## 12. Fase Pertumbuhan Pohon
+## 11. Fase Pertumbuhan Pohon
 
 ### Fitur Masuk MVP
 
@@ -312,7 +329,7 @@ Fitur ini tidak digunakan untuk memprediksi panen otomatis. Keputusan panen teta
 
 ---
 
-## 13. Riwayat Pohon
+## 12. Riwayat Pohon
 
 ### Fitur Masuk MVP
 
@@ -329,7 +346,7 @@ Riwayat pohon membantu owner mengevaluasi treatment, kondisi, dan perkembangan p
 
 ---
 
-## 14. Dashboard Owner
+## 13. Dashboard Owner
 
 ### Fitur Masuk MVP
 
@@ -344,7 +361,7 @@ Dashboard owner menampilkan ringkasan informasi penting, seperti:
 * worker pending
 * pohon dalam fase berbunga
 * pohon dalam fase berbuah
-* SOP yang sudah jatuh tempo atau terlambat
+* jadwal yang sudah jatuh tempo atau terlambat
 
 ### Tujuan
 
@@ -354,7 +371,7 @@ Owner dapat melihat kondisi penting kebun dalam waktu singkat tanpa harus membuk
 
 ---
 
-## 15. Dashboard Worker
+## 14. Dashboard Worker
 
 ### Fitur Masuk MVP
 
@@ -392,7 +409,7 @@ Fitur berikut tidak dimasukkan ke dalam MVP Avology V2:
 14. Sistem kelompok tani
 15. Multi-owner kompleks
 16. Role admin global
-17. Recurring task full otomatis tanpa konfirmasi owner
+17. Penjadwal latar yang berjalan di luar aplikasi
 
 ---
 
@@ -402,7 +419,7 @@ Fitur berikut tidak dimasukkan ke dalam MVP Avology V2:
 2. Sistem hanya mencatat fase pertumbuhan sebagai acuan monitoring.
 3. Sistem tidak mengirim push notification.
 4. Sistem tidak membuat tugas berulang otomatis tanpa persetujuan owner.
-5. SOP digunakan sebagai template standar dan acuan interval, bukan sebagai dokumen prosedur panjang.
+5. Interval pengulangan disimpan pada jadwal itu sendiri dan hanya menjadi acuan jadwal berikutnya.
 6. Laporan operasional kebun hanya mencakup laporan, status, dan tindak lanjut menjadi tugas.
 7. Manajemen worker hanya mencakup approve, reject, dan remove worker.
 8. Fokus aplikasi adalah pencatatan, monitoring, jadwal, tugas, dan riwayat operasional kebun alpukat.
@@ -419,14 +436,13 @@ MVP Avology V2 mencakup:
 4. Manajemen data pohon
 5. Laporan kondisi pohon
 6. Laporan operasional kebun
-7. SOP perawatan sebagai template standar
-8. Jadwal perawatan dari SOP atau manual
-9. Interval SOP sebagai acuan jadwal berikutnya
-10. Tugas worker
-11. Realisasi perawatan
-12. Fase pertumbuhan pohon
-13. Riwayat pohon
-14. Dashboard owner
-15. Dashboard worker
+7. Jadwal perawatan manual
+8. Interval pengulangan sebagai acuan jadwal berikutnya
+9. Tugas worker
+10. Realisasi perawatan
+11. Fase pertumbuhan pohon
+12. Riwayat pohon
+13. Dashboard owner
+14. Dashboard worker
 
 Dengan scope ini, Avology V2 diposisikan sebagai sistem informasi operasional kebun alpukat yang mendukung pencatatan, pemantauan, koordinasi kerja, dan pengambilan keputusan owner berdasarkan data lapangan.

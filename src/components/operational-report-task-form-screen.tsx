@@ -48,7 +48,7 @@ import {
   type OptionItem,
 } from './ui';
 
-const targetTypeOptions: TargetType[] = ['farm', 'row', 'column', 'tree', 'custom'];
+const targetTypeOptions: TargetType[] = ['farm', 'tree', 'custom'];
 
 export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { reportId?: string }) {
   const { currentFarm } = useAuth();
@@ -65,8 +65,6 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
   const [report, setReport] = React.useState<OperationalReport | null>(null);
   const [requiresPhoto, setRequiresPhoto] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
-  const [targetColumn, setTargetColumn] = React.useState('');
-  const [targetRow, setTargetRow] = React.useState('');
   const [targetTreeId, setTargetTreeId] = React.useState('');
   const [targetType, setTargetType] = React.useState<TargetType>('farm');
   const [title, setTitle] = React.useState('');
@@ -145,8 +143,6 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
 
   function updateTargetType(nextTargetType: TargetType) {
     setTargetType(nextTargetType);
-    setTargetRow('');
-    setTargetColumn('');
     setTargetTreeId('');
     setCustomTargetNote('');
   }
@@ -177,16 +173,6 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
       return;
     }
 
-    if (targetType === 'row' && !targetRow.trim()) {
-      setError('Baris target wajib diisi.');
-      return;
-    }
-
-    if (targetType === 'column' && !targetColumn.trim()) {
-      setError('Kolom target wajib diisi.');
-      return;
-    }
-
     if (targetType === 'tree' && !targetTreeId) {
       setError('Pohon target wajib dipilih.');
       return;
@@ -211,8 +197,6 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
       // Kosong berarti owner memang ingin menghapus catatan lama.
       ownerResponseNote,
       requiresPhoto,
-      targetColumn: targetType === 'column' ? targetColumn : null,
-      targetRow: targetType === 'row' ? targetRow : null,
       targetTreeId: targetType === 'tree' ? targetTreeId : null,
       targetType,
       title,
@@ -311,24 +295,6 @@ export function OwnerCreateTaskFromOperationalReportScreen({ reportId }: { repor
           value={targetType}
           onChange={(value) => updateTargetType(value as TargetType)}
         />
-
-        {targetType === 'row' ? (
-          <Field
-            label="Baris target *"
-            onChangeText={setTargetRow}
-            placeholder="Contoh: A"
-            value={targetRow}
-          />
-        ) : null}
-
-        {targetType === 'column' ? (
-          <Field
-            label="Kolom target *"
-            onChangeText={setTargetColumn}
-            placeholder="Contoh: 1"
-            value={targetColumn}
-          />
-        ) : null}
 
         {targetType === 'tree' ? (
           trees.length === 0 ? (

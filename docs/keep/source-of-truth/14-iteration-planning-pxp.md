@@ -1,5 +1,20 @@
 # Iteration Planning Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Iteration 3 ("SOP Perawatan dan
+> Acuan Jadwal Berikutnya", 23 SP) dihapus dan iterasi sesudahnya dinomori ulang
+> menjadi Iteration 3–6. US-21, US-22, US-23, dan US-25 dikeluarkan dari backlog.
+> Akibatnya total estimasi backlog turun dari 137 SP menjadi **119 SP**, dan
+> total rencana iterasi dari 150 SP menjadi **127 SP**. Riwayat keputusannya ada
+> di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** Iteration 3 diperdalam tanpa
+> penambahan user story: rantai jadwal, masa toleransi, penundaan bertanggal,
+> penautan pohon, pelepasan tugas, dan pelonggaran penguncian jadwal semuanya
+> memperbaiki US yang sudah ada. Daftar service iterasi itu bertambah, tetapi
+> **estimasi story point tidak berubah** — backlog tetap 119 SP dan rencana
+> iterasi tetap 127 SP. Riwayat keputusannya ada di `decision-log.md` (DL-034
+> sampai DL-038).
+
 ## 1. Tujuan Iteration Planning
 
 Iteration planning digunakan untuk membagi pengembangan Avology V2 ke dalam beberapa iterasi kerja berdasarkan metode Personal Extreme Programming (PXP).
@@ -96,11 +111,7 @@ Story point tidak selalu sama dengan durasi waktu. Story point digunakan untuk m
 | US-18 | Owner Melihat Laporan Operasional Kebun             |     NAT 3 |           3 |
 | US-19 | Owner Mengubah Status Laporan Operasional           |     NAT 3 |           2 |
 | US-20 | Owner Membuat Tugas dari Laporan Operasional        |     NAT 3 |           5 |
-| US-21 | Owner Membuat SOP Perawatan                         |     NAT 3 |           5 |
-| US-22 | Owner Mengubah SOP Perawatan                        |     NAT 3 |           3 |
-| US-23 | Owner Menonaktifkan SOP                             |     NAT 2 |           2 |
-| US-24 | Sistem Menampilkan Acuan Jadwal Berikutnya dari SOP |     NAT 3 |           5 |
-| US-25 | Owner Membuat Jadwal dari SOP                       |     NAT 3 |           8 |
+| US-24 | Sistem Melanjutkan Jadwal Berulang | NAT 3 | 5 |
 | US-26 | Owner Membuat Jadwal Manual                         |     NAT 2 |           5 |
 | US-27 | Owner Menentukan Target Jadwal                      |     NAT 3 |           3 |
 | US-28 | Worker Melihat Daftar Tugas                         |     NAT 3 |           3 |
@@ -122,7 +133,7 @@ Story point tidak selalu sama dengan durasi waktu. Story point digunakan untuk m
 Total estimasi seluruh user story MVP:
 
 ```txt
-137 Story Point
+119 Story Point
 ```
 
 ---
@@ -142,8 +153,6 @@ Data Pohon
 ↓
 Laporan Kondisi
 ↓
-SOP
-↓
 Jadwal
 ↓
 Tugas Worker
@@ -157,7 +166,7 @@ Riwayat
 Dashboard
 ```
 
-Fitur yang menjadi pondasi harus dikerjakan lebih awal. Contohnya, dashboard tidak boleh dikerjakan sebelum data pohon, tugas, laporan, dan SOP tersedia. Dashboard tanpa data sumber cuma hiasan statistik palsu, alias dekorasi kebohongan digital.
+Fitur yang menjadi pondasi harus dikerjakan lebih awal. Contohnya, dashboard tidak boleh dikerjakan sebelum data pohon, tugas, dan laporan tersedia. Dashboard tanpa data sumber cuma hiasan statistik palsu, alias dekorasi kebohongan digital.
 
 ---
 
@@ -366,80 +375,13 @@ Membangun fitur data pohon individual dan laporan kondisi pohon.
 
 ---
 
-## Iteration 3 - SOP Perawatan dan Acuan Jadwal Berikutnya
-
-### Fokus
-
-Membangun fitur SOP sebagai template standar perawatan dan acuan jadwal berikutnya berdasarkan interval.
-
-### User Story Terkait
-
-| Kode  | User Story                                          | Story Point |
-| ----- | --------------------------------------------------- | ----------: |
-| US-21 | Owner Membuat SOP Perawatan                         |           5 |
-| US-22 | Owner Mengubah SOP Perawatan                        |           3 |
-| US-23 | Owner Menonaktifkan SOP                             |           2 |
-| US-24 | Sistem Menampilkan Acuan Jadwal Berikutnya dari SOP |           5 |
-| US-25 | Owner Membuat Jadwal dari SOP                       |           8 |
-
-### Total Story Point
-
-23 SP
-
-### Service yang Dibuat
-
-* `getCareSOPs`
-* `getCareSOPDetail`
-* `createCareSOP`
-* `updateCareSOP`
-* `setCareSOPActiveStatus`
-* `getCareSOPNextScheduleReference`
-* `createScheduleFromSOP`
-
-### Screen yang Dibuat
-
-* Care SOP List Screen
-* Care SOP Detail Screen
-* Create Care SOP Screen
-* Edit Care SOP Screen
-* Create Schedule From SOP Screen
-
-### Output
-
-* Owner dapat membuat SOP.
-* Owner dapat mengubah SOP.
-* Owner dapat menonaktifkan SOP.
-* Sistem dapat menghitung acuan jadwal berikutnya.
-* Owner dapat membuat jadwal dan tugas dari SOP.
-* Sistem tidak membuat tugas otomatis tanpa konfirmasi owner.
-
-### Black-box Testing
-
-1. Owner membuat SOP dengan data valid berhasil.
-2. SOP dengan interval 0 gagal.
-3. Owner mengubah SOP berhasil.
-4. Owner menonaktifkan SOP berhasil.
-5. SOP tidak aktif tidak muncul sebagai pilihan utama jadwal.
-6. Sistem menampilkan status no_history jika SOP belum pernah direalisasikan.
-7. Sistem menghitung acuan jadwal berikutnya jika sudah ada realisasi.
-8. Owner membuat jadwal dari SOP berhasil.
-9. Jadwal dari SOP menghasilkan tugas worker.
-10. Worker dapat melihat tugas yang berasal dari SOP.
-
-### Retrospective
-
-* Apakah SOP terasa berguna, bukan sekadar template pajangan?
-* Apakah interval SOP membantu owner?
-* Apakah proses membuat jadwal dari SOP terlalu rumit?
-* Apakah perlu menyederhanakan target default?
-
----
-
-## Iteration 4 - Jadwal Manual dan Realisasi Tugas Worker
+## Iteration 3 - Jadwal Perawatan dan Realisasi Tugas Worker
 
 ### Fokus
 
 Membangun jadwal manual, daftar tugas worker, detail tugas, selesai tugas, dan tunda tugas.
+
+Iterasi ini kemudian diperdalam lewat migrasi 048–052: rantai jadwal berulang beserta masa toleransi keterlambatan, penundaan yang wajib bertanggal, penautan pohon pada realisasi tugas, pelepasan tugas saat keanggotaan berakhir, dan pelonggaran aturan penguncian jadwal. Pekerjaan itu tidak menambah user story baru — seluruhnya memperbaiki US-24 dan US-26 sampai US-31 yang sudah ada, sehingga estimasi story point iterasi tidak berubah.
 
 ### User Story Terkait
 
@@ -466,6 +408,12 @@ Membangun jadwal manual, daftar tugas worker, detail tugas, selesai tugas, dan t
 * `getTaskDetail`
 * `completeTask`
 * `postponeTask`
+* `getScheduleEditEligibility`
+* `cancelCareSchedule`
+* `assignWorkerToSchedule`
+* `stopScheduleRepeat`
+* `sweepMissedSchedules`
+* `leaveCurrentFarm`
 
 ### Screen yang Dibuat
 
@@ -509,7 +457,7 @@ Membangun jadwal manual, daftar tugas worker, detail tugas, selesai tugas, dan t
 
 ---
 
-## Iteration 5 - Laporan Operasional Kebun dan Tindak Lanjut
+## Iteration 4 - Laporan Operasional Kebun dan Tindak Lanjut
 
 ### Fokus
 
@@ -572,7 +520,7 @@ Membangun fitur laporan operasional kebun dan tugas tindak lanjut dari laporan.
 
 ---
 
-## Iteration 6 - Fase Pertumbuhan dan Riwayat Pohon
+## Iteration 5 - Fase Pertumbuhan dan Riwayat Pohon
 
 ### Fokus
 
@@ -634,7 +582,7 @@ Membangun pencatatan fase pertumbuhan, monitoring pohon berbunga/berbuah, dan ri
 
 ---
 
-## Iteration 7 - Dashboard, Role Guard, dan Final MVP Polish
+## Iteration 6 - Dashboard, Role Guard, dan Final MVP Polish
 
 ### Fokus
 
@@ -686,7 +634,7 @@ Menyelesaikan dashboard owner, dashboard worker, role guard, navigasi akhir, dan
 3. Dashboard owner menampilkan tugas hari ini.
 4. Dashboard owner menampilkan laporan operasional baru.
 5. Dashboard owner menampilkan worker pending.
-6. Dashboard owner menampilkan SOP terlambat/jatuh tempo.
+6. Dashboard owner menampilkan jadwal terlambat/jatuh tempo.
 7. Dashboard worker menampilkan tugas hari ini.
 8. Dashboard worker menampilkan tugas belum selesai.
 9. Worker tidak dapat membuka fitur owner.
@@ -713,16 +661,15 @@ Menyelesaikan dashboard owner, dashboard worker, role guard, navigasi akhir, dan
 | Iteration 0 | Project Foundation                      |          13 |
 | Iteration 1 | Auth, Kebun, dan Keanggotaan Worker     |          24 |
 | Iteration 2 | Manajemen Pohon dan Laporan Kondisi     |          23 |
-| Iteration 3 | SOP dan Acuan Jadwal Berikutnya         |          23 |
-| Iteration 4 | Jadwal Manual dan Realisasi Tugas       |          19 |
-| Iteration 5 | Laporan Operasional dan Tindak Lanjut   |          13 |
-| Iteration 6 | Fase Pertumbuhan dan Riwayat Pohon      |          16 |
-| Iteration 7 | Dashboard, Role Guard, dan Final Polish |          19 |
+| Iteration 3 | Jadwal Perawatan dan Realisasi Tugas    |          19 |
+| Iteration 4 | Laporan Operasional dan Tindak Lanjut   |          13 |
+| Iteration 5 | Fase Pertumbuhan dan Riwayat Pohon      |          16 |
+| Iteration 6 | Dashboard, Role Guard, dan Final Polish |          19 |
 
 ## Total Story Point MVP
 
 ```txt
-150 Story Point
+127 Story Point
 ```
 
 Catatan:
@@ -784,7 +731,7 @@ Sebuah user story boleh masuk implementasi jika:
 | --------------------------------- | ------------------------------------------ | --------------------------------------------- |
 | Scope melebar                     | MVP tidak selesai                          | Gunakan MVP Scope dan Decision Log            |
 | RLS Supabase rumit                | User tidak bisa akses data atau data bocor | Uji RLS per tabel dan per role                |
-| Jadwal dan tugas terlalu kompleks | Iterasi SOP/task molor                     | Gunakan semi-otomatis, bukan recurring penuh  |
+| Jadwal dan tugas terlalu kompleks | Iterasi jadwal/task molor | Hitung rantai pada jalur baca, bukan lewat penjadwal latar |
 | Dashboard lambat                  | UX buruk                                   | Gunakan query ringkasan dan index             |
 | Worker flow terlalu rumit         | Aplikasi tidak sesuai kebutuhan lapangan   | Form minim teks dan pilihan kategori          |
 | Data histori kacau                | Riwayat pohon tidak akurat                 | Gunakan tabel riwayat terpisah dan view       |
@@ -868,15 +815,13 @@ Iteration 1 - Auth, Kebun, dan Keanggotaan Worker
 ↓
 Iteration 2 - Manajemen Pohon dan Laporan Kondisi
 ↓
-Iteration 3 - SOP dan Acuan Jadwal Berikutnya
+Iteration 3 - Jadwal Perawatan dan Realisasi Tugas
 ↓
-Iteration 4 - Jadwal Manual dan Realisasi Tugas
+Iteration 4 - Laporan Operasional dan Tindak Lanjut
 ↓
-Iteration 5 - Laporan Operasional dan Tindak Lanjut
+Iteration 5 - Fase Pertumbuhan dan Riwayat Pohon
 ↓
-Iteration 6 - Fase Pertumbuhan dan Riwayat Pohon
-↓
-Iteration 7 - Dashboard, Role Guard, dan Final Polish
+Iteration 6 - Dashboard, Role Guard, dan Final Polish
 ```
 
 ---
@@ -917,7 +862,7 @@ Fokus utama MVP adalah membangun sistem informasi operasional kebun alpukat yang
 2. Pencatatan pohon individual
 3. Laporan kondisi pohon
 4. Laporan operasional kebun
-5. SOP perawatan semi-otomatis
+5. Pengulangan jadwal perawatan sebagai rantai jadwal
 6. Jadwal dan tugas worker
 7. Realisasi perawatan
 8. Fase pertumbuhan pohon

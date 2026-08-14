@@ -144,10 +144,18 @@ export function scheduleDueMarker(
 // dengan sistem (1). scheduleIsCancelled diterima sebagai argumen terpisah
 // (bukan di dalam `task`) supaya pemanggil bebas menyuplai status pembatalan
 // jadwal induk dari sumber mana pun.
-export type TimeBucket = 'overdue' | 'today' | 'upcoming' | 'inactive';
+// 'missed' ditambahkan di migrasi 048. Berbeda dari 'overdue': 'overdue' murni
+// turunan tanggal (due_date sudah lewat), sedangkan 'missed' adalah FAKTA yang
+// distempel sweep_missed_schedules setelah tugas melewati masa toleransi jadwal
+// induknya. Setiap tugas 'missed' pasti juga sudah lewat tanggalnya, jadi
+// urutan pemeriksaan di bawah menempatkan 'missed' lebih dulu.
+//
+// Status tugas TIDAK berubah saat ditandai terlewat — pekerja masih boleh
+// mengerjakannya, dan barisnya tetap muncul di daftar.
+export type TimeBucket = 'overdue' | 'missed' | 'today' | 'upcoming' | 'inactive';
 
 export function taskTimeBucket(
-  task: { status: TaskStatus; dueDate: string },
+  task: { status: TaskStatus; dueDate: string; missedAt?: string | null },
   todayIso: string,
   scheduleIsCancelled: boolean
 ): TimeBucket {
@@ -157,6 +165,12 @@ export function taskTimeBucket(
 
   if (task.status === 'completed') {
     return 'inactive';
+  }
+
+  // Didahulukan atas perbandingan tanggal: tugas terlewat selalu juga terlambat,
+  // tapi tidak sebaliknya.
+  if (task.missedAt) {
+    return 'missed';
   }
 
   // Catatan: 'postponed' sengaja lolos ke sini — tetap dikelompokkan menurut tanggalnya.
@@ -319,21 +333,41 @@ export function dueDatePill(
   };
 }
 
-// Varian jadwal: pakai scheduledDate + status turunan dari tugas-tugasnya.
-// Jadwal dianggap "selesai" (→ neutral) hanya jika ada tugas dan semuanya
-// completed; selain itu diperlakukan aktif (pending/postponed sama saja untuk
-// pill). Pembatalan jadwal ditangani oleh pemanggil, bukan di sini.
+// Varian jadwal. Jadwal dianggap "selesai" (→ neutral) hanya jika ada tugas dan
+// semuanya completed; selain itu diperlakukan aktif (pending/postponed sama saja
+// untuk pill). Pembatalan jadwal ditangani oleh pemanggil, bukan di sini.
+//
+// TANGGAL YANG DIPAKAI diselaraskan di migrasi 049. Sebelumnya fungsi ini
+// memakai schedule.scheduledDate sementara scheduleDueMarker dan
+// scheduleTimeBucket memakai due_date per-tugas. Selama tenggat tugas selalu
+// sama dengan tanggal jadwalnya, keduanya kebetulan sepakat — tapi sejak
+// penundaan bertanggal, due_date tugas bergeser ke depan sementara
+// scheduled_date jadwal tetap di tempatnya. Akibatnya satu kartu bisa
+// menampilkan pill "Terlambat 3 hari" berdampingan dengan chip "Mendatang".
+//
+// Sekarang pill memakai tenggat PALING AWAL di antara tugas yang masih terbuka
+// — ukuran yang sama yang membuat scheduleTimeBucket mengembalikan 'overdue'.
+// Jadwal tanpa tugas, dan jadwal yang seluruh tugasnya selesai, jatuh kembali
+// ke scheduledDate karena memang tidak ada tenggat tugas yang bisa dipakai.
 export function scheduleDueDatePill(
   schedule: { scheduledDate: string },
-  tasks: { status: TaskStatus }[],
+  tasks: { status: TaskStatus; dueDate?: string }[],
   todayIso: string
 ): DueDatePill {
-  const derivedStatus: TaskStatus =
-    tasks.length > 0 && tasks.every((task) => task.status === 'completed')
-      ? 'completed'
-      : 'pending';
+  const allCompleted = tasks.length > 0 && tasks.every((task) => task.status === 'completed');
+  const derivedStatus: TaskStatus = allCompleted ? 'completed' : 'pending';
 
-  return dueDatePill({ status: derivedStatus, dueDate: schedule.scheduledDate }, todayIso);
+  const openDueDates = tasks
+    .filter((task) => task.status !== 'completed')
+    .map((task) => task.dueDate)
+    .filter((dueDate): dueDate is string => Boolean(dueDate));
+
+  const effectiveDueDate =
+    openDueDates.length > 0
+      ? openDueDates.reduce((earliest, current) => (current < earliest ? current : earliest))
+      : schedule.scheduledDate;
+
+  return dueDatePill({ status: derivedStatus, dueDate: effectiveDueDate }, todayIso);
 }
 
 // Agregasi ember waktu level-jadwal, meniru pola prioritas scheduleDueMarker
@@ -355,6 +389,13 @@ export function scheduleTimeBucket(
   // owner. Klasifikasinya memakai scheduledDate jadwal itu sendiri, satu-satunya
   // tanggal yang tersedia saat belum ada tugas.
   if (tasks.length === 0) {
+    // Jadwal tanpa tugas punya penandanya sendiri di level jadwal
+    // (care_schedules.missed_at, migrasi 048) karena tidak ada baris tugas
+    // untuk distempel.
+    if (schedule.missedAt) {
+      return 'missed';
+    }
+
     if (schedule.scheduledDate < todayIso) {
       return 'overdue';
     }
@@ -366,21 +407,31 @@ export function scheduleTimeBucket(
     return 'upcoming';
   }
 
+  let hasMissed = false;
   let hasToday = false;
   let hasUpcoming = false;
 
   for (const task of tasks) {
     const bucket = taskTimeBucket(task, todayIso, false);
 
+    // 'overdue' tetap menang atas 'missed': kalau satu tugas sudah terlewat
+    // sementara tugas lain masih terlambat dan bisa dikerjakan, yang mendesak
+    // bagi owner adalah yang masih bisa ditindaklanjuti.
     if (bucket === 'overdue') {
       return 'overdue';
     }
 
-    if (bucket === 'today') {
+    if (bucket === 'missed') {
+      hasMissed = true;
+    } else if (bucket === 'today') {
       hasToday = true;
     } else if (bucket === 'upcoming') {
       hasUpcoming = true;
     }
+  }
+
+  if (hasMissed) {
+    return 'missed';
   }
 
   if (hasToday) {

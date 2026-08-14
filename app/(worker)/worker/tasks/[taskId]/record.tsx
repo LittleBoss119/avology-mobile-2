@@ -3,6 +3,7 @@ import React from 'react';
 import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { BottomSheet, PhotoSourceSheet } from '../../../../../src/components/bottom-sheet';
+import { FormDateField } from '../../../../../src/components/care-schedule-components';
 import { Icon, type IconName } from '../../../../../src/components/icons';
 import {
   Badge,
@@ -41,6 +42,7 @@ import {
   parseDecimalInput,
   sanitizeDecimalInput,
 } from '../../../../../src/utils/decimalInput';
+import { addDaysToIsoDate, getTodayIsoDate } from '../../../../../src/utils/taskDueDate';
 
 type RecordMode = 'create' | 'edit';
 
@@ -75,6 +77,12 @@ export default function WorkerTaskRecordScreen() {
   const [bahanError, setBahanError] = React.useState<string | null>(null);
   const [photoError, setPhotoError] = React.useState<string | null>(null);
   const [reasonError, setReasonError] = React.useState<string | null>(null);
+  // Default besok: RPC menolak hari ini dan masa lalu, jadi membuka picker di
+  // tanggal hari ini hanya akan menyeret pekerja ke pesan error.
+  const [postponedUntil, setPostponedUntil] = React.useState(() =>
+    addDaysToIsoDate(getTodayIsoDate(), 1)
+  );
+  const [postponedUntilError, setPostponedUntilError] = React.useState<string | undefined>(undefined);
 
   const loadTask = React.useCallback(async () => {
     const normalizedTaskId = taskId?.trim();
@@ -256,6 +264,15 @@ export default function WorkerTaskRecordScreen() {
       return;
     }
 
+    // Cermin dari validasi RPC (migrasi 049). Diperiksa di sini juga supaya
+    // pekerja mendapat pesan di sebelah field-nya, bukan banner error dari
+    // server.
+    if (!isCompleted && postponedUntil <= getTodayIsoDate()) {
+      setPostponedUntilError('Pilih tanggal setelah hari ini.');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+
     if (mode === 'edit') {
       await submitEdit();
       return;
@@ -325,6 +342,7 @@ export default function WorkerTaskRecordScreen() {
 
     const result = await postponeTask({
       note,
+      postponedUntil,
       taskId: currentTask.id,
     });
 
@@ -489,20 +507,39 @@ export default function WorkerTaskRecordScreen() {
           </View>
         </>
       ) : (
-        <View style={{ gap: spacing.sm }}>
-          <SectionLabel text="Alasan tunda" />
-          <NoteInput
-            error={reasonError}
-            onChangeText={(value) => {
-              setNote(value);
-              if (value.trim()) {
-                setReasonError(null);
-              }
-            }}
-            placeholder="Contoh: Stok air belum tersedia"
-            value={note}
-          />
-        </View>
+        <>
+          {/* Tanggal DI ATAS alasan: sejak migrasi 049 penundaan adalah
+              penjadwalan ulang, jadi pertanyaan pertamanya "kapan", bukan
+              "kenapa". Hanya muncul di mode catat — pada mode perbaiki,
+              tanggalnya ikut dikoreksi lewat field yang sama di bawah. */}
+          <View style={{ gap: spacing.sm }}>
+            <SectionLabel text="Ditunda sampai" />
+            <FormDateField
+              error={postponedUntilError}
+              label=""
+              onChangeDate={(value) => {
+                setPostponedUntil(value);
+                setPostponedUntilError(undefined);
+              }}
+              value={postponedUntil}
+            />
+          </View>
+
+          <View style={{ gap: spacing.sm }}>
+            <SectionLabel text="Alasan tunda" />
+            <NoteInput
+              error={reasonError}
+              onChangeText={(value) => {
+                setNote(value);
+                if (value.trim()) {
+                  setReasonError(null);
+                }
+              }}
+              placeholder="Contoh: Stok air belum tersedia"
+              value={note}
+            />
+          </View>
+        </>
       )}
 
       <SatuanSheet

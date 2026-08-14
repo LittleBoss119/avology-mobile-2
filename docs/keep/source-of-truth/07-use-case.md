@@ -1,5 +1,18 @@
 # Use Case Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Fitur SOP perawatan dan target
+> jadwal berupa **baris**/**kolom** sudah dicabut dari sistem. **UC-18**
+> (Mengelola SOP Perawatan) dan **UC-20** (Membuat Jadwal dari SOP) dihapus
+> beserta relasi `<<include>>`-nya di diagram; nomornya sengaja TIDAK dipakai
+> ulang agar penomoran UC lain tidak bergeser. UC-19 dan UC-21 disunting isinya.
+> Riwayat keputusannya ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** **UC-09**, **UC-24**, dan **UC-25**
+> disunting isinya. **UC-19** berubah judul menjadi "Melanjutkan Jadwal Berulang"
+> karena sistem kini membuat jadwal penerus sendiri, dan aktornya bertambah
+> Sistem. Tidak ada UC baru maupun UC yang dihapus. Riwayat keputusannya ada di
+> `decision-log.md` (DL-034 sampai DL-038).
+
 ## 1. Tujuan Use Case
 
 Use case digunakan untuk menggambarkan interaksi antara pengguna dengan sistem Avology V2. Use case ini diturunkan dari MVP Scope, kebutuhan fungsional, dan user story yang telah disusun berdasarkan hasil wawancara dengan pemilik kebun alpukat MS Farm.
@@ -8,7 +21,7 @@ Sistem Avology V2 memiliki dua aktor utama, yaitu:
 
 1. **Owner**
 
-   Pemilik kebun yang bertanggung jawab mengelola data kebun, pekerja, pohon, SOP perawatan, jadwal, laporan operasional, dan monitoring kebun.
+   Pemilik kebun yang bertanggung jawab mengelola data kebun, pekerja, pohon, jadwal perawatan, laporan operasional, dan monitoring kebun.
 
 2. **Worker**
 
@@ -35,10 +48,11 @@ Owner adalah pemilik kebun yang memiliki hak akses utama dalam sistem.
 * Mencatat fase pertumbuhan pohon
 * Mengelola laporan operasional kebun
 * Membuat tugas tindak lanjut dari laporan operasional
-* Mengelola SOP perawatan
-* Melihat acuan jadwal berikutnya berdasarkan interval SOP
-* Membuat jadwal perawatan dari SOP
+* Mengatur pengulangan jadwal, dasar perhitungan tanggal penerus, dan masa toleransi keterlambatan
+* Menghentikan pengulangan jadwal
 * Membuat jadwal manual
+* Mengedit atau membatalkan jadwal yang belum punya hasil kerja selesai
+* Menugaskan ulang jadwal yang belum punya tugas aktif
 * Melihat dashboard owner
 
 ---
@@ -59,7 +73,8 @@ Worker adalah pekerja kebun yang menggunakan sistem untuk melihat tugas dan mela
 * Melihat daftar tugas
 * Melihat detail tugas
 * Menyelesaikan tugas
-* Menunda tugas
+* Menunda tugas dengan menyebut tanggal rencana pengerjaan ulang
+* Keluar sendiri dari kebun
 * Melihat dashboard worker
 
 ---
@@ -85,9 +100,7 @@ Worker adalah pekerja kebun yang menggunakan sistem untuk melihat tugas dan mela
 | UC-15 | Melihat Laporan Operasional Kebun      | Owner         |
 | UC-16 | Mengubah Status Laporan Operasional    | Owner         |
 | UC-17 | Membuat Tugas dari Laporan Operasional | Owner         |
-| UC-18 | Mengelola SOP Perawatan                | Owner         |
-| UC-19 | Melihat Acuan Jadwal Berikutnya        | Owner         |
-| UC-20 | Membuat Jadwal dari SOP                | Owner         |
+| UC-19 | Melanjutkan Jadwal Berulang            | Owner, Sistem |
 | UC-21 | Membuat Jadwal Manual                  | Owner         |
 | UC-22 | Melihat Daftar Tugas                   | Worker        |
 | UC-23 | Melihat Detail Tugas                   | Worker        |
@@ -135,9 +148,7 @@ rectangle "Avology V2" {
   usecase "Mengubah Status Laporan Operasional" as UC16
   usecase "Membuat Tugas dari Laporan Operasional" as UC17
 
-  usecase "Mengelola SOP Perawatan" as UC18
-  usecase "Melihat Acuan Jadwal Berikutnya" as UC19
-  usecase "Membuat Jadwal dari SOP" as UC20
+  usecase "Melanjutkan Jadwal Berulang" as UC19
   usecase "Membuat Jadwal Manual" as UC21
 
   usecase "Melihat Daftar Tugas" as UC22
@@ -168,9 +179,7 @@ Owner --> UC13
 Owner --> UC15
 Owner --> UC16
 Owner --> UC17
-Owner --> UC18
 Owner --> UC19
-Owner --> UC20
 Owner --> UC21
 Owner --> UC26
 Owner --> UC27
@@ -197,8 +206,6 @@ Worker --> UC30
 UC07 ..> UC06 : <<include>>
 UC08 ..> UC06 : <<include>>
 UC17 ..> UC15 : <<extend>>
-UC20 ..> UC18 : <<include>>
-UC20 ..> UC19 : <<include>>
 UC24 ..> UC23 : <<include>>
 UC25 ..> UC23 : <<include>>
 UC28 ..> UC13 : <<include>>
@@ -465,13 +472,19 @@ Worker sudah berstatus active.
 1. Owner membuka daftar worker.
 2. Owner memilih worker aktif.
 3. Owner memilih aksi hapus atau keluarkan worker.
-4. Sistem mengubah status worker menjadi removed.
-5. Sistem mencabut akses worker terhadap data kebun.
-6. Riwayat tugas dan laporan worker tetap tersimpan.
+4. Sistem melepas seluruh tugas terbuka milik worker itu di kebun tersebut.
+5. Sistem mengubah status worker menjadi removed.
+6. Sistem mencabut akses worker terhadap data kebun.
+7. Riwayat tugas dan laporan worker tetap tersimpan.
+
+### Alur Alternatif
+
+* Jika worker keluar sendiri dari kebun, alur pelepasan tugas berjalan sama persis.
+* Jadwal yang tugasnya dilepas kembali terbaca sebagai jadwal tanpa pekerja dan dapat ditugaskan ulang.
 
 ### Hasil Akhir
 
-Worker tidak lagi memiliki akses ke kebun.
+Worker tidak lagi memiliki akses ke kebun, dan pekerjaan yang ditinggalkannya tidak menggantung sebagai tunggakan atas nama orang yang sudah tidak ada di kebun.
 
 ---
 
@@ -697,92 +710,38 @@ Tugas tindak lanjut berhasil dibuat dari laporan operasional.
 
 ---
 
-## UC-18 Mengelola SOP Perawatan
+## UC-19 Melanjutkan Jadwal Berulang
 
 ### Aktor
 
-Owner
+Owner, Sistem
 
 ### Tujuan
 
-Owner mengelola template SOP perawatan.
+Sistem melanjutkan rantai jadwal perawatan berulang tanpa menunggu owner membuat jadwal berikutnya.
 
 ### Prasyarat
 
-Owner sudah memiliki kebun.
+Jadwal memiliki interval pengulangan dalam satuan hari.
 
 ### Alur Utama
 
-1. Owner membuka halaman SOP.
-2. Owner dapat membuat SOP baru.
-3. Owner dapat mengubah SOP.
-4. Owner dapat mengaktifkan atau menonaktifkan SOP.
-5. Sistem menyimpan data SOP.
-
-### Hasil Akhir
-
-Template SOP tersedia sebagai acuan pembuatan jadwal.
-
----
-
-## UC-19 Melihat Acuan Jadwal Berikutnya
-
-### Aktor
-
-Owner
-
-### Tujuan
-
-Owner melihat acuan jadwal berikutnya berdasarkan interval SOP.
-
-### Prasyarat
-
-SOP memiliki interval hari.
-
-### Alur Utama
-
-1. Owner membuka daftar SOP.
-2. Sistem membaca tanggal realisasi terakhir dari SOP terkait.
-3. Sistem menghitung tanggal berikutnya berdasarkan interval SOP.
-4. Sistem menampilkan status jadwal berikutnya.
+1. Siklus jadwal yang sedang berjalan ditutup karena tugasnya diselesaikan.
+2. Sistem menentukan tanggal dasar sesuai pilihan owner: tanggal jadwal atau tanggal realisasi.
+3. Sistem menghitung tanggal penerus berdasarkan interval pengulangan.
+4. Sistem membuat jadwal penerus beserta tugasnya untuk worker yang sama.
+5. Owner melihat jadwal penerus pada daftar jadwal perawatan.
 
 ### Alur Alternatif
 
-* Jika SOP belum pernah direalisasikan, sistem meminta owner menentukan tanggal awal secara manual.
+* Jika siklus berjalan melewati tanggal jatuh tempo ditambah masa toleransi, sistem menandai jadwal itu terlewat dan tetap membuat penerusnya.
+* Jika jadwal tidak memiliki masa toleransi, jadwal tidak pernah dinyatakan terlewat dan rantai menunggu sampai tugasnya dikerjakan.
+* Jika worker pada siklus sebelumnya sudah tidak aktif, penerus dibuat tanpa tugas dan menunggu owner menugaskan pekerja.
+* Jika owner menghentikan pengulangan, rantai berhenti tanpa membatalkan jadwal yang sedang berjalan.
 
 ### Hasil Akhir
 
-Owner mengetahui acuan jadwal perawatan berikutnya.
-
----
-
-## UC-20 Membuat Jadwal dari SOP
-
-### Aktor
-
-Owner
-
-### Tujuan
-
-Owner membuat jadwal perawatan berdasarkan template SOP.
-
-### Prasyarat
-
-Terdapat SOP aktif.
-
-### Alur Utama
-
-1. Owner membuka halaman buat jadwal.
-2. Owner memilih SOP.
-3. Sistem mengisi kategori dan instruksi berdasarkan SOP.
-4. Owner menentukan tanggal, target, dan worker.
-5. Owner meninjau jadwal.
-6. Sistem menyimpan jadwal.
-7. Sistem membuat tugas untuk worker.
-
-### Hasil Akhir
-
-Jadwal dan tugas worker berhasil dibuat berdasarkan SOP.
+Rantai perawatan rutin terus berjalan, dan siklus yang tidak dikerjakan tidak menahan siklus berikutnya.
 
 ---
 
@@ -794,7 +753,7 @@ Owner
 
 ### Tujuan
 
-Owner membuat jadwal tanpa menggunakan SOP.
+Owner membuat jadwal perawatan baru.
 
 ### Prasyarat
 
@@ -886,12 +845,19 @@ Worker memiliki tugas berstatus belum selesai atau tertunda.
 2. Worker memilih aksi selesai.
 3. Worker menambahkan catatan singkat jika diperlukan.
 4. Sistem menyimpan tanggal realisasi.
-5. Sistem mengubah status tugas menjadi selesai.
-6. Sistem menyimpan aktivitas ke riwayat perawatan.
+5. Sistem menautkan pohon yang dirawat sesuai target tugas.
+6. Sistem mengubah status tugas menjadi selesai.
+7. Sistem menyimpan aktivitas ke riwayat perawatan dan ke riwayat setiap pohon yang tertaut.
+
+### Alur Alternatif
+
+* Jika target tugas berupa seluruh kebun, sistem menautkan semua pohon kebun yang belum diarsipkan.
+* Jika target tugas berupa catatan bebas, sistem tidak menautkan pohon dan aktivitas hanya tercatat sebagai riwayat kerja kebun.
+* Jika tugas sudah pernah diselesaikan, sistem menolak pencatatan ulang dan mengarahkan worker memperbaiki catatan terakhir.
 
 ### Hasil Akhir
 
-Tugas berhasil diselesaikan dan tercatat sebagai riwayat.
+Tugas berhasil diselesaikan dan tercatat sebagai riwayat, termasuk pada riwayat pohon yang dirawat.
 
 ---
 
@@ -913,13 +879,19 @@ Worker memiliki tugas berstatus belum selesai.
 
 1. Worker membuka detail tugas.
 2. Worker memilih aksi tunda.
-3. Worker mengisi alasan atau catatan singkat.
-4. Sistem mengubah status tugas menjadi tertunda.
-5. Owner dapat melihat tugas tertunda.
+3. Worker memilih tanggal rencana pengerjaan ulang.
+4. Worker mengisi alasan atau catatan singkat.
+5. Sistem mengubah status tugas menjadi tertunda.
+6. Sistem menggeser tenggat tugas ke tanggal penundaan.
+7. Owner dapat melihat tugas tertunda beserta tanggal rencananya.
+
+### Alur Alternatif
+
+* Jika tanggal penundaan atau catatan tidak diisi, sistem menolak penundaan.
 
 ### Hasil Akhir
 
-Tugas tercatat sebagai tertunda.
+Tugas tercatat sebagai tertunda dengan tenggat baru, dan masa toleransi jadwal dihitung ulang dari tanggal tersebut.
 
 ---
 
@@ -1028,7 +1000,7 @@ Owner sudah memiliki kebun.
 5. Sistem menampilkan laporan operasional baru.
 6. Sistem menampilkan worker pending.
 7. Sistem menampilkan pohon berbunga dan berbuah.
-8. Sistem menampilkan SOP yang jatuh tempo atau terlambat.
+8. Sistem menampilkan jadwal yang jatuh tempo atau terlambat.
 
 ### Hasil Akhir
 
@@ -1081,6 +1053,6 @@ Use case Avology V2 tidak mencakup fitur berikut:
 10. Marketplace
 11. Grading buah
 12. Sistem kelompok tani
-13. Recurring task full otomatis tanpa konfirmasi owner
+13. Penjadwal latar yang berjalan di luar aplikasi
 
 Fitur-fitur tersebut masuk ke pengembangan lanjutan, bukan MVP.

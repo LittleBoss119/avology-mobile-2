@@ -1,5 +1,19 @@
 # User Acceptance Testing Plan Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Tiga skenario UAT owner terkait SOP
+> (membuat SOP, melihat acuan jadwal dari SOP, membuat jadwal dari SOP) dan
+> butir kuesioner yang menanyakannya dihapus; penomoran tabel dirapatkan.
+> Butir "jadwal manual" diperluas menjadi "jadwal perawatan". Data uji contoh
+> tidak lagi memuat baris SOP. Riwayat keputusannya ada di `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** Skenario UAT owner bertambah empat
+> butir (jadwal berulang beserta masa toleransi, jadwal penerus, kelola jadwal
+> yang tugasnya tertunda, penugasan ulang) dan skenario worker bertambah dua
+> (tenggat yang bergeser setelah ditunda, keluar sendiri dari kebun). Kuesioner
+> owner bertambah lima pernyataan. Penomoran tabel skenario dan kuesioner
+> dirapatkan mengikuti tambahan tersebut. Riwayat keputusannya ada di
+> `decision-log.md` (DL-034 sampai DL-038).
+
 ## 1. Tujuan UAT
 
 User Acceptance Testing atau UAT digunakan untuk mengetahui apakah aplikasi Avology V2 dapat diterima oleh pengguna berdasarkan kebutuhan dan alur kerja yang telah dirancang.
@@ -31,7 +45,7 @@ UAT Avology V2 mencakup pengujian terhadap fitur utama MVP, yaitu:
 5. Manajemen data pohon
 6. Pencatatan kondisi pohon
 7. Laporan operasional kebun
-8. SOP perawatan
+8. Jadwal perawatan
 9. Jadwal perawatan
 10. Tugas worker
 11. Realisasi tugas worker
@@ -52,7 +66,7 @@ UAT dilakukan untuk menilai beberapa aspek berikut:
 3. Apakah alur pencatatan data pohon mudah dipahami.
 4. Apakah alur tugas worker membantu pelaksanaan pekerjaan kebun.
 5. Apakah laporan kondisi dan laporan operasional membantu komunikasi antara worker dan owner.
-6. Apakah SOP dan jadwal membantu owner mengelola perawatan kebun.
+6. Apakah jadwal perawatan membantu owner mengelola perawatan kebun.
 7. Apakah dashboard membantu owner melihat kondisi kebun secara ringkas.
 8. Apakah aplikasi layak digunakan sebagai sistem manajemen kebun alpukat.
 
@@ -100,11 +114,11 @@ Kuesioner UAT menggunakan skala Likert 1 sampai 5.
 
 | Skor | Keterangan          |
 | ---: | ------------------- |
-|    1 | Sangat Tidak Setuju |
-|    2 | Tidak Setuju        |
-|    3 | Netral              |
-|    4 | Setuju              |
-|    5 | Sangat Setuju       |
+|  1 | Sangat Tidak Setuju |
+|  2 | Tidak Setuju        |
+|  3 | Netral              |
+|  4 | Setuju              |
+|  5 | Sangat Setuju       |
 
 ---
 
@@ -165,19 +179,20 @@ Skenario UAT owner digunakan untuk menguji alur penggunaan aplikasi dari sudut p
 |  5 | Owner menambahkan data pohon                               | Create Tree            |
 |  6 | Owner melihat detail pohon                                 | Tree Detail            |
 |  7 | Owner mencatat kondisi pohon                               | Condition Report       |
-|  8 | Owner membuat SOP perawatan                                | Care SOP               |
-|  9 | Owner melihat acuan jadwal berikutnya dari SOP             | SOP Schedule Reference |
-| 10 | Owner membuat jadwal dari SOP                              | Schedule From SOP      |
-| 11 | Owner membuat jadwal manual                                | Manual Schedule        |
-| 12 | Owner melihat daftar tugas worker                          | Task List              |
-| 13 | Owner melihat laporan operasional dari worker              | Operational Report     |
-| 14 | Owner membuat tugas tindak lanjut dari laporan operasional | Task From Report       |
-| 15 | Owner mencatat fase pertumbuhan pohon                      | Growth Phase           |
-| 16 | Owner melihat pohon berbunga atau berbuah                  | Growth Monitoring      |
-| 17 | Owner melihat riwayat pohon                                | Tree History           |
-| 18 | Owner melihat dashboard kebun                              | Owner Dashboard        |
-| 19 | Owner mengeluarkan worker dari kebun                       | Remove Worker          |
-| 20 | Owner logout dari aplikasi                                 | Logout                 |
+|  8 | Owner membuat jadwal manual                                | Manual Schedule        |
+|  9 | Owner membuat jadwal berulang beserta masa toleransi keterlambatan | Recurring Schedule |
+| 10 | Owner melihat jadwal penerus yang dibuat sistem            | Schedule Chain         |
+| 11 | Owner mengedit atau membatalkan jadwal yang tugasnya tertunda | Manage Schedule      |
+| 12 | Owner menugaskan ulang jadwal yang belum punya pekerja     | Assign Worker          |
+| 13 | Owner melihat daftar tugas worker                          | Task List              |
+| 14 | Owner melihat laporan operasional dari worker              | Operational Report     |
+| 15 | Owner membuat tugas tindak lanjut dari laporan operasional | Task From Report       |
+| 16 | Owner mencatat fase pertumbuhan pohon                      | Growth Phase           |
+| 17 | Owner melihat pohon berbunga atau berbuah                  | Growth Monitoring      |
+| 18 | Owner melihat riwayat perawatan pada detail pohon          | Tree History           |
+| 19 | Owner melihat dashboard kebun                              | Owner Dashboard        |
+| 20 | Owner mengeluarkan worker dari kebun dan menugaskan ulang pekerjaannya | Remove Worker |
+| 21 | Owner logout dari aplikasi                                 | Logout                 |
 
 ---
 
@@ -194,14 +209,16 @@ Skenario UAT worker digunakan untuk menguji alur penggunaan aplikasi dari sudut 
 |  5 | Worker melihat daftar tugas                           | Worker Task List   |
 |  6 | Worker membuka detail tugas                           | Worker Task Detail |
 |  7 | Worker menandai tugas sebagai selesai                 | Complete Task      |
-|  8 | Worker menunda tugas dengan catatan                   | Postpone Task      |
-|  9 | Worker melihat daftar pohon                           | Tree List          |
-| 10 | Worker membuka detail pohon                           | Tree Detail        |
-| 11 | Worker mencatat kondisi pohon                         | Condition Report   |
-| 12 | Worker mencatat fase pertumbuhan pohon                | Growth Phase       |
-| 13 | Worker membuat laporan operasional kebun              | Operational Report |
-| 14 | Worker melihat ringkasan tugas di dashboard           | Worker Dashboard   |
-| 15 | Worker logout dari aplikasi                           | Logout             |
+|  8 | Worker menunda tugas dengan catatan dan tanggal rencana pengerjaan | Postpone Task |
+|  9 | Worker melihat tenggat tugas yang sudah bergeser setelah ditunda | Postpone Task |
+| 10 | Worker melihat daftar pohon                           | Tree List          |
+| 11 | Worker membuka detail pohon                           | Tree Detail        |
+| 12 | Worker mencatat kondisi pohon                         | Condition Report   |
+| 13 | Worker mencatat fase pertumbuhan pohon                | Growth Phase       |
+| 14 | Worker membuat laporan operasional kebun              | Operational Report |
+| 15 | Worker melihat ringkasan tugas di dashboard           | Worker Dashboard   |
+| 16 | Worker keluar sendiri dari kebun                      | Leave Farm         |
+| 17 | Worker logout dari aplikasi                           | Logout             |
 
 ---
 
@@ -219,18 +236,20 @@ Kuesioner berikut digunakan untuk responden dengan peran owner.
 |  6 | Fitur manajemen data pohon sesuai dengan kebutuhan pencatatan pohon alpukat.                    |          |
 |  7 | Informasi detail pohon mudah dipahami.                                                          |          |
 |  8 | Fitur laporan kondisi pohon membantu owner memantau kondisi pohon.                              |          |
-|  9 | Fitur SOP perawatan membantu owner menyusun acuan perawatan kebun.                              |          |
-| 10 | Fitur acuan jadwal berikutnya dari SOP membantu owner mengingat jadwal perawatan.               |          |
-| 11 | Fitur pembuatan jadwal dari SOP mudah digunakan.                                                |          |
-| 12 | Fitur jadwal manual membantu owner membuat tugas di luar SOP.                                   |          |
+|  9 | Fitur jadwal perawatan membantu owner membuat tugas untuk pekerja.                                   |          |
+| 10 | Jadwal berulang yang dilanjutkan sistem membantu owner menjaga perawatan rutin tetap berjalan.  |          |
+| 11 | Masa toleransi keterlambatan sesuai dengan cara kerja di lapangan.                              |          |
+| 12 | Owner tetap dapat mengubah atau membatalkan jadwal ketika pekerjaannya belum dikerjakan.        |          |
 | 13 | Fitur tugas worker membantu owner membagi pekerjaan kepada pekerja.                             |          |
 | 14 | Fitur laporan operasional membantu owner mengetahui kondisi umum kebun.                         |          |
 | 15 | Fitur tindak lanjut laporan operasional menjadi tugas worker mudah dipahami.                    |          |
 | 16 | Fitur pencatatan fase pertumbuhan membantu owner memantau perkembangan pohon.                   |          |
 | 17 | Fitur monitoring pohon berbunga dan berbuah membantu owner dalam pemantauan panen.              |          |
 | 18 | Fitur riwayat pohon membantu owner menelusuri kondisi, fase, dan perawatan pohon.               |          |
-| 19 | Dashboard owner menampilkan informasi penting secara ringkas.                                   |          |
-| 20 | Secara keseluruhan, aplikasi Avology V2 layak digunakan untuk membantu manajemen kebun alpukat. |          |
+| 19 | Riwayat perawatan pada detail pohon mencerminkan pekerjaan yang benar-benar dilakukan di kebun. |          |
+| 20 | Pekerjaan yang ditinggalkan pekerja yang keluar dapat ditugaskan ulang tanpa kebingungan.       |          |
+| 21 | Dashboard owner menampilkan informasi penting secara ringkas.                                   |          |
+| 22 | Secara keseluruhan, aplikasi Avology V2 layak digunakan untuk membantu manajemen kebun alpukat. |          |
 
 ---
 
@@ -275,15 +294,14 @@ Jika responden tambahan tidak secara langsung berperan sebagai owner atau worker
 |  4 | Fitur manajemen data pohon sesuai dengan kebutuhan pencatatan kebun.                 |          |
 |  5 | Fitur laporan kondisi pohon mudah digunakan.                                         |          |
 |  6 | Fitur laporan operasional kebun mudah dipahami.                                      |          |
-|  7 | Fitur SOP perawatan membantu penyusunan acuan perawatan kebun.                       |          |
-|  8 | Fitur jadwal perawatan membantu pengelolaan aktivitas kebun.                         |          |
-|  9 | Fitur tugas worker membantu pembagian pekerjaan.                                     |          |
-| 10 | Fitur pencatatan fase pertumbuhan membantu monitoring pohon.                         |          |
-| 11 | Fitur riwayat pohon membantu menelusuri data pohon.                                  |          |
-| 12 | Dashboard menampilkan informasi penting secara ringkas.                              |          |
-| 13 | Role owner dan worker terlihat memiliki alur yang berbeda.                           |          |
-| 14 | Form dalam aplikasi tidak terlalu rumit.                                             |          |
-| 15 | Secara keseluruhan, aplikasi layak digunakan sebagai sistem manajemen kebun alpukat. |          |
+|  7 | Fitur jadwal perawatan membantu pengelolaan aktivitas kebun.                         |          |
+|  8 | Fitur tugas worker membantu pembagian pekerjaan.                                     |          |
+|  9 | Fitur pencatatan fase pertumbuhan membantu monitoring pohon.                         |          |
+| 10 | Fitur riwayat pohon membantu menelusuri data pohon.                                  |          |
+| 11 | Dashboard menampilkan informasi penting secara ringkas.                              |          |
+| 12 | Role owner dan worker terlihat memiliki alur yang berbeda.                           |          |
+| 13 | Form dalam aplikasi tidak terlalu rumit.                                             |          |
+| 14 | Secara keseluruhan, aplikasi layak digunakan sebagai sistem manajemen kebun alpukat. |          |
 
 ---
 
@@ -309,18 +327,15 @@ Jika responden tambahan tidak secara langsung berperan sebagai owner atau worker
 |  6 | Fitur manajemen data pohon sesuai dengan kebutuhan pencatatan pohon alpukat.                    |    |    |    |    |    |            |
 |  7 | Informasi detail pohon mudah dipahami.                                                          |    |    |    |    |    |            |
 |  8 | Fitur laporan kondisi pohon membantu owner memantau kondisi pohon.                              |    |    |    |    |    |            |
-|  9 | Fitur SOP perawatan membantu owner menyusun acuan perawatan kebun.                              |    |    |    |    |    |            |
-| 10 | Fitur acuan jadwal berikutnya dari SOP membantu owner mengingat jadwal perawatan.               |    |    |    |    |    |            |
-| 11 | Fitur pembuatan jadwal dari SOP mudah digunakan.                                                |    |    |    |    |    |            |
-| 12 | Fitur jadwal manual membantu owner membuat tugas di luar SOP.                                   |    |    |    |    |    |            |
-| 13 | Fitur tugas worker membantu owner membagi pekerjaan kepada pekerja.                             |    |    |    |    |    |            |
-| 14 | Fitur laporan operasional membantu owner mengetahui kondisi umum kebun.                         |    |    |    |    |    |            |
-| 15 | Fitur tindak lanjut laporan operasional menjadi tugas worker mudah dipahami.                    |    |    |    |    |    |            |
-| 16 | Fitur pencatatan fase pertumbuhan membantu owner memantau perkembangan pohon.                   |    |    |    |    |    |            |
-| 17 | Fitur monitoring pohon berbunga dan berbuah membantu owner dalam pemantauan panen.              |    |    |    |    |    |            |
-| 18 | Fitur riwayat pohon membantu owner menelusuri kondisi, fase, dan perawatan pohon.               |    |    |    |    |    |            |
-| 19 | Dashboard owner menampilkan informasi penting secara ringkas.                                   |    |    |    |    |    |            |
-| 20 | Secara keseluruhan, aplikasi Avology V2 layak digunakan untuk membantu manajemen kebun alpukat. |    |    |    |    |    |            |
+|  9 | Fitur jadwal perawatan membantu owner membuat tugas untuk pekerja.                                   |    |    |    |    |    |            |
+| 10 | Fitur tugas worker membantu owner membagi pekerjaan kepada pekerja.                             |    |    |    |    |    |            |
+| 11 | Fitur laporan operasional membantu owner mengetahui kondisi umum kebun.                         |    |    |    |    |    |            |
+| 12 | Fitur tindak lanjut laporan operasional menjadi tugas worker mudah dipahami.                    |    |    |    |    |    |            |
+| 13 | Fitur pencatatan fase pertumbuhan membantu owner memantau perkembangan pohon.                   |    |    |    |    |    |            |
+| 14 | Fitur monitoring pohon berbunga dan berbuah membantu owner dalam pemantauan panen.              |    |    |    |    |    |            |
+| 15 | Fitur riwayat pohon membantu owner menelusuri kondisi, fase, dan perawatan pohon.               |    |    |    |    |    |            |
+| 16 | Dashboard owner menampilkan informasi penting secara ringkas.                                   |    |    |    |    |    |            |
+| 17 | Secara keseluruhan, aplikasi Avology V2 layak digunakan untuk membantu manajemen kebun alpukat. |    |    |    |    |    |            |
 |    | Total                                                                                           |    |    |    |    |    |            |
 |    | Persentase                                                                                      |    |    |    |    |    |            |
 
@@ -375,7 +390,7 @@ Selain kuesioner skala Likert, responden juga dapat diberikan pertanyaan terbuka
 1. Fitur apa yang paling membantu dalam pengelolaan kebun?
 2. Fitur apa yang masih membingungkan?
 3. Apakah dashboard sudah menampilkan informasi yang dibutuhkan?
-4. Apakah fitur SOP dan jadwal membantu mengingat aktivitas perawatan?
+4. Apakah fitur jadwal perawatan membantu mengingat aktivitas perawatan?
 5. Apakah ada bagian aplikasi yang perlu disederhanakan?
 6. Saran tambahan untuk pengembangan aplikasi?
 
@@ -420,8 +435,7 @@ Untuk memudahkan pelaksanaan UAT, data awal berikut dapat disiapkan:
 | Worker              | Pekerja kebun                                         |
 | Pohon               | P-01, P-02, P-03                                      |
 | Varietas            | Miki, Aligator                                        |
-| SOP                 | Semprot Pencegahan, Pemupukan NPK, Pengendalian Gulma |
-| Jadwal              | Semprot P-01, Pemupukan Baris A                       |
+| Jadwal              | Semprot P-01, Pemupukan seluruh kebun                 |
 | Laporan Operasional | Alat rusak, stok pupuk menipis                        |
 | Fase Pohon          | Vegetatif, Berbunga, Berbuah                          |
 
@@ -457,9 +471,11 @@ Fitur berikut tidak diuji karena tidak termasuk dalam MVP Avology V2:
 10. Marketplace
 11. Grading buah
 12. Sistem kelompok tani
-13. Recurring task otomatis penuh
+13. Penjadwal latar yang berjalan di luar aplikasi
 14. Peternakan
 15. Supply chain restoran atau warung
+
+Catatan untuk nomor 13: rantai jadwal berulang MEMANG diuji dalam UAT, karena sistem menjalankannya sendiri. Yang tidak diuji adalah proses latar seperti cron atau push notification, yang memang tidak dimiliki MVP.
 
 ---
 

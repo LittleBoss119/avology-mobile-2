@@ -1,5 +1,20 @@
 # Traceability Matrix Avology V2
 
+> **Catatan perubahan (migrasi 046 & 047).** Baris keterlacakan untuk **FR-13**
+> (SOP Perawatan) dan **FR-14** (Jadwal Perawatan dari SOP) dihapus, begitu juga
+> modul "SOP Perawatan" dan test case `TC-SOP-*`. Modul jadwal digabung dan
+> dinomori ulang. Masalah lapangan **P-02** tetap dipertahankan apa adanya:
+> itu temuan wawancara tentang praktik kerja di kebun, bukan spesifikasi fitur —
+> kebutuhannya kini dijawab FR-15/FR-16/FR-17. Riwayat keputusannya ada di
+> `decision-log.md`.
+
+> **Catatan perubahan (migrasi 048–052).** Baris keterlacakan FR-15, FR-17,
+> FR-20, dan FR-21 diperluas mengikuti test case baru, dan satu baris FR-06
+> ditambahkan karena pelepasan tugas menghubungkan manajemen pekerja dengan
+> `care_tasks`. Kolom Database pada baris FR-21 kini menyebut
+> `care_activity_trees`. Tidak ada FR, US, atau UC yang berubah nomor. Riwayat
+> keputusannya ada di `decision-log.md` (DL-034 sampai DL-038).
+
 ## 1. Tujuan Traceability Matrix
 
 Traceability matrix digunakan untuk menelusuri keterkaitan antara masalah lapangan, kebutuhan sistem, user story, use case, screen aplikasi, struktur database, dan skenario pengujian.
@@ -35,12 +50,11 @@ Berdasarkan wawancara dengan pemilik kebun MS Farm, ditemukan beberapa masalah u
 
 | Masalah          | Kebutuhan Fungsional                                   | User Story                        | Use Case                          | Screen                                                                               | Database                                                                              | Black-box Testing              |
 | ---------------- | ------------------------------------------------------ | --------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------ |
-| P-01, P-02       | FR-13 SOP Perawatan                                    | US-21, US-22, US-23               | UC-18                             | Care SOP List, Care SOP Detail, Create Care SOP, Edit Care SOP                       | care_sops                                                                             | TC-SOP-01 sampai TC-SOP-05     |
-| P-01, P-02       | FR-17 Acuan Jadwal Berikutnya Berdasarkan Interval SOP | US-24                             | UC-19                             | Care SOP Detail, Owner Dashboard                                                     | care_sops, care_schedules, care_tasks, care_activities                                | TC-SOP-06 sampai TC-SOP-08     |
-| P-01, P-02       | FR-14 Jadwal Perawatan dari SOP                        | US-25                             | UC-20                             | Create Schedule From SOP                                                             | care_sops, care_schedules, care_tasks                                                 | TC-SCH-01 sampai TC-SCH-04     |
-| P-01, P-02       | FR-15 Jadwal Perawatan Manual                          | US-26                             | UC-21                             | Create Manual Schedule                                                               | care_schedules, care_tasks                                                            | TC-SCH-05 sampai TC-SCH-07     |
-| P-01, P-03       | FR-20 Realisasi Tugas Worker                           | US-30, US-31                      | UC-24, UC-25                      | Worker Task Detail                                                                   | care_tasks, care_activities                                                           | TC-TASK-01 sampai TC-TASK-05   |
-| P-01, P-03, P-12 | FR-21 Riwayat Perawatan                                | US-36                             | UC-28                             | Tree Detail, Tree History Section                                                    | care_tasks, care_activities, tree_history_view                                        | TC-HIS-01 sampai TC-HIS-03     |
+| P-01, P-02       | FR-17 Acuan Jadwal Berikutnya Berdasarkan Interval Pengulangan | US-24 | UC-19 | Care Schedule List, Care Schedule Detail, Owner Dashboard | care_schedules, care_tasks, care_activities | TC-SCH-05 sampai TC-SCH-08 |
+| P-01, P-02       | FR-15 Jadwal Perawatan Manual                          | US-26                             | UC-21                             | Create Manual Schedule, Care Schedule Detail                                          | care_schedules, care_tasks, care_activities                                            | TC-SCH-01 sampai TC-SCH-02, TC-SCH-09 sampai TC-SCH-10 |
+| P-01, P-03       | FR-20 Realisasi Tugas Worker                           | US-30, US-31                      | UC-24, UC-25                      | Worker Task Detail                                                                   | care_tasks, care_activities                                                           | TC-TASK-01 sampai TC-TASK-08   |
+| P-01, P-03, P-12 | FR-21 Riwayat Perawatan                                | US-36                             | UC-28                             | Tree Detail, Tree History Section                                                    | care_activities, care_activity_trees, care_tasks, tree_history_view                    | TC-HIS-01 sampai TC-HIS-05     |
+| P-08             | FR-06 Manajemen Pekerja                                | US-09                             | UC-09                             | Worker Management, Care Schedule Detail                                              | farm_members, care_tasks                                                              | TC-MEM-07, TC-MEM-10 sampai TC-MEM-11 |
 | P-04             | FR-07 Manajemen Data Pohon                             | US-10, US-11, US-12               | UC-10                             | Owner Tree List, Create Tree, Edit Tree, Tree Detail                                 | trees                                                                                 | TC-TREE-01 sampai TC-TREE-05   |
 | P-04             | FR-08 Identifikasi Pohon Individual                    | US-10, US-13                      | UC-10, UC-11                      | Owner Tree List, Worker Tree List, Tree Detail                                       | trees                                                                                 | TC-TREE-06 sampai TC-TREE-08   |
 | P-05             | FR-09 Laporan Kondisi Pohon                            | US-14, US-15                      | UC-12                             | Create Condition Report                                                              | tree_condition_reports, trees                                                         | TC-COND-01 sampai TC-COND-04   |
@@ -54,7 +68,7 @@ Berdasarkan wawancara dengan pemilik kebun MS Farm, ditemukan beberapa masalah u
 | P-10             | FR-04 Kode Bergabung Kebun                             | US-05, US-06                      | UC-05, UC-06                      | Join Farm, Farm Detail                                                               | farms, farm_members                                                                   | TC-MEM-01 sampai TC-MEM-03     |
 | P-10             | FR-05 Persetujuan Worker                               | US-07, US-08                      | UC-07, UC-08                      | Worker Management                                                                    | farm_members                                                                          | TC-MEM-04 sampai TC-MEM-06     |
 | P-10             | FR-06 Manajemen Pekerja                                | US-09                             | UC-09                             | Worker Management                                                                    | farm_members                                                                          | TC-MEM-07 sampai TC-MEM-09     |
-| P-11             | FR-25 Dashboard Owner                                  | US-37                             | UC-29                             | Owner Dashboard                                                                      | trees, care_tasks, operational_reports, farm_members, care_sops, growth_phase_records | TC-DASH-01 sampai TC-DASH-08   |
+| P-11             | FR-25 Dashboard Owner                                  | US-37                             | UC-29                             | Owner Dashboard                                                                      | trees, care_tasks, operational_reports, farm_members, growth_phase_records | TC-DASH-01 sampai TC-DASH-08   |
 | P-07, P-11       | FR-26 Dashboard Worker                                 | US-38                             | UC-30                             | Worker Dashboard                                                                     | care_tasks                                                                            | TC-DASH-09 sampai TC-DASH-11   |
 | P-06, P-10       | FR-27 Pembatasan Fitur Berdasarkan Role                | US-39, US-40                      | UC-29, UC-30                      | Owner Area, Worker Area, Guard Screen                                                | farm_members, RLS policies                                                            | TC-ROLE-01 sampai TC-ROLE-06   |
 | P-06, P-10       | FR-01 Autentikasi Pengguna                             | US-01, US-02, US-03               | UC-01, UC-02, UC-03               | Register, Login, Profile                                                             | auth.users, profiles                                                                  | TC-AUTH-01 sampai TC-AUTH-06   |
@@ -140,37 +154,22 @@ Berdasarkan wawancara dengan pemilik kebun MS Farm, ditemukan beberapa masalah u
 
 ---
 
-## 4.6 Modul SOP Perawatan
-
-| Item        | Detail                                                                                                               |
-| ----------- | -------------------------------------------------------------------------------------------------------------------- |
-| Masalah     | SOP perawatan berisiko tidak disiplin karena tanggal treatment tidak tercatat                                        |
-| Requirement | FR-13, FR-17                                                                                                         |
-| User Story  | US-21, US-22, US-23, US-24                                                                                           |
-| Use Case    | UC-18, UC-19                                                                                                         |
-| Screen      | Care SOP List, Care SOP Detail, Create Care SOP, Edit Care SOP                                                       |
-| Service     | getCareSOPs, getCareSOPDetail, createCareSOP, updateCareSOP, setCareSOPActiveStatus, getCareSOPNextScheduleReference |
-| Database    | care_sops, care_schedules, care_tasks, care_activities                                                               |
-| Testing     | TC-SOP-01 sampai TC-SOP-08                                                                                           |
-
----
-
-## 4.7 Modul Jadwal dan Tugas Worker
+## 4.6 Modul Jadwal dan Tugas Worker
 
 | Item        | Detail                                                                                                                                 |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Masalah     | Jadwal treatment mundur dan realisasi pekerjaan tidak terdokumentasi                                                                   |
-| Requirement | FR-14, FR-15, FR-16, FR-18, FR-19, FR-20, FR-21                                                                                        |
-| User Story  | US-25 sampai US-31                                                                                                                     |
-| Use Case    | UC-20 sampai UC-25                                                                                                                     |
-| Screen      | Create Schedule From SOP, Create Manual Schedule, Care Schedule List, Worker Task List, Worker Task Detail, Owner Task List            |
-| Service     | createScheduleFromSOP, createManualSchedule, getCareSchedules, getWorkerTasks, getFarmTasks, getTaskDetail, completeTask, postponeTask |
+| Requirement | FR-15, FR-16, FR-17, FR-18, FR-19, FR-20, FR-21                                                                                        |
+| User Story  | US-24, US-26 sampai US-31                                                                                                              |
+| Use Case    | UC-19, UC-21 sampai UC-25                                                                                                              |
+| Screen      | Create Manual Schedule, Care Schedule List, Care Schedule Detail, Worker Task List, Worker Task Detail, Owner Task List                |
+| Service     | createManualSchedule, getCareSchedules, getCareScheduleDetail, getWorkerTasks, getFarmTasks, getTaskDetail, completeTask, postponeTask |
 | Database    | care_schedules, care_tasks, care_activities                                                                                            |
 | Testing     | TC-SCH, TC-TASK                                                                                                                        |
 
 ---
 
-## 4.8 Modul Fase Pertumbuhan
+## 4.7 Modul Fase Pertumbuhan
 
 | Item        | Detail                                                                                                |
 | ----------- | ----------------------------------------------------------------------------------------------------- |
@@ -185,7 +184,7 @@ Berdasarkan wawancara dengan pemilik kebun MS Farm, ditemukan beberapa masalah u
 
 ---
 
-## 4.9 Modul Riwayat Pohon
+## 4.8 Modul Riwayat Pohon
 
 | Item        | Detail                                                                                       |
 | ----------- | -------------------------------------------------------------------------------------------- |
@@ -200,7 +199,7 @@ Berdasarkan wawancara dengan pemilik kebun MS Farm, ditemukan beberapa masalah u
 
 ---
 
-## 4.10 Modul Dashboard
+## 4.9 Modul Dashboard
 
 | Item        | Detail                                                                                |
 | ----------- | ------------------------------------------------------------------------------------- |
@@ -210,7 +209,7 @@ Berdasarkan wawancara dengan pemilik kebun MS Farm, ditemukan beberapa masalah u
 | Use Case    | UC-29, UC-30                                                                          |
 | Screen      | Owner Dashboard, Worker Dashboard                                                     |
 | Service     | getOwnerDashboardSummary, getWorkerDashboardSummary                                   |
-| Database    | trees, care_tasks, operational_reports, farm_members, care_sops, growth_phase_records |
+| Database    | trees, care_tasks, operational_reports, farm_members, growth_phase_records |
 | Testing     | TC-DASH-01 sampai TC-DASH-11                                                          |
 
 ---
@@ -222,11 +221,11 @@ Berdasarkan wawancara dengan pemilik kebun MS Farm, ditemukan beberapa masalah u
 | NFR-01 Kemudahan Penggunaan                  | P-07                           | Alur sederhana, navigasi jelas, halaman worker tidak terlalu kompleks   | Semua screen worker                  | TC-UX-01                     |
 | NFR-02 Input Minim Teks                      | P-07                           | Form memakai kategori, tombol, pilihan status, catatan singkat opsional | Form laporan, task detail, form fase | TC-UX-02                     |
 | NFR-03 Mobile First                          | Kondisi penggunaan di kebun    | Layout dioptimalkan untuk HP                                            | Semua screen                         | TC-UX-03                     |
-| NFR-04 Konsistensi Data dan Satuan           | Kebutuhan data rapi            | Interval memakai hari, status memakai enum, tanggal konsisten           | Form SOP, jadwal, tugas              | TC-DATA-01                   |
+| NFR-04 Konsistensi Data dan Satuan           | Kebutuhan data rapi            | Interval memakai hari, status memakai enum, tanggal konsisten           | Form jadwal, tugas | TC-DATA-01                   |
 | NFR-05 Keamanan Akses Berdasarkan Role       | P-10                           | Owner dan worker dipisahkan melalui role guard dan RLS                  | Owner Area, Worker Area              | TC-ROLE-01 sampai TC-ROLE-06 |
 | NFR-06 Data Terstruktur dan Dapat Ditelusuri | P-12                           | Data kondisi, fase, tugas, dan aktivitas disimpan sebagai riwayat       | Tree Detail, History                 | TC-HIS-01 sampai TC-HIS-03   |
 | NFR-07 Dashboard Ringkas                     | P-11                           | Dashboard hanya berisi ringkasan penting                                | Owner Dashboard, Worker Dashboard    | TC-DASH                      |
-| NFR-08 Fleksibilitas Jadwal                  | P-02                           | Jadwal bisa dari SOP atau manual                                        | Schedule Screen                      | TC-SCH                       |
+| NFR-08 Fleksibilitas Jadwal                  | P-02                           | Jadwal dibuat manual dengan opsi pengulangan | Schedule Screen                      | TC-SCH                       |
 | NFR-09 Tidak Overclaim Prediksi              | P-08                           | Tidak ada fitur prediksi panen otomatis                                 | Growth Monitoring                    | TC-PHASE-08                  |
 | NFR-10 Kesesuaian Lapangan                   | P-07                           | Worker flow cepat dan praktis                                           | Worker Dashboard, Task, Report       | TC-UX                        |
 | NFR-11 Maintainability                       | Risiko teknis                  | Service layer modular, komponen reusable                                | Struktur kode                        | Review kode                  |
@@ -315,25 +314,15 @@ Berdasarkan wawancara dengan pemilik kebun MS Farm, ditemukan beberapa masalah u
 
 ---
 
-## 6.6 SOP dan Jadwal
+## 6.6 Jadwal Perawatan
 
 | Test Case | Skenario                           | Expected Result                      |
 | --------- | ---------------------------------- | ------------------------------------ |
-| TC-SOP-01 | Owner membuat SOP valid            | SOP berhasil dibuat                  |
-| TC-SOP-02 | Owner membuat SOP tanpa nama       | Sistem menampilkan error             |
-| TC-SOP-03 | Owner mengisi interval 0           | Sistem menampilkan error             |
-| TC-SOP-04 | Owner mengubah SOP                 | SOP berhasil diperbarui              |
-| TC-SOP-05 | Owner menonaktifkan SOP            | SOP menjadi tidak aktif              |
-| TC-SOP-06 | SOP belum punya histori            | Status acuan menjadi no_history      |
-| TC-SOP-07 | SOP punya histori realisasi        | Sistem menghitung tanggal berikutnya |
-| TC-SOP-08 | Tanggal berikutnya lewat hari ini  | Sistem menampilkan status overdue    |
-| TC-SCH-01 | Owner membuat jadwal dari SOP      | Jadwal berhasil dibuat               |
-| TC-SCH-02 | Jadwal dari SOP dibuat             | Task worker otomatis dibuat          |
-| TC-SCH-03 | Owner membuat jadwal manual        | Jadwal manual berhasil dibuat        |
-| TC-SCH-04 | Jadwal manual dibuat               | Task worker dibuat                   |
-| TC-SCH-05 | Target jadwal tree dipilih         | Task terhubung ke pohon              |
-| TC-SCH-06 | Target jadwal custom tanpa catatan | Sistem menampilkan error             |
-| TC-SCH-07 | Worker melihat tugas dari jadwal   | Tugas tampil di daftar worker        |
+| TC-SCH-01 | Owner membuat jadwal manual        | Jadwal manual berhasil dibuat        |
+| TC-SCH-02 | Jadwal manual dibuat               | Task worker dibuat                   |
+| TC-SCH-03 | Target jadwal tree dipilih         | Task terhubung ke pohon              |
+| TC-SCH-04 | Target jadwal custom tanpa catatan | Sistem menampilkan error             |
+| TC-SCH-05 | Worker melihat tugas dari jadwal   | Tugas tampil di daftar worker        |
 
 ---
 
@@ -387,7 +376,7 @@ Berdasarkan wawancara dengan pemilik kebun MS Farm, ditemukan beberapa masalah u
 | TC-DASH-05 | Ada laporan operasional baru   | Jumlah laporan baru tampil benar           |
 | TC-DASH-06 | Ada worker pending             | Jumlah worker pending tampil benar         |
 | TC-DASH-07 | Ada pohon berbunga/berbuah     | Jumlah pohon berbunga/berbuah tampil benar |
-| TC-DASH-08 | Ada SOP overdue                | Jumlah SOP terlambat tampil benar          |
+| TC-DASH-08 | Ada jadwal overdue | Jumlah jadwal terlambat tampil benar |
 | TC-DASH-09 | Worker membuka dashboard       | Ringkasan tugas worker tampil              |
 | TC-DASH-10 | Worker memiliki tugas hari ini | Jumlah tugas hari ini tampil benar         |
 | TC-DASH-11 | Worker tidak punya tugas       | Empty state tampil                         |
@@ -418,7 +407,7 @@ Berdasarkan wawancara dengan pemilik kebun MS Farm, ditemukan beberapa masalah u
 | TC-UX-05   | Worker menyelesaikan tugas         | Aksi selesai mudah ditemukan                                       |
 | TC-UX-06   | Worker menunda tugas               | Catatan alasan dapat diisi singkat                                 |
 | TC-UX-07   | Worker mencatat fase               | Pilihan fase mudah dipilih                                         |
-| TC-DATA-01 | Sistem menyimpan interval SOP      | Interval memakai satuan hari                                       |
+| TC-DATA-01 | Sistem menyimpan interval pengulangan jadwal | Interval memakai satuan hari |
 | TC-DATA-02 | Data histori user/pohon lama       | Riwayat tetap tersimpan setelah worker removed atau pohon archived |
 | TC-PERF-01 | User membuka dashboard             | Data ringkasan tampil dalam waktu wajar                            |
 | TC-UI-01   | User berpindah halaman             | Komponen dan style tetap konsisten                                 |
@@ -455,6 +444,6 @@ Fitur yang secara eksplisit tidak termasuk MVP:
 
 Traceability matrix Avology V2 menunjukkan bahwa setiap fitur dalam MVP dapat ditelusuri dari masalah lapangan yang ditemukan melalui wawancara dengan pemilik kebun MS Farm.
 
-Matriks ini menjadi pengendali scope agar pengembangan Avology V2 tetap fokus pada pencatatan, monitoring, SOP perawatan, jadwal, tugas worker, laporan operasional, fase pertumbuhan, riwayat pohon, dan dashboard kebun.
+Matriks ini menjadi pengendali scope agar pengembangan Avology V2 tetap fokus pada pencatatan, monitoring, jadwal perawatan, tugas worker, laporan operasional, fase pertumbuhan, riwayat pohon, dan dashboard kebun.
 
 Dengan dokumen ini, Avology V2 memiliki dasar pengembangan yang lebih kuat dan dapat dipertanggungjawabkan secara akademik.
