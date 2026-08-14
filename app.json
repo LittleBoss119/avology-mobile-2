@@ -4,6 +4,12 @@
     "slug": "avology-mobile-v2",
     "scheme": "avology",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/09e6a589-07a0-40e6-9c21-db9e7febe77d"
+    },
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
@@ -13,10 +19,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/adaptive-icon-monochrome.png",
         "backgroundColor": "#065F2E"
-      },
-      "permissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
+      }
     },
     "plugins": [
       "expo-router",
@@ -25,7 +28,8 @@
         "expo-image-picker",
         {
           "cameraPermission": "Avology membutuhkan kamera untuk mengambil foto kebun.",
-          "photosPermission": "Avology membutuhkan akses galeri untuk memilih foto kebun."
+          "photosPermission": "Avology membutuhkan akses galeri untuk memilih foto kebun.",
+          "microphonePermission": false
         }
       ]
     ],
