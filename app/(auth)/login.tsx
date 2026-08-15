@@ -70,7 +70,7 @@ export default function LoginScreen() {
         />
       }
     >
-      <PageIntro title="Masuk" subtitle="Lanjutkan kelola kebun lu." />
+      <PageIntro title="Masuk" subtitle="Lanjutkan mengelola kebun anda" />
       <ErrorBanner message={error} />
       <View style={{ gap: tokens.space.lg }}>
         <Field

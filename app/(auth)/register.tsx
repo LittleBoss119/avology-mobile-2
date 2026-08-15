@@ -86,7 +86,7 @@ export default function RegisterScreen() {
         />
       }
     >
-      <PageIntro title="Buat akun" subtitle="Cuma butuh sebentar." />
+      <PageIntro title="Buat akun" subtitle="Mulai perjalanan mengelola kebun anda!" />
       <ErrorBanner message={error} />
       <View style={{ gap: tokens.space.lg }}>
         <Field

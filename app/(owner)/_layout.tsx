@@ -76,7 +76,7 @@ export default function OwnerLayout() {
             contentStyle: { backgroundColor: '#F7FAF3' },
           }}
         >
-          <Stack.Screen name="owner/index" options={{ headerShown: false, title: 'Owner' }} />
+          <Stack.Screen name="owner/index" options={{ headerShown: false, title: 'Pemilik' }} />
           <Stack.Screen name="owner/growth-monitoring" options={{ title: 'Monitoring Fase' }} />
           <Stack.Screen name="owner/trees/index" options={{ headerShown: false, title: 'Pohon' }} />
           <Stack.Screen name="owner/trees/create" options={{ headerShown: false, title: 'Tambah Pohon' }} />
