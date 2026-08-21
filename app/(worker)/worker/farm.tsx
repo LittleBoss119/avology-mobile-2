@@ -95,7 +95,7 @@ export default function WorkerFarmHubScreen() {
   }
 
   const header = (
-    <MainTabHeader title="Kebun" roleLabel="Pekerja" onProfilePress={() => router.push('/worker/profile')} />
+    <MainTabHeader title="Kebun" />
   );
 
   if (loading) {
@@ -114,29 +114,13 @@ export default function WorkerFarmHubScreen() {
     );
   }
 
-  const metaLine = buildFarmMetaLine(farm);
-
   return (
     <Screen header={header}>
       <ErrorBanner message={error} />
 
-      <Card>
-        <View style={{ gap: spacing.xs }}>
-          <Text
-            style={{
-              color: colors.text,
-              fontSize: typography.h2.fontSize,
-              fontWeight: '700',
-              lineHeight: typography.h2.lineHeight,
-            }}
-          >
-            {farm.name}
-          </Text>
-          {metaLine ? (
-            <Text style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>{metaLine}</Text>
-          ) : null}
-        </View>
-      </Card>
+      {/* Kartu identitas kebun — nama, lokasi, luas — PINDAH ke Beranda, tempat
+          ia jadi judul halaman. Yang tersisa di sini orangnya: siapa saja yang
+          ada di kebun ini, dan jalan keluar darinya. */}
 
       <SectionLabel
         title="Anggota"
@@ -230,27 +214,3 @@ function buildMemberMeta(actor: FarmActorDisplayProfile, currentUserId?: string)
   return actor.userId === currentUserId ? `${roleLabel} · kamu` : roleLabel;
 }
 
-function buildFarmMetaLine(farm: Farm): string {
-  const parts: string[] = [];
-  const location = farm.location?.trim();
-
-  if (location) {
-    parts.push(location);
-  }
-
-  const area = formatArea(farm.areaSize);
-
-  if (area) {
-    parts.push(area);
-  }
-
-  return parts.join(' · ');
-}
-
-function formatArea(value?: number | null): string | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  return `${new Intl.NumberFormat('id-ID').format(value)} m²`;
-}

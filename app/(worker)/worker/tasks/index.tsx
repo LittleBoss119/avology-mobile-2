@@ -126,11 +126,7 @@ export default function WorkerTaskListScreen() {
   return (
     <Screen
       header={
-        <MainTabHeader
-          title="Tugas"
-          roleLabel="Pekerja"
-          onProfilePress={() => router.push('/worker/profile')}
-        />
+        <MainTabHeader title="Perawatan" />
       }
     >
       <ErrorBanner message={error} />

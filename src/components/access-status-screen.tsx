@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
@@ -10,7 +10,7 @@ import { acknowledgeAccessNotice, cancelJoinRequest } from '../services/memberSe
 import type { CurrentUserFarm } from '../types/domain';
 import { ConfirmDialog } from './bottom-sheet';
 import { Icon, type IconName } from './icons';
-import { Button, ErrorBanner, LoadingState, ProfileIconButton, Screen, TopAppBar } from './ui';
+import { BrandMark, Button, Card, ChipButton, ErrorBanner, LoadingState, Screen, TopAppBar } from './ui';
 
 // Layar ini melayani tiga state sekaligus: pending, rejected, removed.
 //
@@ -157,20 +157,32 @@ export function AccessStatusScreen() {
   return (
     <Screen
       header={
+        // Susunannya sama persis dengan layar pilih akses: baris merek di slot
+        // judul, chip "Profil" berlabel di kanan. flexShrink 0 pada chip supaya
+        // baris merek yang mengalah kalau ruangnya sempit.
         <TopAppBar
           variant="main"
-          right={<ProfileIconButton onPress={() => router.push('/profile')} />}
+          titleContent={<BrandMark inline />}
+          right={
+            <View style={{ flexShrink: 0 }}>
+              <ChipButton
+                active={false}
+                icon="user"
+                label="Profil"
+                onPress={() => router.push('/profile')}
+              />
+            </View>
+          }
         />
       }
+      // "Batalkan pengajuan" TIDAK lagi di sini: ia aksi atas pengajuan yang
+      // disebut kartu di atas, jadi tempatnya di dalam kartu itu. Yang tinggal di
+      // footer cuma aksi yang membawa user KELUAR dari layar ini — dan itu hanya
+      // ada saat pengajuannya sudah berakhir. Untuk pending, footer memang tidak
+      // ada: `undefined`, bukan fragmen kosong, supaya Screen tidak menyisakan
+      // pembungkus berpadding di dasar layar.
       footer={
-        isPending ? (
-          <TextAction
-            title="Batalkan pengajuan"
-            tone="danger"
-            disabled={busy}
-            onPress={() => setConfirmCancel(true)}
-          />
-        ) : (
+        isPending ? undefined : (
           <>
             <Button
               title="Coba kode lain"
@@ -229,20 +241,49 @@ export function AccessStatusScreen() {
           </Text>
         ) : null}
 
-        {view.dateLine ? (
-          <Text
-            selectable
-            style={{
-              color: tokens.color.text.tertiary,
-              fontSize: tokens.type.meta.fontSize,
-              lineHeight: tokens.type.meta.lineHeight,
-              textAlign: 'center',
-            }}
-          >
-            {view.dateLine}
-          </Text>
-        ) : null}
+        {/* Satu kalimat, bahasa sehari-hari. Layar ini sebelumnya hanya menyebut
+            status tanpa pernah mengatakan apa yang sedang terjadi dan apa yang
+            bisa dilakukan — dan bagi orang yang baru pertama memakai aplikasi,
+            "Menunggu persetujuan" saja tidak menjelaskan siapa yang menyetujui. */}
+        <Text
+          selectable
+          style={{
+            color: tokens.color.text.secondary,
+            fontSize: tokens.type.bodySmall.fontSize,
+            lineHeight: tokens.type.bodySmall.lineHeight,
+            textAlign: 'center',
+          }}
+        >
+          {view.description}
+        </Text>
       </View>
+
+      {/* Tanggal naik dari baris teks lepas menjadi kartu. Sebagai baris lepas ia
+          terbaca seperti keterangan gambar; sebagai kartu ia menjadi berkas
+          pengajuannya sendiri — dan untuk pengajuan yang masih berjalan, tempat
+          yang benar untuk membatalkannya. */}
+      <Card>
+        <View style={styles.cardRow}>
+          <Text selectable style={styles.cardLabel}>
+            {view.dateLabel}
+          </Text>
+          <Text selectable style={styles.cardValue}>
+            {view.dateValue ?? '—'}
+          </Text>
+        </View>
+
+        {isPending ? (
+          <>
+            <View style={styles.cardDivider} />
+            <TextAction
+              title="Batalkan pengajuan"
+              tone="danger"
+              disabled={busy}
+              onPress={() => setConfirmCancel(true)}
+            />
+          </>
+        ) : null}
+      </Card>
 
       <JoinedFarmModal busy={busy} farmName={joinedFarm?.name ?? null} onStart={handleStart} visible={joinedFarm !== null} />
 
@@ -389,8 +430,15 @@ function TextAction({
   );
 }
 
+// dateLine yang dulu satu string ("Diajukan 3 Maret") kini dipecah jadi label +
+// nilai: kartunya menaruh label di kiri dan nilainya di kanan, jadi keduanya
+// harus terpisah. Label untuk rejected/removed sengaja NETRAL ("Tanggal") — judul
+// di atas sudah menyatakan peristiwanya, dan mengulangnya di label akan
+// menghasilkan "Pengajuan ditolak" lalu "Ditolak · 3 Maret".
 type StatusView = {
-  dateLine: string | null;
+  dateLabel: string;
+  dateValue: string | null;
+  description: string;
   icon: IconName;
   iconBackground: string;
   iconColor: string;
@@ -405,7 +453,9 @@ function resolveStatusView(membership: CurrentUserFarm): StatusView {
     const requestedAt = formatDate(membership.updatedAt ?? membership.createdAt);
 
     return {
-      dateLine: requestedAt ? `Diajukan ${requestedAt}` : null,
+      dateLabel: 'Diajukan',
+      dateValue: requestedAt,
+      description: 'Pengajuanmu sudah dikirim ke kebun ini. Pemilik kebun sedang meninjaunya.',
       icon: 'clock',
       iconBackground: tokens.color.status.warning.bg,
       iconColor: tokens.color.status.warning.text,
@@ -413,17 +463,28 @@ function resolveStatusView(membership: CurrentUserFarm): StatusView {
     };
   }
 
-  // Judul sudah menyatakan peristiwanya, jadi barisnya cukup tanggal saja —
-  // "Ditolak · Ditolak 3 Maret" itu penyampaian ganda.
   const endedAt = formatDate(membership.removedAt ?? membership.updatedAt ?? membership.createdAt);
 
   return {
-    dateLine: endedAt,
+    dateLabel: 'Tanggal',
+    dateValue: endedAt,
+    description: resolveEndedDescription(membership),
     icon: 'x',
     iconBackground: tokens.color.status.danger.bg,
     iconColor: tokens.color.status.danger.text,
     title: resolveEndedTitle(membership),
   };
+}
+
+// Kalimatnya menyebut jalan keluarnya, karena dua tombol di dasar layar itulah
+// yang harus dipahami: user di sini sedang menunggu diberi tahu apa yang bisa dia
+// lakukan sekarang.
+function resolveEndedDescription(membership: CurrentUserFarm): string {
+  if (membership.status === 'rejected') {
+    return 'Pemilik kebun tidak menyetujui pengajuanmu. Kamu bisa mencoba kode kebun lain, atau membuat kebun sendiri.';
+  }
+
+  return 'Kamu sudah tidak punya akses ke kebun ini. Kamu bisa bergabung ke kebun lain, atau membuat kebun sendiri.';
 }
 
 function resolveEndedTitle(membership: CurrentUserFarm): string {
@@ -455,3 +516,18 @@ function formatDate(value?: string | null): string | null {
 
   return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 }
+
+const styles = StyleSheet.create({
+  cardRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: tokens.space.md,
+    justifyContent: 'space-between',
+  },
+  cardLabel: { ...tokens.type.body, color: tokens.color.text.secondary },
+  cardValue: { ...tokens.type.bodyStrong, color: tokens.color.text.primary },
+  cardDivider: {
+    backgroundColor: tokens.color.line.hairline,
+    height: StyleSheet.hairlineWidth,
+  },
+});

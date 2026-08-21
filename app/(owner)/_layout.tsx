@@ -2,8 +2,8 @@ import { router, Stack, useFocusEffect, usePathname } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 
+import { AccessGate } from '../../src/components/access-gate';
 import { RoleBottomNavigation } from '../../src/components/role-bottom-navigation';
-import { LoadingState } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
 import {
   logAccessGuardDecision,
@@ -13,7 +13,13 @@ import {
 
 export default function OwnerLayout() {
   const { currentFarm, initializing, profile, refresh } = useAuth();
-  const [checkingAccess, setCheckingAccess] = React.useState(false);
+  // Dimulai true, BUKAN false. Dengan false, render pertama setelah mount jatuh
+  // ke cabang <Stack> di bawah karena useFocusEffect baru menyalakannya setelah
+  // commit — sehingga seluruh layar pemilik sempat dilukis memakai currentFarm
+  // yang masih basi dari sesi sebelumnya. Aman dari macet: satu-satunya yang
+  // mematikannya (.finally() di useFocusEffect) selalu jalan, sukses maupun
+  // gagal, dan tidak ada jalur lain yang menyalakannya.
+  const [checkingAccess, setCheckingAccess] = React.useState(true);
   const pathname = usePathname();
   const loading = initializing || checkingAccess;
   const targetRoute = resolveAccessRoute({ session: profile, membership: currentFarm });
@@ -21,6 +27,14 @@ export default function OwnerLayout() {
   const membershipKey = currentFarm
     ? `${currentFarm.membershipId}:${currentFarm.role}:${currentFarm.status}`
     : 'none';
+  // Dihitung saat RENDER, bukan hanya di dalam effect. Nilainya dipakai dua kali
+  // untuk dua pertanyaan yang berbeda waktunya: "harus pindah?" (di effect,
+  // setelah commit) dan "boleh melukis <Stack>?" (di sini, sebelum commit).
+  // Tanpa pemakaian kedua, masih tersisa satu frame — antara verifikasi selesai
+  // dan effect jalan — di mana loading sudah false tapi router.replace() belum
+  // dipanggil, dan di frame itu layar pemilik terlihat oleh orang yang justru
+  // sedang diarahkan pergi.
+  const shouldRedirect = !loading && shouldRedirectAccess(pathname, targetRoute);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -44,8 +58,6 @@ export default function OwnerLayout() {
       return;
     }
 
-    const shouldRedirect = shouldRedirectAccess(pathname, targetRoute);
-
     logAccessGuardDecision({
       currentPathname: pathname,
       membership: currentFarm,
@@ -57,10 +69,10 @@ export default function OwnerLayout() {
     if (shouldRedirect) {
       router.replace(targetRoute);
     }
-  }, [loading, membershipKey, pathname, sessionUserId, targetRoute]);
+  }, [loading, membershipKey, pathname, sessionUserId, shouldRedirect, targetRoute]);
 
-  if (loading) {
-    return <LoadingState message="Memeriksa akses pemilik..." />;
+  if (loading || shouldRedirect) {
+    return <AccessGate />;
   }
 
   return (

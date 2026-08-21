@@ -14,15 +14,20 @@ type NavigationItem = {
   match: string[];
 };
 
-type NavigationIconName = 'document' | 'farm' | 'home' | 'leaf' | 'checklist';
+type NavigationIconName = 'document' | 'farm' | 'home' | 'leaf' | 'checklist' | 'user';
 
 // Peta nama ikon navigasi (internal) → IconName Tabler di icons.tsx.
+//
+// 'document' dan 'farm' tidak lagi dipakai sejak item Laporan dan Kebun dicabut,
+// tapi sengaja DIBIARKAN: keduanya masih ikon yang benar untuk kedua tujuan itu
+// kalau suatu saat kembali ke bar, dan menghapusnya tidak menghemat apa pun.
 const NAV_ICON: Record<NavigationIconName, IconName> = {
   home: 'home',
   checklist: 'list-check',
   leaf: 'tree',
   document: 'file-text',
   farm: 'building-warehouse',
+  user: 'user',
 };
 
 export function RoleBottomNavigation({ role }: { role: MemberRole }) {
@@ -102,18 +107,28 @@ export function RoleBottomNavigation({ role }: { role: MemberRole }) {
   );
 }
 
+// Empat item, bukan lima. Laporan dan Kebun dicabut dari bar dan pindah ke
+// baris tujuan di dashboard (app/(owner)/owner/index.tsx) — keduanya layar yang
+// dibuka sesekali, bukan tempat yang ditinggali sepanjang hari.
+//
+// Kebun dan Laporan kini hanya dicapai dari Beranda, jadi keduanya diperlakukan
+// sebagai TURUNAN Beranda: path-nya masuk ke `match` item Beranda supaya ikon
+// Beranda tetap tersorot selama user berada di cabang itu. `href`-nya tidak
+// ikut berubah — menekan Beranda tetap membawa ke '/owner', bukan ke tempat
+// terakhir di cabangnya.
+//
+// '/owner/farm-profile' dan '/owner/workers' harus disebut sendiri-sendiri:
+// keduanya cabang dari layar Kebun tapi bukan subpath '/owner/farm/', sehingga
+// aturan startsWith di isActivePath() tidak menjangkaunya.
+//
+// Daftar path tempat bar DITAMPILKAN (ownerTopLevelPaths di bawah) dibiarkan
+// utuh.
 const ownerNavigationItems: NavigationItem[] = [
   {
     href: '/owner',
     icon: 'home',
     label: 'Beranda',
-    match: ['/owner'],
-  },
-  {
-    href: '/owner/schedules',
-    icon: 'checklist',
-    label: 'Jadwal',
-    match: ['/owner/schedules', '/owner/tasks'],
+    match: ['/owner', '/owner/farm', '/owner/farm-profile', '/owner/workers', '/owner/reports'],
   },
   {
     href: '/owner/trees',
@@ -122,16 +137,16 @@ const ownerNavigationItems: NavigationItem[] = [
     match: ['/owner/trees'],
   },
   {
-    href: '/owner/reports',
-    icon: 'document',
-    label: 'Laporan',
-    match: ['/owner/reports'],
+    href: '/owner/schedules',
+    icon: 'checklist',
+    label: 'Perawatan',
+    match: ['/owner/schedules', '/owner/tasks'],
   },
   {
-    href: '/owner/farm',
-    icon: 'farm',
-    label: 'Kebun',
-    match: ['/owner/farm', '/owner/profile', '/owner/farm-profile', '/owner/workers'],
+    href: '/owner/profile',
+    icon: 'user',
+    label: 'Profil',
+    match: ['/owner/profile'],
   },
 ];
 
@@ -143,18 +158,17 @@ function isActivePath(pathname: string, match: string): boolean {
   return pathname === match || pathname.startsWith(`${match}/`);
 }
 
+// Bentuknya sejajar dengan ownerNavigationItems di atas, termasuk alasannya.
+//
+// Label item ketiga "Perawatan", bukan "Tugas", meski href-nya '/worker/tasks'.
+// Itu DISENGAJA: kedua peran menyebut hal yang sama dengan kata yang sama,
+// walau pekerja masuk lewat daftar tugasnya sendiri dan pemilik lewat jadwal.
 const workerNavigationItems: NavigationItem[] = [
   {
     href: '/worker',
     icon: 'home',
     label: 'Beranda',
-    match: ['/worker'],
-  },
-  {
-    href: '/worker/tasks',
-    icon: 'checklist',
-    label: 'Tugas',
-    match: ['/worker/tasks'],
+    match: ['/worker', '/worker/farm', '/worker/reports'],
   },
   {
     href: '/worker/trees',
@@ -163,16 +177,16 @@ const workerNavigationItems: NavigationItem[] = [
     match: ['/worker/trees'],
   },
   {
-    href: '/worker/reports',
-    icon: 'document',
-    label: 'Laporan',
-    match: ['/worker/reports'],
+    href: '/worker/tasks',
+    icon: 'checklist',
+    label: 'Perawatan',
+    match: ['/worker/tasks'],
   },
   {
-    href: '/worker/farm',
-    icon: 'farm',
-    label: 'Kebun',
-    match: ['/worker/farm', '/worker/profile'],
+    href: '/worker/profile',
+    icon: 'user',
+    label: 'Profil',
+    match: ['/worker/profile'],
   },
 ];
 

@@ -7,15 +7,15 @@ import { tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
 import { consumePendingFeedback } from '../lib/pendingFeedback';
 import type { CurrentUserFarm } from '../types/domain';
-import { formatPersonDisplayName, formatRole, sanitizeDisplayValue } from '../utils/displayFormat';
+import { formatPersonDisplayName, sanitizeDisplayValue } from '../utils/displayFormat';
 import { isOwnerActive, isWorkerActive } from '../utils/routeGuard';
 import { ConfirmDialog } from './bottom-sheet';
 import { useSnackbar } from './snackbar';
 import {
-  Badge,
   Card,
   EmptyState,
   ErrorBanner,
+  MainTabHeader,
   MenuRow,
   MenuRowGroup,
   Screen,
@@ -66,16 +66,19 @@ export function ProfileScreen() {
     router.replace('/get-started');
   }
 
-  const farmHubRoute = getFarmHubRoute(currentFarm);
   const passwordRoute = getPasswordRoute(currentFarm);
   const profileEditRoute = getProfileEditRoute(currentFarm);
   const displayName = formatPersonDisplayName(profile?.fullName, 'Pengguna Avology');
   const farmName = currentFarm?.farm?.name ?? null;
-  // Chip role + nama kebun hanya bermakna untuk anggota kebun AKTIF. Di konteks
-  // onboarding (belum punya kebun, pending, ditolak, dinonaktifkan) keduanya
-  // tidak dirender sama sekali — bukan chip kosong, bukan placeholder, bukan "-".
-  const showMembershipMeta =
-    (isOwnerActive(currentFarm) || isWorkerActive(currentFarm)) && Boolean(farmName);
+  // Anggota kebun AKTIF membuka layar ini sebagai tujuan bottom nav; selain itu
+  // (belum punya kebun, pending, ditolak, dinonaktifkan) layar ini dibuka lewat
+  // push dari layar pilih akses atau layar pemberitahuan. Pembedaan itu dipakai
+  // dua kali di bawah: untuk tombol back, dan untuk baris nama kebun.
+  const isFarmMember = isOwnerActive(currentFarm) || isWorkerActive(currentFarm);
+  // Nama kebun hanya bermakna untuk anggota kebun aktif. Di konteks onboarding
+  // ia tidak dirender sama sekali — bukan baris kosong, bukan placeholder,
+  // bukan "-".
+  const showMembershipMeta = isFarmMember && Boolean(farmName);
   // expoConfig bisa null di runtime tertentu (mis. konteks tanpa manifest). Baris
   // versi disembunyikan seluruhnya dalam kasus itu — lebih baik tidak ada daripada
   // memajang penanda kosong yang tidak berarti apa-apa bagi pengguna.
@@ -84,19 +87,28 @@ export function ProfileScreen() {
   return (
     <Screen
       header={
-        <TopAppBar
-          title="Profil Akun"
-          // Varian tanpa relasi kebun tidak punya hub untuk dituju, dan
-          // sebelumnya itu berarti TIDAK ADA tombol kembali sama sekali — user
-          // yang membukanya dari layar pilih akses terkurung sampai menutup
-          // aplikasi. Mundur satu langkah sudah cukup; '/' hanya cadangan kalau
-          // layar ini jadi entri pertama (mis. dibuka dari tautan).
-          onBack={
-            farmHubRoute
-              ? () => router.replace(farmHubRoute)
-              : () => (router.canGoBack() ? router.back() : router.replace('/'))
-          }
-        />
+        // DUA bentuk header, dipisah oleh isFarmMember — bukan satu TopAppBar
+        // yang di-tweak.
+        //
+        // Anggota kebun aktif membuka layar ini sebagai tujuan bottom nav, jadi
+        // ia memakai MainTabHeader yang sama persis dengan Beranda, Pohon, dan
+        // Perawatan: judul rata kiri, tanpa tombol kembali. Tidak ada tempat
+        // untuk "mundur" dari sebuah tab, dan judul yang rata tengah membuat
+        // satu dari empat destinasi terlihat seperti layar turunan.
+        //
+        // Di konteks onboarding layar ini tetap dibuka lewat push, jadi
+        // bentuknya tetap layar turunan: judul rata tengah dengan chevron.
+        // Tanpa chevron itu, user yang membukanya dari layar pilih akses
+        // terkurung sampai menutup aplikasi. Mundur satu langkah sudah cukup;
+        // '/' hanya cadangan kalau layar ini jadi entri pertama.
+        isFarmMember ? (
+          <MainTabHeader title="Profil Akun" />
+        ) : (
+          <TopAppBar
+            title="Profil Akun"
+            onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+          />
+        )
       }
     >
       <ErrorBanner message={formError ?? error?.message} />
@@ -126,7 +138,10 @@ export function ProfileScreen() {
                   gap: tokens.space.sm,
                 }}
               >
-                <Badge label={formatRole(currentFarm?.role)} tone="neutral" />
+                {/* Badge peran dicabut, sejalan dengan pencabutannya di
+                    MainTabHeader: peran tidak berubah sepanjang sesi dan tidak
+                    pernah jadi bahan keputusan di layar ini. Nama kebun tetap —
+                    itu yang membedakan satu akun dari akun lain. */}
                 <Text
                   selectable
                   numberOfLines={1}
@@ -229,18 +244,6 @@ function AccountRow({ label, value }: { label: string; value?: string | null }) 
       </Text>
     </View>
   );
-}
-
-function getFarmHubRoute(currentFarm: CurrentUserFarm | null): '/owner/farm' | '/worker/farm' | null {
-  if (isOwnerActive(currentFarm)) {
-    return '/owner/farm';
-  }
-
-  if (isWorkerActive(currentFarm)) {
-    return '/worker/farm';
-  }
-
-  return null;
 }
 
 function getPasswordRoute(currentFarm: CurrentUserFarm | null): '/owner/profile-password' | '/password' | '/worker/profile-password' {

@@ -6,30 +6,28 @@ import { tokens } from '../../../src/constants/theme';
 import {
   Button,
   Card,
-  EmptyState,
   ErrorBanner,
   LoadingState,
   MainTabHeader,
   Screen,
   SectionHeader,
 } from '../../../src/components/ui';
-import { Icon } from '../../../src/components/icons';
+import { FarmIdentityBlock, TreeConditionSummary } from '../../../src/components/farm-overview';
+import { Icon, type IconName } from '../../../src/components/icons';
 import { useAuth } from '../../../src/context/auth-context';
 import { getOwnerDashboardSummary } from '../../../src/services/dashboardService';
 import type { OwnerDashboardSummary } from '../../../src/types/domain';
-import { formatPersonDisplayName } from '../../../src/utils/displayFormat';
 
 type ActionRowItem = {
   key: string;
   title: string;
   subtitle?: string;
   value: number;
-  valueColor: string;
   route: string;
 };
 
 export default function OwnerDashboardScreen() {
-  const { currentFarm, profile } = useAuth();
+  const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState<OwnerDashboardSummary | null>(null);
@@ -67,49 +65,97 @@ export default function OwnerDashboardScreen() {
     return <LoadingState message="Memuat dashboard pemilik..." />;
   }
 
-  const farmName = currentFarm?.farm?.name;
-  const ownerName = formatPersonDisplayName(profile?.fullName, 'Pemilik kebun');
+  const farm = currentFarm?.farm;
+  const actionRows = summary ? buildActionRows(summary) : [];
 
   return (
-    <Screen
-      header={
-        <MainTabHeader
-          title="Beranda"
-          roleLabel="Pemilik"
-          onProfilePress={() => router.push('/owner/profile')}
-        />
-      }
-    >
-      <Text
-        selectable
-        style={{
-          color: tokens.color.text.tertiary,
-          fontSize: tokens.type.body.fontSize,
-          lineHeight: tokens.type.body.lineHeight,
-        }}
-      >
-        {farmName ? `Halo, ${ownerName}. Pantau ${farmName} hari ini.` : `Halo, ${ownerName}. Pantau kebun hari ini.`}
-      </Text>
+    <Screen header={<MainTabHeader title="Beranda" />}>
+      {/* Sapaan "Halo, {nama}" dihapus. Ia memakan baris paling atas layar untuk
+          menyebut nama orang yang sedang memegang HP-nya sendiri; tempat itu
+          sekarang milik identitas kebun, satu-satunya hal di layar ini yang
+          benar-benar menjawab pertanyaan "aku sedang melihat apa". */}
+      {farm ? (
+        <FarmIdentityBlock farm={farm} onEditPress={() => router.push('/owner/farm-profile')} />
+      ) : null}
       <ErrorBanner message={error} />
 
-      {summary === null ? null : summary.totalTrees === 0 ? (
-        <View style={styles.emptyGroup}>
-          <EmptyState
-            title="Belum ada pohon di kebun ini"
-            subtitle="Tambahkan pohon pertama untuk mulai memantau kondisi kebun."
-          />
-          <Button title="Tambah Pohon" onPress={() => router.push('/owner/trees/create')} />
-        </View>
-      ) : (
+      {summary === null ? null : (
         <View style={styles.sections}>
-          <TreeConditionCard summary={summary} />
-          <View style={styles.section}>
-            <SectionHeader title="Perlu tindakan" />
-            <ActionList summary={summary} />
-          </View>
+          {/* Satu-satunya kartu bersurface di layar ini. Kebun tanpa pohon TIDAK
+              menghapus kartunya dan tidak menghapus apa pun di bawahnya — blok
+              identitas, Pantauan, dan dua baris navigasi tetap berdiri. Yang
+              berganti hanya ISI kartu: bar dan tiga angka nol tidak mengabarkan
+              apa-apa, sedangkan satu kalimat plus jalan masuk mengabarkan apa
+              yang harus dilakukan berikutnya. */}
+          <Pressable onPress={() => router.push('/owner/trees')}>
+            <Card padding={tokens.layout.cardPadding}>
+              <View style={styles.cardHeader}>
+                <Text selectable style={styles.cardTitle}>
+                  Kondisi kebun
+                </Text>
+                <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+              </View>
+              {summary.totalTrees === 0 ? (
+                <View style={styles.emptyCardBody}>
+                  <Text selectable style={styles.emptyCardText}>
+                    Belum ada pohon yang dicatat di kebun ini.
+                  </Text>
+                  <Button
+                    title="Tambah pohon"
+                    variant="secondary"
+                    onPress={() => router.push('/owner/trees/create')}
+                  />
+                </View>
+              ) : (
+                <TreeConditionSummary
+                  healthyTrees={summary.healthyTrees}
+                  problemTrees={summary.problemTrees}
+                  totalTrees={summary.totalTrees}
+                />
+              )}
+            </Card>
+          </Pressable>
+
+          {/* Kosong berarti HILANG, bukan "tidak ada yang perlu ditindaklanjuti".
+              Kalimat itu adalah kabar bahwa tidak ada kabar, dan ia menempati
+              ruang yang sama besarnya dengan pekerjaan yang sungguhan. */}
+          {actionRows.length > 0 ? (
+            <View style={styles.section}>
+              <SectionHeader title="Perlu tindakan" />
+              <View style={styles.actionGroup}>
+                {actionRows.map((row) => (
+                  <ActionRow key={row.key} row={row} />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
           <View style={styles.section}>
             <SectionHeader title="Pantauan" />
             <MonitorList summary={summary} />
+          </View>
+
+          {/* Jalan masuk ke Kebun dan Laporan setelah keduanya dicabut dari
+              bottom nav — bukan pekerjaan yang menunggu, jadi berada di luar
+              "Perlu tindakan" dan tanpa SectionHeader sendiri. Divider tipis
+              yang memisahkannya dari Pantauan sudah cukup menandai bahwa dua
+              baris ini jenis lain. */}
+          <View style={styles.destinations}>
+            <View style={styles.divider} />
+            <NavRow
+              icon="user"
+              title="Anggota kebun"
+              onPress={() => router.push('/owner/farm')}
+            />
+            <View style={styles.divider} />
+            {/* Angka nol TIDAK dirender: "0" di sini terbaca sebagai penanda
+                kosong, bukan kabar baik. Yang tersisa judul dan chevron. */}
+            <NavRow
+              icon="file-text"
+              title="Laporan"
+              value={summary.newOperationalReports}
+              onPress={() => router.push('/owner/reports')}
+            />
           </View>
         </View>
       )}
@@ -117,69 +163,12 @@ export default function OwnerDashboardScreen() {
   );
 }
 
-function TreeConditionCard({ summary }: { summary: OwnerDashboardSummary }) {
-  return (
-    <Pressable onPress={() => router.push('/owner/trees')}>
-      <Card padding={tokens.layout.cardPadding}>
-        <View style={styles.treeCardHeader}>
-          <Text selectable style={styles.treeCardTitle}>
-            Kondisi pohon
-          </Text>
-          <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
-        </View>
-        <View style={styles.treeCardMetrics}>
-          <TreeMetric label="Total" value={summary.totalTrees} color={tokens.color.text.primary} />
-          <TreeMetric label="Sehat" value={summary.healthyTrees} color={tokens.color.status.success.text} />
-          <TreeMetric
-            label="Perhatian"
-            value={summary.problemTrees}
-            color={summary.problemTrees > 0 ? tokens.color.status.warning.text : tokens.color.text.primary}
-          />
-        </View>
-      </Card>
-    </Pressable>
-  );
-}
-
-function TreeMetric({ color, label, value }: { color: string; label: string; value: number }) {
-  return (
-    <View style={styles.treeMetricCol}>
-      <Text selectable style={[styles.treeMetricValue, { color }]}>
-        {value}
-      </Text>
-      <Text selectable style={styles.treeMetricLabel}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function ActionList({ summary }: { summary: OwnerDashboardSummary }) {
-  const rows = buildActionRows(summary);
-
-  return (
-    <Card padding={0} style={styles.listCard}>
-      {rows.length > 0 ? (
-        rows.map((row, index) => (
-          <React.Fragment key={row.key}>
-            {index > 0 ? <View style={styles.divider} /> : null}
-            <ActionRow row={row} />
-          </React.Fragment>
-        ))
-      ) : (
-        <View style={styles.emptyRow}>
-          <Text selectable style={styles.emptyRowText}>
-            Tidak ada yang perlu ditindaklanjuti
-          </Text>
-        </View>
-      )}
-    </Card>
-  );
-}
-
+// Border danger, bukan Card putih. Yang membedakan seksi ini dari sisa layar
+// bukan lagi elevasi permukaan melainkan warnanya — dan karena seksinya hilang
+// saat kosong, warna itu tidak pernah jadi latar tetap yang mati rasa.
 function ActionRow({ row }: { row: ActionRowItem }) {
   return (
-    <Pressable onPress={() => router.push(row.route)} style={styles.row}>
+    <Pressable onPress={() => router.push(row.route)} style={styles.actionRow}>
       <View style={styles.rowMain}>
         <Text selectable style={styles.rowTitle}>
           {row.title}
@@ -190,14 +179,45 @@ function ActionRow({ row }: { row: ActionRowItem }) {
           </Text>
         ) : null}
       </View>
-      <Text selectable style={[styles.rowValue, { color: row.valueColor }]}>
-        {row.value}
-      </Text>
+      {row.value > 0 ? (
+        <Text selectable style={styles.actionValue}>
+          {row.value}
+        </Text>
+      ) : null}
       <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
     </Pressable>
   );
 }
 
+function NavRow({
+  icon,
+  onPress,
+  title,
+  value,
+}: {
+  icon: IconName;
+  onPress: () => void;
+  title: string;
+  value?: number;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.row}>
+      <Icon name={icon} size={tokens.icon.md} color={tokens.color.text.tertiary} />
+      <Text selectable style={[styles.rowTitle, styles.rowMain]}>
+        {title}
+      </Text>
+      {value !== undefined && value > 0 ? (
+        <Text selectable style={styles.rowValue}>
+          {value}
+        </Text>
+      ) : null}
+      <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+    </Pressable>
+  );
+}
+
+// Baris polos dengan divider tipis, tanpa Card. Isinya tidak berubah: angka yang
+// dipantau sesekali, bukan ditindaklanjuti.
 function MonitorList({ summary }: { summary: OwnerDashboardSummary }) {
   const items = [
     { key: 'flowering', label: 'Pohon berbunga', value: summary.floweringTrees },
@@ -206,7 +226,7 @@ function MonitorList({ summary }: { summary: OwnerDashboardSummary }) {
   ];
 
   return (
-    <Card padding={0} style={styles.listCard}>
+    <View>
       {items.map((item, index) => (
         <React.Fragment key={item.key}>
           {index > 0 ? <View style={styles.divider} /> : null}
@@ -220,7 +240,7 @@ function MonitorList({ summary }: { summary: OwnerDashboardSummary }) {
           </View>
         </React.Fragment>
       ))}
-    </Card>
+    </View>
   );
 }
 
@@ -233,28 +253,7 @@ function buildActionRows(summary: OwnerDashboardSummary): ActionRowItem[] {
       title: 'Tugas belum selesai',
       subtitle: summary.overdueTasks > 0 ? `${summary.overdueTasks} sudah lewat tenggat` : undefined,
       value: summary.unfinishedTasks,
-      valueColor: tokens.color.text.primary,
       route: '/owner/schedules',
-    });
-  }
-
-  if (summary.pendingWorkers > 0) {
-    rows.push({
-      key: 'workers',
-      title: 'Pengajuan pekerja',
-      value: summary.pendingWorkers,
-      valueColor: tokens.color.status.warning.text,
-      route: '/owner/farm',
-    });
-  }
-
-  if (summary.newOperationalReports > 0) {
-    rows.push({
-      key: 'reports',
-      title: 'Laporan belum ditinjau',
-      value: summary.newOperationalReports,
-      valueColor: tokens.color.text.primary,
-      route: '/owner/reports',
     });
   }
 
@@ -262,46 +261,49 @@ function buildActionRows(summary: OwnerDashboardSummary): ActionRowItem[] {
 }
 
 const styles = StyleSheet.create({
-  emptyGroup: { gap: tokens.space.lg },
   sections: { gap: tokens.layout.sectionGap },
   section: { gap: tokens.space.md },
 
-  treeCardHeader: {
+  cardHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  treeCardTitle: { ...tokens.type.label, color: tokens.color.text.secondary },
-  treeCardMetrics: { flexDirection: 'row', gap: tokens.space.md },
-  treeMetricCol: { flex: 1 },
-  treeMetricValue: { ...tokens.type.title, lineHeight: tokens.type.title.lineHeight },
-  treeMetricLabel: { ...tokens.type.meta, color: tokens.color.text.secondary, marginTop: tokens.space.xs },
+  cardTitle: { ...tokens.type.label, color: tokens.color.text.secondary },
+  emptyCardBody: { gap: tokens.space.md },
+  emptyCardText: { ...tokens.type.body, color: tokens.color.text.secondary },
 
-  listCard: { gap: 0 },
-  divider: {
-    backgroundColor: tokens.color.line.hairline,
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: tokens.space.lg,
-  },
-  row: {
+  actionGroup: { gap: tokens.space.sm },
+  actionRow: {
     alignItems: 'center',
+    borderColor: tokens.color.status.danger.border,
+    borderCurve: 'continuous',
+    borderRadius: tokens.radius.cardInner,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: tokens.space.md,
     minHeight: tokens.layout.rowMinHeight,
     paddingHorizontal: tokens.space.lg,
     paddingVertical: tokens.space.md,
   },
+  actionValue: { ...tokens.type.subheading, color: tokens.color.status.danger.text },
+
+  destinations: { gap: 0 },
+  divider: {
+    backgroundColor: tokens.color.line.hairline,
+    height: StyleSheet.hairlineWidth,
+  },
+  row: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: tokens.space.md,
+    minHeight: tokens.layout.rowMinHeight,
+    paddingVertical: tokens.space.md,
+  },
   rowMain: { flex: 1 },
   rowTitle: { ...tokens.type.body, color: tokens.color.text.primary },
   rowSubtitle: { ...tokens.type.meta, color: tokens.color.status.danger.text },
-  rowValue: { ...tokens.type.subheading },
-  emptyRow: {
-    justifyContent: 'center',
-    minHeight: tokens.layout.rowMinHeight,
-    paddingHorizontal: tokens.space.lg,
-    paddingVertical: tokens.space.md,
-  },
-  emptyRowText: { ...tokens.type.body, color: tokens.color.text.secondary },
+  rowValue: { ...tokens.type.subheading, color: tokens.color.text.primary },
   monitorLabel: { ...tokens.type.body, color: tokens.color.text.secondary, flex: 1 },
   monitorValue: { ...tokens.type.bodyStrong, color: tokens.color.text.primary },
 });

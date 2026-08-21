@@ -273,14 +273,18 @@ export function Screen({
       {header ? (
         // Header fixed (tidak menggulung): sibling di atas ScrollView, di dalam
         // View flex:1 terluar. Duduk di background variant yang sama (0.3) supaya
-        // tak belang; pemisah hairline bawah tanpa shadow, tanpa onScroll. Inset
-        // atas TIDAK diterapkan di sini — TopAppBar di dalam `header` yang
-        // menerapkannya (ui.tsx TopAppBar), agar tidak dobel (0.1/safe-area).
+        // tak belang; tanpa shadow, tanpa onScroll. Inset atas TIDAK diterapkan
+        // di sini — TopAppBar di dalam `header` yang menerapkannya (ui.tsx
+        // TopAppBar), agar tidak dobel (0.1/safe-area).
+        //
+        // TANPA garis pemisah bawah. Latar header dan latar konten memang warna
+        // yang sama, jadi hairline itulah satu-satunya hal yang memotong layar
+        // jadi dua bidang — padahal judul layar bagian dari halaman, bukan chrome
+        // yang berdiri sendiri di atasnya. Padding dan tinggi header tidak
+        // berubah: yang hilang hanya garisnya, di semua layar tanpa kecuali.
         <View
           style={{
             backgroundColor,
-            borderBottomColor: colors.border,
-            borderBottomWidth: 1,
             paddingHorizontal: spacing.screenHorizontal,
           }}
         >
@@ -479,16 +483,19 @@ export function PageIntro({
 }
 
 export function TopAppBar({
-  badge,
   right,
   subtitle,
   title,
+  titleContent,
   onBack,
   variant,
 }: {
-  badge?: React.ReactNode;
   right?: React.ReactNode;
   subtitle?: string;
+  // Mengisi SLOT judul dengan elemen, bukan teks — dipakai layar pra-kebun yang
+  // menaruh baris merek di sana alih-alih judul layar. Kalau diisi, `title`
+  // diabaikan; kalau tidak, tidak ada satu pun perilaku lama yang bergeser.
+  titleContent?: React.ReactNode;
   // Opsional supaya layar bisa memakai bar ini murni sebagai baris tombol back,
   // dengan judul ditangani PageIntro di badan layar (pola layar auth). Tinggi bar
   // TIDAK bergantung pada judul — baris di bawah sudah punya minHeight 56 eksplisit
@@ -541,27 +548,10 @@ export function TopAppBar({
             minWidth: 0,
           }}
         >
-          {badge ? (
-            <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, maxWidth: '100%' }}>
-              {title === undefined ? null : (
-                <Text
-                  selectable
-                  numberOfLines={1}
-                  style={{
-                    color: colors.text,
-                    flexShrink: 1,
-                    fontSize: resolvedVariant === 'main' ? typography.screenTitle.fontSize : 20,
-                    fontWeight: resolvedVariant === 'main' ? typography.screenTitle.fontWeight : '700',
-                    lineHeight: typography.screenTitle.lineHeight,
-                    textAlign: titleAlign,
-                  }}
-                >
-                  {title}
-                </Text>
-              )}
-              <View style={{ flexShrink: 0 }}>{badge}</View>
-            </View>
-          ) : title === undefined ? null : (
+          {/* Satu jalur judul saja. Slot `badge` dicabut bersama nama kebun di
+              MainTabHeader — ia satu-satunya pengirimnya, jadi cabang kedua di
+              sini tidak akan pernah menyala lagi. */}
+          {titleContent ?? (title === undefined ? null : (
             <Text
               selectable
               numberOfLines={1}
@@ -575,7 +565,7 @@ export function TopAppBar({
             >
               {title}
             </Text>
-          )}
+          ))}
         </View>
         {right ?? (titleAlign === 'center' ? <View style={{ height: 32, width: 32 }} /> : null)}
       </View>
@@ -626,25 +616,24 @@ export function ProfileIconButton({
   );
 }
 
-export function MainTabHeader({
-  onProfilePress,
-  roleLabel,
-  roleTone = 'neutral',
-  title,
-}: {
-  onProfilePress: () => void;
-  roleLabel?: string;
-  roleTone?: BadgeTone;
-  title: string;
-}) {
-  return (
-    <TopAppBar
-      badge={roleLabel ? <Badge label={roleLabel} tone={roleTone} /> : undefined}
-      right={<ProfileIconButton onPress={onProfilePress} />}
-      title={title}
-      variant="main"
-    />
-  );
+// Header layar utama: judul layar, rata kiri, titik. Tidak ada tombol profil
+// (Profil punya itemnya sendiri di bottom nav), tidak ada badge peran (peran
+// tidak berubah sepanjang sesi), dan tidak lagi ada nama kebun.
+//
+// Nama kebun sempat tinggal di sini sebagai jawaban atas "ini kebun yang mana?".
+// Jawabannya sekarang diberikan sekali, besar, di blok identitas paling atas
+// Beranda — bukan dicicil sebagai teks kecil di samping judul SETIAP layar
+// utama. Di empat destinasi lain, tempat itu kembali jadi milik judul layar.
+// `right` diteruskan APA ADANYA ke slot kanan TopAppBar — tanpa pembungkus,
+// tanpa style tambahan. Layar yang mengisinya bertanggung jawab atas ukuran dan
+// flexShrink isinya, karena hanya layar itu yang tahu seberapa penting isinya
+// dibanding judulnya sendiri.
+//
+// Slot ini menggantikan FAB di layar yang punya satu aksi "tambah": FAB melayang
+// di atas daftar dan menutupi baris terakhir, sementara di sini aksinya duduk
+// sebaris dengan judul, di tempat yang tetap.
+export function MainTabHeader({ right, title }: { right?: React.ReactNode; title: string }) {
+  return <TopAppBar right={right} title={title} variant="main" />;
 }
 
 // showWordmark=false menyisakan kotak logo saja. Dipakai layar yang judulnya
@@ -654,15 +643,29 @@ export function MainTabHeader({
 // jatuh kembali ke aturan lama (compact = kiri, selain itu tengah), jadi arti
 // `compact` yang sudah ada tidak bergeser. Mengisi `align` memisahkan perataan
 // dari ukuran, sehingga bisa dapat kotak ukuran penuh yang rata kiri.
+// `inline` adalah ukuran KETIGA, di bawah compact (52) dan default (72): logo 28
+// berdampingan mendatar dengan wordmark kecil, tanpa tagline. Ia dipakai sebagai
+// baris merek di dalam app bar layar pra-kebun — di sana merek harus hadir
+// sebagai penanda "aplikasi apa ini", bukan sebagai blok sambutan.
+//
+// Dikerjakan lewat cabang keluar lebih awal, bukan dengan menyisipkan syarat ke
+// dalam susunan yang sudah ada: dengan begitu jalur compact dan default di bawah
+// sama sekali tidak tersentuh, termasuk perhitungan `align` dan `showWordmark`.
 export function BrandMark({
   align,
   compact = false,
+  inline = false,
   showWordmark = true,
 }: {
   align?: 'left' | 'center';
   compact?: boolean;
+  inline?: boolean;
   showWordmark?: boolean;
 }) {
+  if (inline) {
+    return <InlineBrandMark />;
+  }
+
   const alignItems = (align ?? (compact ? 'left' : 'center')) === 'left' ? 'flex-start' : 'center';
 
   return (
@@ -702,6 +705,38 @@ export function BrandMark({
           </Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+// Tanpa tagline: di app bar hanya ada ruang untuk menyebut nama, dan tagline yang
+// dipadatkan ke satu baris bersama logo akan terbaca sebagai judul layar.
+const INLINE_BRAND_LOGO = 28;
+
+function InlineBrandMark() {
+  return (
+    <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm }}>
+      <View
+        style={{
+          alignItems: 'center',
+          backgroundColor: colors.primary,
+          borderColor: colors.primaryBorder,
+          borderCurve: 'continuous',
+          borderRadius: radius.sm,
+          borderWidth: 1,
+          height: INLINE_BRAND_LOGO,
+          justifyContent: 'center',
+          width: INLINE_BRAND_LOGO,
+        }}
+      >
+        <Image
+          source={require('../../assets/icon.png')}
+          style={{ borderRadius: radius.sm, height: '100%', width: '100%' }}
+        />
+      </View>
+      <Text selectable style={{ color: colors.text, fontSize: typography.body.fontSize, fontWeight: '700' }}>
+        Avology
+      </Text>
     </View>
   );
 }
@@ -828,14 +863,20 @@ export const badgeColors: Record<BadgeTone, { background: string; border: string
   },
 };
 
+// `size` default 'sm' — nilainya SAMA PERSIS dengan angka yang dulu ditulis
+// langsung di sini, jadi seluruh badge yang sudah ada tidak bergeser satu piksel
+// pun. 'md' hanya untuk badge yang harus mengimbangi teks yang lebih besar di
+// sebelahnya, seperti kode pohon di baris daftar.
 export function Badge({
   label,
   maxWidth = 128,
+  size = 'sm',
   status,
   tone = 'muted',
 }: {
   label?: string;
   maxWidth?: number;
+  size?: 'sm' | 'md';
   status?: string;
   tone?: BadgeTone;
 }) {
@@ -846,6 +887,7 @@ export function Badge({
   }
 
   const badge = badgeColors[status ? getStatusTone(status) : tone];
+  const isMedium = size === 'md';
 
   return (
     <View
@@ -856,8 +898,8 @@ export function Badge({
         borderRadius: radius.round,
         borderWidth: 1,
         maxWidth,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
+        paddingHorizontal: isMedium ? spacing.md : 10,
+        paddingVertical: isMedium ? 6 : 5,
       }}
     >
       <Text
@@ -865,9 +907,9 @@ export function Badge({
         numberOfLines={1}
         style={{
           color: badge.text,
-          fontSize: typography.caption.fontSize,
+          fontSize: isMedium ? typography.meta.fontSize : typography.caption.fontSize,
           fontWeight: '700',
-          lineHeight: typography.caption.lineHeight,
+          lineHeight: isMedium ? typography.meta.lineHeight : typography.caption.lineHeight,
         }}
       >
         {displayLabel}
@@ -916,30 +958,43 @@ export function MetricCard({
   );
 }
 
+// `icon` opsional dan default TIDAK ADA, jadi seluruh chip filter yang sudah ada
+// tetap berbentuk sama persis. Ia ditambahkan untuk chip aksi di sisi kanan
+// judul (mis. "Tambah" di layar Pohon dan Perawatan), tempat ikon plus yang
+// menandai "membuat sesuatu" perlu ikut terbaca — bukan untuk chip penyaring,
+// yang justru harus tetap polos supaya deretnya terbaca sebagai satu sumbu.
 export function ChipButton({
   active,
   count,
+  icon,
   label,
   onPress,
 }: {
   active: boolean;
   count?: number;
+  icon?: IconName;
   label: string;
   onPress: () => void;
 }) {
+  const contentColor = active ? '#FFFFFF' : colors.text;
+
   return (
     <Pressable
       onPress={onPress}
       style={{
+        alignItems: 'center',
         backgroundColor: active ? colors.primary : colors.surface,
         borderColor: active ? colors.primary : colors.border,
         borderRadius: radius.round,
         borderWidth: 1,
+        flexDirection: 'row',
+        gap: spacing.xs,
         paddingHorizontal: spacing.lg,
         paddingVertical: spacing.sm + 1,
       }}
     >
-      <Text selectable style={{ color: active ? '#FFFFFF' : colors.text, fontSize: 14, fontWeight: '700' }}>
+      {icon ? <Icon name={icon} size={tokens.icon.sm} color={active ? contentColor : colors.primary} /> : null}
+      <Text selectable style={{ color: contentColor, fontSize: 14, fontWeight: '700' }}>
         {count === undefined ? label : `${label} · ${count}`}
       </Text>
     </Pressable>
@@ -1998,6 +2053,11 @@ export function SearchFilterRow({
   value: string;
 }) {
   return (
+    // Baris ini dulu setinggi 56 — setinggi tombol utama — padahal ia hanya alat
+    // bantu di atas daftar, bukan aksi. rowMinHeight (48) menyusutkannya tanpa
+    // menembus batas area tekan yang nyaman, dan ukuran itu WAJIB sama persis
+    // untuk kolom pencarian dan tombol Filter: keduanya bersebelahan, dan selisih
+    // satu piksel pun langsung terlihat sebagai bar yang miring.
     <View style={[{ alignItems: 'center', flexDirection: 'row', gap: spacing.md }, style]}>
       <View
         style={{
@@ -2010,18 +2070,25 @@ export function SearchFilterRow({
           flex: 1,
           flexDirection: 'row',
           gap: spacing.sm,
-          minHeight: 56,
-          paddingHorizontal: spacing.lg,
+          height: tokens.layout.rowMinHeight,
+          paddingHorizontal: spacing.md,
         }}
       >
-        <Icon name="search" size={20} color={colors.textSoft} />
+        <Icon name="search" size={tokens.icon.md} color={colors.textSoft} />
+        {/* paddingVertical 0 eksplisit: Android memberi TextInput padding bawaan
+            yang, di kotak 48px, mendorong teksnya keluar dari tengah. */}
         <TextInput
           autoCapitalize="none"
           autoCorrect={false}
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={colors.textSoft}
-          style={{ color: colors.text, flex: 1, fontSize: 16 }}
+          style={{
+            color: colors.text,
+            flex: 1,
+            fontSize: typography.small.fontSize,
+            paddingVertical: 0,
+          }}
           value={value}
         />
         {value.length > 0 ? (
@@ -2031,11 +2098,16 @@ export function SearchFilterRow({
             hitSlop={{ bottom: 12, left: 12, right: 12, top: 12 }}
             onPress={() => onChangeText('')}
           >
-            <Icon name="x" size={20} color={colors.textSoft} />
+            <Icon name="x" size={tokens.icon.md} color={colors.textSoft} />
           </Pressable>
         ) : null}
       </View>
       {onFilterPress ? (
+        // Ikon PLUS teks "Filter", bukan ikon saja. Glif adjustments-horizontal
+        // tidak punya arti bawaan yang bisa ditebak sekali lihat — tombol ini
+        // sebelumnya hanya terbaca oleh orang yang sudah pernah menekannya.
+        // Lebarnya sekarang mengikuti isi (dulu kotak 56×56); kolom pencarian di
+        // sebelahnya flex:1, jadi ia yang menyesuaikan diri.
         <Pressable
           accessibilityRole="button"
           onPress={onFilterPress}
@@ -2046,12 +2118,28 @@ export function SearchFilterRow({
             borderCurve: 'continuous',
             borderRadius: radius.lg,
             borderWidth: 1,
-            height: 56,
+            flexDirection: 'row',
+            gap: spacing.sm,
+            height: tokens.layout.rowMinHeight,
             justifyContent: 'center',
-            width: 56,
+            paddingHorizontal: spacing.md,
           }}
         >
-          <Icon name="adjustments-horizontal" size={20} color={filterActive ? colors.surface : colors.primary} />
+          <Icon
+            name="adjustments-horizontal"
+            size={tokens.icon.md}
+            color={filterActive ? colors.surface : colors.primary}
+          />
+          <Text
+            selectable={false}
+            style={{
+              color: filterActive ? colors.surface : colors.primary,
+              fontSize: typography.small.fontSize,
+              fontWeight: '700',
+            }}
+          >
+            Filter
+          </Text>
           {(filterCount ?? 0) > 0 ? (
             <View
               style={{

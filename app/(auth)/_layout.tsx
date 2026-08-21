@@ -1,7 +1,7 @@
 import { router, Stack, usePathname } from 'expo-router';
 import React from 'react';
 
-import { LoadingState } from '../../src/components/ui';
+import { AccessGate } from '../../src/components/access-gate';
 import { useAuth } from '../../src/context/auth-context';
 import {
   logAccessGuardDecision,
@@ -39,7 +39,7 @@ export default function AuthLayout() {
   }, [initializing, membershipKey, pathname, sessionUserId, targetRoute]);
 
   if (initializing) {
-    return <LoadingState message="Memeriksa sesi..." />;
+    return <AccessGate />;
   }
 
   return (

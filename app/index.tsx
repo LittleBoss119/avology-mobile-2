@@ -1,7 +1,8 @@
 import { router, usePathname } from 'expo-router';
 import React from 'react';
 
-import { ErrorBanner, LoadingState, Screen } from '../src/components/ui';
+import { AccessGate } from '../src/components/access-gate';
+import { ErrorBanner, Screen } from '../src/components/ui';
 import { useAuth } from '../src/context/auth-context';
 import {
   logAccessGuardDecision,
@@ -41,7 +42,7 @@ export default function IndexRoute() {
   }, [hasBlockingError, initializing, membershipKey, pathname, sessionUserId, targetRoute]);
 
   if (initializing) {
-    return <LoadingState message="Memeriksa akses..." />;
+    return <AccessGate />;
   }
 
   if (hasBlockingError) {
@@ -52,5 +53,9 @@ export default function IndexRoute() {
     );
   }
 
-  return <LoadingState message="Mengarahkan..." />;
+  // Cabang yang sama dengan `initializing` di atas, dan itu memang disengaja:
+  // dari sudut pandang user, "sedang memeriksa" dan "sedang mengarahkan" adalah
+  // satu penantian yang sama. Membedakannya secara visual hanya menambah satu
+  // pergantian layar di tengah cold start.
+  return <AccessGate />;
 }

@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import { Icon, type IconName } from '../../src/components/icons';
-import { ErrorBanner, PageIntro, ProfileIconButton, Screen, TopAppBar } from '../../src/components/ui';
+import { BrandMark, ChipButton, ErrorBanner, PageIntro, Screen, TopAppBar } from '../../src/components/ui';
 import { tokens } from '../../src/constants/theme';
 import { useAuth } from '../../src/context/auth-context';
 
@@ -20,9 +20,27 @@ export default function OnboardingDecisionScreen() {
   return (
     <Screen
       header={
+        // Slot judul diisi baris merek — layar ini titik masuk pertama sesudah
+        // akun dibuat, dan app bar tanpa judul maupun logo terbaca seperti layar
+        // yang belum jadi. Di kanan, chip BERLABEL menggantikan ikon profil
+        // telanjang: "Profil" bisa dibaca, sedangkan ikon orang harus ditebak.
+        //
+        // flexShrink 0 pada chip: kalau ruangnya sempit, baris merek di slot
+        // judul yang mengalah — nama aplikasi masih terbaca dari logonya,
+        // sedangkan chip yang gepeng kehilangan labelnya sama sekali.
         <TopAppBar
           variant="main"
-          right={<ProfileIconButton onPress={() => router.push('/profile')} />}
+          titleContent={<BrandMark inline />}
+          right={
+            <View style={{ flexShrink: 0 }}>
+              <ChipButton
+                active={false}
+                icon="user"
+                label="Profil"
+                onPress={() => router.push('/profile')}
+              />
+            </View>
+          }
         />
       }
     >

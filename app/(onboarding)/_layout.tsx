@@ -1,7 +1,7 @@
 import { router, Stack, useFocusEffect, usePathname } from 'expo-router';
 import React from 'react';
 
-import { LoadingState } from '../../src/components/ui';
+import { AccessGate } from '../../src/components/access-gate';
 import { useAuth } from '../../src/context/auth-context';
 import {
   consumePendingAccessRoute,
@@ -15,7 +15,12 @@ import {
 
 export default function OnboardingLayout() {
   const { currentFarm, initializing, profile, refresh } = useAuth();
-  const [checkingAccess, setCheckingAccess] = React.useState(false);
+  // Dimulai true, BUKAN false. Dengan false, render pertama setelah mount jatuh
+  // ke cabang <Stack> di bawah karena useFocusEffect baru menyalakannya setelah
+  // commit — sehingga layar pilih akses sempat dilukis untuk user yang relasinya
+  // sebenarnya pending/rejected/removed. Aman dari macet: satu-satunya yang
+  // mematikannya (.finally() di useFocusEffect) selalu jalan.
+  const [checkingAccess, setCheckingAccess] = React.useState(true);
   const pathname = usePathname();
   const loading = initializing || checkingAccess;
   const guardRoute = resolveAccessRoute({ session: profile, membership: currentFarm });
@@ -29,6 +34,17 @@ export default function OnboardingLayout() {
   const membershipKey = currentFarm
     ? `${currentFarm.membershipId}:${currentFarm.role}:${currentFarm.status}`
     : 'none';
+  // Dihitung saat RENDER, bukan hanya di dalam effect. Nilainya dipakai dua kali
+  // untuk dua pertanyaan yang berbeda waktunya: "harus pindah?" (di effect,
+  // setelah commit) dan "boleh melukis <Stack>?" (di bawah, sebelum commit).
+  // Tanpa pemakaian kedua, masih tersisa satu frame — antara verifikasi selesai
+  // dan effect jalan — di mana loading sudah false tapi router.replace() belum
+  // dipanggil.
+  //
+  // Ikut membaca `targetRoute`, jadi niat pemulihan (recoveryRoute) tetap
+  // dihormati persis seperti sebelumnya: kalau tujuannya sudah tercapai,
+  // shouldRedirect false dan Stack dilukis seperti biasa.
+  const shouldRedirect = !loading && shouldRedirectAccess(pathname, targetRoute);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -52,8 +68,6 @@ export default function OnboardingLayout() {
       return;
     }
 
-    const shouldRedirect = shouldRedirectAccess(pathname, targetRoute);
-
     logAccessGuardDecision({
       currentPathname: pathname,
       membership: currentFarm,
@@ -74,10 +88,10 @@ export default function OnboardingLayout() {
     if (recoveryRoute) {
       consumePendingAccessRoute();
     }
-  }, [loading, membershipKey, pathname, recoveryRoute, sessionUserId, targetRoute]);
+  }, [loading, membershipKey, pathname, recoveryRoute, sessionUserId, shouldRedirect, targetRoute]);
 
-  if (loading) {
-    return <LoadingState message="Memeriksa akses..." />;
+  if (loading || shouldRedirect) {
+    return <AccessGate />;
   }
 
   return (

@@ -67,6 +67,8 @@ export type TreeMainPhotoFormSectionProps = {
 };
 
 export type ConditionStatusBadgeProps = {
+  // Diteruskan apa adanya ke Badge. Tanpa nilai, ukurannya persis seperti dulu.
+  size?: 'sm' | 'md';
   status: TreeConditionStatus;
 };
 
@@ -103,43 +105,101 @@ export type TreeHistoryTimelineProps = {
 type TreeHistoryViewerMode = 'owner' | 'worker';
 export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest' | 'care';
 
+// BARIS daftar, bukan kartu grid. Namanya tetap TreeCard supaya kedua layar
+// pemakainya tidak perlu ikut berubah.
+//
+// Grid dua kolom membayar mahal untuk foto: tiap kartu memuat gambar 4:3 selebar
+// setengah layar, padahal foto pohon jarang jadi alasan seseorang membuka daftar
+// — yang dicari kode, kondisi, dan fase. Sebagai baris, satu layar memuat tiga
+// kali lebih banyak pohon dan ketiga hal itu terbaca sejajar ke bawah.
+//
+// TIGA baris teks dengan hierarki menurun — kode, varietas, lalu fase dan umur —
+// dan badge kondisi sendirian di tepi kanan. Kode dan badge tidak lagi berbagi
+// satu baris: keduanya isyarat terkuat di baris ini, dan berdampingan keduanya
+// saling menahan lebar. Terpisah, masing-masing punya tepi bacanya sendiri —
+// kode di tepi kiri, kondisi di tepi kanan — dan dipindai sebagai dua kolom.
+//
+// Tanpa chevron. Seluruh barisnya memang bisa ditekan, tapi itu sudah tersirat
+// dari daftar yang isinya seragam; sebuah panah di setiap baris membayar ruang
+// tetap untuk mengulang hal yang sama sebanyak jumlah pohon.
+//
+// Umur ikut di baris ketiga dalam bentuk pendek ("3 th"): di daftar ia hanya
+// perlu dikenali sekilas, sedangkan bentuk panjangnya tetap ada di layar detail.
+const TREE_ROW_THUMBNAIL = 72;
+const TREE_ROW_MIN_HEIGHT = 96;
+
 export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
   const isInactive = tree.isArchived || tree.currentCondition === 'dead';
   const phaseText = tree.currentGrowthPhase ? formatGrowthPhase(tree.currentGrowthPhase) : 'Fase -';
-  const ageText = tree.plantedAt ? formatTreeAge(tree.plantedAt) : null;
-  const metaText = ageText ? `${phaseText} · ${ageText}` : phaseText;
+  // filter(Boolean) sebelum join: pohon tanpa tanggal tanam kehilangan bagian
+  // umurnya BESERTA pemisahnya, bukan menyisakan "· " yang menggantung.
+  const metaText = [phaseText, shortTreeAge(tree.plantedAt)].filter(Boolean).join(' · ');
 
   const content = (
     <View
       style={{
-        backgroundColor: colors.surface,
-        borderColor: colors.border,
-        borderCurve: 'continuous',
-        borderRadius: radius.xl,
-        borderWidth: 1,
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.lg,
+        // 72 + 12 + 12 = 96, dan alignItems 'center' menjaga thumbnail duduk di
+        // tengah baris. Tiga baris teks berjumlah sekitar 65, jadi thumbnail-lah
+        // yang menentukan tinggi — padding dipilih supaya ia punya ruang napas
+        // yang sama di atas dan di bawah, bukan menempel ke divider.
+        minHeight: TREE_ROW_MIN_HEIGHT,
         opacity: isInactive ? 0.62 : 1,
-        overflow: 'hidden',
+        paddingVertical: spacing.md,
       }}
     >
-      <View style={{ aspectRatio: 4 / 3, width: '100%' }}>
+      <View
+        style={{
+          borderCurve: 'continuous',
+          borderRadius: tokens.radius.cardInner,
+          height: TREE_ROW_THUMBNAIL,
+          overflow: 'hidden',
+          width: TREE_ROW_THUMBNAIL,
+        }}
+      >
+        {/* iconSize tidak dioper: 28 bawaan TreeVisualPlaceholder memang ukuran
+            yang benar untuk kotak sebesar ini. */}
         <TreeVisualPlaceholder inactive={isInactive} photoUrl={photoUrl} />
-        <View style={{ left: 8, position: 'absolute', top: 8 }}>
-          {tree.isArchived ? <Badge label="Arsip" tone="muted" /> : <ConditionStatusBadge status={tree.currentCondition} />}
-        </View>
       </View>
 
-      <View style={{ gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 1 }}>
-        <Text selectable numberOfLines={1} style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
+      {/* minWidth 0 WAJIB di kolom yang melar: tanpa itu teks panjang mendorong
+          badge keluar layar alih-alih terpotong sendiri. */}
+      <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+        <Text
+          selectable
+          numberOfLines={1}
+          style={{ ...tokens.type.subheading, color: tokens.color.text.primary }}
+        >
           {displayCode}
         </Text>
-        <Text selectable numberOfLines={1} style={{ color: colors.text, fontSize: 13 }}>
+        <Text
+          selectable
+          numberOfLines={1}
+          style={{ ...tokens.type.bodySmall, color: tokens.color.text.secondary }}
+        >
           {tree.variety ?? '—'}
         </Text>
-        <Text selectable numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12 }}>
+        <Text
+          selectable
+          numberOfLines={1}
+          style={{ ...tokens.type.meta, color: tokens.color.text.tertiary }}
+        >
           {metaText}
         </Text>
         {children}
+      </View>
+
+      {/* flexShrink 0: badge kondisi adalah alasan utama baris ini dipindai,
+          jadi teks di kolom tengah yang terpotong duluan saat ruang sempit. */}
+      <View style={{ flexShrink: 0 }}>
+        {tree.isArchived ? (
+          <Badge label="Arsip" size="md" tone="muted" />
+        ) : (
+          <ConditionStatusBadge size="md" status={tree.currentCondition} />
+        )}
       </View>
     </View>
   );
@@ -151,10 +211,37 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   return <Pressable onPress={onPress}>{content}</Pressable>;
 }
 
+// Bentuk pendek umur untuk baris daftar: "3 th", "5 bln", "12 hr".
+//
+// Memendekkan keluaran formatTreeAge, BUKAN menghitung ulang selisih tanggalnya.
+// Aturan umur pohon (hari di bawah sebulan, bulan di bawah setahun, selebihnya
+// tahun) hanya boleh hidup di satu tempat; menyalinnya ke sini berarti dua
+// tempat yang bisa berbeda jawaban untuk pohon yang sama.
+//
+// Mengembalikan null kalau tanggal tanam kosong atau tidak terbaca — pemanggil
+// membuang bagian itu beserta pemisahnya.
+function shortTreeAge(plantedAt?: string | null): string | null {
+  if (!plantedAt) {
+    return null;
+  }
+
+  const match = /^(\d+)\s+(tahun|bulan|hari)$/.exec(formatTreeAge(plantedAt));
+
+  if (!match) {
+    return null;
+  }
+
+  const shortUnits: Record<string, string> = { bulan: 'bln', hari: 'hr', tahun: 'th' };
+
+  return `${match[1]} ${shortUnits[match[2]]}`;
+}
+
 export function TreeVisualPlaceholder({
+  iconSize = 28,
   inactive = false,
   photoUrl,
 }: {
+  iconSize?: number;
   inactive?: boolean;
   photoUrl?: string | null;
 }) {
@@ -186,7 +273,7 @@ export function TreeVisualPlaceholder({
         width: '100%',
       }}
     >
-      <Icon name="tree" size={28} color={colors.textMuted} />
+      <Icon name="tree" size={iconSize} color={colors.textMuted} />
     </View>
   );
 }
@@ -416,10 +503,10 @@ function TreeFormSection({
   );
 }
 
-export function ConditionStatusBadge({ status }: ConditionStatusBadgeProps) {
+export function ConditionStatusBadge({ size, status }: ConditionStatusBadgeProps) {
   const tone = getConditionTone(status);
 
-  return <Badge label={formatCompactConditionStatus(status)} maxWidth={180} tone={tone} />;
+  return <Badge label={formatCompactConditionStatus(status)} maxWidth={180} size={size} tone={tone} />;
 }
 
 export function GrowthPhaseBadge({ phase }: GrowthPhaseBadgeProps) {

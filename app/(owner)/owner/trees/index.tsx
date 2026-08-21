@@ -10,7 +10,6 @@ import {
   EmptyState,
   ErrorBanner,
   FilterChipsRow,
-  FloatingActionButton,
   LoadingState,
   MainTabHeader,
   SearchFilterRow,
@@ -40,21 +39,14 @@ const DEFAULT_CRITERIA: TreeFilterCriteria = {
   phases: [],
 };
 
-// Chip triase kondisi: 'Bermasalah' menyatukan empat kondisi non-mati; 'dead'
-// sengaja tidak masuk chip mana pun.
+// TIDAK TERPAKAI sejak sumbu kondisi seluruhnya pindah ke deret chip. Dibiarkan
+// menunggu keputusan: chip "Bermasalah" yang menyatukan empat kondisi non-mati
+// bisa saja kembali sebagai chip kedelapan.
 const PROBLEM_CONDITIONS: TreeConditionStatus[] = [
   'needs_attention',
   'pest_attacked',
   'disease_indicated',
   'damaged',
-];
-
-type TriageKey = 'all' | 'problem' | 'healthy';
-
-const triageChips: Array<{ conditions: TreeConditionStatus[]; key: TriageKey; label: string }> = [
-  { conditions: [], key: 'all', label: 'Semua' },
-  { conditions: PROBLEM_CONDITIONS, key: 'problem', label: 'Bermasalah' },
-  { conditions: ['healthy'], key: 'healthy', label: 'Sehat' },
 ];
 
 const conditionOptions: Array<{ label: string; value: TreeConditionStatus }> = [
@@ -78,6 +70,23 @@ const ageRangeOptions: Array<{ label: string; value: TreeAgeRange }> = [
   { label: '<1 tahun', value: 'lt_1' },
   { label: '1-3 tahun', value: '1_3' },
   { label: '>3 tahun', value: 'gt_3' },
+];
+
+// SATU sumbu kondisi, dan tempatnya di sini — bukan dibagi dua antara deret chip
+// dan grup "Kondisi" di dalam sheet. Dulu keduanya menulis criteria.conditions
+// yang sama: menekan chip menghapus pilihan sheet tanpa memberi tahu, dan
+// sebaliknya. Yang terlihat berbeda ternyata satu benda.
+//
+// Diturunkan dari conditionOptions supaya label chip dan label yang dulu ada di
+// sheet tidak bisa berbeda. Tiap chip memilih TEPAT SATU kondisi; deretnya
+// melebihi lebar layar dan digulung horizontal oleh FilterChipsRow.
+const triageChips: Array<{ conditions: TreeConditionStatus[]; key: string; label: string }> = [
+  { conditions: [], key: 'all', label: 'Semua' },
+  ...conditionOptions.map((option) => ({
+    conditions: [option.value],
+    key: option.value,
+    label: option.label,
+  })),
 ];
 
 export default function OwnerTreeListScreen() {
@@ -153,13 +162,19 @@ export default function OwnerTreeListScreen() {
     [criteria.ageRanges, criteria.conditions, criteria.phases, debouncedSearch, trees]
   );
 
-  const problemCount = trees.filter((tree) => PROBLEM_CONDITIONS.includes(tree.currentCondition)).length;
-
+  // Kondisi TIDAK ikut dihitung di sini sejak ia keluar dari sheet: badge angka
+  // di tombol Filter hanya boleh mewakili yang tersembunyi di balik tombol itu,
+  // sedangkan kondisi sudah terpampang sebagai chip yang aktif.
   const activeGroupCount =
-    (criteria.conditions.length > 0 ? 1 : 0) +
     (criteria.phases.length > 0 ? 1 : 0) +
     (criteria.ageRanges.length > 0 ? 1 : 0) +
     (criteria.archived ? 1 : 0);
+
+  // "Kebun ini memang belum punya pohon" — BUKAN sekadar nol hasil. Mode arsip
+  // sengaja tidak dihitung sebagai kebun kosong: ia salah satu filter, dan
+  // menyembunyikan tombol Filter di sana akan mengurung pemilik di daftar arsip
+  // kosong tanpa jalan kembali ke daftar aktif.
+  const isFarmEmpty = trees.length === 0 && !criteria.archived;
 
   function openFilterSheet() {
     setDraft(criteria);
@@ -177,38 +192,61 @@ export default function OwnerTreeListScreen() {
 
   return (
     <Screen
-      floatingAction={<FloatingActionButton label="Tambah pohon" onPress={() => router.push('/owner/trees/create')} />}
       header={
+        // Aksi "tambah" pindah dari FAB ke sisi kanan judul. FAB melayang di atas
+        // daftar dan menutupi baris terakhir; di sini tempatnya tetap dan tidak
+        // menghalangi apa pun. flexShrink 0 supaya judul "Pohon" yang mengalah
+        // kalau ruangnya sempit, bukan chipnya.
         <MainTabHeader
           title="Pohon"
-          roleLabel="Pemilik"
-          onProfilePress={() => router.push('/owner/profile')}
+          right={
+            <View style={{ flexShrink: 0 }}>
+              <ChipButton
+                active={false}
+                icon="plus"
+                label="Tambah"
+                onPress={() => router.push('/owner/trees/create')}
+              />
+            </View>
+          }
         />
       }
     >
       <ErrorBanner message={error} />
 
-      <SearchFilterRow
-        filterCount={activeGroupCount}
-        onChangeText={setSearch}
-        onFilterPress={openFilterSheet}
-        placeholder="Cari kode atau varietas"
-        value={search}
-      />
-
-      <FilterChipsRow>
-        {triageChips.map((chip) => (
-          <ChipButton
-            key={chip.key}
-            active={sameConditionSet(criteria.conditions, chip.conditions)}
-            count={chip.key === 'problem' && problemCount > 0 ? problemCount : undefined}
-            label={chip.label}
-            onPress={() => setCriteria((current) => ({ ...current, conditions: chip.conditions }))}
+      {/* Kebun yang belum punya pohon tidak diberi kolom pencarian, deret chip,
+          maupun "Menampilkan 0 pohon": tidak ada yang bisa dicari atau disaring,
+          dan ketiganya cuma menunda empty state yang jadi satu-satunya isi
+          berguna di layar ini. Begitu ada pohon, ketiganya kembali — termasuk
+          saat filter tidak menghasilkan apa-apa, karena di sana justru kontrol
+          itulah jalan keluarnya. */}
+      {isFarmEmpty ? null : (
+        <>
+          <SearchFilterRow
+            filterCount={activeGroupCount}
+            onChangeText={setSearch}
+            onFilterPress={openFilterSheet}
+            placeholder="Cari kode atau varietas"
+            value={search}
           />
-        ))}
-      </FilterChipsRow>
 
-      <ResultCount count={displayedTrees.length} />
+          {/* Tanpa angka. Baris "Menampilkan N pohon" tepat di bawahnya sudah
+              menyatakan berapa yang terlihat, dan angka di chip yang tidak aktif
+              mengabarkan hal yang tidak ditanyakan siapa pun. */}
+          <FilterChipsRow>
+            {triageChips.map((chip) => (
+              <ChipButton
+                key={chip.key}
+                active={sameConditionSet(criteria.conditions, chip.conditions)}
+                label={chip.label}
+                onPress={() => setCriteria((current) => ({ ...current, conditions: chip.conditions }))}
+              />
+            ))}
+          </FilterChipsRow>
+
+          <ResultCount count={displayedTrees.length} />
+        </>
+      )}
 
       <TreeFilterSheet
         draft={draft}
@@ -243,15 +281,18 @@ export default function OwnerTreeListScreen() {
           />
         )
       ) : (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-          {displayedTrees.map((tree) => (
-            <View key={tree.id} style={{ flexBasis: '47.8%', flexGrow: 0, maxWidth: '47.8%', minWidth: 0 }}>
+        // Satu kolom dengan garis rambut antar baris, bukan grid dua kolom.
+        // Baris terakhir tidak diberi garis supaya daftarnya tidak menggantung.
+        <View>
+          {displayedTrees.map((tree, index) => (
+            <React.Fragment key={tree.id}>
+              {index > 0 ? <View style={styles.rowDivider} /> : null}
               <TreeCard
                 photoUrl={photoMap[tree.id]?.signedUrl}
                 tree={tree}
                 onPress={() => router.push(`/owner/trees/${tree.id}`)}
               />
-            </View>
+            </React.Fragment>
           ))}
         </View>
       )}
@@ -282,15 +323,11 @@ function TreeFilterSheet({
   onDraftChange: (next: TreeFilterCriteria) => void;
   visible: boolean;
 }) {
+  // conditions TIDAK ikut diperiksa: sumbu itu sudah tidak ada di sheet ini, dan
+  // "Atur ulang" di sini hanya boleh mengatur ulang apa yang terlihat di sini.
+  // Chip kondisi di layar punya "Semua" sebagai jalan atur ulangnya sendiri.
   const isDefault =
-    draft.ageRanges.length === 0 &&
-    draft.archived === false &&
-    draft.conditions.length === 0 &&
-    draft.phases.length === 0;
-
-  function toggleCondition(value: TreeConditionStatus) {
-    onDraftChange({ ...draft, conditions: toggleArrayValue(draft.conditions, value) });
-  }
+    draft.ageRanges.length === 0 && draft.archived === false && draft.phases.length === 0;
 
   function togglePhase(value: GrowthPhase) {
     onDraftChange({ ...draft, phases: toggleArrayValue(draft.phases, value) });
@@ -308,28 +345,15 @@ function TreeFilterSheet({
             accessibilityRole="button"
             disabled={isDefault}
             hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
-            onPress={() => onDraftChange(DEFAULT_CRITERIA)}
+            // conditions dibawa serta, tidak ikut direset: kondisi dipilih lewat
+            // chip di luar sheet, dan tombol ini tidak boleh diam-diam
+            // membatalkan pilihan yang dibuat di sana.
+            onPress={() => onDraftChange({ ...DEFAULT_CRITERIA, conditions: draft.conditions })}
           >
             <Text selectable={false} style={[styles.resetText, isDefault ? styles.resetTextDisabled : null]}>
               Atur ulang
             </Text>
           </Pressable>
-        </View>
-
-        <View style={styles.filterGroup}>
-          <Text selectable style={styles.filterLabel}>
-            Kondisi
-          </Text>
-          <FilterChipsRow>
-            {conditionOptions.map((option) => (
-              <ChipButton
-                key={option.value}
-                active={draft.conditions.includes(option.value)}
-                label={option.label}
-                onPress={() => toggleCondition(option.value)}
-              />
-            ))}
-          </FilterChipsRow>
         </View>
 
         <View style={styles.filterGroup}>
@@ -486,6 +510,10 @@ function toggleArrayValue<T>(values: T[], value: T): T[] {
 }
 
 const styles = StyleSheet.create({
+  rowDivider: {
+    backgroundColor: tokens.color.line.hairline,
+    height: StyleSheet.hairlineWidth,
+  },
   filterSheetBody: { gap: tokens.space.md },
   filterGroup: { gap: tokens.space.sm },
   filterLabel: { ...tokens.type.label, color: tokens.color.text.primary },

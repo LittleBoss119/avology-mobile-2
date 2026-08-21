@@ -46,7 +46,6 @@ type OperationalReportStatusFilter = 'all' | OperationalReportStatus;
 
 type OperationalReportListScreenProps = {
   role: MemberRole;
-  onProfilePress: () => void;
 };
 
 // Kriteria filter yang tinggal di bottom sheet: kategori (multi) + pelapor (owner saja).
@@ -69,7 +68,7 @@ const reportStatusFilterOptions: OperationalReportStatusFilter[] = [
 // Lebar pita gradasi di tepi kanan deret chip status.
 const CHIP_ROW_FADE_WIDTH = tokens.space.xxxl;
 
-export function OperationalReportListScreen({ role, onProfilePress }: OperationalReportListScreenProps) {
+export function OperationalReportListScreen({ role }: OperationalReportListScreenProps) {
   const isOwner = role === 'owner';
   const { currentFarm } = useAuth();
   const [criteria, setCriteria] = React.useState<ReportSheetCriteria>(DEFAULT_REPORT_CRITERIA);
@@ -229,11 +228,7 @@ export function OperationalReportListScreen({ role, onProfilePress }: Operationa
   return (
     <Screen
       header={
-        <MainTabHeader
-          title="Laporan"
-          roleLabel={isOwner ? 'Pemilik' : 'Pekerja'}
-          onProfilePress={onProfilePress}
-        />
+        <MainTabHeader title="Laporan" />
       }
       // Hanya pekerja yang bisa membuat laporan. Owner tidak punya footer sama
       // sekali, jadi daftarnya memakai seluruh tinggi layar. Tinggi footer

@@ -2,8 +2,8 @@ import { router, Stack, useFocusEffect, usePathname } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 
+import { AccessGate } from '../../src/components/access-gate';
 import { RoleBottomNavigation } from '../../src/components/role-bottom-navigation';
-import { LoadingState } from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
 import {
   logAccessGuardDecision,
@@ -13,7 +13,14 @@ import {
 
 export default function WorkerLayout() {
   const { currentFarm, initializing, profile, refresh } = useAuth();
-  const [checkingAccess, setCheckingAccess] = React.useState(false);
+  // Dimulai true, BUKAN false. Dengan false, render pertama setelah mount jatuh
+  // ke cabang <Stack> di bawah karena useFocusEffect baru menyalakannya setelah
+  // commit — sehingga seluruh layar pekerja sempat dilukis memakai currentFarm
+  // yang masih basi. Itu jalur nyata: pekerja yang aksesnya dicabut selagi app
+  // di background akan melihat dashboardnya sekali lagi saat app kembali fokus,
+  // sebelum guard memindahkannya ke /removed-access. Aman dari macet: satu-
+  // satunya yang mematikannya (.finally() di useFocusEffect) selalu jalan.
+  const [checkingAccess, setCheckingAccess] = React.useState(true);
   const pathname = usePathname();
   const loading = initializing || checkingAccess;
   const targetRoute = resolveAccessRoute({ session: profile, membership: currentFarm });
@@ -21,6 +28,14 @@ export default function WorkerLayout() {
   const membershipKey = currentFarm
     ? `${currentFarm.membershipId}:${currentFarm.role}:${currentFarm.status}`
     : 'none';
+  // Dihitung saat RENDER, bukan hanya di dalam effect. Nilainya dipakai dua kali
+  // untuk dua pertanyaan yang berbeda waktunya: "harus pindah?" (di effect,
+  // setelah commit) dan "boleh melukis <Stack>?" (di sini, sebelum commit).
+  // Tanpa pemakaian kedua, masih tersisa satu frame — antara verifikasi selesai
+  // dan effect jalan — di mana loading sudah false tapi router.replace() belum
+  // dipanggil, dan di frame itu layar pekerja terlihat oleh orang yang justru
+  // sedang diarahkan pergi.
+  const shouldRedirect = !loading && shouldRedirectAccess(pathname, targetRoute);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -44,8 +59,6 @@ export default function WorkerLayout() {
       return;
     }
 
-    const shouldRedirect = shouldRedirectAccess(pathname, targetRoute);
-
     logAccessGuardDecision({
       currentPathname: pathname,
       membership: currentFarm,
@@ -57,10 +70,10 @@ export default function WorkerLayout() {
     if (shouldRedirect) {
       router.replace(targetRoute);
     }
-  }, [loading, membershipKey, pathname, sessionUserId, targetRoute]);
+  }, [loading, membershipKey, pathname, sessionUserId, shouldRedirect, targetRoute]);
 
-  if (loading) {
-    return <LoadingState message="Memeriksa akses pekerja..." />;
+  if (loading || shouldRedirect) {
+    return <AccessGate />;
   }
 
   return (

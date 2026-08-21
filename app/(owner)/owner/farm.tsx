@@ -191,7 +191,7 @@ export default function OwnerFarmHubScreen() {
   }
 
   const header = (
-    <MainTabHeader title="Kebun" roleLabel="Pemilik" onProfilePress={() => router.push('/owner/profile')} />
+    <MainTabHeader title="Kebun" />
   );
 
   if (loading) {
@@ -210,43 +210,15 @@ export default function OwnerFarmHubScreen() {
     );
   }
 
-  const metaLine = buildFarmMetaLine(farm);
-
   return (
     <Screen header={header}>
       <ErrorBanner message={error} />
 
-      {/* Identitas kebun adalah JUDUL HALAMAN, bukan kartu. */}
-      <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: tokens.space.md }}>
-        <View style={{ flex: 1, gap: tokens.space.xs }}>
-          <Text
-            style={{
-              color: tokens.color.text.primary,
-              fontSize: tokens.type.title.fontSize,
-              fontWeight: tokens.type.title.fontWeight,
-              lineHeight: tokens.type.title.lineHeight,
-            }}
-          >
-            {farm.name}
-          </Text>
-          {metaLine ? (
-            <Text
-              style={{
-                color: tokens.color.text.secondary,
-                fontSize: tokens.type.bodySmall.fontSize,
-                lineHeight: tokens.type.bodySmall.lineHeight,
-              }}
-            >
-              {metaLine}
-            </Text>
-          ) : null}
-        </View>
-        <IconActionButton
-          label="Edit kebun"
-          onPress={() => router.push('/owner/farm-profile')}
-          icon={<Icon name="pencil" size={20} color={tokens.color.brand.base} />}
-        />
-      </View>
+      {/* Identitas kebun — nama, lokasi, luas — beserta tombol edit-nya PINDAH
+          ke Beranda, tempat ia jadi judul halaman yang sesungguhnya. Layar ini
+          tinggal berisi orang: kode untuk mengundang, pengajuan yang masuk,
+          anggota yang ada, dan jejak akses. Jalan ke /owner/farm-profile kini
+          lewat chip "Ubah data kebun" di Beranda. */}
 
       {/* Satu-satunya kartu yang dipertahankan di layar ini: isinya benda yang
           disalin dan dibagikan, bukan sekadar teks. */}
@@ -806,31 +778,6 @@ function buildDialTarget(value?: string | null): string | null {
   }
 
   return `tel:${trimmed.startsWith('+') ? '+' : ''}${digits}`;
-}
-
-function buildFarmMetaLine(farm: Farm): string {
-  const parts: string[] = [];
-  const location = farm.location?.trim();
-
-  if (location) {
-    parts.push(location);
-  }
-
-  const area = formatArea(farm.areaSize);
-
-  if (area) {
-    parts.push(area);
-  }
-
-  return parts.join(' · ');
-}
-
-function formatArea(value?: number | null): string | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  return `${new Intl.NumberFormat('id-ID').format(value)} m²`;
 }
 
 function toTime(value?: string | null): number {

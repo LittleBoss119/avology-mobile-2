@@ -12,7 +12,6 @@ import {
   EmptyState,
   ErrorBanner,
   FilterChipsRow,
-  FloatingActionButton,
   LoadingState,
   MainTabHeader,
   Screen,
@@ -286,17 +285,24 @@ export default function CareScheduleListScreen() {
 
   return (
     <Screen
-      // Dulu FAB membuka sheet berisi dua pilihan (manual / dari SOP). Sejak
-      // jalur SOP dihapus hanya tersisa satu tujuan, jadi sheet perantaranya
-      // ikut hilang dan FAB langsung membuka form.
-      floatingAction={
-        <FloatingActionButton label="Tambah jadwal" onPress={() => router.push('/owner/schedules/create')} />
-      }
       header={
+        // Dulu FAB, dan sebelum itu FAB yang membuka sheet berisi dua pilihan
+        // (manual / dari SOP). Jalur SOP hilang di migrasi 046, jadi tinggal satu
+        // tujuan — dan satu tujuan tidak butuh tombol melayang yang menutupi
+        // baris terakhir daftar. Sekarang ia duduk sebaris dengan judul.
+        // flexShrink 0 supaya judul yang mengalah kalau ruangnya sempit.
         <MainTabHeader
-          title="Jadwal"
-          roleLabel="Pemilik"
-          onProfilePress={() => router.push('/owner/profile')}
+          title="Perawatan"
+          right={
+            <View style={{ flexShrink: 0 }}>
+              <ChipButton
+                active={false}
+                icon="plus"
+                label="Tambah"
+                onPress={() => router.push('/owner/schedules/create')}
+              />
+            </View>
+          }
         />
       }
     >
