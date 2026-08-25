@@ -36,9 +36,12 @@ await runStage(STAGE, async () => {
 
   // ---------- Persiapan: dua pohon aktif, satu pohon terarsip ----------
 
-  const treeA = await createTree(owner, farm.id, `TL-A-${runId}`, 'A', '1');
-  const treeB = await createTree(owner, farm.id, `TL-B-${runId}`, 'A', '2');
-  const treeArchived = await createTree(owner, farm.id, `TL-ARC-${runId}`, 'B', '1');
+  // Posisi, bukan kode: sejak migrasi 054 tree_code diturunkan database dari
+  // baris dan kolom. Ketiganya muat di ukuran kebun default 26 x 9, dan tidak
+  // perlu disisipi runId karena stage ini memakai kebunnya sendiri.
+  const treeA = await createTree(owner, farm.id, 1, 'A');
+  const treeB = await createTree(owner, farm.id, 1, 'B');
+  const treeArchived = await createTree(owner, farm.id, 2, 'A');
 
   await expectSuccess(
     STAGE,
@@ -172,23 +175,31 @@ await runStage(STAGE, async () => {
   );
 });
 
-async function createTree(owner, farmId, treeCode, rowPosition, columnPosition) {
+// Lewat RPC sejak migrasi 055: posisi dan siklus tanam pertamanya lahir dalam
+// satu transaksi, dan variety/planted_at bukan lagi kolom trees.
+async function createTree(owner, farmId, rowPosition, columnPosition) {
+  const treeId = await expectSuccess(
+    STAGE,
+    `owner creates tree ${rowPosition}-${columnPosition}`,
+    owner.client.rpc('create_tree_with_planting', {
+      p_farm_id: farmId,
+      p_row_position: rowPosition,
+      p_column_position: columnPosition,
+      p_variety: 'Alpukat Test',
+      p_planted_at: todayIso(),
+    }),
+    'Check create_tree_with_planting(uuid, smallint, text, text, date) after migration 055.'
+  );
+
   return getSingle(
     STAGE,
-    `owner creates tree ${treeCode}`,
+    `created tree ${rowPosition}-${columnPosition} is readable`,
     owner.client
       .from('trees')
-      .insert({
-        farm_id: farmId,
-        tree_code: treeCode,
-        row_position: rowPosition,
-        column_position: columnPosition,
-        variety: 'Alpukat Test',
-        planted_at: todayIso(),
-      })
       .select('id, tree_code, is_archived')
+      .eq('id', treeId)
       .single(),
-    'Active owner should be able to insert trees.'
+    'Active owner should be able to read the tree just created.'
   );
 }
 

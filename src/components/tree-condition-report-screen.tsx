@@ -257,7 +257,7 @@ export function TreeConditionReportScreen({
           </Text>
           <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
           <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-          <MetaRow label="Varietas" value={tree.variety ?? 'Belum diisi'} />
+          <MetaRow label="Varietas" value={tree.activePlanting?.variety ?? 'Belum diisi'} />
           <View style={{ gap: tokens.space.xs }}>
             <Text selectable style={{ color: tokens.color.text.tertiary, ...tokens.type.meta }}>
               Kondisi terakhir

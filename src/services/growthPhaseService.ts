@@ -17,13 +17,20 @@ import type {
   UpdateGrowthPhaseRecordInput,
   UUID,
 } from '../types/domain';
+import {
+  readActivePlanting,
+  TREE_SELECT_WITH_ACTIVE_PLANTING,
+  type TreePlantingRow,
+} from './treePlantingShared';
 import { fail, ok } from '../utils/serviceResult';
 
 const GROWTH_PHASE_RECORD_SELECT =
   'id, farm_id, tree_id, recorded_by, phase, note, recorded_at, created_at, updated_at, is_deleted, deleted_at, deleted_by, delete_reason';
 
-const TREE_SELECT =
-  'id, farm_id, tree_code, row_position, column_position, variety, planted_at, current_condition, current_growth_phase, is_archived, created_at, updated_at';
+// Bentuknya sama persis dengan treeService — sengaja dari satu sumber, bukan
+// disalin. Ingat: select ini tidak membatasi ke siklus aktif; filter
+// `.is('tree_plantings.ended_at', null)` di query yang melakukannya.
+const TREE_SELECT = TREE_SELECT_WITH_ACTIVE_PLANTING;
 
 const growthPhases: GrowthPhase[] = [
   'initial_planting',
@@ -52,11 +59,13 @@ type GrowthPhaseRecordRow = {
 type TreeRow = {
   id: string;
   farm_id: string;
+  // Kolom generated (migrasi 054) — hanya dibaca.
   tree_code: string;
-  row_position: string | null;
+  // smallint di database; PostgREST mengirimnya sebagai number.
+  row_position: number | null;
   column_position: string | null;
-  variety: string | null;
-  planted_at: string | null;
+  // Sudah tersaring ke siklus aktif oleh filter di query; paling banyak satu.
+  tree_plantings: TreePlantingRow[] | null;
   current_condition: TreeConditionStatus;
   current_growth_phase: GrowthPhase | null;
   is_archived: boolean;
@@ -226,6 +235,7 @@ export async function getFloweringAndFruitingTrees(
     .select(TREE_SELECT)
     .eq('farm_id', input.farmId)
     .eq('is_archived', false)
+    .is('tree_plantings.ended_at', null)
     .in('current_growth_phase', ['flowering', 'fruiting'])
     .order('current_growth_phase', { ascending: true })
     .order('tree_code', { ascending: true })
@@ -412,8 +422,7 @@ function mapTree(row: TreeRow): Tree {
     treeCode: row.tree_code,
     rowPosition: row.row_position,
     columnPosition: row.column_position,
-    variety: row.variety,
-    plantedAt: row.planted_at,
+    activePlanting: readActivePlanting(row.tree_plantings),
     currentCondition: row.current_condition,
     currentGrowthPhase: row.current_growth_phase,
     isArchived: row.is_archived,

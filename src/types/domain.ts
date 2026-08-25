@@ -140,16 +140,50 @@ export type FarmActorDisplayProfile = {
 export type Tree = {
   id: UUID;
   farmId: UUID;
+  // Diturunkan database sebagai kolom GENERATED sejak migrasi 054
+  // (`row_position::text || '-' || column_position`). Read-only: mengirimnya di
+  // INSERT/UPDATE ditolak Postgres.
   treeCode: string;
-  rowPosition: string | null;
+  // Baris = angka, kolom = satu huruf A-Z. Konvensinya dibalik di migrasi 054.
+  rowPosition: number | null;
   columnPosition: string | null;
-  variety: string | null;
-  plantedAt: string | null;
+  // Siklus tanam yang sedang berjalan di posisi ini, atau null kalau posisinya
+  // sedang kosong (siklus terakhirnya sudah ditutup).
+  //
+  // variety dan plantedAt DULU ada di sini. Keduanya pindah ke tree_plantings
+  // di migrasi 055 karena satu posisi bisa ditanami berkali-kali: menyimpannya
+  // di trees membuat penanaman ulang menimpa fakta penanaman sebelumnya.
+  // Pemanggil yang butuh varietas membacanya lewat activePlanting?.variety --
+  // bentuk yang sengaja tidak disembunyikan, supaya terlihat bahwa nilainya
+  // milik siklus dan bisa tidak ada.
+  activePlanting: TreePlanting | null;
   currentCondition: TreeConditionStatus;
   currentGrowthPhase: GrowthPhase | null;
   isArchived: boolean;
   createdAt?: string;
   updatedAt?: string | null;
+};
+
+// Cerminan CHECK tree_plantings_end_reason_check (migrasi 055).
+export const TREE_PLANTING_END_REASONS = ['mati', 'dibongkar', 'diganti'] as const;
+
+export type TreePlantingEndReason = (typeof TREE_PLANTING_END_REASONS)[number];
+
+// Satu siklus tanam pada satu posisi. endedAt null berarti siklusnya masih
+// berjalan, dan database menjamin paling banyak SATU baris seperti itu per
+// pohon lewat partial unique index tree_plantings_one_active_per_tree.
+export type TreePlanting = {
+  id: UUID;
+  treeId: UUID;
+  farmId: UUID;
+  cycleNo: number;
+  variety: string | null;
+  plantedAt: string | null;
+  endedAt: string | null;
+  endReason: TreePlantingEndReason | null;
+  endedBy: UUID | null;
+  createdBy: UUID;
+  createdAt: string;
 };
 
 export type TreeConditionReport = {
@@ -372,9 +406,12 @@ export type GetTreeDetailInput = {
   treeId: UUID;
 };
 
+// treeCode TIDAK ada di sini dan tidak boleh ditambahkan: kolomnya generated
+// sejak migrasi 054, jadi ia diturunkan dari posisinya, bukan dikirim klien.
+// rowPosition/columnPosition tetap string karena berasal dari field form;
+// treeService yang mengubah barisnya jadi angka sebelum dikirim.
 export type CreateTreeInput = {
   farmId: UUID;
-  treeCode?: string;
   rowPosition?: string | null;
   columnPosition?: string | null;
   variety?: string | null;
@@ -385,13 +422,36 @@ export type CreateTreeData = {
   treeId: UUID;
 };
 
+// Lihat catatan di CreateTreeInput soal ketiadaan treeCode.
+//
+// variety dan plantedAt SENGAJA tidak ada di sini. Keduanya milik siklus tanam
+// sejak migrasi 055, dan mengubahnya berarti mengubah fakta penanaman yang
+// sudah terjadi. Yang bisa diedit dari layar pohon tinggal POSISINYA.
 export type UpdateTreeInput = {
   treeId: UUID;
-  treeCode?: string;
   rowPosition?: string | null;
   columnPosition?: string | null;
+};
+
+// ---- Siklus tanam (migrasi 055) ----
+// Ketiganya lewat RPC SECURITY DEFINER; tree_plantings tidak punya grant tulis
+// untuk authenticated, jadi tidak ada jalur lain.
+
+export type EndTreePlantingInput = {
+  treeId: UUID;
+  endReason: TreePlantingEndReason;
+  // Kosong berarti hari ini (WIB), diputuskan di sisi database.
+  endedAt?: string | null;
+};
+
+export type StartTreePlantingInput = {
+  treeId: UUID;
   variety?: string | null;
   plantedAt?: string | null;
+};
+
+export type StartTreePlantingData = {
+  plantingId: UUID;
 };
 
 export type TreeArchiveInput = {

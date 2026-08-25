@@ -146,7 +146,9 @@ function MonitoringTreeCard({ tree }: { tree: FloweringMonitoringTree }) {
         {tree.treeCode}
       </Text>
       <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-      {tree.variety ? <MetaRow label="Varietas" value={tree.variety} /> : null}
+      {tree.activePlanting?.variety ? (
+        <MetaRow label="Varietas" value={tree.activePlanting.variety} />
+      ) : null}
       {tree.currentGrowthPhase ? (
         <MetaRow label="Fase saat ini" value={formatGrowthPhase(tree.currentGrowthPhase)} />
       ) : null}

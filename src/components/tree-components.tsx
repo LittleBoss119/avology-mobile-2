@@ -52,6 +52,9 @@ export type TreeFormProps = {
   errors?: TreeFormErrors;
   values: TreeFormValues;
   onChange: (values: TreeFormValues) => void;
+  // Lihat catatan di TreeForm. Default true (alur tambah pohon); layar edit
+  // mengirim false karena varietas & tanggal tanam milik siklus tanam.
+  includePlantingFields?: boolean;
 };
 
 export type TreeMainPhotoFormSectionProps = {
@@ -134,7 +137,9 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const phaseText = tree.currentGrowthPhase ? formatGrowthPhase(tree.currentGrowthPhase) : 'Fase -';
   // filter(Boolean) sebelum join: pohon tanpa tanggal tanam kehilangan bagian
   // umurnya BESERTA pemisahnya, bukan menyisakan "· " yang menggantung.
-  const metaText = [phaseText, shortTreeAge(tree.plantedAt)].filter(Boolean).join(' · ');
+  const metaText = [phaseText, shortTreeAge(tree.activePlanting?.plantedAt)]
+    .filter(Boolean)
+    .join(' · ');
 
   const content = (
     <View
@@ -180,7 +185,7 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
           numberOfLines={1}
           style={{ ...tokens.type.bodySmall, color: tokens.color.text.secondary }}
         >
-          {tree.variety ?? '—'}
+          {tree.activePlanting?.variety ?? '—'}
         </Text>
         <Text
           selectable
@@ -278,7 +283,17 @@ export function TreeVisualPlaceholder({
   );
 }
 
-export function TreeForm({ errors, onChange, values }: TreeFormProps) {
+// includePlantingFields memisahkan dua field yang sejak migrasi 055 BUKAN milik
+// posisi melainkan milik siklus tanam:
+//
+//   Tambah pohon  -> true (default). Membuat pohon sekaligus membuka siklus
+//                    pertamanya, jadi varietas & tanggal tanam diisi di sini.
+//   Edit pohon    -> false. Mengubah keduanya berarti mengubah fakta penanaman
+//                    yang sudah terjadi; yang boleh diubah tinggal posisinya.
+//
+// Tata letak field yang tersisa TIDAK berubah — kedua field ini hanya tidak
+// dirender, bukan dipindah.
+export function TreeForm({ errors, includePlantingFields = true, onChange, values }: TreeFormProps) {
   const previewCode = buildTreeDisplayCode(values);
 
   function updateTextValue(field: 'rowPosition' | 'columnPosition' | 'variety', value: string) {
@@ -332,7 +347,7 @@ export function TreeForm({ errors, onChange, values }: TreeFormProps) {
               error={errors?.rowPosition}
               label="Baris *"
               onChangeText={(value) => updateTextValue('rowPosition', value)}
-              placeholder="A"
+              placeholder="1"
               value={values.rowPosition}
             />
           </View>
@@ -341,48 +356,78 @@ export function TreeForm({ errors, onChange, values }: TreeFormProps) {
               error={errors?.columnPosition}
               label="Kolom *"
               onChangeText={(value) => updateTextValue('columnPosition', value)}
-              placeholder="1"
+              placeholder="A"
               value={values.columnPosition}
             />
           </View>
         </View>
-        <Field
-          error={errors?.variety}
-          label="Varietas *"
-          onChangeText={(value) => updateTextValue('variety', value)}
-          placeholder="Contoh: Alpukat mentega"
-          value={values.variety}
-        />
+        {includePlantingFields ? (
+          <Field
+            error={errors?.variety}
+            label="Varietas *"
+            onChangeText={(value) => updateTextValue('variety', value)}
+            placeholder="Contoh: Alpukat mentega"
+            value={values.variety}
+          />
+        ) : null}
       </TreeFormSection>
 
-      <DateField
-        error={errors?.plantedAt}
-        label="Tanggal tanam *"
-        value={formatDateForDb(values.plantedAt)}
-        onChangeDate={(value) => updateDateValue(parseDbDate(value))}
-      />
+      {includePlantingFields ? (
+        <DateField
+          error={errors?.plantedAt}
+          label="Tanggal tanam *"
+          value={formatDateForDb(values.plantedAt)}
+          onChangeDate={(value) => updateDateValue(parseDbDate(value))}
+        />
+      ) : null}
     </View>
   );
 }
 
 // Validasi bersama create & edit: tandai semua field wajib yang kosong sekaligus.
-export function validateTreeForm(values: TreeFormValues): TreeFormErrors {
+//
+// Sejak migrasi 054, baris dan kolom punya BENTUK yang wajib: baris angka
+// 1-999, kolom tepat satu huruf A-Z. Keduanya cerminan CHECK constraint
+// trees_row_position_check dan trees_column_position_check — ditegakkan di sini
+// juga supaya pekerja membaca pesan yang masuk akal, bukan balasan Postgres.
+//
+// Yang TIDAK diperiksa di sini: apakah posisinya muat di ukuran kebun. Itu
+// milik trigger validate_tree_position, yang perlu membaca baris farms.
+//
+// includePlantingFields harus sepadan dengan yang dioper ke TreeForm. Kalau
+// tidak, layar edit akan menolak submit karena varietas kosong — padahal
+// fieldnya memang sengaja tidak dirender di sana.
+export function validateTreeForm(
+  values: TreeFormValues,
+  { includePlantingFields = true }: { includePlantingFields?: boolean } = {}
+): TreeFormErrors {
   const errors: TreeFormErrors = {};
 
-  if (!values.rowPosition.trim()) {
+  const rowPosition = values.rowPosition.trim();
+  const columnPosition = values.columnPosition.trim().toUpperCase();
+
+  if (!rowPosition) {
     errors.rowPosition = 'Baris wajib diisi.';
+  } else if (!/^\d+$/.test(rowPosition)) {
+    errors.rowPosition = 'Baris harus berupa angka.';
+  } else if (Number(rowPosition) < 1 || Number(rowPosition) > 999) {
+    errors.rowPosition = 'Baris harus antara 1 dan 999.';
   }
 
-  if (!values.columnPosition.trim()) {
+  if (!columnPosition) {
     errors.columnPosition = 'Kolom wajib diisi.';
+  } else if (!/^[A-Z]$/.test(columnPosition)) {
+    errors.columnPosition = 'Kolom harus satu huruf A sampai Z.';
   }
 
-  if (!values.variety.trim()) {
-    errors.variety = 'Varietas wajib diisi.';
-  }
+  if (includePlantingFields) {
+    if (!values.variety.trim()) {
+      errors.variety = 'Varietas wajib diisi.';
+    }
 
-  if (!values.plantedAt) {
-    errors.plantedAt = 'Tanggal tanam wajib dipilih.';
+    if (!values.plantedAt) {
+      errors.plantedAt = 'Tanggal tanam wajib dipilih.';
+    }
   }
 
   return errors;

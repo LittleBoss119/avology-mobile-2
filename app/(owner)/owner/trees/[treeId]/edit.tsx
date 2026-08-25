@@ -74,10 +74,16 @@ export default function OwnerEditTreeScreen() {
       }
 
       setValues({
-        rowPosition: result.data.rowPosition ?? '',
+        // rowPosition kini number (smallint di database, migrasi 054) sementara
+        // field form selalu string — String() menjembataninya. `?? ''` saja
+        // tidak cukup: ia menghasilkan number, bukan string.
+        rowPosition: result.data.rowPosition === null ? '' : String(result.data.rowPosition),
         columnPosition: result.data.columnPosition ?? '',
-        variety: result.data.variety ?? '',
-        plantedAt: parseDbDate(result.data.plantedAt),
+        // Tetap diisi walau tidak dirender: TreeFormValues masih memuat kedua
+        // field ini, dan mengisinya menjaga nilainya tetap benar seandainya
+        // layar ini kelak menampilkannya lagi (mis. ringkasan siklus aktif).
+        variety: result.data.activePlanting?.variety ?? '',
+        plantedAt: parseDbDate(result.data.activePlanting?.plantedAt ?? null),
       });
       setFarmId(result.data.farmId);
 
@@ -111,7 +117,9 @@ export default function OwnerEditTreeScreen() {
       return;
     }
 
-    const nextErrors = validateTreeForm(values);
+    // includePlantingFields false, sepadan dengan TreeForm di bawah: varietas
+    // dan tanggal tanam tidak dirender di layar edit, jadi tidak boleh divalidasi.
+    const nextErrors = validateTreeForm(values, { includePlantingFields: false });
 
     if (hasTreeFormErrors(nextErrors)) {
       setErrors(nextErrors);
@@ -128,12 +136,12 @@ export default function OwnerEditTreeScreen() {
     setSubmitting(true);
     setError(null);
 
+    // Hanya POSISI. Varietas dan tanggal tanam milik siklus tanam sejak migrasi
+    // 055, dan mengubahnya berarti mengubah fakta penanaman yang sudah terjadi.
     const result = await updateTree({
       treeId: normalizedTreeId,
       rowPosition: values.rowPosition,
       columnPosition: values.columnPosition,
-      variety: values.variety,
-      plantedAt: formatDateForDb(values.plantedAt),
     });
 
     if (result.error) {
@@ -241,7 +249,12 @@ export default function OwnerEditTreeScreen() {
         header={<TopAppBar title="Edit Pohon" onBack={() => router.back()} />}
       >
         <ErrorBanner message={error} />
-        <TreeForm errors={errors} values={values} onChange={handleValuesChange} />
+        <TreeForm
+          errors={errors}
+          includePlantingFields={false}
+          values={values}
+          onChange={handleValuesChange}
+        />
         <TreeMainPhotoFormSection
           currentPhotoUrl={currentPhoto?.signedUrl}
           deleteRequested={deletePhotoRequested}

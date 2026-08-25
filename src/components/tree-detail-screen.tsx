@@ -599,9 +599,12 @@ function TreePhotoArea({
 
 function InfoGrid({ tree }: { tree: Tree }) {
   const items = [
-    { label: 'Varietas', value: tree.variety || 'Belum diisi' },
-    { label: 'Tanggal tanam', value: formatFriendlyDate(tree.plantedAt) },
-    { label: 'Umur pohon', value: formatTreeAge(tree.plantedAt) },
+    // Ketiganya milik SIKLUS TANAM yang sedang berjalan, bukan posisinya
+    // (migrasi 055). Posisi yang siklusnya sudah ditutup tidak punya varietas
+    // maupun tanggal tanam — di situ activePlanting bernilai null.
+    { label: 'Varietas', value: tree.activePlanting?.variety || 'Belum diisi' },
+    { label: 'Tanggal tanam', value: formatFriendlyDate(tree.activePlanting?.plantedAt ?? null) },
+    { label: 'Umur pohon', value: formatTreeAge(tree.activePlanting?.plantedAt ?? null) },
     { label: 'Fase tumbuh', value: formatGrowthPhase(tree.currentGrowthPhase) },
   ];
 

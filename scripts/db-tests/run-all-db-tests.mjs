@@ -19,6 +19,7 @@ const stages = [
   '12-care-activity-tree-links.test.mjs',
   '13-task-release-on-membership-exit.test.mjs',
   '14-schedule-lock-on-completed-only.test.mjs',
+  '15-tree-planting-cycle.test.mjs',
 ];
 
 const summary = {

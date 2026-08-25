@@ -36,10 +36,10 @@ export function formatTreeLocation({
   rowPosition,
 }: {
   columnPosition?: string | null;
-  rowPosition?: string | null;
+  rowPosition?: TreeRowInput;
 }): string {
-  const row = normalizeOptionalText(rowPosition);
-  const column = normalizeOptionalText(columnPosition);
+  const row = normalizeTreeRow(rowPosition);
+  const column = normalizeTreeColumn(columnPosition);
 
   if (row && column) {
     return `Baris ${row} \u00B7 Kolom ${column}`;
@@ -56,12 +56,24 @@ export function formatTreeLocation({
   return 'Lokasi belum diisi';
 }
 
+// Baris boleh datang sebagai angka (dari database — row_position kini smallint,
+// dan PostgREST mengirimnya sebagai number) maupun sebagai teks (dari field
+// form, yang selalu string). Keduanya diterima di satu tipe supaya pemanggil
+// tidak perlu mengonversi lebih dulu.
+export type TreeRowInput = string | number | null | undefined;
+
+// HANYA untuk tampilan. Sejak migrasi 054, tree_code adalah kolom GENERATED di
+// database (`row_position::text || '-' || column_position`) dan TIDAK BISA
+// ditulis — fungsi ini tidak lagi membentuk nilai yang disimpan.
+//
+// Gunanya tinggal dua: pratinjau kode di form sebelum baris tersimpan, dan
+// merangkai kode dari nilai form yang belum sempat dikirim.
 export function buildTreeDisplayCode({
   columnPosition,
   rowPosition,
 }: {
   columnPosition?: string | null;
-  rowPosition?: string | null;
+  rowPosition?: TreeRowInput;
 }): string | null {
   const row = normalizeTreeRow(rowPosition);
   const column = normalizeTreeColumn(columnPosition);
@@ -73,18 +85,17 @@ export function buildTreeDisplayCode({
   return `${row}-${column}`;
 }
 
+// Kode yang tersimpan didahulukan. tree_code kini dijamin database selalu ada
+// dan selalu sepadan dengan posisinya, jadi ia sumber yang paling benar;
+// perakitan dari row/column hanya cadangan untuk objek yang belum tersimpan.
 export function formatTreeDisplayCode(tree: Pick<Tree, 'columnPosition' | 'rowPosition' | 'treeCode'>): string {
-  const displayCode = buildTreeDisplayCode(tree);
+  const storedCode = normalizeOptionalText(tree.treeCode);
 
-  if (displayCode) {
-    return displayCode;
+  if (storedCode) {
+    return storedCode;
   }
 
-  const row = normalizeOptionalText(tree.rowPosition);
-  const column = normalizeOptionalText(tree.columnPosition);
-  const legacyCode = !row && !column ? normalizeOptionalText(tree.treeCode) : null;
-
-  return legacyCode ?? 'Lokasi belum lengkap';
+  return buildTreeDisplayCode(tree) ?? 'Lokasi belum lengkap';
 }
 
 export function formatTreeAge(plantedAt?: string | null): string {
@@ -129,13 +140,27 @@ function normalizeOptionalText(value: string | null | undefined): string | null 
   return normalized ? normalized : null;
 }
 
-function normalizeTreeRow(value: string | null | undefined): string | null {
-  const normalized = normalizeOptionalText(value);
-  return normalized ? normalized.toUpperCase() : null;
+// Baris adalah ANGKA sejak migrasi 054. `.toUpperCase()` dibuang dari sini —
+// dulu ia ada karena baris dilambangkan huruf, dan konvensinya kini terbalik:
+// baris = angka, kolom = huruf, menghasilkan '1-A'.
+//
+// Angka dari database dilewatkan apa adanya lewat String(); teks dari form
+// hanya di-trim. Yang MEMVALIDASI bentuknya adalah validateTreeForm di sisi
+// form dan CHECK constraint di sisi database, bukan fungsi ini.
+function normalizeTreeRow(value: TreeRowInput): string | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : null;
+  }
+
+  return normalizeOptionalText(value);
 }
 
+// Kolom adalah HURUF sejak migrasi 054. Di-uppercase supaya 'a' yang diketik
+// pekerja tampil sama dengan 'A' yang tersimpan — CHECK di database hanya
+// menerima huruf kapital.
 function normalizeTreeColumn(value: string | null | undefined): string | null {
-  return normalizeOptionalText(value);
+  const normalized = normalizeOptionalText(value);
+  return normalized ? normalized.toUpperCase() : null;
 }
 
 function getFullMonthDiff(startDate: Date, endDate: Date): number {

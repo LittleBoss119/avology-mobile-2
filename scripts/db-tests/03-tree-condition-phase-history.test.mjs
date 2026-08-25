@@ -27,35 +27,69 @@ await runStage(STAGE, async () => {
   const { client: ownerClient } = await createSignedInClient(state.ownerEmail, state.password);
   const { client: workerClient } = await createSignedInClient(state.workerEmail, state.password);
 
-  const tree = await getSingle(
+  // Lewat RPC, bukan INSERT langsung: sejak migrasi 055 membuat pohon berarti
+  // membuat posisinya DAN siklus tanam pertamanya dalam satu transaksi, dan
+  // variety/planted_at sudah tidak ada lagi di tabel trees.
+  //
+  // Baris = angka, kolom = huruf. Stage ini menaruh tepat satu pohon di kebun
+  // bersama, jadi posisi 1-A tidak pernah bentrok dengan stage lain (satu-
+  // satunya stage lain yang menanam pohon, 12, memakai kebunnya sendiri).
+  const treeId = await expectSuccess(
     STAGE,
-    'owner creates tree',
-    ownerClient
-      .from('trees')
-      .insert({
-        farm_id: state.farmId,
-        tree_code: `TREE-${state.runId}`,
-        row_position: 'A',
-        column_position: '1',
-        variety: 'Alpukat Test',
-        planted_at: todayIso(),
-      })
-      .select('id, farm_id, tree_code, variety, is_archived')
-      .single(),
-    'Active owner should be able to insert trees.'
+    'owner creates tree with its first planting',
+    ownerClient.rpc('create_tree_with_planting', {
+      p_farm_id: state.farmId,
+      p_row_position: 1,
+      p_column_position: 'A',
+      p_variety: 'Alpukat Test',
+      p_planted_at: todayIso(),
+    }),
+    'Check create_tree_with_planting(uuid, smallint, text, text, date) after migration 055.'
   );
 
-  await getSingle(
+  const tree = await getSingle(
     STAGE,
-    'owner updates tree',
+    'created tree is readable',
     ownerClient
       .from('trees')
-      .update({ variety: 'Alpukat Test Updated' })
+      .select('id, farm_id, tree_code, is_archived')
+      .eq('id', treeId)
+      .single(),
+    'Active members should be able to read trees in their farm.'
+  );
+  assertEqual(STAGE, 'tree_code is derived from its position', tree.tree_code, '1-A',
+    'tree_code is GENERATED from row_position and column_position (migration 054).');
+
+  const firstPlanting = await getSingle(
+    STAGE,
+    'first planting cycle exists',
+    ownerClient
+      .from('tree_plantings')
+      .select('id, cycle_no, variety, ended_at')
+      .eq('tree_id', treeId)
+      .single(),
+    'create_tree_with_planting should open cycle 1 in the same transaction.'
+  );
+  assertEqual(STAGE, 'first cycle is numbered 1', firstPlanting.cycle_no, 1,
+    'The first planting on a position must be cycle_no 1.');
+  assertEqual(STAGE, 'first cycle is still running', firstPlanting.ended_at, null,
+    'A newly created planting must not be closed.');
+
+  // Yang bisa diedit di trees tinggal POSISINYA. variety pindah ke
+  // tree_plantings di migrasi 055, jadi update lama tidak lagi mungkin.
+  const movedTree = await getSingle(
+    STAGE,
+    'owner updates tree position',
+    ownerClient
+      .from('trees')
+      .update({ column_position: 'B' })
       .eq('id', tree.id)
-      .select('id, variety')
+      .select('id, tree_code')
       .single(),
     'Active owner should be able to update trees.'
   );
+  assertEqual(STAGE, 'tree_code follows the new position', movedTree.tree_code, '1-B',
+    'tree_code is generated, so moving a tree must regenerate it.');
 
   const archivedTree = await getSingle(
     STAGE,

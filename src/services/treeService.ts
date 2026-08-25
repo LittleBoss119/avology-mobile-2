@@ -9,26 +9,34 @@ import type {
   MemberStatus,
   ServiceResult,
   SuccessData,
+  EndTreePlantingInput,
+  StartTreePlantingData,
+  StartTreePlantingInput,
   Tree,
   TreeArchiveInput,
   TreeConditionStatus,
   UpdateTreeInput,
   UUID,
 } from '../types/domain';
+import {
+  readActivePlanting,
+  TREE_SELECT_WITH_ACTIVE_PLANTING,
+  type TreePlantingRow,
+} from './treePlantingShared';
 import { fail, ok } from '../utils/serviceResult';
-import { buildTreeDisplayCode } from '../utils/treeFormat';
-
-const TREE_SELECT =
-  'id, farm_id, tree_code, row_position, column_position, variety, planted_at, current_condition, current_growth_phase, is_archived, created_at, updated_at';
+const TREE_SELECT = TREE_SELECT_WITH_ACTIVE_PLANTING;
 
 type TreeRow = {
   id: string;
   farm_id: string;
+  // Kolom generated (migrasi 054) — hanya dibaca, tidak pernah ditulis.
   tree_code: string;
-  row_position: string | null;
+  // smallint di database; PostgREST mengirimnya sebagai number.
+  row_position: number | null;
   column_position: string | null;
-  variety: string | null;
-  planted_at: string | null;
+  // Sudah tersaring ke siklus aktif oleh filter di query. Paling banyak satu
+  // baris — dijamin partial unique index tree_plantings_one_active_per_tree.
+  tree_plantings: TreePlantingRow[] | null;
   current_condition: TreeConditionStatus;
   current_growth_phase: GrowthPhase | null;
   is_archived: boolean;
@@ -46,12 +54,15 @@ type MembershipRow = {
   status: MemberStatus;
 };
 
+// tree_code SENGAJA tidak ada di sini. Kolomnya generated sejak migrasi 054;
+// menyertakannya di payload UPDATE membuat Postgres menolak seluruh statement
+// dengan "column tree_code can only be updated to DEFAULT".
+//
+// variety dan planted_at juga tidak ada: keduanya pindah ke tree_plantings di
+// migrasi 055, dan kolomnya sudah tidak ada lagi di trees.
 type TreeUpdateRow = Partial<{
-  tree_code: string;
-  row_position: string | null;
-  column_position: string | null;
-  variety: string | null;
-  planted_at: string | null;
+  row_position: number;
+  column_position: string;
 }>;
 
 export async function getTrees(input: GetTreesInput): Promise<ServiceResult<Tree[]>> {
@@ -61,7 +72,13 @@ export async function getTrees(input: GetTreesInput): Promise<ServiceResult<Tree
     return fail(accessResult.error);
   }
 
-  let query = supabase.from('trees').select(TREE_SELECT).eq('farm_id', input.farmId);
+  let query = supabase
+    .from('trees')
+    .select(TREE_SELECT)
+    .eq('farm_id', input.farmId)
+    // Menyaring baris EMBEDDED, bukan induknya: pohon yang posisinya sedang
+    // kosong tetap terbawa, hanya dengan tree_plantings kosong.
+    .is('tree_plantings.ended_at', null);
 
   const search = normalizeOptionalText(input.search);
 
@@ -70,14 +87,25 @@ export async function getTrees(input: GetTreesInput): Promise<ServiceResult<Tree
 
     if (sanitizedSearch) {
       const pattern = `%${sanitizedSearch}%`;
-      query = query.or(
-        [
-          `tree_code.ilike.${pattern}`,
-          `row_position.ilike.${pattern}`,
-          `column_position.ilike.${pattern}`,
-          `variety.ilike.${pattern}`,
-        ].join(',')
-      );
+      // Tinggal tree_code. Dua cabang lain dibuang karena kolomnya tidak lagi
+      // ada di trees:
+      //   * row_position -- smallint sejak 054; `ilike` pada angka ditolak
+      //     Postgres dan menggagalkan SELURUH query, bukan cuma cabangnya.
+      //     column_position ikut dibuang karena mubazir: tree_code adalah kolom
+      //     generated '{baris}-{kolom}', jadi ia sudah mencakup keduanya.
+      //   * variety -- pindah ke tree_plantings di 055.
+      //
+      // Varietas TIDAK dicarikan lewat resource embedded. Filter PostgREST pada
+      // embedded resource menyaring baris ANAK, bukan induknya, jadi ia tidak
+      // bisa dipakai untuk membuang pohon dari hasil; menjangkaunya menuntut
+      // `!inner` join yang mengubah bentuk query dan diam-diam membuang pohon
+      // berposisi kosong.
+      //
+      // Tidak mendesak: penyaring `search` ini TIDAK PERNAH dipakai. Kelima
+      // pemanggil getTrees hanya mengirim farmId dan archived; pencarian yang
+      // benar-benar dilihat pengguna dilakukan di sisi klien pada layar daftar
+      // pohon, dan di sana varietas tetap ikut tercari.
+      query = query.or([`tree_code.ilike.${pattern}`].join(','));
     }
   }
 
@@ -112,6 +140,7 @@ export async function getTreeDetail(
     .from('trees')
     .select(TREE_SELECT)
     .eq('id', input.treeId)
+    .is('tree_plantings.ended_at', null)
     .maybeSingle<TreeRow>();
 
   if (error) {
@@ -128,12 +157,10 @@ export async function getTreeDetail(
 export async function createTree(
   input: CreateTreeInput
 ): Promise<ServiceResult<CreateTreeData>> {
-  const rowPosition = normalizeOptionalText(input.rowPosition);
-  const columnPosition = normalizeOptionalText(input.columnPosition);
-  const treeCode = buildTreeDisplayCode({ columnPosition, rowPosition });
+  const position = normalizeTreePosition(input.rowPosition, input.columnPosition);
 
-  if (!treeCode) {
-    return fail(new Error('Baris dan kolom wajib diisi untuk membuat kode pohon.'));
+  if (position instanceof Error) {
+    return fail(position);
   }
 
   const accessResult = await ensureActiveOwner(input.farmId);
@@ -142,25 +169,80 @@ export async function createTree(
     return fail(accessResult.error);
   }
 
-  const { data, error } = await supabase
-    .from('trees')
-    .insert({
-      farm_id: input.farmId,
-      tree_code: treeCode,
-      row_position: rowPosition,
-      column_position: columnPosition,
-      variety: normalizeOptionalText(input.variety),
-      planted_at: normalizeOptionalText(input.plantedAt),
-    })
-    .select('id')
-    .single<{ id: string }>();
+  // Lewat RPC, bukan INSERT langsung. Membuat pohon berarti membuat DUA baris —
+  // posisinya di trees dan siklus tanam pertamanya di tree_plantings — dan
+  // pohon tanpa siklus adalah keadaan yang tidak sah. Hanya transaksi di sisi
+  // database yang bisa menjaminnya, dan klien Supabase tidak bisa membungkus
+  // dua statement dalam satu transaksi.
+  //
+  // Rentang posisi terhadap ukuran kebun tidak diperiksa di sini maupun di RPC:
+  // itu milik validate_tree_position_trigger (migrasi 054).
+  const { data, error } = await supabase.rpc('create_tree_with_planting', {
+    p_column_position: position.columnPosition,
+    p_farm_id: input.farmId,
+    p_planted_at: normalizeOptionalText(input.plantedAt),
+    p_row_position: position.rowPosition,
+    p_variety: normalizeOptionalText(input.variety),
+  });
 
   if (error) {
     return fail(error, 'Gagal menambahkan pohon.');
   }
 
+  if (!data) {
+    return fail(new Error('RPC create_tree_with_planting tidak mengembalikan tree id.'));
+  }
+
   return ok({
-    treeId: data.id,
+    treeId: data as UUID,
+  });
+}
+
+// Menutup siklus tanam yang sedang berjalan di sebuah posisi.
+//
+// SENGAJA tidak menyentuh kondisi pohon. Mencatat kondisi 'mati' tidak
+// memanggil fungsi ini, dan fungsi ini tidak mengubah currentCondition —
+// kondisi adalah pengamatan lapangan yang bisa dikoreksi, akhir siklus adalah
+// keputusan owner yang tersimpan permanen.
+export async function endTreePlanting(
+  input: EndTreePlantingInput
+): Promise<ServiceResult<SuccessData>> {
+  const { error } = await supabase.rpc('end_tree_planting', {
+    p_end_reason: input.endReason,
+    p_ended_at: normalizeOptionalText(input.endedAt),
+    p_tree_id: input.treeId,
+  });
+
+  if (error) {
+    return fail(error, 'Gagal menutup siklus tanam.');
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
+// Menanami ulang posisi yang siklus sebelumnya sudah ditutup. RPC menolak
+// kalau masih ada siklus aktif, dan menghitung cycle_no berikutnya sendiri.
+export async function startTreePlanting(
+  input: StartTreePlantingInput
+): Promise<ServiceResult<StartTreePlantingData>> {
+  const { data, error } = await supabase.rpc('start_tree_planting', {
+    p_planted_at: normalizeOptionalText(input.plantedAt),
+    p_tree_id: input.treeId,
+    p_variety: normalizeOptionalText(input.variety),
+  });
+
+  if (error) {
+    return fail(error, 'Gagal memulai siklus tanam baru.');
+  }
+
+  if (!data) {
+    return fail(new Error('RPC start_tree_planting tidak mengembalikan planting id.'));
+  }
+
+  return ok({
+    plantingId: data as UUID,
   });
 }
 
@@ -326,36 +408,19 @@ async function getCurrentUserMembership(
 
 function buildTreeUpdates(input: UpdateTreeInput): TreeUpdateRow | Error {
   const updates: TreeUpdateRow = {};
-  const rowPosition = input.rowPosition !== undefined ? normalizeOptionalText(input.rowPosition) : undefined;
-  const columnPosition = input.columnPosition !== undefined ? normalizeOptionalText(input.columnPosition) : undefined;
 
-  if (input.rowPosition !== undefined) {
-    updates.row_position = rowPosition ?? null;
-  }
-
-  if (input.columnPosition !== undefined) {
-    updates.column_position = columnPosition ?? null;
-  }
-
+  // Baris dan kolom diperlakukan sebagai SATU kesatuan: keduanya NOT NULL di
+  // database dan bersama-sama membentuk tree_code, jadi menyentuh salah satu
+  // saja tidak masuk akal. Kalau salah satunya disebut, keduanya harus sah.
   if (input.rowPosition !== undefined || input.columnPosition !== undefined) {
-    const treeCode = buildTreeDisplayCode({
-      columnPosition,
-      rowPosition,
-    });
+    const position = normalizeTreePosition(input.rowPosition, input.columnPosition);
 
-    if (!treeCode) {
-      return new Error('Baris dan kolom wajib diisi untuk membuat kode pohon.');
+    if (position instanceof Error) {
+      return position;
     }
 
-    updates.tree_code = treeCode;
-  }
-
-  if (input.variety !== undefined) {
-    updates.variety = normalizeOptionalText(input.variety);
-  }
-
-  if (input.plantedAt !== undefined) {
-    updates.planted_at = normalizeOptionalText(input.plantedAt);
+    updates.row_position = position.rowPosition;
+    updates.column_position = position.columnPosition;
   }
 
   return updates;
@@ -368,14 +433,52 @@ function mapTree(row: TreeRow): Tree {
     treeCode: row.tree_code,
     rowPosition: row.row_position,
     columnPosition: row.column_position,
-    variety: row.variety,
-    plantedAt: row.planted_at,
+    activePlanting: readActivePlanting(row.tree_plantings),
     currentCondition: row.current_condition,
     currentGrowthPhase: row.current_growth_phase,
     isArchived: row.is_archived,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+// Satu-satunya tempat nilai form diubah jadi bentuk yang diterima database.
+//
+// Aturannya cerminan constraint di migrasi 054: row_position smallint dengan
+// CHECK 1..999, column_position text dengan CHECK '^[A-Z]$'. Ditegakkan di sini
+// juga supaya pesannya terbaca pekerja, bukan "violates check constraint".
+//
+// Rentang terhadap UKURAN KEBUN sengaja TIDAK diperiksa di sini — itu milik
+// trigger validate_tree_position, yang punya akses ke baris farms. Klien hanya
+// menutup bentuknya.
+function normalizeTreePosition(
+  rowValue: string | null | undefined,
+  columnValue: string | null | undefined
+): { rowPosition: number; columnPosition: string } | Error {
+  const rawRow = normalizeOptionalText(rowValue);
+  const rawColumn = normalizeOptionalText(columnValue);
+
+  if (!rawRow || !rawColumn) {
+    return new Error('Baris dan kolom wajib diisi.');
+  }
+
+  if (!/^\d+$/.test(rawRow)) {
+    return new Error('Baris harus berupa angka.');
+  }
+
+  const rowPosition = Number(rawRow);
+
+  if (rowPosition < 1 || rowPosition > 999) {
+    return new Error('Baris harus antara 1 dan 999.');
+  }
+
+  const columnPosition = rawColumn.toUpperCase();
+
+  if (!/^[A-Z]$/.test(columnPosition)) {
+    return new Error('Kolom harus satu huruf A sampai Z.');
+  }
+
+  return { columnPosition, rowPosition };
 }
 
 function normalizeOptionalText(value: string | null | undefined): string | null {

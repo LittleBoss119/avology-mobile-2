@@ -413,7 +413,7 @@ function filterTrees(
     const searchableText = [
       formatTreeDisplayCode(tree),
       tree.treeCode,
-      tree.variety,
+      tree.activePlanting?.variety,
       tree.rowPosition,
       tree.columnPosition,
     ]
@@ -430,7 +430,7 @@ function matchesAgeRanges(tree: Tree, ageRanges: TreeAgeRange[]): boolean {
     return true;
   }
 
-  const ageYears = getTreeAgeYears(tree.plantedAt);
+  const ageYears = getTreeAgeYears(tree.activePlanting?.plantedAt);
 
   if (ageYears === null) {
     return false;

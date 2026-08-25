@@ -313,7 +313,7 @@ export function TreeRecordEditScreen({
           </Text>
           <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
           <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-          <MetaRow label="Varietas" value={tree.variety ?? 'Belum diisi'} />
+          <MetaRow label="Varietas" value={tree.activePlanting?.variety ?? 'Belum diisi'} />
         </Card>
       ) : null}
 

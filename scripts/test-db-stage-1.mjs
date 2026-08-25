@@ -256,18 +256,17 @@ async function main() {
 
   logStep('9. Owner create tree untuk data operasional minimal');
 
-  const createTree = await owner
-    .from('trees')
-    .insert({
-      farm_id: farmId,
-      tree_code: 'T-001',
-      row_number: 1,
-      column_number: 1,
-      variety: 'Miki',
-      planted_at: '2024-01-01',
-    })
-    .select('*')
-    .single();
+  // Lewat RPC sejak migrasi 055: pohon dan siklus tanam pertamanya lahir dalam
+  // satu transaksi. Sebelumnya blok ini memakai row_number / column_number --
+  // nama kolom yang TIDAK PERNAH ada (aslinya row_position / column_position,
+  // 003:5-6). Skrip ini di luar suite, jadi salahnya tidak pernah ketahuan.
+  const createTree = await owner.rpc('create_tree_with_planting', {
+    p_farm_id: farmId,
+    p_row_position: 1,
+    p_column_position: 'A',
+    p_variety: 'Miki',
+    p_planted_at: '2024-01-01',
+  });
 
   logResult('Owner create tree', createTree.error, createTree.data);
 
