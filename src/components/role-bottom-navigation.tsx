@@ -18,9 +18,12 @@ type NavigationIconName = 'document' | 'farm' | 'home' | 'leaf' | 'checklist' | 
 
 // Peta nama ikon navigasi (internal) → IconName Tabler di icons.tsx.
 //
-// 'document' dan 'farm' tidak lagi dipakai sejak item Laporan dan Kebun dicabut,
-// tapi sengaja DIBIARKAN: keduanya masih ikon yang benar untuk kedua tujuan itu
-// kalau suatu saat kembali ke bar, dan menghapusnya tidak menghemat apa pun.
+// 'farm' tidak lagi dipakai sejak item Kebun dicabut dari bar, tapi sengaja
+// DIBIARKAN: ia masih ikon yang benar untuk tujuan itu kalau suatu saat kembali
+// ke bar, dan menghapusnya tidak menghemat apa pun.
+//
+// 'document' juga dibiarkan walau modul laporan sudah dibuang (migrasi 053) —
+// ia ikon generik untuk dokumen, bukan milik laporan operasional.
 const NAV_ICON: Record<NavigationIconName, IconName> = {
   home: 'home',
   checklist: 'list-check',
@@ -107,15 +110,16 @@ export function RoleBottomNavigation({ role }: { role: MemberRole }) {
   );
 }
 
-// Empat item, bukan lima. Laporan dan Kebun dicabut dari bar dan pindah ke
-// baris tujuan di dashboard (app/(owner)/owner/index.tsx) — keduanya layar yang
-// dibuka sesekali, bukan tempat yang ditinggali sepanjang hari.
+// Empat item. Kebun dicabut dari bar dan pindah ke baris tujuan di dashboard
+// (app/(owner)/owner/index.tsx) — layar yang dibuka sesekali, bukan tempat yang
+// ditinggali sepanjang hari. Laporan dulu diperlakukan sama; modulnya dibuang
+// seluruhnya di migrasi 053.
 //
-// Kebun dan Laporan kini hanya dicapai dari Beranda, jadi keduanya diperlakukan
-// sebagai TURUNAN Beranda: path-nya masuk ke `match` item Beranda supaya ikon
-// Beranda tetap tersorot selama user berada di cabang itu. `href`-nya tidak
-// ikut berubah — menekan Beranda tetap membawa ke '/owner', bukan ke tempat
-// terakhir di cabangnya.
+// Kebun kini hanya dicapai dari Beranda, jadi ia diperlakukan sebagai TURUNAN
+// Beranda: path-nya masuk ke `match` item Beranda supaya ikon Beranda tetap
+// tersorot selama user berada di cabang itu. `href`-nya tidak ikut berubah —
+// menekan Beranda tetap membawa ke '/owner', bukan ke tempat terakhir di
+// cabangnya.
 //
 // '/owner/farm-profile' dan '/owner/workers' harus disebut sendiri-sendiri:
 // keduanya cabang dari layar Kebun tapi bukan subpath '/owner/farm/', sehingga
@@ -128,7 +132,7 @@ const ownerNavigationItems: NavigationItem[] = [
     href: '/owner',
     icon: 'home',
     label: 'Beranda',
-    match: ['/owner', '/owner/farm', '/owner/farm-profile', '/owner/workers', '/owner/reports'],
+    match: ['/owner', '/owner/farm', '/owner/farm-profile', '/owner/workers'],
   },
   {
     href: '/owner/trees',
@@ -168,7 +172,7 @@ const workerNavigationItems: NavigationItem[] = [
     href: '/worker',
     icon: 'home',
     label: 'Beranda',
-    match: ['/worker', '/worker/farm', '/worker/reports'],
+    match: ['/worker', '/worker/farm'],
   },
   {
     href: '/worker/trees',
@@ -200,7 +204,6 @@ const ownerTopLevelPaths = [
   '/owner/trees',
   '/owner/schedules',
   '/owner/tasks',
-  '/owner/reports',
   '/owner/farm',
   '/owner/profile',
 ];
@@ -209,7 +212,6 @@ const workerTopLevelPaths = [
   '/worker',
   '/worker/tasks',
   '/worker/trees',
-  '/worker/reports',
   '/worker/farm',
   '/worker/profile',
 ];

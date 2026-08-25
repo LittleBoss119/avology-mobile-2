@@ -1,24 +1,16 @@
-import {
-  canCreateTaskFromReportStatus,
-  getClosedReportTaskMessage,
-} from '../constants/operationalReport';
 import { supabase } from '../lib/supabase';
 import type {
   CareActivity,
   CareCategory,
   CareTask,
   CareTaskDetail,
-  ResolveReportWithTaskData,
-  ResolveReportWithTaskInput,
   CompleteTaskData,
   CompleteTaskInput,
   GetFarmTasksInput,
-  GetOperationalReportFollowUpTasksInput,
   GetTaskDetailInput,
   GetWorkerTasksInput,
   MemberRole,
   MemberStatus,
-  OperationalReportStatus,
   PostponeTaskData,
   PostponeTaskInput,
   RollbackCompletedTaskActivityInput,
@@ -45,13 +37,12 @@ import { sweepMissedSchedules } from './missedScheduleSweep';
 import { fail, ok } from '../utils/serviceResult';
 
 const CARE_TASK_SELECT =
-  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_tree_id, custom_target_note, due_date, status, missed_at, requires_photo, created_at, updated_at';
+  'id, farm_id, care_schedule_id, assigned_to, assigned_by, title, category, instruction, target_type, target_tree_id, custom_target_note, due_date, status, missed_at, requires_photo, created_at, updated_at';
 
 type CareTaskRow = {
   id: string;
   farm_id: string;
   care_schedule_id: string | null;
-  operational_report_id: string | null;
   assigned_to: string;
   assigned_by: string;
   title: string;
@@ -71,18 +62,6 @@ type CareTaskRow = {
 type MembershipRow = {
   role: MemberRole;
   status: MemberStatus;
-};
-
-type OperationalReportSourceRow = {
-  id: string;
-  farm_id: string;
-  status: OperationalReportStatus;
-};
-
-type ExistingFollowUpTaskRow = {
-  id: string;
-  status: TaskStatus;
-  title: string;
 };
 
 type ScheduleCancellationRow = {
@@ -208,204 +187,6 @@ export async function getTaskDetail(
       scheduleIsCancelled: scheduleCancellationResult.data,
     }),
     activities: (activitiesResult.data ?? []).map(mapCareActivity),
-  });
-}
-
-export async function getOperationalReportFollowUpTasks(
-  input: GetOperationalReportFollowUpTasksInput
-): Promise<ServiceResult<CareTaskDetail[]>> {
-  const reportId = normalizeRequiredText(
-    input.operationalReportId,
-    'Laporan operasional tidak ditemukan.'
-  );
-
-  if (reportId instanceof Error) {
-    return fail(reportId);
-  }
-
-  // BUKAN duplikasi dari baris laporan yang sudah dipegang layar — ini PENJAGA
-  // AKSES, dan datanya memang tidak dipakai di bawah. Tanpa dia, laporan yang
-  // tidak boleh diakses pemanggil akan lolos ke query care_tasks yang juga
-  // ber-RLS dan balik sebagai daftar kosong, bukan error — "tidak punya tugas"
-  // jadi tak terbedakan dari "tidak boleh kamu lihat". Jangan dihapus.
-  const reportResult = await getAccessibleOperationalReportSource(reportId);
-
-  if (reportResult.error) {
-    return fail(reportResult.error);
-  }
-
-  const tasksResult = await supabase
-    .from('care_tasks')
-    .select(CARE_TASK_SELECT)
-    .eq('operational_report_id', reportId)
-    // Sejalan dengan getExistingActiveFollowUpTask di bawah, yang sejak migrasi
-    // 051 tidak lagi menganggap tugas terlepas sebagai tindak lanjut aktif.
-    // Kalau daftar ini tetap menampilkannya, owner melihat dua tugas tindak
-    // lanjut untuk satu laporan padahal hanya satu yang hidup.
-    .is('released_at', null)
-    .order('due_date', { ascending: true })
-    .order('created_at', { ascending: false })
-    .returns<CareTaskRow[]>();
-
-  if (tasksResult.error) {
-    return fail(tasksResult.error, 'Gagal memuat tugas tindak lanjut laporan.');
-  }
-
-  const tasks = tasksResult.data ?? [];
-
-  if (tasks.length === 0) {
-    return ok([]);
-  }
-
-  const taskIds = tasks.map((task) => task.id);
-  const activitiesResult = await supabase
-    .from('care_activities')
-    .select(CARE_ACTIVITY_SELECT)
-    .in('care_task_id', taskIds)
-    .order('performed_at', { ascending: false })
-    .returns<CareActivityRow[]>();
-
-  if (activitiesResult.error) {
-    return fail(activitiesResult.error, 'Gagal memuat hasil kerja tindak lanjut laporan.');
-  }
-
-  const activitiesByTaskId = new Map<string, CareActivity[]>();
-
-  for (const activity of activitiesResult.data ?? []) {
-    const mappedActivity = mapCareActivity(activity);
-
-    // Catatan inisiatif tidak punya tugas induk, jadi tidak ikut dikelompokkan.
-    if (!mappedActivity.careTaskId) {
-      continue;
-    }
-
-    const existingActivities = activitiesByTaskId.get(mappedActivity.careTaskId) ?? [];
-    existingActivities.push(mappedActivity);
-    activitiesByTaskId.set(mappedActivity.careTaskId, existingActivities);
-  }
-
-  return ok(
-    tasks.map((task) => ({
-      ...mapCareTask(task),
-      activities: activitiesByTaskId.get(task.id) ?? [],
-    }))
-  );
-}
-
-// Keputusan owner "buat tugas tindak lanjut".
-//
-// RPC create_task_from_operational_report (migration 034) meng-insert tugas
-// DAN menyetel status='in_progress' + resolution='task' pada laporan dalam satu
-// transaksi. JANGAN memanggil aksi status apa pun setelah ini — laporan sudah
-// berada di keadaan akhir yang benar.
-export async function resolveReportWithTask(
-  input: ResolveReportWithTaskInput
-): Promise<ServiceResult<ResolveReportWithTaskData>> {
-  const reportId = normalizeRequiredText(
-    input.operationalReportId,
-    'Laporan operasional tidak ditemukan.'
-  );
-
-  if (reportId instanceof Error) {
-    return fail(reportId);
-  }
-
-  const workerId = normalizeRequiredText(
-    input.assignedWorkerId,
-    'Pekerja aktif wajib dipilih.'
-  );
-
-  if (workerId instanceof Error) {
-    return fail(workerId);
-  }
-
-  const dueDate = normalizeTaskDate(input.dueDate);
-
-  if (dueDate instanceof Error) {
-    return fail(dueDate);
-  }
-
-  const title = normalizeRequiredText(input.title, 'Judul tugas wajib diisi.');
-
-  if (title instanceof Error) {
-    return fail(title);
-  }
-
-  // Kategori wajib sejak migrasi 047. Ditolak di sini supaya pesannya terbaca;
-  // tanpa ini pemanggil hanya melihat exception mentah dari RPC.
-  if (!input.category) {
-    return fail(new Error('Kategori perawatan wajib dipilih.'));
-  }
-
-  const target = normalizeTaskTarget({
-    customTargetNote: input.customTargetNote,
-    targetTreeId: input.targetTreeId,
-    targetType: input.targetType,
-  });
-
-  if (target instanceof Error) {
-    return fail(target);
-  }
-
-  const reportResult = await getAccessibleOperationalReportSource(reportId);
-
-  if (reportResult.error) {
-    return fail(reportResult.error);
-  }
-
-  const accessResult = await ensureActiveOwner(
-    reportResult.data.farm_id,
-    'Hanya pemilik aktif yang dapat membuat tindak lanjut laporan operasional.'
-  );
-
-  if (accessResult.error) {
-    return fail(accessResult.error);
-  }
-
-  if (!canCreateTaskFromReportStatus(reportResult.data.status)) {
-    return fail(new Error(getClosedReportTaskMessage(reportResult.data.status)));
-  }
-
-  const existingTaskResult = await getExistingActiveFollowUpTask(reportId);
-
-  if (existingTaskResult.error) {
-    return fail(existingTaskResult.error);
-  }
-
-  if (existingTaskResult.data) {
-    return fail(
-      new Error('Laporan ini sudah memiliki tugas tindak lanjut aktif. Buka detail laporan untuk melihat tugas tersebut.')
-    );
-  }
-
-  const { data, error } = await supabase.rpc('create_task_from_operational_report', {
-    p_assigned_worker_id: workerId,
-    p_category: input.category,
-    p_custom_target_note: target.customTargetNote,
-    p_due_date: dueDate,
-    p_instruction: normalizeOptionalText(input.instruction),
-    p_operational_report_id: reportId,
-    // null = pertahankan catatan lama, '' = hapus catatan, teks = ganti catatan.
-    p_owner_response_note:
-      input.ownerResponseNote === null || input.ownerResponseNote === undefined
-        ? null
-        : input.ownerResponseNote.trim(),
-    p_requires_photo: input.requiresPhoto ?? false,
-    p_target_tree_id: target.targetTreeId,
-    p_target_type: target.targetType,
-    p_title: title,
-  });
-
-  if (error) {
-    return fail(error, 'Gagal membuat tugas tindak lanjut laporan operasional.');
-  }
-
-  if (!data) {
-    return fail(new Error('RPC create_task_from_operational_report tidak mengembalikan task id.'));
-  }
-
-  return ok({
-    taskId: data as UUID,
   });
 }
 
@@ -733,55 +514,6 @@ async function getTaskScheduleCancellationStatus(task: CareTaskRow): Promise<Ser
   return ok(data?.is_cancelled === true);
 }
 
-async function getAccessibleOperationalReportSource(
-  operationalReportId: UUID
-): Promise<ServiceResult<OperationalReportSourceRow>> {
-  const { data, error } = await supabase
-    .from('operational_reports')
-    .select('id, farm_id, status')
-    .eq('id', operationalReportId)
-    .maybeSingle<OperationalReportSourceRow>();
-
-  if (error) {
-    return fail(error, 'Gagal memeriksa laporan operasional.');
-  }
-
-  if (!data) {
-    return fail(new Error('Laporan operasional tidak ditemukan atau tidak dapat diakses.'));
-  }
-
-  return ok(data);
-}
-
-async function getExistingActiveFollowUpTask(
-  operationalReportId: UUID
-): Promise<ServiceResult<ExistingFollowUpTaskRow | null>> {
-  const { data, error } = await supabase
-    .from('care_tasks')
-    .select('id, status, title')
-    .eq('operational_report_id', operationalReportId)
-    .in('status', ['pending', 'postponed'])
-    // Defensif saja: tugas tindak lanjut laporan punya care_schedule_id NULL,
-    // dan sweep_missed_schedules (migrasi 048) hanya menandai tugas yang
-    // ter-join ke sebuah jadwal — jadi baris di sini tidak pernah terlewat.
-    // Filter dipasang agar tetap benar seandainya suatu saat ada tugas yang
-    // punya kedua sumber sekaligus.
-    .is('missed_at', null)
-    // Bukan defensif: tugas tindak lanjut laporan IKUT dilepas saat pekerjanya
-    // keluar (migrasi 051). Tanpa baris ini, klien tetap melaporkan "sudah ada
-    // tindak lanjut aktif" dan menghalangi owner sebelum RPC-nya sempat
-    // dipanggil — padahal penjaga di sisi database sudah dilonggarkan.
-    .is('released_at', null)
-    .limit(1)
-    .maybeSingle<ExistingFollowUpTaskRow>();
-
-  if (error) {
-    return fail(error, 'Gagal memeriksa tugas tindak lanjut aktif.');
-  }
-
-  return ok(data);
-}
-
 // getLatestActivityForTask() dihapus bersama updateLatestTaskRealization.
 // Penentuan "baris terakhir per tugas" kini sepenuhnya milik RPC
 // update_task_realization, lengkap dengan tie-breaker `id desc` yang tidak
@@ -947,7 +679,6 @@ function mapCareTask(
     farmId: row.farm_id,
     id: row.id,
     instruction: row.instruction,
-    operationalReportId: row.operational_report_id,
     requiresPhoto: row.requires_photo ?? false,
     scheduleIsCancelled: options.scheduleIsCancelled,
     status: row.status,
@@ -963,92 +694,9 @@ function normalizeRequiredText(value: string, message: string): string | Error {
   return normalized ? normalized : new Error(message);
 }
 
-function normalizeTaskDate(value: string): string | Error {
-  const normalized = value.trim();
-
-  if (!normalized) {
-    return new Error('Tanggal jatuh tempo wajib diisi.');
-  }
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    return new Error('Tanggal jatuh tempo harus memakai format YYYY-MM-DD.');
-  }
-
-  const date = new Date(`${normalized}T00:00:00`);
-
-  if (Number.isNaN(date.getTime()) || toLocalIsoDate(date) !== normalized) {
-    return new Error('Tanggal jatuh tempo tidak valid.');
-  }
-
-  return normalized;
-}
-
-function normalizeTaskTarget(input: {
-  targetType: TargetType | string | null | undefined;
-  targetTreeId?: string | null;
-  customTargetNote?: string | null;
-}):
-  | {
-      targetType: TargetType;
-      targetTreeId: string | null;
-      customTargetNote: string | null;
-    }
-  | Error {
-  if (!input.targetType) {
-    return new Error('Target tugas wajib dipilih.');
-  }
-
-  // Lihat catatan yang sama di normalizeManualTarget (careScheduleService):
-  // 'row'/'column' ditutup CHECK di database sejak migrasi 047.
-  if (!['farm', 'tree', 'custom'].includes(input.targetType)) {
-    return new Error('Target tugas tidak valid.');
-  }
-
-  if (input.targetType === 'farm') {
-    return {
-      customTargetNote: null,
-      targetTreeId: null,
-      targetType: 'farm',
-    };
-  }
-
-  if (input.targetType === 'tree') {
-    const treeId = normalizeOptionalText(input.targetTreeId);
-
-    if (!treeId) {
-      return new Error('Pohon target wajib dipilih.');
-    }
-
-    return {
-      customTargetNote: null,
-      targetTreeId: treeId,
-      targetType: 'tree',
-    };
-  }
-
-  const customTargetNote = normalizeOptionalText(input.customTargetNote);
-
-  if (!customTargetNote) {
-    return new Error('Catatan target khusus wajib diisi.');
-  }
-
-  return {
-    customTargetNote,
-    targetTreeId: null,
-    targetType: 'custom',
-  };
-}
-
 function normalizeOptionalText(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
-}
-
-function toLocalIsoDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 function isMissingSessionError(error: { message?: string; name?: string }): boolean {

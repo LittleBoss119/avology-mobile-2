@@ -17,7 +17,6 @@ import {
 //   - rantai tetap maju setelah DUA siklus terlewat berturut-turut
 //   - penyapu idempoten: panggilan kedua tidak menambah baris
 //   - jadwal tanpa masa toleransi tidak pernah dinyatakan terlewat
-//   - tugas dari laporan operasional tidak pernah dinyatakan terlewat
 //
 // Stage ini berdiri sendiri seperti stage 09: seluruh pelaku dan kebunnya
 // dibuat di dalam tes. Itu bukan gaya penulisan, melainkan syarat -- stage ini
@@ -303,64 +302,9 @@ await runStage(STAGE, async () => {
   assertEqual(STAGE, 'task of a never-expiring schedule stays unmissed', neverExpiresTask.missed_at, null,
     'sweep_missed_schedules requires s.grace_days is not null.');
 
-  // ---------- 6. Tugas laporan operasional tidak pernah terlewat ----------
-  //
-  // Penyaringnya bukan aturan tersendiri melainkan bentuk join-nya: tugas
-  // tindak lanjut punya care_schedule_id NULL sehingga tidak pernah ikut
-  // ter-join ke care_schedules pada 5a.
-  const report = await getSingle(
-    STAGE,
-    'worker creates operational report',
-    worker.client
-      .from('operational_reports')
-      .insert({
-        farm_id: farm.id,
-        reported_by: worker.userId,
-        category: 'broken_tool',
-        location_note: 'Missed sweep test shed',
-        description: 'Report used to build an overdue follow-up task',
-      })
-      .select('id, status')
-      .single(),
-    'Active workers should be allowed to insert operational_reports for their farm.'
-  );
-
-  const followUpTaskId = await expectSuccess(
-    STAGE,
-    'owner creates an overdue follow-up task from the report',
-    owner.client.rpc('create_task_from_operational_report', {
-      p_operational_report_id: report.id,
-      p_assigned_worker_id: worker.userId,
-      p_due_date: isoDateOffset(-30),
-      p_title: `Overdue Follow Up ${runId}`,
-      p_instruction: 'Follow-up task deliberately dated in the past',
-      p_target_type: 'farm',
-      p_category: 'other',
-      p_target_tree_id: null,
-      p_custom_target_note: null,
-    }),
-    'Check create_task_from_operational_report signature after migration 047.'
-  );
-
-  await expectSuccess(
-    STAGE,
-    'owner sweeps with an overdue follow-up task present',
-    owner.client.rpc('sweep_missed_schedules', { p_farm_id: farm.id }),
-    'Check sweep_missed_schedules(p_farm_id uuid).'
-  );
-
-  const followUpTask = await getSingle(
-    STAGE,
-    'operational report task is never marked missed',
-    owner.client
-      .from('care_tasks')
-      .select('id, missed_at, care_schedule_id')
-      .eq('id', followUpTaskId)
-      .single(),
-    'Tasks from operational reports have care_schedule_id NULL and must never be swept.'
-  );
-  assertEqual(STAGE, 'follow-up task has no parent schedule', followUpTask.care_schedule_id, null,
-    'create_task_from_operational_report should leave care_schedule_id NULL.');
-  assertEqual(STAGE, 'follow-up task stays unmissed despite being 30 days overdue', followUpTask.missed_at, null,
-    'sweep_missed_schedules 5a joins care_schedules, so report tasks can never match.');
+  // Bagian 6 lama -- "tugas laporan operasional tidak pernah terlewat" --
+  // dibuang bersama modul laporan (migrasi 053). Kasusnya sendiri sudah tidak
+  // mungkin terjadi: constraint care_tasks_source_check yang baru mewajibkan
+  // care_schedule_id terisi, jadi tidak ada lagi tugas tanpa jadwal induk yang
+  // bisa lolos dari join di 5a.
 });

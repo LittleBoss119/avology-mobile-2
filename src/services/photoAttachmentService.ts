@@ -5,15 +5,9 @@ import type { MemberRole, MemberStatus, ServiceResult, SuccessData, UUID } from 
 import type {
   ConditionRecordPhoto,
   ConditionRecordPhotoMap,
-  CountOperationalReportPhotosInput,
-  OperationalReportPhotoCountMap,
-  DeleteOperationalReportPhotoObjectsInput,
   DeleteTreeMainPhotoInput,
   DeletePhotoAttachmentInput,
   GetConditionRecordPhotosInput,
-  ListOperationalReportPhotosInput,
-  OperationalReportPhoto,
-  UploadOperationalReportPhotoInput,
   GetTreeMainPhotoData,
   GetPhotoSignedUrlData,
   ListConditionRecordPhotosForTreeInput,
@@ -49,12 +43,10 @@ const allowedEntityTypes: PhotoAttachmentEntityType[] = [
   'tree_main',
   'condition_record',
   'task_proof',
-  'operational_report',
 ];
 
 const entityPathFolders: Record<PhotoAttachmentEntityType, PhotoAttachmentPathFolder> = {
   condition_record: 'condition-reports',
-  operational_report: 'operational-reports',
   task_proof: 'task-proofs',
   tree_main: 'trees',
 };
@@ -816,231 +808,6 @@ export async function listTaskProofPhotosForActivities(
       entries.filter((entry): entry is [string, TaskProofPhoto] => entry !== null)
     )
   );
-}
-
-// ---------------------------------------------------------------------------
-// Foto laporan operasional
-// ---------------------------------------------------------------------------
-// Batasan yang DITEGAKKAN RLS (migration 035) — UI harus mengikuti ini, jangan
-// berasumsi lain:
-//   - HANYA pekerja pembuat laporan yang boleh upload dan hapus.
-//   - HANYA selama laporan masih berstatus 'new' DAN belum disentuh owner sama
-//     sekali (responded_by, responded_at, owner_response_note semuanya kosong).
-//     Begitu owner merespons, upload dan hapus langsung ditolak database.
-//   - Owner boleh MEMBACA, tidak boleh upload.
-//   - Laporan HARUS sudah ada sebelum upload, karena entity_id = report.id dan
-//     policy memverifikasinya ke tabel operational_reports. Jadi di form "Buat
-//     Laporan": insert laporan dulu, baru upload foto.
-//   - Kalau upload gagal, JANGAN rollback laporannya. Foto laporan bersifat
-//     opsional (beda dengan task_proof yang bisa wajib) — cukup peringatkan
-//     pekerja bahwa fotonya tidak terkirim.
-//
-// Path storage: farms/{farmId}/operational-reports/{reportId}/{ts}-{rand}.{ext}
-// (cabang generik buildPhotoStoragePath; sudah cocok dengan fungsi SQL
-// avology_storage_path_farm_id / _entity_folder / _entity_id).
-
-export async function uploadOperationalReportPhoto(
-  input: UploadOperationalReportPhotoInput
-): Promise<ServiceResult<OperationalReportPhoto>> {
-  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
-  const operationalReportId = normalizeRequiredText(
-    input.operationalReportId,
-    'Laporan operasional tidak valid.'
-  );
-
-  if (farmId instanceof Error) {
-    return fail(farmId);
-  }
-
-  if (operationalReportId instanceof Error) {
-    return fail(operationalReportId);
-  }
-
-  const uploadResult = await uploadPhotoAttachment({
-    base64: input.base64,
-    caption: input.caption,
-    entityId: operationalReportId,
-    entityType: 'operational_report',
-    farmId,
-    fileName: input.fileName,
-    isPrimary: false,
-    localUri: input.localUri,
-    mimeType: input.mimeType,
-  });
-
-  if (uploadResult.error) {
-    return fail(uploadResult.error, 'Foto laporan gagal diunggah.');
-  }
-
-  const signedUrlResult = await getPhotoSignedUrl(uploadResult.data.attachment.storagePath);
-
-  if (signedUrlResult.error) {
-    return fail(
-      signedUrlResult.error,
-      'Foto laporan berhasil diunggah, tetapi pratinjau gagal dimuat.'
-    );
-  }
-
-  return ok({
-    attachment: uploadResult.data.attachment,
-    signedUrl: signedUrlResult.data.signedUrl,
-  });
-}
-
-export async function listOperationalReportPhotos(
-  input: ListOperationalReportPhotosInput
-): Promise<ServiceResult<OperationalReportPhoto[]>> {
-  const photoResult = await listPhotoAttachments({
-    entityId: input.operationalReportId,
-    entityType: 'operational_report',
-    farmId: input.farmId,
-  });
-
-  if (photoResult.error) {
-    return fail(photoResult.error, 'Gagal memuat foto laporan.');
-  }
-
-  const photos = await Promise.all(
-    photoResult.data.map(async (attachment) => {
-      const signedUrlResult = await getPhotoSignedUrl(attachment.storagePath);
-
-      if (signedUrlResult.error) {
-        return null;
-      }
-
-      return {
-        attachment,
-        signedUrl: signedUrlResult.data.signedUrl,
-      };
-    })
-  );
-
-  return ok(photos.filter((photo): photo is OperationalReportPhoto => photo !== null));
-}
-
-// Jumlah foto untuk BANYAK laporan sekaligus — satu query, bukan N+1.
-// Sengaja tidak membuat signed URL: daftar laporan hanya butuh angkanya, dan
-// signed URL itu yang mahal (satu round-trip per foto). RLS tetap memfilter
-// baris, jadi pekerja hanya menghitung foto laporannya sendiri.
-export async function countOperationalReportPhotos(
-  input: CountOperationalReportPhotosInput
-): Promise<ServiceResult<OperationalReportPhotoCountMap>> {
-  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
-  const reportIds = Array.from(new Set(input.operationalReportIds.filter(Boolean)));
-
-  if (farmId instanceof Error) {
-    return fail(farmId);
-  }
-
-  if (reportIds.length === 0) {
-    return ok({});
-  }
-
-  const { data, error } = await supabase
-    .from('photo_attachments')
-    .select('entity_id')
-    .eq('farm_id', farmId)
-    .eq('entity_type', 'operational_report')
-    .in('entity_id', reportIds)
-    .returns<Array<{ entity_id: string }>>();
-
-  if (error) {
-    return fail(error, 'Gagal memuat jumlah foto laporan.');
-  }
-
-  const counts: OperationalReportPhotoCountMap = {};
-
-  for (const row of data ?? []) {
-    counts[row.entity_id] = (counts[row.entity_id] ?? 0) + 1;
-  }
-
-  return ok(counts);
-}
-
-// Hapus satu foto laporan (objek storage dulu, baru baris metadata — urutan itu
-// sudah benar di deletePhotoAttachment dan penting karena policy DELETE storage
-// memakai baris photo_attachments sebagai bukti kepemilikan).
-export async function deleteOperationalReportPhoto(
-  input: DeletePhotoAttachmentInput
-): Promise<ServiceResult<SuccessData>> {
-  const result = await deletePhotoAttachment(input);
-
-  if (result.error) {
-    return fail(result.error, 'Foto laporan gagal dihapus.');
-  }
-
-  return ok(result.data);
-}
-
-// Bersih-bersih objek storage SEBELUM RPC delete_own_operational_report jalan.
-// RPC itu menghapus baris photo_attachments DAN baris laporannya sekaligus;
-// setelah itu tidak ada lagi yang membuktikan kepemilikan file ke policy DELETE
-// storage, jadi file yang belum sempat dihapus jadi yatim permanen.
-//
-// Sengaja TIDAK menghapus baris photo_attachments di sini — biar RPC yang
-// melakukannya secara transaksional bersama laporannya.
-export async function deleteOperationalReportPhotoObjects(
-  input: DeleteOperationalReportPhotoObjectsInput
-): Promise<ServiceResult<SuccessData>> {
-  const photoResult = await listPhotoAttachments({
-    entityId: input.operationalReportId,
-    entityType: 'operational_report',
-    farmId: input.farmId,
-  });
-
-  if (photoResult.error) {
-    logOperationalReportPhotoCleanupWarning('list-failed', {
-      message: photoResult.error.message,
-      operationalReportId: input.operationalReportId,
-    });
-
-    return fail(photoResult.error, 'Gagal memeriksa foto laporan.');
-  }
-
-  const storagePaths = photoResult.data.map((attachment) => attachment.storagePath);
-
-  if (storagePaths.length === 0) {
-    return ok({
-      success: true,
-    });
-  }
-
-  const removeResult = await supabase.storage.from(PHOTO_STORAGE_BUCKET).remove(storagePaths);
-
-  if (removeResult.error) {
-    logOperationalReportPhotoCleanupWarning('remove-failed', {
-      message: removeResult.error.message,
-      operationalReportId: input.operationalReportId,
-      requested: storagePaths.length,
-    });
-
-    return fail(removeResult.error, 'Sebagian file foto laporan gagal dihapus.');
-  }
-
-  const removedCount = removeResult.data?.length ?? 0;
-
-  if (removedCount < storagePaths.length) {
-    logOperationalReportPhotoCleanupWarning('remove-partial', {
-      operationalReportId: input.operationalReportId,
-      removed: removedCount,
-      requested: storagePaths.length,
-    });
-  }
-
-  return ok({
-    success: true,
-  });
-}
-
-function logOperationalReportPhotoCleanupWarning(
-  stage: string,
-  payload: Record<string, unknown>
-): void {
-  if (typeof __DEV__ === 'undefined' || !__DEV__) {
-    return;
-  }
-
-  console.warn('[operational-report-photo-cleanup]', stage, payload);
 }
 
 export async function listPhotoAttachments(

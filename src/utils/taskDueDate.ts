@@ -36,7 +36,7 @@ export function getTodayIsoDate(now: Date = new Date()): string {
 
 // Timestamptz dari database (mis. '2026-08-10T04:12:00+00:00') menjadi tanggal
 // WIB 'YYYY-MM-DD', bentuk yang dimengerti dayDifference dan seluruh util di
-// file ini. Kolom seperti operational_reports.responded_at adalah timestamptz,
+// file ini. Kolom seperti care_activities.performed_at adalah timestamptz,
 // sedangkan semua klasifikasi waktu di sini bekerja pada tanggal murni — ini
 // jembatannya, dan sengaja tinggal di file ini supaya layar tidak pernah
 // menghitung offset WIB sendiri.

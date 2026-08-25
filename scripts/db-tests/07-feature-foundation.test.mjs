@@ -26,7 +26,6 @@ await runStage(STAGE, async () => {
     'joinCode',
     'treeId',
     'workerId',
-    'operationalReportId',
   ]);
 
   const { client: ownerClient } = await createSignedInClient(state.ownerEmail, state.password);
@@ -42,7 +41,7 @@ await runStage(STAGE, async () => {
         tree_id: state.treeId,
         harvested_by: state.ownerId,
         fruit_count: 3,
-        fruit_condition: 'Good test harvest',
+        fruit_condition: 'A2',
         note: 'Actual harvest record test',
       })
       .select('id, farm_id, tree_id, fruit_count')
@@ -52,29 +51,13 @@ await runStage(STAGE, async () => {
   assertEqual(STAGE, 'harvest fruit_count stored', harvest.fruit_count, 3,
     'harvest_records.fruit_count should be stored as a positive integer.');
 
-  const manualCare = await getSingle(
-    STAGE,
-    'worker creates manual_care_record for tree',
-    workerClient
-      .from('manual_care_records')
-      .insert({
-        farm_id: state.farmId,
-        recorded_by: state.workerId,
-        category: 'watering',
-        target_type: 'tree',
-        target_tree_id: state.treeId,
-        note: 'Manual care database test',
-      })
-      .select('id, farm_id, target_type, target_tree_id')
-      .single(),
-    'manual_care_records should exist and allow active workers to insert own records.'
-  );
-  assertEqual(STAGE, 'manual care targets tree', manualCare.target_tree_id, state.treeId,
-    'manual_care_records.target_tree_id should store the tree target.');
+  // Blok manual_care_records dibuang: tabelnya di-drop migrasi 031 dan tidak
+  // akan kembali. Pencatatan perawatan kini hidup di care_activities +
+  // care_activity_trees, yang diuji stage 12.
 
-  const growthPhase = await getSingle(
+  await getSingle(
     STAGE,
-    'worker creates growth phase record for photo constraint',
+    'worker creates growth phase record',
     workerClient
       .from('growth_phase_records')
       .insert({
@@ -89,82 +72,28 @@ await runStage(STAGE, async () => {
     'Existing growth_phase_records insert should still work.'
   );
 
-  const harvestPhotoRows = await expectSuccess(
-    STAGE,
-    'harvest photo entity type is accepted',
-    ownerClient
-      .from('photo_attachments')
-      .insert({
-        farm_id: state.farmId,
-        uploaded_by: state.ownerId,
-        entity_type: 'harvest_record',
-        entity_id: harvest.id,
-        bucket: 'avology-photos',
-        storage_path: `farms/${state.farmId}/harvest-records/${harvest.id}/db-test-harvest.jpg`,
-        file_name: 'db-test-harvest.jpg',
-        mime_type: 'image/jpeg',
-        file_size: 12,
-      })
-      .select('id, entity_type'),
-    'photo_attachments constraints and RLS should allow harvest_record metadata.'
-  );
-  const growthPhasePhotoRows = await expectSuccess(
-    STAGE,
-    'growth phase photo entity type is accepted',
-    workerClient
-      .from('photo_attachments')
-      .insert({
-        farm_id: state.farmId,
-        uploaded_by: state.workerId,
-        entity_type: 'growth_phase_record',
-        entity_id: growthPhase.id,
-        bucket: 'avology-photos',
-        storage_path: `farms/${state.farmId}/growth-phase-records/${growthPhase.id}/db-test-phase.jpg`,
-        file_name: 'db-test-phase.jpg',
-        mime_type: 'image/jpeg',
-        file_size: 12,
-      })
-      .select('id, entity_type'),
-    'photo_attachments constraints and RLS should allow growth_phase_record metadata.'
-  );
-  const manualCarePhotoRows = await expectSuccess(
-    STAGE,
-    'manual care photo entity type is accepted',
-    workerClient
-      .from('photo_attachments')
-      .insert({
-        farm_id: state.farmId,
-        uploaded_by: state.workerId,
-        entity_type: 'manual_care_record',
-        entity_id: manualCare.id,
-        bucket: 'avology-photos',
-        storage_path: `farms/${state.farmId}/manual-care-records/${manualCare.id}/db-test-manual.jpg`,
-        file_name: 'db-test-manual.jpg',
-        mime_type: 'image/jpeg',
-        file_size: 12,
-      })
-      .select('id, entity_type'),
-    'photo_attachments constraints and RLS should allow manual_care_record metadata.'
-  );
-  const photoRows = [...harvestPhotoRows, ...growthPhasePhotoRows, ...manualCarePhotoRows];
-  assertEqual(STAGE, 'three new photo metadata rows inserted', photoRows.length, 3,
-    'Expected growth_phase_record, harvest_record, and manual_care_record photo metadata.');
-
-  await expectSuccess(
-    STAGE,
-    'owner deletes test photo metadata rows',
-    ownerClient.from('photo_attachments').delete().in('id', photoRows.map((row) => row.id)),
-    'Owner should be able to clean up test photo attachment metadata.'
-  );
+  // Ketiga insert photo_attachments di sini dibuang seluruhnya, berikut
+  // penggabungan photoRows, asersi "three new photo metadata rows inserted",
+  // dan pembersihannya -- keempatnya satu kesatuan dengan insert-nya.
+  //
+  // Alasannya: entity_type 'harvest_record', 'growth_phase_record', dan
+  // 'manual_care_record' sempat sah lewat migrasi 020 (7 nilai), lalu dipangkas
+  // migrasi 031 jadi tiga ('tree_main', 'condition_record', 'task_proof').
+  // Migrasi 035 menambah 'operational_report' jadi empat, dan 053 memangkasnya
+  // kembali jadi tiga. Ketiga nilai yang diuji di sini tidak pernah kembali,
+  // jadi insert-nya pasti melanggar photo_attachments_entity_type_check.
+  //
+  // Cakupan foto yang masih hidup ada di stage 03 (condition_record) dan
+  // stage 04 (task_proof).
 
   const historyRows = await expectSuccess(
     STAGE,
-    'tree_history_view includes harvest and manual care',
+    'tree_history_view includes harvest',
     ownerClient
       .from('tree_history_view')
       .select('tree_id, history_type, title')
       .eq('tree_id', state.treeId),
-    'tree_history_view should include new harvest/manual care unions.'
+    'tree_history_view should include the harvest union.'
   );
   assertCondition(
     STAGE,
@@ -172,13 +101,6 @@ await runStage(STAGE, async () => {
     historyRows.some((row) => row.history_type === 'harvest' && row.title === 'Panen dicatat'),
     'Harvest record did not appear in tree_history_view.',
     'Check tree_history_view harvest union.'
-  );
-  assertCondition(
-    STAGE,
-    'history includes manual care record',
-    historyRows.some((row) => row.history_type === 'manual_care' && row.title === 'Perawatan manual'),
-    'Manual care record did not appear in tree_history_view.',
-    'Check tree_history_view manual care union.'
   );
 
   const cancelScheduleRows = await expectSuccess(
@@ -224,30 +146,9 @@ await runStage(STAGE, async () => {
   assertEqual(STAGE, 'schedule cancelled_by owner', cancelled.cancelled_by, state.ownerId,
     'cancel_care_schedule should set cancelled_by to auth.uid().');
 
-  await expectSuccess(
-    STAGE,
-    'owner reopens resolved operational report',
-    ownerClient.rpc('reopen_operational_report', {
-      p_report_id: state.operationalReportId,
-      p_note: 'Reopen database foundation test',
-    }),
-    'reopen_operational_report should allow active owner to reopen final reports.'
-  );
-
-  const reopenedReport = await getSingle(
-    STAGE,
-    'reopened report is in progress with audit fields',
-    ownerClient
-      .from('operational_reports')
-      .select('id, status, owner_response_note, responded_by, responded_at')
-      .eq('id', state.operationalReportId)
-      .single(),
-    'operational_reports should expose response audit columns.'
-  );
-  assertEqual(STAGE, 'reopened report status is in_progress', reopenedReport.status, 'in_progress',
-    'reopen_operational_report should set status to in_progress.');
-  assertEqual(STAGE, 'reopened report responded_by owner', reopenedReport.responded_by, state.ownerId,
-    'reopen_operational_report should set responded_by to auth.uid().');
+  // Blok "owner reopens resolved operational report" dibuang bersama modul
+  // laporan (migrasi 053): RPC reopen_operational_report dan tabel
+  // operational_reports sudah tidak ada.
 
   const leavingWorker = await createWorkerAndJoin({
     stage: STAGE,

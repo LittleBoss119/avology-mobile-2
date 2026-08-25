@@ -392,10 +392,8 @@ export async function assertNoOperationalAccess(stage, client, label) {
     client.from('care_tasks').select('id'),
     'Only active owners or assigned active workers should read care tasks.'
   );
-  await expectZeroRows(
-    stage,
-    `${label} cannot read operational_reports`,
-    client.from('operational_reports').select('id'),
-    'Only active owners or active workers reading their own reports should read operational reports.'
-  );
+  // Pemeriksaan ketiga -- operational_reports -- dibuang bersama modul laporan
+  // (migrasi 053). Nama fungsi ini SENGAJA dipertahankan: 'operational' di sini
+  // berarti "data operasional kebun", bukan "laporan operasional", dan ketiga
+  // pemanggilnya di stage 02 tidak perlu ikut berubah.
 }

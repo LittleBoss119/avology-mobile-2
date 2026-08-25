@@ -1,9 +1,4 @@
 import type { FarmAccessEvent, MemberRole, MemberStatus } from '../constants/membership';
-import type {
-  OperationalReportCategory,
-  OperationalReportResolution,
-  OperationalReportStatus,
-} from '../constants/operationalReport';
 import type { GradePanen } from '../constants/gradePanen';
 import type { SatuanBahan } from '../constants/satuanBahan';
 
@@ -12,15 +7,6 @@ import type { SatuanBahan } from '../constants/satuanBahan';
 // bisa diiterasi saat runtime. Di-re-export dari sini supaya pemakai cukup
 // mengimpor dari '../types/domain' seperti tipe domain lainnya.
 export type { GradePanen, SatuanBahan };
-
-// Status/kategori/resolusi laporan hidup di src/constants/operationalReport.ts
-// (satu sumber kebenaran, diturunkan dari tuple readonly). Di-re-export dari
-// sini supaya import lama `from '../types/domain'` tidak perlu diubah.
-export type {
-  OperationalReportCategory,
-  OperationalReportResolution,
-  OperationalReportStatus,
-};
 
 // Peran, status keanggotaan, dan jenis event akses hidup di
 // src/constants/membership.ts — pola yang sama, diturunkan dari tuple readonly
@@ -250,30 +236,6 @@ export type TreeHistoryItem = {
   produk: string | null;
 };
 
-export type OperationalReport = {
-  id: UUID;
-  farmId: UUID;
-  reportedBy: UUID;
-  category: OperationalReportCategory;
-  locationNote: string | null;
-  description: string | null;
-  status: OperationalReportStatus;
-  ownerResponseNote?: string | null;
-  respondedBy?: UUID | null;
-  respondedAt?: string | null;
-  // Keputusan owner. Kombinasi status x resolution DIJAMIN database lewat
-  // constraint `operational_reports_resolution_status_check` (migration 034):
-  //   new         -> resolution null, resolvedAt null
-  //   in_progress -> resolution 'task' | 'self_handled'
-  //   resolved    -> resolution non-null
-  //   rejected    -> resolution null, ownerResponseNote non-null
-  // UI boleh mengandalkan invarian ini tanpa pengecekan defensif tambahan.
-  resolution: OperationalReportResolution | null;
-  resolvedAt: string | null;
-  createdAt: string;
-  updatedAt?: string | null;
-};
-
 export type CareSchedule = {
   id: UUID;
   farmId: UUID;
@@ -314,7 +276,6 @@ export type CareTask = {
   id: UUID;
   farmId: UUID;
   careScheduleId: UUID | null;
-  operationalReportId: UUID | null;
   assignedTo: UUID;
   assignedBy: UUID;
   title: string;
@@ -327,7 +288,7 @@ export type CareTask = {
   status: TaskStatus;
   // Diisi sweep_missed_schedules (migrasi 048) saat tugas melewati masa
   // toleransi jadwal induknya. Status tugas TIDAK ikut berubah — pekerja masih
-  // boleh mengerjakannya. Tugas dari laporan operasional tidak pernah terisi.
+  // boleh mengerjakannya.
   missedAt: string | null;
   requiresPhoto: boolean;
   scheduleIsCancelled?: boolean;
@@ -388,7 +349,6 @@ export type OwnerDashboardSummary = {
   todayTasks: number;
   unfinishedTasks: number;
   overdueTasks: number;
-  newOperationalReports: number;
   pendingWorkers: number;
   floweringTrees: number;
   fruitingTrees: number;
@@ -564,92 +524,6 @@ export type GetOwnerDashboardSummaryInput = {
 export type GetWorkerDashboardSummaryInput = {
   farmId: UUID;
   userId: UUID;
-};
-
-// `description` wajib, `locationNote` opsional. Aturan lama "salah satu dari
-// keduanya" sudah tidak berlaku di client. RPC update_own_operational_report
-// masih memakai aturan lama (either-or) — itu lebih longgar, jadi tidak konflik.
-export type CreateOperationalReportInput = {
-  farmId: UUID;
-  category: OperationalReportCategory;
-  description: string;
-  locationNote?: string | null;
-};
-
-export type CreateOperationalReportData = {
-  reportId: UUID;
-};
-
-// Filter status/kategori sengaja TIDAK ada di sini: daftar laporan menyaring
-// seluruhnya di client (search + chip status + sheet kategori/pelapor) di atas
-// satu set data yang sama, jadi filter server-side hanya jadi jalur mati.
-// `reportedBy` tetap ada karena itu batas data, bukan filter tampilan.
-export type GetOperationalReportsInput = {
-  farmId: UUID;
-  reportedBy?: UUID;
-};
-
-export type GetOperationalReportDetailInput = {
-  operationalReportId: UUID;
-};
-
-export type GetOperationalReportFollowUpTasksInput = {
-  operationalReportId: UUID;
-};
-
-// ---- Aksi keputusan owner (berbasis niat, bukan berbasis status) ----
-// Semuanya bermuara ke RPC update_operational_report_status, kecuali
-// resolveReportWithTask yang lewat create_task_from_operational_report.
-
-export type HandleReportMyselfInput = {
-  operationalReportId: UUID;
-  // Wajib diisi: RPC menolak self_handled tanpa catatan.
-  note: string;
-};
-
-export type MarkReportAlreadyResolvedInput = {
-  operationalReportId: UUID;
-  note?: string | null;
-};
-
-export type RejectReportInput = {
-  operationalReportId: UUID;
-  // Wajib diisi: RPC menolak penolakan tanpa alasan.
-  reason: string;
-};
-
-export type CloseReportInput = {
-  operationalReportId: UUID;
-  note?: string | null;
-  // Resolution laporan saat ini. Dipakai closeReport untuk menolak pengosongan
-  // catatan pada laporan self_handled sebelum round-trip — RPC menolaknya juga,
-  // tapi dengan pesan yang tidak masuk akal bagi owner.
-  currentResolution?: OperationalReportResolution | null;
-};
-
-export type OperationalReportEditEligibility = {
-  canEdit: boolean;
-  reason?: string | null;
-};
-
-export type GetOperationalReportEditEligibilityInput = {
-  operationalReportId: UUID;
-};
-
-export type UpdateOwnOperationalReportInput = {
-  operationalReportId: UUID;
-  category: OperationalReportCategory;
-  description: string;
-  locationNote?: string | null;
-};
-
-export type UpdateOwnOperationalReportData = {
-  reportId: UUID;
-};
-
-export type DeleteOwnOperationalReportInput = {
-  farmId: UUID;
-  operationalReportId: UUID;
 };
 
 // Tanpa satu pun field opsional diisi, hasilnya adalah seluruh jadwal kebun
@@ -830,29 +704,6 @@ export type PostponeTaskInput = {
 
 export type PostponeTaskData = {
   activityId: UUID;
-};
-
-// Keputusan "buat tugas". RPC create_task_from_operational_report menyetel
-// status='in_progress' + resolution='task' secara atomik bersama insert tugas,
-// jadi JANGAN panggil aksi status apa pun setelah ini.
-export type ResolveReportWithTaskInput = {
-  operationalReportId: UUID;
-  assignedWorkerId: UUID;
-  dueDate: string;
-  title: string;
-  instruction?: string | null;
-  targetType: TargetType;
-  targetTreeId?: UUID | null;
-  customTargetNote?: string | null;
-  requiresPhoto?: boolean;
-  // Wajib sejak migrasi 047: care_tasks.category kini NOT NULL dan
-  // create_task_from_operational_report menolak p_category null.
-  category: CareCategory;
-  ownerResponseNote?: string | null;
-};
-
-export type ResolveReportWithTaskData = {
-  taskId: UUID;
 };
 
 export type RegisterUserInput = {

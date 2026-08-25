@@ -1,9 +1,0 @@
-import { useLocalSearchParams } from 'expo-router';
-
-import { OwnerCreateTaskFromOperationalReportScreen } from '../../../../../src/components/operational-report-task-form-screen';
-
-export default function OwnerCreateTaskFromOperationalReportRoute() {
-  const { reportId } = useLocalSearchParams<{ reportId: string }>();
-
-  return <OwnerCreateTaskFromOperationalReportScreen reportId={reportId} />;
-}

@@ -76,7 +76,6 @@ async function main() {
   let farmId = null;
   let joinCode = null;
   let workerMembershipId = null;
-  let operationalReportId = null;
 
   logStep('1. Sign up / login owner dan worker');
 
@@ -184,17 +183,6 @@ async function main() {
     console.dir(pendingTrees.data, { depth: null });
   }
 
-  const pendingReports = await worker.from('operational_reports').select('*').eq('farm_id', farmId);
-  if (pendingReports.error) {
-    console.log('✅ Worker pending tidak bisa akses operational_reports');
-    console.log(pendingReports.error.message);
-  } else if (pendingReports.data.length === 0) {
-    console.log('✅ Worker pending tidak melihat operational_reports, result kosong');
-  } else {
-    console.log('❌ Worker pending bisa akses operational_reports');
-    console.dir(pendingReports.data, { depth: null });
-  }
-
   logStep('6. Owner lihat pending worker');
 
   const pendingWorkers = await owner.rpc('get_pending_workers', {
@@ -290,55 +278,9 @@ async function main() {
 
   logResult('Worker active bisa lihat trees', workerTreesActive.error, workerTreesActive.data);
 
-  logStep('10. Worker create operational report');
-
-  const createReport = await worker
-    .from('operational_reports')
-    .insert({
-      farm_id: farmId,
-      category: 'tool_damage',
-      location_note: 'Gudang alat',
-      description: 'Cangkul rusak untuk test',
-    })
-    .select('*')
-    .single();
-
-  logResult('Worker create operational report', createReport.error, createReport.data);
-
-  if (createReport.error) {
-    throw new Error('Worker gagal create operational report. Cek enum category / insert policy.');
-  }
-
-  operationalReportId = createReport.data.id;
-
-  logStep('11. Owner update status operational report lewat RPC');
-
-  const updateStatus = await owner.rpc('update_operational_report_status', {
-    p_report_id: operationalReportId,
-    p_status: 'in_progress',
-  });
-
-  logResult('Owner update operational report status via RPC', updateStatus.error, updateStatus.data);
-
-  logStep('12. Direct update operational_reports harus ditolak');
-
-  const directUpdate = await owner
-    .from('operational_reports')
-    .update({
-      description: 'Owner mencoba ubah deskripsi langsung. Harus ditolak.',
-    })
-    .eq('id', operationalReportId)
-    .select('*');
-
-  if (directUpdate.error) {
-    console.log('✅ Direct update operational_reports ditolak');
-    console.log(directUpdate.error.message);
-  } else if (!directUpdate.data || directUpdate.data.length === 0) {
-    console.log('✅ Direct update operational_reports tidak mengubah data');
-  } else {
-    console.log('❌ Direct update operational_reports berhasil, ini harus dipatch');
-    console.dir(directUpdate.data, { depth: null });
-  }
+  // Langkah 10-12 lama (buat laporan operasional, ubah statusnya lewat RPC, dan
+  // pastikan UPDATE langsung ditolak) dibuang bersama modul laporan
+  // (migrasi 053).
 
   logStep('SELESAI');
 

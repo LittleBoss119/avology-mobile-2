@@ -37,7 +37,7 @@ const CARE_SCHEDULE_SELECT =
 const SCHEDULE_TASK_BATCH_SIZE = 100;
 
 const CARE_TASK_SELECT =
-  'id, farm_id, care_schedule_id, operational_report_id, assigned_to, assigned_by, title, category, instruction, target_type, target_tree_id, custom_target_note, due_date, status, missed_at, requires_photo, created_at, updated_at';
+  'id, farm_id, care_schedule_id, assigned_to, assigned_by, title, category, instruction, target_type, target_tree_id, custom_target_note, due_date, status, missed_at, requires_photo, created_at, updated_at';
 
 const careCategories: CareCategory[] = [
   'watering',
@@ -92,7 +92,6 @@ type CareTaskRow = {
   id: string;
   farm_id: string;
   care_schedule_id: string | null;
-  operational_report_id: string | null;
   assigned_to: string;
   assigned_by: string;
   title: string;
@@ -1136,7 +1135,6 @@ function mapCareTask(row: CareTaskRow): CareTask {
     farmId: row.farm_id,
     id: row.id,
     instruction: row.instruction,
-    operationalReportId: row.operational_report_id,
     requiresPhoto: row.requires_photo ?? false,
     status: row.status,
     targetTreeId: row.target_tree_id,

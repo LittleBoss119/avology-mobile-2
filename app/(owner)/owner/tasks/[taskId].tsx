@@ -7,7 +7,6 @@ import {
   formatTaskSource,
   formatTaskStatus,
 } from '../../../../src/components/care-schedule-components';
-import { ReportSourceRow } from '../../../../src/components/operational-report-source-row';
 import { WorkResultList } from '../../../../src/components/work-result-list';
 import {
   Badge,
@@ -19,16 +18,14 @@ import {
   Screen,
   TopAppBar,
 } from '../../../../src/components/ui';
-import { colors, tokens } from '../../../../src/constants/theme';
+import { tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
-import { getOperationalReportDetail } from '../../../../src/services/operationalReportService';
 import { listTaskProofPhotosForActivities } from '../../../../src/services/photoAttachmentService';
 import type {
   CareTaskDetail,
   FarmMemberBasicProfile,
-  OperationalReport,
 } from '../../../../src/types/domain';
 import type { TaskProofPhotoMap } from '../../../../src/types/media';
 import { formatCareCategory } from '../../../../src/utils/displayFormat';
@@ -38,7 +35,6 @@ export default function OwnerTaskDetailScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [report, setReport] = React.useState<OperationalReport | null>(null);
   const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
   const [workerNames, setWorkerNames] = React.useState<Record<string, string>>({});
@@ -50,7 +46,6 @@ export default function OwnerTaskDetailScreen() {
 
     if (!normalizedTaskId) {
       setError('Data tugas tidak ditemukan.');
-      setReport(null);
       setProofPhotoMap({});
       setTask(null);
       setWorkerNames({});
@@ -59,7 +54,6 @@ export default function OwnerTaskDetailScreen() {
 
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
-      setReport(null);
       setProofPhotoMap({});
       setTask(null);
       setWorkerNames({});
@@ -67,7 +61,6 @@ export default function OwnerTaskDetailScreen() {
     }
 
     setError(null);
-    setReport(null);
 
     const [taskResult, workersResult] = await Promise.all([
       getTaskDetail({ taskId: normalizedTaskId }),
@@ -92,15 +85,6 @@ export default function OwnerTaskDetailScreen() {
         setProofPhotoMap(proofResult.data);
       }
 
-      if (taskResult.data.operationalReportId) {
-        const reportResult = await getOperationalReportDetail({
-          operationalReportId: taskResult.data.operationalReportId,
-        });
-
-        if (!reportResult.error) {
-          setReport(reportResult.data);
-        }
-      }
     }
 
     if (workersResult.error) {
@@ -165,24 +149,12 @@ export default function OwnerTaskDetailScreen() {
         </Text>
       </Card>
 
-      {task.operationalReportId ? (
-        // Satu baris saja: kategori, lokasi, pelapor, dan status laporan semuanya
-        // ada di layar tujuan — menyalinnya ke sini cuma menambah tempat yang
-        // harus dijaga sinkron.
-        <ReportSourceRow
-          description={report?.description}
-          onPress={() => router.push(`/owner/reports/${task.operationalReportId}`)}
-        />
-      ) : task.careScheduleId ? null : (
-        <Card>
-          <Text selectable style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
-            Sumber Tugas
-          </Text>
-          <Text selectable style={{ color: colors.textSecondary, lineHeight: 21 }}>
-            Tugas tidak terhubung ke jadwal atau laporan.
-          </Text>
-        </Card>
-      )}
+      {/* Blok "Sumber Tugas" dibuang bersama modul laporan (migrasi 053).
+          Kedua cabangnya sudah tidak terjangkau: constraint
+          care_tasks_source_check yang baru menjamin setiap tugas punya
+          care_schedule_id, sehingga tidak ada lagi tugas tanpa jadwal maupun
+          tugas dari laporan. Asal tugas tetap terbaca lewat badge
+          formatTaskSource di kartu atas. */}
 
       <Text selectable style={{ ...tokens.type.heading, color: tokens.color.text.primary, paddingTop: tokens.space.xs }}>
         {task.activities.length === 0 ? 'Hasil kerja' : 'Riwayat hasil kerja'}

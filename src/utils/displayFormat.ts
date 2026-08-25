@@ -5,8 +5,6 @@ import type {
   GrowthPhase,
   MemberRole,
   MemberStatus,
-  OperationalReportCategory,
-  OperationalReportStatus,
   SatuanBahan,
   TargetType,
   TaskStatus,
@@ -63,33 +61,6 @@ export function formatGrowthPhase(phase?: GrowthPhase | null): string {
   };
 
   return labels[phase];
-}
-
-export function formatOperationalReportStatus(status: OperationalReportStatus): string {
-  const labels: Record<OperationalReportStatus, string> = {
-    in_progress: 'Diproses',
-    new: 'Menunggu',
-    rejected: 'Ditolak',
-    resolved: 'Selesai',
-  };
-
-  return labels[status];
-}
-
-export function formatOperationalReportCategory(category: OperationalReportCategory): string {
-  const labels: Record<OperationalReportCategory, string> = {
-    broken_tool: 'Alat rusak',
-    disaster: 'Bencana alam',
-    disease: 'Penyakit tanaman',
-    land_damage: 'Kerusakan lahan',
-    other: 'Lainnya',
-    out_of_stock: 'Stok habis',
-    pest: 'Hama tanaman',
-    weather: 'Cuaca ekstrem',
-    worker_need: 'Kebutuhan pekerja',
-  };
-
-  return labels[category];
 }
 
 export function formatCareCategory(category: CareCategory): string {

@@ -40,7 +40,6 @@ export async function getOwnerDashboardSummary(
     todayTasks,
     unfinishedTasks,
     overdueTasks,
-    newOperationalReports,
     pendingWorkers,
     floweringTrees,
     fruitingTrees,
@@ -51,7 +50,6 @@ export async function getOwnerDashboardSummary(
     countFarmTasksDueToday(input.farmId, today),
     countFarmUnfinishedTasks(input.farmId),
     countFarmOverdueTasks(input.farmId),
-    countNewOperationalReports(input.farmId),
     countPendingWorkers(input.farmId),
     countTreesByGrowthPhase(input.farmId, 'flowering'),
     countTreesByGrowthPhase(input.farmId, 'fruiting'),
@@ -64,7 +62,6 @@ export async function getOwnerDashboardSummary(
     ['tugas hari ini', todayTasks],
     ['tugas belum selesai', unfinishedTasks],
     ['tugas terlambat', overdueTasks],
-    ['laporan operasional baru', newOperationalReports],
     ['worker pending', pendingWorkers],
     ['pohon flowering', floweringTrees],
     ['pohon fruiting', fruitingTrees],
@@ -85,7 +82,6 @@ export async function getOwnerDashboardSummary(
     todayTasks: readCount(todayTasks),
     unfinishedTasks: readCount(unfinishedTasks),
     overdueTasks: readCount(overdueTasks),
-    newOperationalReports: readCount(newOperationalReports),
     pendingWorkers: readCount(pendingWorkers),
     floweringTrees: readCount(floweringTrees),
     fruitingTrees: readCount(fruitingTrees),
@@ -171,8 +167,9 @@ async function countFarmTasksDueToday(
   // Jatuh tempo hari ini & masih 'pending'. task_status tidak punya nilai
   // 'cancelled' (migrasi 001), jadi completed/postponed cukup dibuang lewat
   // status='pending'. Pembatalan hanya di level jadwal (care_schedules
-  // .is_cancelled), disaring countActiveWorkerTaskRows; task tanpa schedule
-  // (care_schedule_id NULL, mis. dari laporan operasional) TETAP dihitung.
+  // .is_cancelled), disaring countActiveWorkerTaskRows. Sejak migrasi 053 tidak
+  // ada lagi task tanpa schedule: care_tasks_source_check mewajibkan
+  // care_schedule_id terisi, jadi cabang NULL di penyaring itu tidak terpakai.
   return countActiveWorkerTaskRows(
     supabase
       .from('care_tasks')
@@ -192,8 +189,8 @@ async function countFarmTasksDueToday(
 
 async function countFarmUnfinishedTasks(farmId: string): Promise<CountResult> {
   // 'Belum selesai' = pending saja (sebelumnya keliru ikut 'postponed').
-  // Kecualikan task dari jadwal yang dibatalkan via countActiveWorkerTaskRows;
-  // task tanpa schedule (care_schedule_id NULL) tetap dihitung.
+  // Kecualikan task dari jadwal yang dibatalkan via countActiveWorkerTaskRows.
+  // Lihat countFarmTasksDueToday soal task tanpa schedule sejak migrasi 053.
   return countActiveWorkerTaskRows(
     supabase
       .from('care_tasks')
@@ -226,14 +223,6 @@ export async function countFarmOverdueTasks(farmId: string): Promise<CountResult
       // seorang pun yang bisa menyelesaikannya.
       .is('released_at', null)
   );
-}
-
-async function countNewOperationalReports(farmId: string): Promise<CountResult> {
-  return supabase
-    .from('operational_reports')
-    .select('id', { count: 'exact', head: true })
-    .eq('farm_id', farmId)
-    .eq('status', 'new');
 }
 
 async function countPendingWorkers(farmId: string): Promise<CountResult> {

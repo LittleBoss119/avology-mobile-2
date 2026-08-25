@@ -11,7 +11,7 @@ import { tokens } from '../../src/constants/theme';
 const VALUE_PROPS: Array<{ icon: IconName; label: string }> = [
   { icon: 'tree', label: 'Pantau kondisi tiap pohon' },
   { icon: 'list-check', label: 'Atur tugas pekerja lapangan' },
-  { icon: 'file-text', label: 'Laporan lapangan terpusat' },
+  { icon: 'file-text', label: 'Catatan aktivitas per pohon' },
 ];
 
 export default function GetStartedScreen() {

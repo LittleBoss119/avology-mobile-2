@@ -130,15 +130,16 @@ export default function WorkerDashboardScreen() {
             </View>
           ) : null}
 
-          {/* Jalan masuk ke Kebun dan Laporan setelah keduanya dicabut dari
-              bottom nav. Tanpa angka di kedua baris: WorkerDashboardSummary
-              tidak menghitung anggota maupun laporan, dan menambah hitungan
-              berarti menambah request — bukan menata navigasi. */}
+          {/* Jalan masuk ke Kebun setelah ia dicabut dari bottom nav. Tanpa
+              angka: WorkerDashboardSummary tidak menghitung anggota, dan
+              menambah hitungan berarti menambah request — bukan menata
+              navigasi.
+
+              Baris kedua ("Laporan") ikut dibuang bersama modul laporan
+              operasional di migrasi 053. */}
           <View style={styles.destinations}>
             <View style={styles.divider} />
             <NavRow icon="user" title="Anggota kebun" onPress={() => router.push('/worker/farm')} />
-            <View style={styles.divider} />
-            <NavRow icon="file-text" title="Laporan" onPress={() => router.push('/worker/reports')} />
           </View>
         </View>
       )}

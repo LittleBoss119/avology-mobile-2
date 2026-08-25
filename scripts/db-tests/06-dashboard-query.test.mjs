@@ -3,7 +3,6 @@ import {
   assertCondition,
   createSignedInClient,
   createWorkerAndJoin,
-  expectSuccess,
   mergeState,
   requireState,
   runStage,
@@ -24,7 +23,6 @@ await runStage(STAGE, async () => {
     'workerEmail',
     'farmId',
     'joinCode',
-    'workerId',
   ]);
 
   const { client: ownerClient } = await createSignedInClient(state.ownerEmail, state.password);
@@ -39,28 +37,12 @@ await runStage(STAGE, async () => {
     phone: '086666666666',
   });
 
-  await expectSuccess(
-    STAGE,
-    'worker creates new operational_report for dashboard count',
-    workerClient
-      .from('operational_reports')
-      .insert({
-        farm_id: state.farmId,
-        reported_by: state.workerId,
-        category: 'other',
-        location_note: 'Dashboard test area',
-        description: 'Dashboard query new report',
-      })
-      .select('id')
-      .single(),
-    'Active worker should be able to create operational reports.'
-  );
-
-  const [trees, problemTrees, pendingWorkers, newReports, ownerTasksToday, ownerUnfinishedTasks, floweringFruitingTrees] = await Promise.all([
+  // Penghitung "laporan operasional baru" dibuang bersama modulnya (migrasi
+  // 053), begitu juga pembuatan laporan yang dulu menyiapkan datanya.
+  const [trees, problemTrees, pendingWorkers, ownerTasksToday, ownerUnfinishedTasks, floweringFruitingTrees] = await Promise.all([
     ownerClient.from('trees').select('id', { count: 'exact', head: true }).eq('farm_id', state.farmId),
     ownerClient.from('trees').select('id', { count: 'exact', head: true }).eq('farm_id', state.farmId).neq('current_condition', 'healthy'),
     ownerClient.from('farm_members').select('id', { count: 'exact', head: true }).eq('farm_id', state.farmId).eq('role', 'worker').eq('status', 'pending'),
-    ownerClient.from('operational_reports').select('id', { count: 'exact', head: true }).eq('farm_id', state.farmId).eq('status', 'new'),
     ownerClient.from('care_tasks').select('id', { count: 'exact', head: true }).eq('farm_id', state.farmId).eq('due_date', todayIso()),
     ownerClient.from('care_tasks').select('id', { count: 'exact', head: true }).eq('farm_id', state.farmId).neq('status', 'completed'),
     ownerClient.from('trees').select('id', { count: 'exact', head: true }).eq('farm_id', state.farmId).in('current_growth_phase', ['flowering', 'fruiting']),
@@ -70,7 +52,6 @@ await runStage(STAGE, async () => {
     ['owner total trees', trees],
     ['owner problem trees', problemTrees],
     ['owner pending workers', pendingWorkers],
-    ['owner new operational reports', newReports],
     ['owner tasks today', ownerTasksToday],
     ['owner unfinished tasks', ownerUnfinishedTasks],
     ['owner flowering/fruiting trees', floweringFruitingTrees],
@@ -108,7 +89,6 @@ await runStage(STAGE, async () => {
     trees.count >= 1
       && problemTrees.count >= 1
       && pendingWorkers.count >= 1
-      && newReports.count >= 1
       && ownerTasksToday.count >= 1
       && floweringFruitingTrees.count >= 1
       && workerTasksToday.count >= 1,

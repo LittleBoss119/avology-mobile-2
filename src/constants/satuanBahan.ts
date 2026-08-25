@@ -10,7 +10,7 @@
 // akan ditolak database — bukan gagal senyap, tapi tetap saja pesan errornya
 // tidak enak dibaca pekerja.
 //
-// Mengikuti pola membership.ts / operationalReport.ts: tuple `as const` dulu,
+// Mengikuti pola membership.ts: tuple `as const` dulu,
 // tipenya diturunkan dari tuple. Dengan begitu daftarnya bisa diiterasi saat
 // runtime (untuk chip pemilih di Tahap C) dan divalidasi lewat type guard,
 // bukan sekadar union tipe telanjang yang hilang setelah kompilasi.

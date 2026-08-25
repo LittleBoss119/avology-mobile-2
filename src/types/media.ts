@@ -3,14 +3,12 @@ import type { UUID } from './domain';
 export type PhotoAttachmentEntityType =
   | 'tree_main'
   | 'condition_record'
-  | 'task_proof'
-  | 'operational_report';
+  | 'task_proof';
 
 export type PhotoAttachmentPathFolder =
   | 'trees'
   | 'condition-reports'
-  | 'task-proofs'
-  | 'operational-reports';
+  | 'task-proofs';
 
 export type PhotoAttachment = {
   id: UUID;
@@ -149,40 +147,6 @@ export type ListTaskProofPhotosForActivitiesInput = {
   farmId: UUID;
   activityIds: UUID[];
 };
-
-export type OperationalReportPhoto = {
-  attachment: PhotoAttachment;
-  signedUrl: string;
-};
-
-export type UploadOperationalReportPhotoInput = {
-  farmId: UUID;
-  operationalReportId: UUID;
-  localUri: string;
-  base64?: string | null;
-  fileName?: string | null;
-  mimeType?: string | null;
-  caption?: string | null;
-};
-
-export type ListOperationalReportPhotosInput = {
-  farmId: UUID;
-  operationalReportId: UUID;
-};
-
-export type DeleteOperationalReportPhotoObjectsInput = {
-  farmId: UUID;
-  operationalReportId: UUID;
-};
-
-export type CountOperationalReportPhotosInput = {
-  farmId: UUID;
-  operationalReportIds: UUID[];
-};
-
-// entityId -> jumlah foto. Dipakai daftar laporan; sengaja hanya jumlah,
-// tanpa signed URL, supaya satu query cukup untuk semua kartu yang tampil.
-export type OperationalReportPhotoCountMap = Record<UUID, number>;
 
 export type PhotoAttachmentPreviewItem = {
   id?: UUID | null;

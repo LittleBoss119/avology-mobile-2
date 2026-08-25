@@ -99,10 +99,6 @@ export default function WorkerLayout() {
           <Stack.Screen name="worker/tasks/index" options={{ headerShown: false, title: 'Tugas' }} />
           <Stack.Screen name="worker/tasks/[taskId]" options={{ headerShown: false, title: 'Detail Tugas' }} />
           <Stack.Screen name="worker/tasks/[taskId]/record" options={{ headerShown: false, title: 'Catat Hasil Kerja' }} />
-          <Stack.Screen name="worker/reports/index" options={{ headerShown: false, title: 'Laporan' }} />
-          <Stack.Screen name="worker/reports/create" options={{ headerShown: false, title: 'Buat Laporan' }} />
-          <Stack.Screen name="worker/reports/[reportId]" options={{ headerShown: false, title: 'Detail Laporan' }} />
-          <Stack.Screen name="worker/reports/[reportId]/edit" options={{ headerShown: false, title: 'Edit laporan' }} />
           <Stack.Screen name="worker/farm" options={{ headerShown: false, title: 'Kebun' }} />
           <Stack.Screen name="worker/profile" options={{ headerShown: false, title: 'Profil Akun' }} />
           {/* gestureEnabled:false disengaja — swipe-back iOS tidak bisa dicegat lewat

@@ -823,16 +823,16 @@ function formatDate(value: string): string {
   });
 }
 
-function formatTaskSource(task: CareTask): string {
-  if (task.careScheduleId) {
-    return 'Dari Jadwal';
-  }
-
-  if (task.operationalReportId) {
-    return 'Dari Laporan';
-  }
-
-  return 'Manual';
+// Satu-satunya asal tugas yang tersisa sejak modul laporan dibuang (migrasi
+// 053). Cabang 'Dari Laporan' ikut dibuang bersama modulnya, dan cabang
+// 'Manual' menyusul karena tidak lagi terjangkau: constraint
+// care_tasks_source_check yang baru berbunyi `check (care_schedule_id is not
+// null)`, sehingga setiap tugas dijamin punya jadwal.
+//
+// Fungsinya sengaja DIPERTAHANKAN meski hasilnya kini konstan — badge-nya
+// masih dirender di kartu tugas, dan tempat pemanggilannya tidak diubah.
+function formatTaskSource(_task: CareTask): string {
+  return 'Dari Jadwal';
 }
 
 function getTaskTone(status: TaskStatus): 'danger' | 'muted' | 'success' | 'warning' {

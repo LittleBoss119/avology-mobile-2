@@ -385,7 +385,7 @@ function JoinedFarmModal({
               textAlign: 'center',
             }}
           >
-            Sekarang kamu bisa lihat tugas dan kirim laporan.
+            Sekarang kamu bisa lihat tugas dan mencatat aktivitas pohon.
           </Text>
 
           <Button title="Mulai" loading={busy} onPress={onStart} />

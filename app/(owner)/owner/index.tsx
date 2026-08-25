@@ -135,26 +135,19 @@ export default function OwnerDashboardScreen() {
             <MonitorList summary={summary} />
           </View>
 
-          {/* Jalan masuk ke Kebun dan Laporan setelah keduanya dicabut dari
-              bottom nav — bukan pekerjaan yang menunggu, jadi berada di luar
-              "Perlu tindakan" dan tanpa SectionHeader sendiri. Divider tipis
-              yang memisahkannya dari Pantauan sudah cukup menandai bahwa dua
-              baris ini jenis lain. */}
+          {/* Jalan masuk ke Kebun setelah ia dicabut dari bottom nav — bukan
+              pekerjaan yang menunggu, jadi berada di luar "Perlu tindakan" dan
+              tanpa SectionHeader sendiri. Divider tipis yang memisahkannya dari
+              Pantauan sudah cukup menandai bahwa baris ini jenis lain.
+
+              Baris kedua ("Laporan") ikut dibuang bersama modul laporan
+              operasional di migrasi 053. */}
           <View style={styles.destinations}>
             <View style={styles.divider} />
             <NavRow
               icon="user"
               title="Anggota kebun"
               onPress={() => router.push('/owner/farm')}
-            />
-            <View style={styles.divider} />
-            {/* Angka nol TIDAK dirender: "0" di sini terbaca sebagai penanda
-                kosong, bukan kabar baik. Yang tersisa judul dan chevron. */}
-            <NavRow
-              icon="file-text"
-              title="Laporan"
-              value={summary.newOperationalReports}
-              onPress={() => router.push('/owner/reports')}
             />
           </View>
         </View>

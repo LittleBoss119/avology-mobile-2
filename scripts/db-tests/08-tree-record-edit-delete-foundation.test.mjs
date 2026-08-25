@@ -1,6 +1,5 @@
 import { assertEnv } from './config.mjs';
 import {
-  assertCondition,
   assertEqual,
   createSignedInClient,
   expectFailure,
@@ -158,7 +157,7 @@ await runStage(STAGE, async () => {
     STAGE,
     'owner updates own harvest record',
     ownerClient.rpc('update_own_harvest_record', {
-      p_fruit_condition: 'Good',
+      p_fruit_condition: 'A2',
       p_fruit_count: 5,
       p_harvested_at: null,
       p_note: 'Updated harvest foundation test',
@@ -167,38 +166,9 @@ await runStage(STAGE, async () => {
     'update_own_harvest_record should update author-owned active records.'
   );
 
-  const manualCare = await getSingle(
-    STAGE,
-    'worker creates editable manual care record',
-    workerClient
-      .from('manual_care_records')
-      .insert({
-        category: 'watering',
-        farm_id: state.farmId,
-        note: 'Manual care edit/delete foundation test',
-        recorded_by: state.workerId,
-        target_tree_id: state.treeId,
-        target_type: 'tree',
-      })
-      .select('id')
-      .single(),
-    'Active workers should still be able to create manual care records.'
-  );
-
-  await expectSuccess(
-    STAGE,
-    'worker updates own manual care record',
-    workerClient.rpc('update_own_manual_care_record', {
-      p_category: 'fertilizing',
-      p_custom_target_note: null,
-      p_note: 'Updated manual care foundation test',
-      p_performed_at: null,
-      p_record_id: manualCare.id,
-      p_target_tree_id: state.treeId,
-      p_target_type: 'tree',
-    }),
-    'update_own_manual_care_record should update author-owned active records.'
-  );
+  // Pembuatan manual_care_record dan RPC update_own_manual_care_record dibuang:
+  // tabel manual_care_records di-drop migrasi 031. Padanan hidupnya adalah
+  // care_activities, yang jalur edit/hapusnya diuji stage 12 dan 14.
 
   const historyBeforeDelete = await expectSuccess(
     STAGE,
@@ -207,86 +177,21 @@ await runStage(STAGE, async () => {
       .from('tree_history_view')
       .select('source_id, history_type')
       .eq('tree_id', state.treeId)
-      .in('source_id', [condition.id, phase.id, harvest.id, manualCare.id]),
+      .in('source_id', [condition.id, phase.id, harvest.id]),
     'tree_history_view should expose source_id for tree record detail routing.'
   );
+  // Tiga, bukan empat: manualCare.id dibuang bersama bloknya di atas, dan angka
+  // 4 memang sudah tidak pernah tercapai sejak migrasi 028 mencabut union
+  // 'manual_care' dari tree_history_view.
+  //
+  // Label "before delete" ikut dilepas: ketiga RPC soft_delete_own_* dibuang
+  // migrasi 031, jadi tidak ada lagi penghapusan setelah baris ini. Cakupan
+  // soft-delete akan kembali bersama fitur hapus catatan.
   assertEqual(
     STAGE,
-    'history contains four source rows before delete',
+    'history contains three source rows',
     historyBeforeDelete.length,
-    4,
-    'Condition, phase, harvest, and manual care records should appear before soft delete.'
-  );
-
-  await expectSuccess(
-    STAGE,
-    'worker soft deletes own condition report',
-    workerClient.rpc('soft_delete_own_tree_condition_report', {
-      p_reason: 'db test cleanup',
-      p_report_id: condition.id,
-    }),
-    'soft_delete_own_tree_condition_report should mark author-owned records deleted.'
-  );
-  await expectSuccess(
-    STAGE,
-    'worker soft deletes own growth phase record',
-    workerClient.rpc('soft_delete_own_growth_phase_record', {
-      p_reason: 'db test cleanup',
-      p_record_id: phase.id,
-    }),
-    'soft_delete_own_growth_phase_record should mark author-owned records deleted.'
-  );
-  await expectSuccess(
-    STAGE,
-    'owner soft deletes own harvest record',
-    ownerClient.rpc('soft_delete_own_harvest_record', {
-      p_reason: 'db test cleanup',
-      p_record_id: harvest.id,
-    }),
-    'soft_delete_own_harvest_record should mark author-owned records deleted.'
-  );
-  await expectSuccess(
-    STAGE,
-    'worker soft deletes own manual care record',
-    workerClient.rpc('soft_delete_own_manual_care_record', {
-      p_reason: 'db test cleanup',
-      p_record_id: manualCare.id,
-    }),
-    'soft_delete_own_manual_care_record should mark author-owned records deleted.'
-  );
-
-  const deletedRows = await expectSuccess(
-    STAGE,
-    'soft delete audit columns are set',
-    ownerClient
-      .from('tree_condition_reports')
-      .select('id, is_deleted, deleted_by, deleted_at, delete_reason')
-      .eq('id', condition.id),
-    'Soft delete should preserve records with audit columns instead of hard deleting.'
-  );
-  assertCondition(
-    STAGE,
-    'condition report soft delete audit populated',
-    deletedRows[0]?.is_deleted === true && deletedRows[0]?.deleted_by === state.workerId,
-    'Condition report soft delete audit fields were not populated.',
-    'Check soft_delete_own_tree_condition_report audit update.'
-  );
-
-  const historyAfterDelete = await expectSuccess(
-    STAGE,
-    'tree_history_view excludes soft-deleted tree records',
-    ownerClient
-      .from('tree_history_view')
-      .select('source_id, history_type')
-      .eq('tree_id', state.treeId)
-      .in('source_id', [condition.id, phase.id, harvest.id, manualCare.id]),
-    'tree_history_view should filter is_deleted records out of normal timeline history.'
-  );
-  assertEqual(
-    STAGE,
-    'deleted source rows no longer visible in history',
-    historyAfterDelete.length,
-    0,
-    'Soft-deleted condition, phase, harvest, and manual care records should be hidden from tree_history_view.'
+    3,
+    'Condition, phase, and harvest records should appear in tree_history_view.'
   );
 });

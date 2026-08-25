@@ -16,7 +16,7 @@
 // memperlakukan nilai di luar daftar ini sebagai null supaya layar tidak pecah
 // sebelum data itu dibersihkan.
 //
-// Mengikuti pola membership.ts / operationalReport.ts / satuanBahan.ts: tuple
+// Mengikuti pola membership.ts / satuanBahan.ts: tuple
 // `as const` dulu, tipenya diturunkan dari tuple, sehingga daftarnya bisa
 // diiterasi saat runtime untuk chip pemilih dan divalidasi lewat type guard.
 

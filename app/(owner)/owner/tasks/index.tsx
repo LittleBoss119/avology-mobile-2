@@ -108,7 +108,7 @@ export default function OwnerTaskListScreen() {
       {filteredTasks.length === 0 ? (
         <EmptyState
           title={tasks.length === 0 ? 'Belum ada tugas' : 'Tidak ada tugas pada filter ini'}
-          subtitle="Tugas dari jadwal perawatan atau laporan operasional akan muncul di sini."
+          subtitle="Tugas dari jadwal perawatan akan muncul di sini."
         />
       ) : (
         <View style={{ gap: 12 }}>

@@ -97,7 +97,8 @@ function buildEventMeta(entry: FarmAccessEventEntry): string {
 
 // Nilai event yang belum dikenal aplikasi tidak boleh membuat seluruh baris
 // tampil rusak — jatuhkan ke nilai mentahnya saja. Pola yang sama dipakai
-// normalizeOperationalReportCategory di src/constants/operationalReport.ts.
+// toNullableSatuanBahan (careActivityShared.ts) dan mapper grade panen
+// (harvestService.ts), walau keduanya jatuh ke null alih-alih nilai mentah.
 function resolveEventLabel(event: string): string {
   return isFarmAccessEvent(event) ? FARM_ACCESS_EVENT_LABELS[event] : event;
 }

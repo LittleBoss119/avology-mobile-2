@@ -10,7 +10,6 @@ const stages = [
   '02-worker-management-rls.test.mjs',
   '03-tree-condition-phase-history.test.mjs',
   '04-sop-schedule-task-activity.test.mjs',
-  '05-operational-report-rpc.test.mjs',
   '06-dashboard-query.test.mjs',
   '07-feature-foundation.test.mjs',
   '08-tree-record-edit-delete-foundation.test.mjs',
