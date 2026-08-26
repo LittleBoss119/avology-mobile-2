@@ -33,6 +33,7 @@ export default function OwnerCreateTreeScreen() {
   const showSnackbar = useSnackbar();
   const [error, setError] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<TreeFormErrors>({});
+  const [processingPhoto, setProcessingPhoto] = React.useState(false);
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [values, setValues] = React.useState<TreeFormValues>(() => ({
@@ -110,30 +111,42 @@ export default function OwnerCreateTreeScreen() {
   }
 
   async function handlePickPhotoFromGallery() {
-    const result = await pickImageFromGallery();
+    setProcessingPhoto(true);
 
-    if (result.error) {
-      setError(result.error.message);
-      return;
-    }
+    try {
+      const result = await pickImageFromGallery();
 
-    if (result.data) {
-      setError(null);
-      setSelectedPhoto(result.data);
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
     }
   }
 
   async function handleTakePhotoFromCamera() {
-    const result = await takePhotoFromCamera();
+    setProcessingPhoto(true);
 
-    if (result.error) {
-      setError(result.error.message);
-      return;
-    }
+    try {
+      const result = await takePhotoFromCamera();
 
-    if (result.data) {
-      setError(null);
-      setSelectedPhoto(result.data);
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
     }
   }
 
@@ -149,6 +162,7 @@ export default function OwnerCreateTreeScreen() {
         <TreeMainPhotoFormSection
           disabled={submitting}
           photo={selectedPhoto}
+          processing={processingPhoto}
           onCameraPress={handleTakePhotoFromCamera}
           onGalleryPress={handlePickPhotoFromGallery}
           onRemoveSelected={() => setSelectedPhoto(null)}

@@ -277,7 +277,20 @@ export type CareSchedule = {
   category: CareCategory;
   scheduledDate: string;
   targetType: TargetType;
+  // BAYANGAN sejak migrasi 057, bukan sumber kebenaran. Jangan dipakai untuk
+  // MENAMPILKAN apa pun -- ia hanya memuat satu pohon dari daftar, sehingga
+  // jadwal tiga pohon akan terbaca sebagai satu. Yang benar targetTreeIds /
+  // targetTreeCodes di bawah. Kolomnya sendiri dibuang setelah migrasi 059.
   targetTreeId: UUID | null;
+  // Daftar pohon yang SUNGGUH disasar, dibaca dari care_schedule_trees.
+  //
+  // OPSIONAL dengan sengaja: hanya terisi kalau pemanggilnya memuatnya lewat
+  // resolveTreeTargetCodes. Mapper dasar tidak mengisinya, karena membaca
+  // jembatan menuntut kueri kedua yang tidak boleh dipaksakan ke setiap
+  // pembaca. `undefined` berarti "belum dimuat", bukan "tidak punya pohon" --
+  // dan di situlah tampilan jatuh balik ke bayangan.
+  targetTreeIds?: UUID[];
+  targetTreeCodes?: string[];
   customTargetNote: string | null;
   instruction: string | null;
   requiresPhoto: boolean;
@@ -316,7 +329,13 @@ export type CareTask = {
   category: CareCategory | null;
   instruction: string | null;
   targetType: TargetType;
+  // BAYANGAN sejak migrasi 057. Lihat catatan yang sama pada CareSchedule.
   targetTreeId: UUID | null;
+  // Daftar pohon tugas ini, diambil lewat careScheduleId ke
+  // care_schedule_trees. Tidak ada care_task_trees -- tugas tidak punya daftar
+  // pohonnya sendiri, ia meminjam daftar milik jadwalnya.
+  targetTreeIds?: UUID[];
+  targetTreeCodes?: string[];
   customTargetNote: string | null;
   dueDate: string;
   status: TaskStatus;
@@ -424,13 +443,18 @@ export type CreateTreeData = {
 
 // Lihat catatan di CreateTreeInput soal ketiadaan treeCode.
 //
-// variety dan plantedAt SENGAJA tidak ada di sini. Keduanya milik siklus tanam
-// sejak migrasi 055, dan mengubahnya berarti mengubah fakta penanaman yang
-// sudah terjadi. Yang bisa diedit dari layar pohon tinggal POSISINYA.
+// variety dan plantedAt KEMBALI sejak migrasi 056, tapi maknanya berbeda dari
+// sebelum 055: keduanya MENGOREKSI siklus tanam yang sedang aktif, bukan
+// membuka siklus baru. Salah ketik saat input adalah kesalahan pencatatan, dan
+// memperbaikinya tidak boleh mengarang peristiwa penanaman ulang.
+//
+// Penanaman ulang yang SUNGGUHAN tetap lewat StartTreePlantingInput.
 export type UpdateTreeInput = {
   treeId: UUID;
   rowPosition?: string | null;
   columnPosition?: string | null;
+  variety?: string | null;
+  plantedAt?: string | null;
 };
 
 // ---- Siklus tanam (migrasi 055) ----
@@ -452,6 +476,15 @@ export type StartTreePlantingInput = {
 
 export type StartTreePlantingData = {
   plantingId: UUID;
+};
+
+// Seluruh siklus tanam sebuah posisi, termasuk yang SUDAH ditutup.
+//
+// Berbeda dari Tree.activePlanting, yang sengaja hanya membawa siklus berjalan.
+// Dua hal butuh siklus lama: keterangan pada posisi yang sedang kosong (kapan
+// dan kenapa pohon sebelumnya berakhir) dan pembatas siklus di riwayat pohon.
+export type GetTreePlantingsInput = {
+  treeId: UUID;
 };
 
 export type TreeArchiveInput = {
@@ -652,7 +685,10 @@ export type UpdateCareScheduleInput = {
   // field jadwal lain tetap bisa diubah tanpa menyentuh penugasan.
   assignedWorkerId?: UUID | null;
   targetType: TargetType;
-  targetTreeId?: UUID | null;
+  // Satu sampai banyak pohon. Menggantikan targetTreeId tunggal: sejak migrasi
+  // 057 daftar pohon sebuah jadwal ada di care_schedule_trees, dan
+  // updateCareSchedule-lah yang menulis jembatan itu.
+  targetTreeIds?: UUID[];
   customTargetNote?: string | null;
   instruction?: string | null;
   requiresPhoto?: boolean;
@@ -673,7 +709,9 @@ export type CreateManualScheduleInput = {
   scheduledDate: string;
   assignedWorkerId: UUID;
   targetType: TargetType;
-  targetTreeId?: UUID | null;
+  // Dikirim ke RPC sebagai p_target_tree_ids (migrasi 057). RPC yang memutuskan
+  // mana yang sah, mengisi jembatan, dan menyetel kolom bayangan.
+  targetTreeIds?: UUID[];
   customTargetNote?: string | null;
   instruction?: string | null;
   requiresPhoto?: boolean;
@@ -685,6 +723,14 @@ export type CreateManualScheduleInput = {
 export type CreateManualScheduleData = {
   scheduleId: UUID;
   taskId: UUID;
+  // Ketiganya berasal dari create_manual_schedule (migrasi 057).
+  //
+  // rejectedMessage TIDAK sama dengan galat: jadwalnya tetap jadi untuk pohon
+  // yang sah, dan pesan ini memberi tahu pemilik pohon mana yang tidak ikut
+  // karena posisinya sedang tidak ditanami.
+  scheduledTreeIds: UUID[];
+  rejectedTreeIds: UUID[];
+  rejectedMessage: string | null;
 };
 
 export type GetWorkerTasksInput = {

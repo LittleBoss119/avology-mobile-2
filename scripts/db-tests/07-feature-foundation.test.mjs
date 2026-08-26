@@ -83,8 +83,10 @@ await runStage(STAGE, async () => {
   // kembali jadi tiga. Ketiga nilai yang diuji di sini tidak pernah kembali,
   // jadi insert-nya pasti melanggar photo_attachments_entity_type_check.
   //
-  // Cakupan foto yang masih hidup ada di stage 03 (condition_record) dan
-  // stage 04 (task_proof).
+  // Cakupan foto ada di stage 17 (17-photo-attachment-policies.test.mjs):
+  // ketiga entity_type yang masih hidup, keenam policy foto, dan seluruh CHECK
+  // constraint photo_attachments. Stage 03 dan 04 TIDAK menyentuh foto sama
+  // sekali -- komentar sebelumnya di baris ini menunjuk ke sana dan itu keliru.
 
   const historyRows = await expectSuccess(
     STAGE,

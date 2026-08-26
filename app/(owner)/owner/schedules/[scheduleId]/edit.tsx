@@ -166,7 +166,7 @@ export default function EditCareScheduleScreen() {
       requiresPhoto: values.requiresPhoto,
       scheduleId: schedule.id,
       scheduledDate: values.scheduledDate,
-      targetTreeId: values.targetType === 'tree' ? values.targetTreeId : null,
+      targetTreeIds: values.targetType === 'tree' ? values.targetTreeIds : undefined,
       targetType: values.targetType,
       title: values.title,
     });
@@ -229,7 +229,7 @@ export default function EditCareScheduleScreen() {
           onFieldLayout={(key, y) => {
             fieldOffsets.current[key] = y;
           }}
-          trees={trees}
+          trees={pickerTrees(trees, values.targetTreeIds)}
           values={values}
           workers={workers}
         />
@@ -285,8 +285,30 @@ function buildInitialValues(schedule: CareScheduleDetail): ManualScheduleFormVal
     repeatEveryDays: '',
     requiresPhoto: schedule.requiresPhoto,
     scheduledDate: schedule.scheduledDate,
-    targetTreeId: schedule.targetTreeId ?? '',
+    // Dari care_schedule_trees, bukan dari kolom bayangan. Jadwal tiga pohon
+    // yang dibuka di layar ini harus kembali sebagai tiga pohon terpilih --
+    // membaca bayangan akan mengembalikannya sebagai satu, lalu menyimpan
+    // membuang dua sisanya tanpa pemilik pernah memintanya.
+    //
+    // `?? []` menutup jadwal yang kode pohonnya gagal dimuat: form terbuka
+    // dengan nol pohon terpilih dan validasi menahan simpan, alih-alih diam-
+    // diam menulis daftar kosong.
+    targetTreeIds: schedule.targetTreeIds ?? [],
     targetType: schedule.targetType,
     title: schedule.title,
   };
+}
+
+// Pemilih menampilkan posisi yang SEDANG DITANAMI, ditambah pohon yang sudah
+// terpilih di jadwal ini walau siklusnya sudah ditutup.
+//
+// Tambahan itu bukan kelonggaran. Menyaringnya habis akan membuat pohon yang
+// siklusnya baru ditutup HILANG dari pemilih sementara id-nya tetap terkirim
+// saat simpan -- keadaan tersembunyi yang tidak bisa dilihat maupun dibatalkan
+// pemilik. Dengan ditampilkan, ia terbaca apa adanya dan bisa dilepas; yang
+// tetap tidak bisa dilakukan adalah MENAMBAH posisi tanpa siklus aktif.
+function pickerTrees(trees: Tree[], selectedTreeIds: string[]): Tree[] {
+  const selected = new Set(selectedTreeIds);
+
+  return trees.filter((tree) => tree.activePlanting !== null || selected.has(tree.id));
 }

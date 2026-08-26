@@ -228,7 +228,14 @@ export default function CareScheduleListScreen() {
 
     if (debouncedSearch) {
       const workers = getScheduleWorkerNames(schedule, workerNames).join(' ');
-      const searchable = [schedule.title, formatCareTarget(schedule), workers]
+      // Kode pohon dimasukkan LENGKAP, bukan lewat formatCareTarget. Ringkasan
+      // yang tampil di kartu berbunyi "3 pohon", dan mencari "1-A" tidak akan
+      // pernah menemukannya kalau hanya ringkasan itu yang dicari.
+      //
+      // `?? []` menutup jadwal yang kode pohonnya belum termuat: pencarian
+      // tetap jalan atas judul, sasaran ringkas, dan nama pekerja.
+      const treeCodes = (schedule.targetTreeCodes ?? []).join(' ');
+      const searchable = [schedule.title, formatCareTarget(schedule), treeCodes, workers]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();

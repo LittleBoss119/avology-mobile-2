@@ -34,7 +34,10 @@ export type ManualScheduleFormValues = {
   repeatEveryDays: string;
   requiresPhoto: boolean;
   scheduledDate: string;
-  targetTreeId: string;
+  // Satu sampai banyak pohon sejak migrasi 057. Dulu satu string; diubah jadi
+  // daftar karena satu jadwal kini boleh menyasar N pohon lewat
+  // care_schedule_trees.
+  targetTreeIds: string[];
   targetType: TargetType;
   title: string;
 };
@@ -162,8 +165,19 @@ export function ManualScheduleForm({
     onChange({
       ...values,
       customTargetNote: targetType === 'custom' ? values.customTargetNote : '',
-      targetTreeId: targetType === 'tree' ? values.targetTreeId : '',
+      targetTreeIds: targetType === 'tree' ? values.targetTreeIds : [],
       targetType,
+    });
+  }
+
+  function toggleTree(treeId: string) {
+    const selected = values.targetTreeIds.includes(treeId);
+
+    onChange({
+      ...values,
+      targetTreeIds: selected
+        ? values.targetTreeIds.filter((id) => id !== treeId)
+        : [...values.targetTreeIds, treeId],
     });
   }
 
@@ -236,13 +250,11 @@ export function ManualScheduleForm({
       {showTargetDetail ? (
         <View onLayout={reportLayout('targetDetail')}>
           {values.targetType === 'tree' ? (
-            <FormChipGroup
-              emptyText="Belum ada pohon aktif. Tambahkan pohon dulu."
+            <FormTreeMultiSelect
               error={errors?.targetDetail}
-              label="Pohon *"
-              options={trees.map((tree) => ({ label: formatTreeDisplayCode(tree), value: tree.id }))}
-              selectedValue={values.targetTreeId}
-              onSelect={(value) => updateValue('targetTreeId', value)}
+              onToggle={toggleTree}
+              selectedTreeIds={values.targetTreeIds}
+              trees={trees}
             />
           ) : null}
           {values.targetType === 'custom' ? (
@@ -313,8 +325,8 @@ export function validateScheduleForm(values: ManualScheduleFormValues): Schedule
     errors.targetType = 'Pilih target.';
   }
 
-  if (values.targetType === 'tree' && !values.targetTreeId.trim()) {
-    errors.targetDetail = 'Pohon wajib dipilih.';
+  if (values.targetType === 'tree' && values.targetTreeIds.length === 0) {
+    errors.targetDetail = 'Pilih minimal satu pohon.';
   } else if (values.targetType === 'custom' && !values.customTargetNote.trim()) {
     errors.targetDetail = 'Target khusus wajib diisi.';
   }
@@ -385,7 +397,7 @@ export function clearResolvedScheduleFormErrors(
 
 function isTargetDetailValid(values: ManualScheduleFormValues): boolean {
   if (values.targetType === 'tree') {
-    return Boolean(values.targetTreeId.trim());
+    return values.targetTreeIds.length > 0;
   }
 
   if (values.targetType === 'custom') {
@@ -585,6 +597,100 @@ export function FormChipGroup({
               onPress={() => onSelect(option.value)}
             />
           ))}
+        </View>
+      )}
+      <FormError message={error} />
+    </View>
+  );
+}
+
+// Pemilih pohon pilih-banyak.
+//
+// KOMPONEN TERPISAH, bukan FormChipGroup yang dilonggarkan. FormChipGroup
+// dipakai enam field lain di form ini (kategori, pekerja, target, bukti foto,
+// pengulangan) dan satu layar lain; mengubah kontraknya jadi pilih-banyak
+// berarti menyentuh semuanya demi satu field.
+//
+// Bentuknya daftar menurun, bukan pil menyamping. Jumlah pohon tumbuh sampai
+// puluhan dan pil yang membungkus beberapa baris membuat "yang mana yang
+// tercentang" sulit dipindai; satu kode per baris dengan centang di tepi kanan
+// terbaca lurus ke bawah.
+//
+// KEADAAN TERPILIH TIDAK HANYA WARNA: ada ikon centang di kanan, teksnya
+// menebal, dan garis tepinya menebal. Tidak ada ikon kotak-centang di proyek
+// ini, jadi baris yang belum terpilih memang tidak menampilkan ikon apa pun --
+// yang membedakan tetap tiga hal sekaligus, bukan warna sendirian.
+function FormTreeMultiSelect({
+  error,
+  onToggle,
+  selectedTreeIds,
+  trees,
+}: {
+  error?: string;
+  onToggle: (treeId: string) => void;
+  selectedTreeIds: string[];
+  trees: Tree[];
+}) {
+  const selectedCount = selectedTreeIds.length;
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <FormLabel error={Boolean(error)} text="Pohon *" />
+      <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+        {selectedCount === 0
+          ? 'Belum ada pohon dipilih. Ketuk untuk memilih, boleh lebih dari satu.'
+          : `${selectedCount} pohon dipilih`}
+      </Text>
+      {trees.length === 0 ? (
+        <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+          Belum ada posisi yang sedang ditanami. Tanam pohon dulu sebelum membuat jadwal.
+        </Text>
+      ) : (
+        <View
+          style={{
+            borderColor: error ? colors.danger : colors.border,
+            borderCurve: 'continuous',
+            borderRadius: radius.md,
+            borderWidth: 1,
+            overflow: 'hidden',
+          }}
+        >
+          {trees.map((tree, index) => {
+            const selected = selectedTreeIds.includes(tree.id);
+
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                key={tree.id}
+                onPress={() => onToggle(tree.id)}
+                style={{
+                  alignItems: 'center',
+                  backgroundColor: selected ? colors.primarySoft : colors.surface,
+                  borderTopColor: colors.divider,
+                  borderTopWidth: index === 0 ? 0 : 1,
+                  flexDirection: 'row',
+                  gap: spacing.md,
+                  minHeight: 48,
+                  paddingHorizontal: spacing.lg,
+                  paddingVertical: spacing.md,
+                }}
+              >
+                <Text
+                  selectable={false}
+                  style={{
+                    color: selected ? colors.primaryDark : colors.text,
+                    flex: 1,
+                    fontSize: 16,
+                    fontWeight: selected ? '700' : '400',
+                  }}
+                >
+                  {formatTreeDisplayCode(tree)}
+                </Text>
+                {selected ? <Icon name="check" size={20} color={colors.primary} /> : null}
+              </Pressable>
+            );
+          })}
         </View>
       )}
       <FormError message={error} />
@@ -793,8 +899,19 @@ function ProofOptionButton({
   );
 }
 
+// SATU-SATUNYA tempat teks sasaran dirumuskan. Dipakai enam layar di kedua
+// sisi; jangan membuat perumusan kedua di layar mana pun.
+//
+// Ia TIDAK mengambil data sendiri. `targetTreeCodes` disuapkan pemanggil, sudah
+// dipecahkan dari care_schedule_trees oleh service. Membuat fungsi format
+// melakukan pembacaan berarti satu request per kartu di layar daftar.
+//
+// Bentuknya RINGKASAN, untuk baris meta kartu dan subjudul. Daftar kode pohon
+// yang lengkap dirender TargetTreeCodeList di bawah -- itu bukan perumusan
+// kedua, itu penyajian yang berbeda dari data yang sama.
 export function formatCareTarget(input: {
   customTargetNote: string | null;
+  targetTreeCodes?: string[] | null;
   targetTreeId: string | null;
   targetType: TargetType;
 }): string {
@@ -803,10 +920,73 @@ export function formatCareTarget(input: {
   }
 
   if (input.targetType === 'tree') {
+    const codes = input.targetTreeCodes ?? [];
+
+    if (codes.length === 1) {
+      return `Pohon ${codes[0]}`;
+    }
+
+    if (codes.length > 1) {
+      return `${codes.length} pohon`;
+    }
+
+    // Kode belum dimuat (pemanggil tidak menyuapkannya) atau jadwalnya benar-
+    // benar tidak punya pohon terbaca. Teks lamanya dipertahankan supaya tidak
+    // ada layar yang tiba-tiba kosong.
     return formatTreeTargetFallback(input.targetTreeId);
   }
 
   return input.customTargetNote ?? 'Target khusus belum diisi';
+}
+
+// Daftar kode pohon yang LENGKAP, untuk layar detail.
+//
+// Wajib di detail tugas pekerja: pekerja harus tahu pohon mana saja yang harus
+// dikerjakan SEBELUM menandai selesai. Meringkasnya jadi "3 pohon" di situ
+// berarti ia menandai selesai tanpa pernah diberi tahu pohon yang mana --
+// persis lubang yang membuat pekerjaan satu pohon tercatat sebagai tiga.
+export function TargetTreeCodeList({
+  targetTreeCodes,
+  targetTreeId,
+}: {
+  targetTreeCodes?: string[] | null;
+  targetTreeId: string | null;
+}) {
+  const codes = targetTreeCodes ?? [];
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
+        {codes.length > 1 ? `Pohon yang dikerjakan · ${codes.length} pohon` : 'Pohon yang dikerjakan'}
+      </Text>
+      {codes.length === 0 ? (
+        <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
+          {formatTreeTargetFallback(targetTreeId)}
+        </Text>
+      ) : (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+          {codes.map((code) => (
+            <View
+              key={code}
+              style={{
+                backgroundColor: colors.primarySoft,
+                borderColor: colors.primaryBorder,
+                borderCurve: 'continuous',
+                borderRadius: radius.md,
+                borderWidth: 1,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm,
+              }}
+            >
+              <Text selectable style={{ color: colors.primaryDark, fontSize: 16, fontWeight: '700' }}>
+                {code}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
 }
 
 function formatDate(value: string): string {

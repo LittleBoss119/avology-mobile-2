@@ -20,6 +20,8 @@ const stages = [
   '13-task-release-on-membership-exit.test.mjs',
   '14-schedule-lock-on-completed-only.test.mjs',
   '15-tree-planting-cycle.test.mjs',
+  '16-multi-tree-schedule.test.mjs',
+  '17-photo-attachment-policies.test.mjs',
 ];
 
 const summary = {

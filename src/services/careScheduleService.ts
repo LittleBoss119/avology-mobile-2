@@ -27,6 +27,7 @@ import type {
   UUID,
 } from '../types/domain';
 import { sweepMissedSchedules } from './missedScheduleSweep';
+import { compareTreePosition, resolveTreeTargetCodes } from './scheduleTreeService';
 import { fail, ok } from '../utils/serviceResult';
 
 const CARE_SCHEDULE_SELECT =
@@ -38,6 +39,18 @@ const SCHEDULE_TASK_BATCH_SIZE = 100;
 
 const CARE_TASK_SELECT =
   'id, farm_id, care_schedule_id, assigned_to, assigned_by, title, category, instruction, target_type, target_tree_id, custom_target_note, due_date, status, missed_at, requires_photo, created_at, updated_at';
+
+// Dipakai untuk SETIAP kegagalan penulisan di updateCareSchedule setelah
+// penulisan pertama dimulai.
+//
+// Dilempar sebagai `new Error(...)`, bukan sebagai fallbackMessage pada
+// fail(error, fallback). Alasannya bentuk toServiceError: fallbackMessage hanya
+// dipakai kalau errornya TIDAK punya message, sedangkan galat Supabase selalu
+// punya -- dan galat teknis apa pun akan dipetakan jadi "Terjadi kendala saat
+// memproses data. Periksa input lalu coba lagi.", saran yang salah di sini
+// karena tidak ada input yang bisa dibetulkan.
+const PARTIAL_SAVE_MESSAGE =
+  'Perubahan belum tersimpan seluruhnya. Buka ulang jadwal ini, lalu periksa daftar pohonnya.';
 
 const careCategories: CareCategory[] = [
   'watering',
@@ -57,9 +70,25 @@ type ActiveWorkerPickerRow = {
   full_name: string;
 };
 
+// Tiga kolom terakhir ditambahkan create_manual_schedule di migrasi 057.
+// Sebelumnya PostgREST tetap mengirimnya dan tipe ini diam-diam membuangnya,
+// jadi pemilik tidak pernah diberi tahu pohon mana yang ditolak.
 type ScheduleTaskRpcRow = {
   schedule_id: string;
   task_id: string;
+  scheduled_tree_ids: string[] | null;
+  rejected_tree_ids: string[] | null;
+  rejected_message: string | null;
+};
+
+type ScheduleTreeBridgeRow = {
+  tree_id: string;
+};
+
+type TreePositionRow = {
+  id: string;
+  row_position: number | null;
+  column_position: string | null;
 };
 
 type CareScheduleRow = {
@@ -114,7 +143,9 @@ type CareActivityIdRow = {
 
 type NormalizedManualTarget = {
   targetType: TargetType;
-  targetTreeId: string | null;
+  // Kosong untuk target 'farm' dan 'custom'. Untuk 'tree' dijamin berisi
+  // minimal satu id, sudah di-trim dan tanpa kembar.
+  targetTreeIds: string[];
   customTargetNote: string | null;
 };
 
@@ -128,7 +159,7 @@ type EditableScheduleUpdate = {
   instruction: string | null;
   requiresPhoto: boolean;
   scheduledDate: string;
-  targetTreeId: string | null;
+  targetTreeIds: string[];
   targetType: TargetType;
   title: string;
 };
@@ -162,7 +193,7 @@ export async function createManualSchedule(
 
   const target = normalizeManualTarget({
     customTargetNote: input.customTargetNote,
-    targetTreeId: input.targetTreeId,
+    targetTreeIds: input.targetTreeIds,
     targetType: input.targetType,
   });
 
@@ -194,7 +225,10 @@ export async function createManualSchedule(
     p_repeat_every_days: normalizeRepeatEveryDays(input.repeatEveryDays),
     p_requires_photo: input.requiresPhoto ?? false,
     p_scheduled_date: scheduledDate,
-    p_target_tree_id: target.targetTreeId,
+    // p_target_tree_ids, BUKAN p_target_tree_id. Yang tunggal masih ada di
+    // signature RPC demi pemanggil lama, tapi hanya yang jamak yang bisa
+    // membawa lebih dari satu pohon ke care_schedule_trees.
+    p_target_tree_ids: target.targetTreeIds.length > 0 ? target.targetTreeIds : null,
     p_target_type: target.targetType,
     p_title: title,
   });
@@ -212,6 +246,11 @@ export async function createManualSchedule(
   return ok({
     scheduleId: row.schedule_id,
     taskId: row.task_id,
+    scheduledTreeIds: row.scheduled_tree_ids ?? [],
+    rejectedTreeIds: row.rejected_tree_ids ?? [],
+    // Bukan galat. Jadwalnya sudah jadi; ini keterangan untuk pemilik soal
+    // pohon yang tidak ikut karena posisinya sedang tidak ditanami.
+    rejectedMessage: normalizeOptionalText(row.rejected_message),
   });
 }
 
@@ -289,12 +328,30 @@ export async function getCareSchedulesWithTasks(
     return fail(tasksResult.error);
   }
 
-  const withTasks = schedules.map((schedule) => ({
-    ...schedule,
-    // Sejak migration 041 sebuah jadwal boleh punya NOL tugas: penerus rantai
-    // dibuat tanpa tugas kalau pekerjanya sudah keluar dari kebun.
-    tasks: tasksResult.data.get(schedule.id) ?? [],
-  }));
+  // SATU pembacaan jembatan untuk SELURUH kartu yang akan dirender, bukan satu
+  // per kartu. Daftar jadwal owner rutin menampilkan puluhan baris sekaligus;
+  // membaca per kartu berarti puluhan request untuk satu layar.
+  const treeCodesBySchedule = await attachTreeTargets(schedules);
+
+  const withTasks = schedules.map((schedule) => {
+    const treeTarget = treeCodesBySchedule[schedule.id];
+
+    return {
+      ...schedule,
+      targetTreeIds: treeTarget?.treeIds,
+      targetTreeCodes: treeTarget?.treeCodes,
+      // Sejak migration 041 sebuah jadwal boleh punya NOL tugas: penerus rantai
+      // dibuat tanpa tugas kalau pekerjanya sudah keluar dari kebun.
+      //
+      // Tugas meminjam daftar pohon milik jadwalnya -- tidak ada
+      // care_task_trees, dan tidak ada pembacaan kedua untuk mengisinya.
+      tasks: (tasksResult.data.get(schedule.id) ?? []).map((task) => ({
+        ...task,
+        targetTreeIds: treeTarget?.treeIds,
+        targetTreeCodes: treeTarget?.treeCodes,
+      })),
+    };
+  });
 
   if (!input.excludeCompleted) {
     return ok(withTasks);
@@ -358,10 +415,51 @@ export async function getCareScheduleDetail(
     return fail(tasksResult.error, 'Gagal memuat tugas dari jadwal.');
   }
 
+  const schedule = mapCareSchedule(scheduleResult.data);
+  const treeTarget = (await attachTreeTargets([schedule]))[schedule.id];
+
   return ok({
-    ...mapCareSchedule(scheduleResult.data),
-    tasks: (tasksResult.data ?? []).map(mapCareTask),
+    ...schedule,
+    targetTreeIds: treeTarget?.treeIds,
+    targetTreeCodes: treeTarget?.treeCodes,
+    tasks: (tasksResult.data ?? []).map((row) => ({
+      ...mapCareTask(row),
+      targetTreeIds: treeTarget?.treeIds,
+      targetTreeCodes: treeTarget?.treeCodes,
+    })),
   });
+}
+
+// Membaca daftar pohon untuk sekumpulan jadwal sekaligus.
+//
+// SENGAJA TIDAK mengembalikan galat. Kode pohon adalah pelengkap tampilan;
+// kalau jembatannya tidak bisa dibaca, daftar jadwal tetap harus muncul dan
+// tampilannya jatuh balik ke bayangan lewat formatCareTarget. Menggagalkan
+// seluruh layar demi satu baris teks menukar hal besar dengan hal kecil.
+async function attachTreeTargets(
+  schedules: CareSchedule[]
+): Promise<Record<string, { treeIds: UUID[]; treeCodes: string[] }>> {
+  // Hanya jadwal bertarget pohon yang punya baris jembatan. Jadwal 'farm' dan
+  // 'custom' dibuang dari daftar id supaya query string .in() tidak menggendong
+  // id yang sudah pasti tidak menghasilkan apa-apa -- dan di kebun nyata
+  // jadwal 'farm' justru yang paling banyak.
+  const treeSchedules = schedules.filter((schedule) => schedule.targetType === 'tree');
+
+  if (treeSchedules.length === 0) {
+    return {};
+  }
+
+  const result = await resolveTreeTargetCodes(
+    treeSchedules.map((schedule) => ({
+      key: schedule.id,
+      scheduleId: schedule.id,
+      // Jadwal lama yang luput backfill 057 tidak punya baris jembatan sama
+      // sekali. Di situ -- dan HANYA di situ -- bayangannya dipakai.
+      fallbackTreeId: schedule.targetTreeId,
+    }))
+  );
+
+  return result.data ?? {};
 }
 
 export async function cancelCareSchedule(
@@ -517,7 +615,91 @@ export async function updateCareSchedule(
   // terjadi di titik ini.
   const scheduleDateChanged = schedule.scheduledDate !== normalized.scheduledDate;
 
+  // ---------------------------------------------------------------------------
+  // Dua pembacaan, NOL penulisan. Sengaja dituntaskan sebelum penulisan pertama:
+  // kalau salah satunya gagal, tidak ada apa pun yang sudah terlanjur berubah.
+  // ---------------------------------------------------------------------------
+  const currentBridgeResult = await supabase
+    .from('care_schedule_trees')
+    .select('tree_id')
+    .eq('schedule_id', schedule.id)
+    .returns<ScheduleTreeBridgeRow[]>();
+
+  if (currentBridgeResult.error) {
+    return fail(currentBridgeResult.error, 'Gagal memuat daftar pohon jadwal ini.');
+  }
+
+  const currentTreeIds = new Set((currentBridgeResult.data ?? []).map((row) => row.tree_id));
+  const nextTreeIds = normalized.targetType === 'tree' ? normalized.targetTreeIds : [];
+
+  // Kolom bayangan diisi pohon yang SAMA dengan yang dipilih RPC: urutan
+  // row_position lalu column_position. Bukan urutan teks tree_code -- urutan
+  // teks menaruh '10-A' sebelum '2-A', dan kalau sisi aplikasi memilih pohon
+  // yang berbeda dari sisi database, bayangan jadwal hasil sunting akan
+  // berbeda dari bayangan jadwal hasil buat.
+  let shadowTreeId: string | null = null;
+
+  if (nextTreeIds.length > 0) {
+    const shadowResult = await pickShadowTreeId(nextTreeIds);
+
+    if (shadowResult.error) {
+      return fail(shadowResult.error);
+    }
+
+    shadowTreeId = shadowResult.data;
+  }
+
   const now = new Date().toISOString();
+  // ---------------------------------------------------------------------------
+  // URUTAN PENULISAN WAJIB: insert jembatan -> delete jembatan -> update
+  // bayangan. Jangan ditukar.
+  //
+  // Alasannya keadaan di tengah. Kalau delete berjalan lebih dulu lalu insert
+  // gagal, jadwal ini berdiri tanpa satu pun pohon -- dan complete_task yang
+  // membaca jembatan akan menautkan pekerjaan ke nol pohon, atau jatuh ke
+  // cadangan bayangan yang saat itu juga sudah tidak sepadan. Dengan insert
+  // lebih dulu, kegagalan di tengah menyisakan jadwal yang menyasar TERLALU
+  // BANYAK pohon -- keadaan yang salah tapi bisa dilihat dan dibetulkan owner,
+  // bukan pekerjaan yang hilang tanpa jejak.
+  //
+  // Tidak ada transaksi yang bisa membungkus ketiganya: jalur sunting sengaja
+  // TIDAK lewat RPC (keputusan 057), dan klien Supabase tidak bisa membungkus
+  // beberapa statement PostgREST dalam satu transaksi.
+  // ---------------------------------------------------------------------------
+
+  // 1. Insert pohon yang baru.
+  const treeIdsToInsert = nextTreeIds.filter((treeId) => !currentTreeIds.has(treeId));
+
+  if (treeIdsToInsert.length > 0) {
+    const insertResult = await supabase
+      .from('care_schedule_trees')
+      .upsert(
+        treeIdsToInsert.map((treeId) => ({ schedule_id: schedule.id, tree_id: treeId })),
+        { ignoreDuplicates: true, onConflict: 'schedule_id,tree_id' }
+      );
+
+    if (insertResult.error) {
+      return fail(new Error(PARTIAL_SAVE_MESSAGE));
+    }
+  }
+
+  // 2. Delete pohon yang tidak lagi dipilih.
+  const nextTreeIdSet = new Set(nextTreeIds);
+  const treeIdsToDelete = Array.from(currentTreeIds).filter((treeId) => !nextTreeIdSet.has(treeId));
+
+  if (treeIdsToDelete.length > 0) {
+    const deleteResult = await supabase
+      .from('care_schedule_trees')
+      .delete()
+      .eq('schedule_id', schedule.id)
+      .in('tree_id', treeIdsToDelete);
+
+    if (deleteResult.error) {
+      return fail(new Error(PARTIAL_SAVE_MESSAGE));
+    }
+  }
+
+  // 3. Update kolom bayangan (bersama sisa field jadwal).
   const scheduleUpdate = {
     // Keduanya hanya ikut dikirim kalau pemanggil memang menyebutkannya;
     // `undefined` berarti kolomnya tidak disentuh.
@@ -528,7 +710,7 @@ export async function updateCareSchedule(
     instruction: normalized.instruction,
     requires_photo: normalized.requiresPhoto,
     scheduled_date: normalized.scheduledDate,
-    target_tree_id: normalized.targetTreeId,
+    target_tree_id: shadowTreeId,
     target_type: normalized.targetType,
     title: normalized.title,
     updated_at: now,
@@ -540,7 +722,10 @@ export async function updateCareSchedule(
     .eq('id', schedule.id);
 
   if (scheduleUpdateResult.error) {
-    return fail(scheduleUpdateResult.error, 'Gagal memperbarui jadwal perawatan.');
+    // Jembatan sudah berubah tapi bayangannya belum. Pesannya menyebut itu
+    // apa adanya, bukan 'Gagal memperbarui jadwal' yang membuat owner mengira
+    // tidak ada apa pun yang berubah.
+    return fail(new Error(PARTIAL_SAVE_MESSAGE));
   }
 
   if (schedule.tasks.length > 0) {
@@ -565,7 +750,7 @@ export async function updateCareSchedule(
         ...(scheduleDateChanged ? { due_date: normalized.scheduledDate } : {}),
         instruction: normalized.instruction,
         requires_photo: normalized.requiresPhoto,
-        target_tree_id: normalized.targetTreeId,
+        target_tree_id: shadowTreeId,
         target_type: normalized.targetType,
         title: normalized.title,
         updated_at: now,
@@ -573,7 +758,7 @@ export async function updateCareSchedule(
       .in('id', taskIds);
 
     if (taskUpdateResult.error) {
-      return fail(taskUpdateResult.error, 'Jadwal diperbarui, tetapi tugas pekerja belum dapat disinkronkan.');
+      return fail(new Error(PARTIAL_SAVE_MESSAGE));
     }
   }
 
@@ -741,6 +926,31 @@ async function getTasksByScheduleId(
   }
 
   return ok(tasksByScheduleId);
+}
+
+// Pohon berkode terkecil dari sebuah daftar, dipakai mengisi kolom bayangan.
+//
+// Urutannya WAJIB sepadan dengan filter_trees_with_active_planting (migrasi
+// 057) -- lihat compareTreePosition di scheduleTreeService, yang dipakai
+// bersama supaya tidak ada dua definisi "terkecil" di basis kode ini.
+async function pickShadowTreeId(treeIds: string[]): Promise<ServiceResult<string>> {
+  const { data, error } = await supabase
+    .from('trees')
+    .select('id, row_position, column_position')
+    .in('id', treeIds)
+    .returns<TreePositionRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memeriksa pohon yang dipilih.');
+  }
+
+  const rows = [...(data ?? [])].sort(compareTreePosition);
+
+  if (rows.length === 0) {
+    return fail(new Error('Pohon yang dipilih tidak ditemukan di kebun ini.'));
+  }
+
+  return ok(rows[0].id);
 }
 
 async function getScheduleEditEligibilityFromDetail(
@@ -954,9 +1164,12 @@ function normalizeScheduleDate(value: string): string | Error {
   return normalized;
 }
 
+// Dipakai DUA jalur: buat jadwal (lewat RPC) dan sunting jadwal (lewat UPDATE
+// tabel langsung). Keduanya sudah diperiksa sebelum bentuk ini dilonggarkan
+// dari satu pohon menjadi satu-sampai-banyak.
 function normalizeManualTarget(input: {
   targetType: TargetType | string | null | undefined;
-  targetTreeId?: string | null;
+  targetTreeIds?: readonly (string | null | undefined)[] | null;
   customTargetNote?: string | null;
 }): NormalizedManualTarget | Error {
   if (!input.targetType) {
@@ -974,21 +1187,30 @@ function normalizeManualTarget(input: {
   if (input.targetType === 'farm') {
     return {
       customTargetNote: null,
-      targetTreeId: null,
+      targetTreeIds: [],
       targetType: 'farm',
     };
   }
 
   if (input.targetType === 'tree') {
-    const treeId = normalizeOptionalText(input.targetTreeId);
+    // Kembar dibuang di sini, bukan diserahkan ke primary key jembatan:
+    // pelanggarannya berbunyi "duplicate key value violates unique constraint"
+    // dan itu tidak memberi tahu pemilik apa pun.
+    const treeIds = Array.from(
+      new Set(
+        (input.targetTreeIds ?? [])
+          .map((treeId) => normalizeOptionalText(treeId))
+          .filter((treeId): treeId is string => Boolean(treeId))
+      )
+    );
 
-    if (!treeId) {
-      return new Error('Pohon target wajib dipilih.');
+    if (treeIds.length === 0) {
+      return new Error('Pilih minimal satu pohon.');
     }
 
     return {
       customTargetNote: null,
-      targetTreeId: treeId,
+      targetTreeIds: treeIds,
       targetType: 'tree',
     };
   }
@@ -1001,7 +1223,7 @@ function normalizeManualTarget(input: {
 
   return {
     customTargetNote,
-    targetTreeId: null,
+    targetTreeIds: [],
     targetType: 'custom',
   };
 }
@@ -1061,7 +1283,7 @@ function normalizeScheduleUpdateInput(input: UpdateCareScheduleInput): EditableS
 
   const target = normalizeManualTarget({
     customTargetNote: input.customTargetNote,
-    targetTreeId: input.targetTreeId,
+    targetTreeIds: input.targetTreeIds,
     targetType: input.targetType,
   });
 
@@ -1088,7 +1310,7 @@ function normalizeScheduleUpdateInput(input: UpdateCareScheduleInput): EditableS
     instruction: normalizeOptionalText(input.instruction),
     requiresPhoto: input.requiresPhoto ?? false,
     scheduledDate,
-    targetTreeId: target.targetTreeId,
+    targetTreeIds: target.targetTreeIds,
     targetType: target.targetType,
     title,
   };

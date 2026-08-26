@@ -22,7 +22,7 @@ import {
   type SatuanBahan,
 } from '../../../../../src/constants/satuanBahan';
 import { spacing, tokens } from '../../../../../src/constants/theme';
-import { pickImageFromGallery, takePhotoFromCamera } from '../../../../../src/lib/media';
+import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../../../../../src/lib/media';
 import { setPendingFeedback } from '../../../../../src/lib/pendingFeedback';
 import {
   completeTask,
@@ -76,6 +76,7 @@ export default function WorkerTaskRecordScreen() {
 
   const [bahanError, setBahanError] = React.useState<string | null>(null);
   const [photoError, setPhotoError] = React.useState<string | null>(null);
+  const [processingPhoto, setProcessingPhoto] = React.useState(false);
   const [reasonError, setReasonError] = React.useState<string | null>(null);
   // Default besok: RPC menolak hari ini dan masa lalu, jadi membuka picker di
   // tanggal hari ini hanya akan menyeret pekerja ke pesan error.
@@ -142,34 +143,46 @@ export default function WorkerTaskRecordScreen() {
   );
 
   async function handlePickFromGallery() {
-    const result = await pickImageFromGallery();
+    setProcessingPhoto(true);
 
-    if (result.error) {
-      setBannerError(result.error.message);
-      return;
-    }
+    try {
+      const result = await pickImageFromGallery();
 
-    if (result.data) {
-      setBannerError(null);
-      setPhotoError(null);
-      setNewPhoto(result.data);
-      setRemoveExistingPhoto(false);
+      if (result.error) {
+        setBannerError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setBannerError(null);
+        setPhotoError(null);
+        setNewPhoto(result.data);
+        setRemoveExistingPhoto(false);
+      }
+    } finally {
+      setProcessingPhoto(false);
     }
   }
 
   async function handleTakeFromCamera() {
-    const result = await takePhotoFromCamera();
+    setProcessingPhoto(true);
 
-    if (result.error) {
-      setBannerError(result.error.message);
-      return;
-    }
+    try {
+      const result = await takePhotoFromCamera();
 
-    if (result.data) {
-      setBannerError(null);
-      setPhotoError(null);
-      setNewPhoto(result.data);
-      setRemoveExistingPhoto(false);
+      if (result.error) {
+        setBannerError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setBannerError(null);
+        setPhotoError(null);
+        setNewPhoto(result.data);
+        setRemoveExistingPhoto(false);
+      }
+    } finally {
+      setProcessingPhoto(false);
     }
   }
 
@@ -497,8 +510,9 @@ export default function WorkerTaskRecordScreen() {
               text="Foto"
             />
             <ProofPhotoField
-              disabled={submitting}
+              disabled={submitting || processingPhoto}
               imageUri={photoUri}
+              processing={processingPhoto}
               onCameraPress={handleTakeFromCamera}
               onDeletePhoto={handleDeletePhoto}
               onGalleryPress={handlePickFromGallery}
@@ -721,18 +735,25 @@ function LockedResultRow({ status }: { status: ActivityStatus }) {
 // yang dibuat di Tahap B, dibungkus Pressable supaya seluruh kotaknya jadi
 // target sentuh — bukan cuma ikonnya. Ada foto = gambar penuh dengan tombol
 // kamera hijau di pojok. Sumber foto lewat PhotoSourceSheet bersama.
+// `processing` dipisahkan dari `disabled` dengan sengaja: `disabled` berarti
+// formulirnya sedang dikirim, `processing` berarti fotonya sedang diperkecil.
+// Bagi pengguna keduanya kejadian yang berbeda, dan hanya yang kedua yang perlu
+// menerangkan dirinya lewat teks. Pemanggilnya menyalakan `disabled` juga selama
+// memproses, sehingga bidang ini tidak bisa ditekan dua kali di tengah jalan.
 function ProofPhotoField({
   disabled,
   imageUri,
   onCameraPress,
   onDeletePhoto,
   onGalleryPress,
+  processing,
 }: {
   disabled: boolean;
   imageUri: string | null;
   onCameraPress: () => void;
   onDeletePhoto: () => void;
   onGalleryPress: () => void;
+  processing: boolean;
 }) {
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const hasPhoto = Boolean(imageUri);
@@ -797,12 +818,20 @@ function ProofPhotoField({
         <Pressable accessibilityLabel="Tambah foto" accessibilityRole="button" disabled={disabled} onPress={openSheet}>
           <EmptyState
             icon="camera"
-            subtitle="Pencet untuk ambil atau pilih foto."
-            title="Tambah foto"
+            subtitle={processing ? PHOTO_PROCESSING_MESSAGE : 'Pencet untuk ambil atau pilih foto.'}
+            title={processing ? 'Menyiapkan foto' : 'Tambah foto'}
             variant="dashed"
           />
         </Pressable>
       )}
+
+      {/* Cabang berfoto tidak memakai EmptyState, jadi keterangannya ditaruh di
+          bawah gambar — satu pesan per cabang, tidak pernah keduanya. */}
+      {processing && hasPhoto ? (
+        <Text selectable style={{ color: tokens.color.text.secondary, ...tokens.type.bodySmall }}>
+          {PHOTO_PROCESSING_MESSAGE}
+        </Text>
+      ) : null}
     </>
   );
 }

@@ -11,6 +11,7 @@ import {
   type ManualScheduleFormValues,
   type ScheduleFormErrors,
 } from '../../../../src/components/care-schedule-components';
+import { ConfirmDialog } from '../../../../src/components/bottom-sheet';
 import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
 import { createManualSchedule } from '../../../../src/services/careScheduleService';
@@ -28,10 +29,24 @@ const initialValues: ManualScheduleFormValues = {
   repeatEveryDays: '',
   requiresPhoto: false,
   scheduledDate: getTodayIsoDate(),
-  targetTreeId: '',
+  targetTreeIds: [],
   targetType: 'farm',
   title: '',
 };
+
+// Posisi tanpa siklus tanam aktif tidak boleh muncul di pemilih.
+//
+// Disaring DI SINI, bukan di getTrees. getTrees sengaja tetap membawa posisi
+// kosong -- daftar pohon dan denah kebun memang harus menampilkannya. Yang
+// tidak boleh dijadwalkan hanyalah posisi yang tidak sedang ditanami, dan itu
+// urusan layar ini.
+//
+// Penyaring yang SEBENARNYA tetap ada di create_manual_schedule (migrasi 057).
+// Penyaringan di sini hanya supaya pemilik tidak pernah melihat pilihan yang
+// akan ditolak; ia bukan pengganti penjaga di sisi database.
+function selectableTrees(trees: Tree[]): Tree[] {
+  return trees.filter((tree) => tree.activePlanting !== null);
+}
 
 export default function CreateManualScheduleScreen() {
   const { currentFarm } = useAuth();
@@ -39,6 +54,8 @@ export default function CreateManualScheduleScreen() {
   const [errors, setErrors] = React.useState<ScheduleFormErrors>({});
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
+  const [createdScheduleId, setCreatedScheduleId] = React.useState<string | null>(null);
+  const [rejectedMessage, setRejectedMessage] = React.useState<string | null>(null);
   const [trees, setTrees] = React.useState<Tree[]>([]);
   const [values, setValues] = React.useState<ManualScheduleFormValues>(initialValues);
   const [workers, setWorkers] = React.useState<WorkerMembership[]>([]);
@@ -144,7 +161,7 @@ export default function CreateManualScheduleScreen() {
       repeatEveryDays: values.repeatEnabled ? Number(values.repeatEveryDays.trim()) : null,
       requiresPhoto: values.requiresPhoto,
       scheduledDate: values.scheduledDate,
-      targetTreeId: values.targetType === 'tree' ? values.targetTreeId : null,
+      targetTreeIds: values.targetType === 'tree' ? values.targetTreeIds : undefined,
       targetType: values.targetType,
       title: values.title,
     });
@@ -156,6 +173,21 @@ export default function CreateManualScheduleScreen() {
     }
 
     setSubmitting(false);
+
+    // Sebagian pohon ditolak RPC karena posisinya sedang tidak ditanami.
+    // BUKAN galat: jadwalnya sudah jadi untuk pohon yang sah. Pemilik ditahan
+    // sebentar dengan dialog konfirmasi supaya keterangannya terbaca, lalu
+    // dilepas ke detail jadwal yang sama seperti jalur normal.
+    //
+    // Ini praktis hanya terjadi kalau siklus tanam sebuah posisi ditutup di
+    // antara layar ini dimuat dan tombol simpan ditekan -- pemilih di atas
+    // sudah menyaringnya lebih dulu.
+    if (result.data.rejectedMessage) {
+      setRejectedMessage(result.data.rejectedMessage);
+      setCreatedScheduleId(result.data.scheduleId);
+      return;
+    }
+
     router.replace(`/owner/schedules/${result.data.scheduleId}`);
   }
 
@@ -178,11 +210,30 @@ export default function CreateManualScheduleScreen() {
             fieldOffsets.current[key] = y;
           }}
           showRepeat
-          trees={trees}
+          trees={selectableTrees(trees)}
           values={values}
           workers={workers}
         />
       </View>
+      <ConfirmDialog
+        cancelLabel="Kembali ke daftar jadwal"
+        confirmLabel="Lihat jadwal ini"
+        icon="alert-triangle"
+        message={rejectedMessage ?? ''}
+        title="Jadwal dibuat, sebagian pohon tidak ikut"
+        visible={Boolean(rejectedMessage && createdScheduleId)}
+        onCancel={() => {
+          setRejectedMessage(null);
+          router.replace('/owner/schedules');
+        }}
+        onConfirm={() => {
+          setRejectedMessage(null);
+
+          if (createdScheduleId) {
+            router.replace(`/owner/schedules/${createdScheduleId}`);
+          }
+        }}
+      />
     </Screen>
   );
 }

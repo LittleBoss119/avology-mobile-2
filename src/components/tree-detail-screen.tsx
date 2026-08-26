@@ -11,32 +11,50 @@ import {
   listConditionRecordPhotosForTree,
   uploadTreeMainPhoto,
 } from '../services/photoAttachmentService';
-import { archiveTree, getTreeDetail, restoreTree } from '../services/treeService';
+import {
+  archiveTree,
+  endTreePlanting,
+  getTreeDetail,
+  listTreePlantings,
+  restoreTree,
+  startTreePlanting,
+} from '../services/treeService';
 import { useAuth } from '../context/auth-context';
-import { pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
-import type { Tree, TreeConditionReport, TreeHistoryItem } from '../types/domain';
+import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
+import type {
+  Tree,
+  TreeConditionReport,
+  TreeHistoryItem,
+  TreePlanting,
+} from '../types/domain';
 import type {
   ConditionRecordPhotoMap,
   PickedPhotoAsset,
   TreeMainPhoto,
 } from '../types/media';
-import {
-  formatGrowthPhase,
-  formatTreeAge,
-  formatTreeDisplayCode,
-  formatTreeLocation,
-} from '../utils/treeFormat';
+import { findLastEndedPlanting, formatPlantingEndSummary } from '../utils/treeCycle';
+import { formatTreeAge, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import {
   ConditionReportList,
   ConditionStatusBadge,
+  GrowthPhaseBadge,
   TreeHistoryTimeline,
   type TreeHistoryRouteRecordType,
 } from './tree-components';
 import { BottomSheet, PhotoSourceSheet, SheetActionRow } from './bottom-sheet';
+import {
+  EndTreePlantingSheet,
+  StartTreePlantingSheet,
+  type EndTreePlantingFormValues,
+  type StartTreePlantingFormValues,
+} from './tree-planting-sheets';
 import { FloweringAgeMarker } from './flowering-marker';
 import { Icon } from './icons';
+import { useSnackbar } from './snackbar';
 import {
+  Badge,
   Button,
+  Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
@@ -54,14 +72,24 @@ export function TreeDetailScreen({
   treeId?: string;
 }) {
   const { profile } = useAuth();
+  const showSnackbar = useSnackbar();
   const [actionLoading, setActionLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [recordSheetOpen, setRecordSheetOpen] = React.useState(false);
   const [history, setHistory] = React.useState<TreeHistoryItem[]>([]);
+  const [plantings, setPlantings] = React.useState<TreePlanting[]>([]);
+  // Galat siklus tanam dipisahkan dari `error` layar supaya ia tampil DI DALAM
+  // sheet yang gagal, tepat di atas tombolnya — bukan di balik sheet, di tempat
+  // yang tidak terlihat selama sheet-nya masih terbuka.
+  const [cycleError, setCycleError] = React.useState<string | null>(null);
+  const [cycleLoading, setCycleLoading] = React.useState(false);
+  const [endSheetOpen, setEndSheetOpen] = React.useState(false);
+  const [startSheetOpen, setStartSheetOpen] = React.useState(false);
   const [conditionPhotoMap, setConditionPhotoMap] = React.useState<ConditionRecordPhotoMap>({});
   const [photoActionLoading, setPhotoActionLoading] = React.useState(false);
+  const [photoActionLabel, setPhotoActionLabel] = React.useState<string | null>(null);
   const [photoSourceOpen, setPhotoSourceOpen] = React.useState(false);
   const [reports, setReports] = React.useState<TreeConditionReport[]>([]);
   const [tree, setTree] = React.useState<Tree | null>(null);
@@ -74,6 +102,7 @@ export function TreeDetailScreen({
       setTreeMainPhoto(null);
       setConditionPhotoMap({});
       setHistory([]);
+      setPlantings([]);
       setReports([]);
       return;
     }
@@ -88,6 +117,7 @@ export function TreeDetailScreen({
       setTreeMainPhoto(null);
       setConditionPhotoMap({});
       setHistory([]);
+      setPlantings([]);
       setReports([]);
       return;
     }
@@ -98,17 +128,25 @@ export function TreeDetailScreen({
       setTreeMainPhoto(null);
       setConditionPhotoMap({});
       setHistory([]);
+      setPlantings([]);
       setReports([]);
       return;
     }
 
     setTree(treeResult.data);
 
-    const [reportsResult, historyResult, photoResult] = await Promise.all([
+    const [reportsResult, historyResult, photoResult, plantingsResult] = await Promise.all([
       getTreeConditionReports({ treeId }),
       getTreeHistory({ treeId }),
       getTreeMainPhoto(treeResult.data.farmId, treeResult.data.id),
+      listTreePlantings({ treeId }),
     ]);
+
+    // Siklus tanam TIDAK menaikkan `error` layar. Ia hanya bahan tambahan —
+    // pembatas di riwayat dan keterangan posisi kosong. Kalau pengambilannya
+    // gagal, layarnya tetap utuh dengan riwayat datar tanpa pembatas; memerahkan
+    // seluruh layar demi hiasan riwayat menukar hal kecil dengan hal besar.
+    setPlantings(plantingsResult.data ?? []);
 
     if (reportsResult.error) {
       setError(reportsResult.error.message);
@@ -198,6 +236,64 @@ export function TreeDetailScreen({
     setActionLoading(false);
   }
 
+  // Kedua aksi siklus di bawah menutup sheet-nya DULU, baru memuat ulang.
+  //
+  // Bukan urutan bebas: sheet adalah konfirmasinya, jadi pemuatan ulang hanya
+  // boleh berjalan setelah pemilik menekan tombolnya, dan tidak boleh berjalan
+  // di belakang sheet yang masih terbuka. Sheet yang GAGAL sengaja tetap
+  // terbuka — galatnya tampil di dalamnya dan isian pemilik tidak hilang.
+  async function runEndPlanting(values: EndTreePlantingFormValues) {
+    if (!tree) {
+      return;
+    }
+
+    setCycleLoading(true);
+    setCycleError(null);
+
+    const result = await endTreePlanting({
+      endReason: values.endReason,
+      endedAt: values.endedAt,
+      treeId: tree.id,
+    });
+
+    if (result.error) {
+      setCycleError(result.error.message);
+      setCycleLoading(false);
+      return;
+    }
+
+    setCycleLoading(false);
+    setEndSheetOpen(false);
+    await loadDetail();
+    showSnackbar('Pohon ditandai sudah tidak ada');
+  }
+
+  async function runStartPlanting(values: StartTreePlantingFormValues) {
+    if (!tree) {
+      return;
+    }
+
+    setCycleLoading(true);
+    setCycleError(null);
+
+    const result = await startTreePlanting({
+      plantedAt: values.plantedAt,
+      treeId: tree.id,
+      variety: values.variety,
+    });
+
+    if (result.error) {
+      setCycleError(result.error.message);
+      setCycleLoading(false);
+      return;
+    }
+
+    setCycleLoading(false);
+    setStartSheetOpen(false);
+    await loadDetail();
+    showSnackbar('Pohon baru ditanam');
+  }
+
   if (loading) {
     return <LoadingState message="Memuat detail pohon..." />;
   }
@@ -222,36 +318,56 @@ export function TreeDetailScreen({
     setPhotoSourceOpen(true);
   }
 
+  // Layar ini mengunggah LANGSUNG setelah memilih, jadi keadaan sibuknya
+  // menyelimuti dua tahap berturut-turut: perkecil, lalu unggah. Hanya tahap
+  // pertama yang diberi keterangan; tahap unggah tetap seperti sebelumnya,
+  // pemintal tanpa teks.
   async function handlePickPhotoFromGallery() {
-    const result = await pickImageFromGallery();
+    setPhotoActionLoading(true);
+    setPhotoActionLabel(PHOTO_PROCESSING_MESSAGE);
 
-    if (result.error) {
-      setError(result.error.message);
-      return;
+    try {
+      const result = await pickImageFromGallery();
+
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (!result.data) {
+        setPhotoSourceOpen(false);
+        return;
+      }
+
+      await runTreePhotoUpload(result.data);
+    } finally {
+      setPhotoActionLoading(false);
+      setPhotoActionLabel(null);
     }
-
-    if (!result.data) {
-      setPhotoSourceOpen(false);
-      return;
-    }
-
-    await runTreePhotoUpload(result.data);
   }
 
   async function handleTakePhotoFromCamera() {
-    const result = await takePhotoFromCamera();
+    setPhotoActionLoading(true);
+    setPhotoActionLabel(PHOTO_PROCESSING_MESSAGE);
 
-    if (result.error) {
-      setError(result.error.message);
-      return;
+    try {
+      const result = await takePhotoFromCamera();
+
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (!result.data) {
+        setPhotoSourceOpen(false);
+        return;
+      }
+
+      await runTreePhotoUpload(result.data);
+    } finally {
+      setPhotoActionLoading(false);
+      setPhotoActionLabel(null);
     }
-
-    if (!result.data) {
-      setPhotoSourceOpen(false);
-      return;
-    }
-
-    await runTreePhotoUpload(result.data);
   }
 
   async function runTreePhotoUpload(asset: PickedPhotoAsset) {
@@ -260,6 +376,7 @@ export function TreeDetailScreen({
     }
 
     setPhotoActionLoading(true);
+    setPhotoActionLabel(null);
     setError(null);
 
     const result = await uploadTreeMainPhoto({
@@ -347,18 +464,43 @@ export function TreeDetailScreen({
 
   const displayCode = formatTreeDisplayCode(tree);
 
+  // SATU-SATUNYA pembeda dua keadaan layar ini.
+  //
+  // activePlanting null berarti siklus terakhir posisi ini sudah ditutup: tidak
+  // ada varietas, tidak ada tanggal tanam, dan layar edit akan ditolak RPC.
+  // Bukan is_archived — arsip menyembunyikan posisinya dari daftar, sedangkan
+  // ini soal ada atau tidaknya pohon di posisi yang tetap ditampilkan.
+  const activePlanting = tree.activePlanting;
+  const lastEndedPlanting = findLastEndedPlanting(plantings);
+
   return (
-    <Screen header={<TreeDetailTopBar mode={mode} onMenuPress={() => setMenuOpen(true)} />}>
+    <Screen
+      header={
+        <TreeDetailTopBar
+          mode={mode}
+          onMenuPress={() => setMenuOpen(true)}
+          title={activePlanting ? 'Detail Pohon' : 'Detail Posisi'}
+        />
+      }
+    >
       <ErrorBanner message={error} />
 
-      <TreeDetailHero
-        displayCode={displayCode}
-        mode={mode}
-        onPhotoPress={handleOpenPhotoSource}
-        photoLoading={photoActionLoading}
-        photoUrl={treeMainPhoto?.signedUrl}
-        tree={tree}
-      />
+      {/* Foto disembunyikan saat posisinya kosong: foto itu milik pohon yang
+          sudah tidak ada, dan menampilkannya di atas tulisan "Belum ditanami"
+          membuat layar membantah dirinya sendiri. Berkasnya tidak dihapus. */}
+      {activePlanting ? (
+        <TreeDetailHero
+          displayCode={displayCode}
+          mode={mode}
+          onPhotoPress={handleOpenPhotoSource}
+          photoLoading={photoActionLoading}
+          photoLoadingLabel={photoActionLabel}
+          photoUrl={treeMainPhoto?.signedUrl}
+          tree={tree}
+        />
+      ) : (
+        <EmptyPositionHeader displayCode={displayCode} tree={tree} />
+      )}
       {mode === 'owner' ? (
         <OwnerTreeMenu
           onArchiveToggle={() => {
@@ -366,10 +508,6 @@ export function TreeDetailScreen({
             handleArchiveToggle();
           }}
           onClose={() => setMenuOpen(false)}
-          onEdit={() => {
-            setMenuOpen(false);
-            router.push(`${basePath}/${tree.id}/edit`);
-          }}
           tree={tree}
           visible={menuOpen}
         />
@@ -386,16 +524,76 @@ export function TreeDetailScreen({
         visible={photoSourceOpen}
       />
 
-      <InfoGrid tree={tree} />
+      {activePlanting ? (
+        <>
+          <CurrentPlantingCard planting={activePlanting} />
 
-      <FloweringAgeMarker currentGrowthPhase={tree.currentGrowthPhase} lastFloweringAt={lastFloweringAt} />
+          <FloweringAgeMarker currentGrowthPhase={tree.currentGrowthPhase} lastFloweringAt={lastFloweringAt} />
 
-      <Button title="Catat aktivitas" onPress={() => setRecordSheetOpen(true)} />
+          {/* Tiga tombol lebar berlabel, menurun sesuai seberapa sering
+              dipakai: mencatat aktivitas berkali-kali sehari, mengoreksi data
+              sesekali, menutup siklus mungkin sekali seumur pohon. */}
+          <View style={{ gap: spacing.md }}>
+            <Button title="Catat aktivitas" onPress={() => setRecordSheetOpen(true)} />
+            {mode === 'owner' ? (
+              <>
+                <Button
+                  title="Ubah data pohon"
+                  variant="secondary"
+                  onPress={() => router.push(`${basePath}/${tree.id}/edit`)}
+                />
+                {/* Nada 'danger' di sini adalah merah LEMBUT (latar
+                    status.danger.bg, teks status.danger.text), bukan tombol
+                    merah pekat — satu-satunya nada peringatan yang sudah punya
+                    varian tombol di proyek ini. */}
+                <Button
+                  title="Tandai pohon sudah tidak ada"
+                  variant="danger"
+                  onPress={() => {
+                    setCycleError(null);
+                    setEndSheetOpen(true);
+                  }}
+                />
+              </>
+            ) : null}
+          </View>
+        </>
+      ) : (
+        <>
+          <EmptyPositionNotice planting={lastEndedPlanting} />
+
+          {mode === 'owner' ? (
+            <Button
+              title="Tanam pohon di sini"
+              onPress={() => {
+                setCycleError(null);
+                setStartSheetOpen(true);
+              }}
+            />
+          ) : null}
+        </>
+      )}
+
       <RecordActivitySheet
         basePath={basePath}
         onClose={() => setRecordSheetOpen(false)}
         treeId={tree.id}
         visible={recordSheetOpen}
+      />
+      <EndTreePlantingSheet
+        error={cycleError}
+        loading={cycleLoading}
+        onClose={() => setEndSheetOpen(false)}
+        onSubmit={runEndPlanting}
+        visible={endSheetOpen}
+      />
+      <StartTreePlantingSheet
+        displayCode={displayCode}
+        error={cycleError}
+        loading={cycleLoading}
+        onClose={() => setStartSheetOpen(false)}
+        onSubmit={runStartPlanting}
+        visible={startSheetOpen}
       />
 
       <SectionTitle subtitle="Riwayat kondisi, fase tumbuh, hasil panen, perawatan, dan aktivitas yang tercatat." title="Riwayat pohon" />
@@ -403,6 +601,7 @@ export function TreeDetailScreen({
         currentUserId={profile?.id}
         history={history}
         onRecordPress={handleOpenHistoryRecord}
+        plantings={plantings}
         viewerMode={mode}
       />
 
@@ -421,7 +620,15 @@ export function TreeDetailScreen({
   );
 }
 
-function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuPress: () => void }) {
+function TreeDetailTopBar({
+  mode,
+  onMenuPress,
+  title,
+}: {
+  mode: TreeDetailMode;
+  onMenuPress: () => void;
+  title: string;
+}) {
   const right =
     mode === 'owner' ? (
       <Pressable
@@ -443,7 +650,7 @@ function TreeDetailTopBar({ mode, onMenuPress }: { mode: TreeDetailMode; onMenuP
       </Pressable>
     ) : undefined;
 
-  return <TopAppBar right={right} title="Detail Pohon" onBack={() => router.back()} />;
+  return <TopAppBar right={right} title={title} onBack={() => router.back()} />;
 }
 
 function TreeDetailHero({
@@ -451,6 +658,7 @@ function TreeDetailHero({
   mode,
   onPhotoPress,
   photoLoading,
+  photoLoadingLabel,
   photoUrl,
   tree,
 }: {
@@ -458,6 +666,7 @@ function TreeDetailHero({
   mode: TreeDetailMode;
   onPhotoPress: () => void;
   photoLoading?: boolean;
+  photoLoadingLabel?: string | null;
   photoUrl?: string | null;
   tree: Tree;
 }) {
@@ -471,19 +680,33 @@ function TreeDetailHero({
               alignItems: 'center',
               backgroundColor: tokens.color.overlay.scrim,
               bottom: 0,
+              gap: spacing.sm,
               justifyContent: 'center',
               left: 0,
+              padding: spacing.lg,
               position: 'absolute',
               right: 0,
               top: 0,
             }}
           >
             <ActivityIndicator color={tokens.color.brand.on} />
+            {photoLoadingLabel ? (
+              <Text
+                selectable={false}
+                style={{
+                  color: tokens.color.text.onBrand,
+                  textAlign: 'center',
+                  ...tokens.type.bodySmall,
+                }}
+              >
+                {photoLoadingLabel}
+              </Text>
+            ) : null}
           </View>
         ) : null}
       </View>
-      <View style={{ flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' }}>
-        <View style={{ flex: 1, gap: spacing.xs }}>
+      <View style={{ gap: spacing.md }}>
+        <View style={{ gap: spacing.xs }}>
           <Text selectable style={{ color: colors.primary, fontSize: 32, fontWeight: '700', lineHeight: 38 }}>
             {displayCode}
           </Text>
@@ -491,11 +714,61 @@ function TreeDetailHero({
             {formatTreeLocation(tree)}
           </Text>
         </View>
-        <View style={{ justifyContent: 'center' }}>
+        {/* Kondisi dan fase berdampingan di BAWAH kode, bukan di sebelahnya.
+            Berdampingan dengan kode, keduanya harus berbagi lebar dengan teks
+            32pt dan salah satunya pasti terpotong; sebaris sendiri, keduanya
+            muat utuh dan terbaca sebagai sepasang. */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
           <ConditionStatusBadge status={tree.currentCondition} />
+          {tree.currentGrowthPhase ? <GrowthPhaseBadge phase={tree.currentGrowthPhase} /> : null}
         </View>
       </View>
     </View>
+  );
+}
+
+// Kepala Keadaan B. Sepadan dengan kepala pohon aktif — kode besar, keterangan
+// posisi, lalu tagnya — supaya berpindah keadaan tidak terasa seperti berpindah
+// layar. Yang hilang cuma fotonya, dan tagnya tinggal satu.
+function EmptyPositionHeader({ displayCode, tree }: { displayCode: string; tree: Tree }) {
+  return (
+    <View style={{ gap: spacing.md }}>
+      <View style={{ gap: spacing.xs }}>
+        <Text selectable style={{ color: colors.primary, fontSize: 32, fontWeight: '700', lineHeight: 38 }}>
+          {displayCode}
+        </Text>
+        <Text selectable style={{ color: colors.textMuted, fontSize: 15, lineHeight: 21 }}>
+          {formatTreeLocation(tree)}
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row' }}>
+        <Badge label="Belum ditanami" maxWidth={200} tone="neutral" />
+      </View>
+    </View>
+  );
+}
+
+// Kotak keterangan Keadaan B: kapan dan kenapa pohon sebelumnya berakhir.
+//
+// Kalimat kedua BOLEH menjanjikan berhentinya jadwal perawatan sejak migrasi
+// 057: create_manual_schedule dan create_successor_schedule sama-sama menolak
+// posisi tanpa siklus tanam aktif, dan pemilih pohon di layar buat maupun
+// sunting jadwal tidak lagi menampilkannya.
+//
+// SATU CABANG BELUM TERTUTUP: jadwal bertarget SELURUH KEBUN masih menautkan
+// posisi ini lewat complete_task, yang menyaring is_archived tapi bukan siklus
+// tanam. Diperbaiki di migrasi 058.
+function EmptyPositionNotice({ planting }: { planting: TreePlanting | null }) {
+  return (
+    <Card variant="warning">
+      <View style={{ flexDirection: 'row', gap: spacing.md }}>
+        <Icon name="alert-triangle" size={tokens.icon.md} color={tokens.color.status.warning.text} />
+        <Text selectable style={{ color: tokens.color.status.warning.text, flex: 1, lineHeight: 21 }}>
+          {formatPlantingEndSummary(planting)} Posisi ini tidak mendapat jadwal perawatan sampai ditanami lagi.
+          Riwayat pohon sebelumnya tetap tersimpan di bawah.
+        </Text>
+      </View>
+    </Card>
   );
 }
 
@@ -597,25 +870,39 @@ function TreePhotoArea({
   );
 }
 
-function InfoGrid({ tree }: { tree: Tree }) {
+// Kartu "Pohon yang ditanam sekarang" — pengganti InfoGrid yang dulu berdiri
+// tanpa judul.
+//
+// Judulnya bukan hiasan: seluruh isi kartu ini milik SIKLUS TANAM yang sedang
+// berjalan (migrasi 055), bukan milik posisinya. Sebuah posisi bisa ditanami
+// berkali-kali, dan tanpa judul itu pembacanya wajar mengira varietas dan
+// tanggal tanam adalah sifat tetap posisi tersebut.
+//
+// Fase tumbuh sengaja TIDAK di sini. Ia milik trees, bukan siklus, dan sudah
+// tampil sebagai tag di kepala layar. Tempatnya digantikan penanaman ke berapa,
+// satu-satunya angka yang memberi tahu bahwa posisi ini pernah ditanami
+// sebelumnya.
+function CurrentPlantingCard({ planting }: { planting: TreePlanting }) {
   const items = [
-    // Ketiganya milik SIKLUS TANAM yang sedang berjalan, bukan posisinya
-    // (migrasi 055). Posisi yang siklusnya sudah ditutup tidak punya varietas
-    // maupun tanggal tanam — di situ activePlanting bernilai null.
-    { label: 'Varietas', value: tree.activePlanting?.variety || 'Belum diisi' },
-    { label: 'Tanggal tanam', value: formatFriendlyDate(tree.activePlanting?.plantedAt ?? null) },
-    { label: 'Umur pohon', value: formatTreeAge(tree.activePlanting?.plantedAt ?? null) },
-    { label: 'Fase tumbuh', value: formatGrowthPhase(tree.currentGrowthPhase) },
+    { label: 'Varietas', value: planting.variety || 'Belum diisi' },
+    { label: 'Tanggal tanam', value: formatFriendlyDate(planting.plantedAt) },
+    { label: 'Umur pohon', value: formatTreeAge(planting.plantedAt) },
+    { label: 'Penanaman ke', value: `${planting.cycleNo}` },
   ];
 
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.lg }}>
-      {items.map((item) => (
-        <View key={item.label} style={{ flexBasis: '50%', paddingRight: spacing.md }}>
-          <InfoCell label={item.label} value={item.value} />
-        </View>
-      ))}
-    </View>
+    <Card>
+      <Text selectable style={{ ...tokens.type.subheading, color: colors.text }}>
+        Pohon yang ditanam sekarang
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.lg }}>
+        {items.map((item) => (
+          <View key={item.label} style={{ flexBasis: '50%', paddingRight: spacing.md }}>
+            <InfoCell label={item.label} value={item.value} />
+          </View>
+        ))}
+      </View>
+    </Card>
   );
 }
 
@@ -680,23 +967,28 @@ function RecordActivitySheet({
   );
 }
 
+// Tinggal arsip. "Edit Pohon" DIPINDAH keluar dari sini menjadi tombol lebar
+// "Ubah data pohon" di badan layar; menyisakan salinannya di menu berarti dua
+// jalan berbeda ke layar yang sama, dan pembaca yang harus menebak apakah
+// keduanya melakukan hal yang berbeda.
+//
+// Arsip tidak ikut naik jadi tombol: ia bukan bagian dari siklus tanam, jarang
+// dipakai, dan menaikkannya akan menambah tombol keempat yang menyaingi tiga
+// tombol yang benar-benar dipakai.
 function OwnerTreeMenu({
   onArchiveToggle,
   onClose,
-  onEdit,
   tree,
   visible,
 }: {
   onArchiveToggle: () => void;
   onClose: () => void;
-  onEdit: () => void;
   tree: Tree;
   visible: boolean;
 }) {
   return (
     <BottomSheet onClose={onClose} title="Kelola data pohon" visible={visible}>
       <View style={{ gap: tokens.space.sm }}>
-        <SheetActionRow icon="file-text" iconTone="neutral" title="Edit Pohon" onPress={onEdit} />
         <SheetActionRow
           icon="building-warehouse"
           iconTone="neutral"

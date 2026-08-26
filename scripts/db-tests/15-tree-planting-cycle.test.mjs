@@ -22,6 +22,11 @@ import {
 //   - menutup siklus TIDAK mengubah kondisi pohon
 //   - authenticated tidak punya jalur tulis langsung ke tree_plantings
 //
+// Lalu koreksi penanaman yang dibangun migrasi 056:
+//   - mengoreksi varietas & tanggal tanam siklus aktif: cycle_no TIDAK naik
+//   - mengoreksi posisi yang siklusnya sudah ditutup DITOLAK
+//   - authenticated tidak punya jalur tulis langsung ke trees
+//
 // Stage ini berdiri sendiri seperti stage 09, 10, dan 14: seluruh pelaku dan
 // kebunnya dibuat di dalam tes. Itu syarat, bukan gaya -- stage ini menanam dan
 // mematikan pohon berkali-kali di satu posisi, dan kalau dijalankan di kebun
@@ -261,5 +266,148 @@ await runStage(STAGE, async () => {
       p_planted_at: todayIso(),
     }),
     'Only active owners may manage planting cycles.'
+  );
+
+  // ---------- 11. KOREKSI siklus aktif: cycle_no TIDAK naik (migrasi 056) ----------
+  //
+  // Perbedaan yang diuji di sini adalah inti migrasi 056. Salah ketik saat input
+  // adalah kesalahan PENCATATAN; memperbaikinya harus menyentuh siklus yang
+  // sedang berjalan. Kalau ia malah membuka siklus baru, aplikasi mengarang
+  // peristiwa penanaman ulang yang tidak pernah terjadi -- dan itu lebih
+  // merusak daripada salah ketiknya.
+  //
+  // Posisi ikut dikoreksi dalam panggilan yang sama: satu RPC, satu transaksi.
+
+  const correctedPlantedAt = isoDateOffset(-10);
+
+  await expectSuccess(
+    STAGE,
+    'owner corrects the running cycle',
+    owner.client.rpc('update_tree_with_planting', {
+      p_tree_id: treeId,
+      p_row_position: 4,
+      p_column_position: 'C',
+      p_variety: 'Alpukat Hass',
+      p_planted_at: correctedPlantedAt,
+    }),
+    'Check update_tree_with_planting(uuid, smallint, text, text, date).'
+  );
+
+  const correctedTree = await getSingle(
+    STAGE,
+    'correction moves the position too',
+    owner.client.from('trees').select('id, tree_code').eq('id', treeId).single(),
+    'update_tree_with_planting should update trees and tree_plantings together.'
+  );
+  assertEqual(STAGE, 'tree_code follows the corrected position', correctedTree.tree_code, '4-C',
+    'tree_code is GENERATED, so correcting row_position must regenerate it.');
+
+  const correctedCycle = await getSingle(
+    STAGE,
+    'correction rewrites the running cycle in place',
+    owner.client
+      .from('tree_plantings')
+      .select('id, cycle_no, variety, planted_at, ended_at')
+      .eq('id', cycleTwoId)
+      .single(),
+    'A correction must edit the active cycle row, not create another one.'
+  );
+  assertEqual(STAGE, 'correction does NOT bump the cycle number', correctedCycle.cycle_no, 2,
+    'THIS IS THE POINT OF 056: correcting a typo must not fake a replanting.');
+  assertEqual(STAGE, 'corrected variety is stored', correctedCycle.variety, 'Alpukat Hass',
+    'variety on the active cycle should follow the correction.');
+  assertEqual(STAGE, 'corrected planting date is stored', correctedCycle.planted_at, correctedPlantedAt,
+    'planted_at on the active cycle should follow the correction.');
+  assertEqual(STAGE, 'corrected cycle is still running', correctedCycle.ended_at, null,
+    'A correction must never close the cycle it corrects.');
+
+  const cyclesAfterCorrection = await expectSuccess(
+    STAGE,
+    'correction creates no extra cycle',
+    owner.client
+      .from('tree_plantings')
+      .select('cycle_no')
+      .eq('tree_id', treeId)
+      .order('cycle_no', { ascending: true }),
+    'The position must still hold exactly the two cycles it had before.'
+  );
+  assertEqual(STAGE, 'position still holds two cycles', cyclesAfterCorrection.length, 2,
+    'A third row here means the correction was implemented as a replanting.');
+
+  const untouchedClosedCycle = await getSingle(
+    STAGE,
+    'the closed cycle is left alone',
+    owner.client.from('tree_plantings').select('id, variety').eq('id', cycleOne.id).single(),
+    'update_tree_with_planting must only touch the cycle where ended_at is null.'
+  );
+  assertEqual(
+    STAGE,
+    'closed cycle keeps its original variety',
+    untouchedClosedCycle.variety,
+    'Alpukat Mentega',
+    'A finished planting is a settled fact -- correcting the running cycle must not rewrite it.'
+  );
+
+  // ---------- 12. KOREKSI pada posisi tanpa siklus aktif DITOLAK ----------
+  //
+  // Mengoreksi "data penanaman" pada posisi yang tidak ditanami apa pun tidak
+  // punya makna, dan menyentuh siklus yang sudah ditutup berarti mengubah fakta
+  // yang sudah selesai.
+
+  await expectSuccess(
+    STAGE,
+    'owner closes the corrected cycle',
+    owner.client.rpc('end_tree_planting', {
+      p_tree_id: treeId,
+      p_end_reason: 'dibongkar',
+      p_ended_at: todayIso(),
+    }),
+    'Check end_tree_planting(uuid, text, date).'
+  );
+
+  await expectFailure(
+    STAGE,
+    'correcting a position with no running cycle is rejected',
+    owner.client.rpc('update_tree_with_planting', {
+      p_tree_id: treeId,
+      p_row_position: 5,
+      p_column_position: 'C',
+      p_variety: 'Miki',
+      p_planted_at: todayIso(),
+    }),
+    'update_tree_with_planting must refuse when the position has no active planting.'
+  );
+
+  const treeAfterRejectedCorrection = await getSingle(
+    STAGE,
+    'rejected correction leaves the position untouched',
+    owner.client.from('trees').select('id, tree_code').eq('id', treeId).single(),
+    'The active-cycle guard must run BEFORE the update to trees, not after.'
+  );
+  assertEqual(
+    STAGE,
+    'position stays where it was before the rejection',
+    treeAfterRejectedCorrection.tree_code,
+    '4-C',
+    'A half-applied correction would move the tree and still report failure.'
+  );
+
+  // ---------- 13. Tidak ada jalur tulis langsung ke trees (migrasi 056) ----------
+  //
+  // Ini yang membuktikan lubang kedua tertutup. Selama grant INSERT masih
+  // menempel di authenticated, owner bisa menyisipkan baris trees TELANJANG --
+  // dan baris itu berumur tanpa siklus tanam: tidak terlihat sebagai pohon,
+  // tidak terlihat sebagai posisi kosong. create_tree_with_planting adalah
+  // satu-satunya jalur yang menjamin keduanya lahir bersama.
+
+  await expectFailure(
+    STAGE,
+    'active owner cannot insert a bare tree row',
+    owner.client.from('trees').insert({
+      farm_id: farm.id,
+      row_position: 7,
+      column_position: 'G',
+    }),
+    'trees INSERT grant is revoked (migration 056) -- create_tree_with_planting is the only way in.'
   );
 });

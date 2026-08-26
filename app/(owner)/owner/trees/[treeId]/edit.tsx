@@ -41,6 +41,7 @@ export default function OwnerEditTreeScreen() {
   const [errors, setErrors] = React.useState<TreeFormErrors>({});
   const [farmId, setFarmId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [processingPhoto, setProcessingPhoto] = React.useState(false);
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [values, setValues] = React.useState<TreeFormValues>(initialValues);
@@ -79,9 +80,9 @@ export default function OwnerEditTreeScreen() {
         // tidak cukup: ia menghasilkan number, bukan string.
         rowPosition: result.data.rowPosition === null ? '' : String(result.data.rowPosition),
         columnPosition: result.data.columnPosition ?? '',
-        // Tetap diisi walau tidak dirender: TreeFormValues masih memuat kedua
-        // field ini, dan mengisinya menjaga nilainya tetap benar seandainya
-        // layar ini kelak menampilkannya lagi (mis. ringkasan siklus aktif).
+        // Diambil dari siklus AKTIF — itulah satu-satunya siklus yang boleh
+        // dikoreksi. Pohon yang siklusnya sudah ditutup tidak punya
+        // activePlanting, dan update_tree_with_planting akan menolaknya.
         variety: result.data.activePlanting?.variety ?? '',
         plantedAt: parseDbDate(result.data.activePlanting?.plantedAt ?? null),
       });
@@ -117,9 +118,7 @@ export default function OwnerEditTreeScreen() {
       return;
     }
 
-    // includePlantingFields false, sepadan dengan TreeForm di bawah: varietas
-    // dan tanggal tanam tidak dirender di layar edit, jadi tidak boleh divalidasi.
-    const nextErrors = validateTreeForm(values, { includePlantingFields: false });
+    const nextErrors = validateTreeForm(values);
 
     if (hasTreeFormErrors(nextErrors)) {
       setErrors(nextErrors);
@@ -136,12 +135,16 @@ export default function OwnerEditTreeScreen() {
     setSubmitting(true);
     setError(null);
 
-    // Hanya POSISI. Varietas dan tanggal tanam milik siklus tanam sejak migrasi
-    // 055, dan mengubahnya berarti mengubah fakta penanaman yang sudah terjadi.
+    // MENGOREKSI, bukan menanam ulang. update_tree_with_planting (migrasi 056)
+    // memperbarui posisi di trees dan varietas serta tanggal tanam pada siklus
+    // yang sedang AKTIF, dalam satu transaksi — cycle_no tidak naik dan tidak
+    // ada siklus baru yang lahir.
     const result = await updateTree({
       treeId: normalizedTreeId,
       rowPosition: values.rowPosition,
       columnPosition: values.columnPosition,
+      variety: values.variety,
+      plantedAt: formatDateForDb(values.plantedAt),
     });
 
     if (result.error) {
@@ -203,32 +206,44 @@ export default function OwnerEditTreeScreen() {
   }
 
   async function handlePickPhotoFromGallery() {
-    const result = await pickImageFromGallery();
+    setProcessingPhoto(true);
 
-    if (result.error) {
-      setError(result.error.message);
-      return;
-    }
+    try {
+      const result = await pickImageFromGallery();
 
-    if (result.data) {
-      setDeletePhotoRequested(false);
-      setError(null);
-      setSelectedPhoto(result.data);
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setDeletePhotoRequested(false);
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
     }
   }
 
   async function handleTakePhotoFromCamera() {
-    const result = await takePhotoFromCamera();
+    setProcessingPhoto(true);
 
-    if (result.error) {
-      setError(result.error.message);
-      return;
-    }
+    try {
+      const result = await takePhotoFromCamera();
 
-    if (result.data) {
-      setDeletePhotoRequested(false);
-      setError(null);
-      setSelectedPhoto(result.data);
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setDeletePhotoRequested(false);
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
     }
   }
 
@@ -249,17 +264,13 @@ export default function OwnerEditTreeScreen() {
         header={<TopAppBar title="Edit Pohon" onBack={() => router.back()} />}
       >
         <ErrorBanner message={error} />
-        <TreeForm
-          errors={errors}
-          includePlantingFields={false}
-          values={values}
-          onChange={handleValuesChange}
-        />
+        <TreeForm errors={errors} values={values} onChange={handleValuesChange} />
         <TreeMainPhotoFormSection
           currentPhotoUrl={currentPhoto?.signedUrl}
           deleteRequested={deletePhotoRequested}
           disabled={submitting}
           photo={selectedPhoto}
+          processing={processingPhoto}
           onCameraPress={handleTakePhotoFromCamera}
           onDeleteExisting={() => {
             setSelectedPhoto(null);

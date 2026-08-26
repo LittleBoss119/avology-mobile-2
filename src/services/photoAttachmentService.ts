@@ -31,10 +31,15 @@ import type {
   UploadPhotoAttachmentInput,
   GetTaskProofPhotosInput,
 } from '../types/media';
+import { base64ByteLength } from '../utils/base64Size';
 import { fail, ok } from '../utils/serviceResult';
 
 export const PHOTO_STORAGE_BUCKET = 'avology-photos';
 export const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024;
+
+// Ambang selisih yang masih dianggap sinkron antara base64 dan berkas di
+// localUri. Lihat assertBase64MatchesLocalFile().
+const BASE64_SYNC_TOLERANCE_BYTES = 1024;
 
 const PHOTO_ATTACHMENT_SELECT =
   'id, farm_id, uploaded_by, entity_type, entity_id, bucket, storage_path, file_name, mime_type, file_size, caption, is_primary, created_at';
@@ -984,7 +989,15 @@ async function loadLocalImageFile(input: {
   localUri: string;
 }): Promise<ServiceResult<LocalImageFileData>> {
   const readAttempts: string[] = [];
-  const base64Result = readImageFileFromBase64(input, readAttempts);
+
+  // Jalur base64 dicoba PERTAMA, jadi ia hanya boleh dipakai kalau bitanya
+  // terbukti masih sama dengan berkas yang ditunjuk localUri. Lihat catatan
+  // panjang di src/lib/media.ts: kalau keduanya berbeda, yang terunggah adalah
+  // foto asli yang belum diperkecil, tanpa gejala apa pun.
+  const base64InSync = await assertBase64MatchesLocalFile(input, readAttempts);
+  const base64Result = base64InSync
+    ? readImageFileFromBase64(input, readAttempts)
+    : new Error('base64_out_of_sync');
 
   if (!(base64Result instanceof Error)) {
     return ok(base64Result);
@@ -1009,6 +1022,69 @@ async function loadLocalImageFile(input: {
   logLocalPhotoReadDebug('local-read-fetch-failed', input, fetchResult, readAttempts);
 
   return fail(new Error('File foto tidak dapat dibaca.'));
+}
+
+// Pemeriksaan silang: base64 dan localUri wajib menunjuk bita yang sama.
+//
+// Keduanya diisi dari satu pemanggilan saveAsync() di src/lib/media.ts, jadi
+// dalam keadaan sehat ukurannya IDENTIK. Selisih yang berarti hanya bisa muncul
+// kalau ada kode yang mengisi salah satunya sendiri-sendiri -- dan akibatnya
+// bukan galat melainkan unggahan diam-diam atas berkas yang salah. Karena itu
+// selisih diperlakukan sebagai bug, bukan sebagai keadaan yang perlu ditoleransi.
+//
+// Pemulihannya: base64 dibuang dan pembacaan jatuh ke localUri, yang memang
+// sumber kebenaran bagi seluruh sisa jalur unggah (nama berkas, mime, path
+// Storage semuanya diturunkan dari sana). Unggahannya tetap berhasil dengan bita
+// yang BENAR, dan bug-nya tercatat.
+async function assertBase64MatchesLocalFile(
+  input: { fallbackBase64: string | null; localUri: string },
+  readAttempts: string[]
+): Promise<boolean> {
+  if (!input.fallbackBase64) {
+    return false;
+  }
+
+  let localFileSize: number | null = null;
+
+  try {
+    const info = await FileSystem.getInfoAsync(input.localUri);
+    localFileSize = info.exists ? info.size : null;
+  } catch {
+    localFileSize = null;
+  }
+
+  if (localFileSize === null || localFileSize <= 0) {
+    // Ukuran berkas tidak terbaca -- misalnya URI content:// yang tidak bisa
+    // di-stat. Tidak ada dasar untuk membandingkan, jadi pemeriksaan ini
+    // DILEWATI dan dicatat sebagai tidak terverifikasi; ia tidak dinyatakan
+    // lulus, dan jejaknya ikut terbawa ke log kalau pembacaan nanti gagal.
+    readAttempts.push('base64_sync_unverified');
+    return true;
+  }
+
+  const base64Size = base64ByteLength(input.fallbackBase64);
+
+  // Toleransi 1 KiB, bukan nol dan bukan persentase. Desinkronisasi nyata
+  // (asli vs hasil perkecilan) berselisih ratusan kilobita sampai megabita,
+  // jadi 1 KiB tidak meloloskan satu pun kasus nyata -- ia hanya meredam
+  // keanehan sepele semacam padding atau metadata di lapis penyimpanan.
+  if (Math.abs(base64Size - localFileSize) <= BASE64_SYNC_TOLERANCE_BYTES) {
+    return true;
+  }
+
+  // SENGAJA tidak digerbangi __DEV__, tidak seperti helper log lain di berkas
+  // ini: ini bug yang menghasilkan data salah tanpa gejala, dan ia harus tetap
+  // bersuara di build produksi.
+  console.error('[photo-base64-desync]', {
+    base64Size,
+    localFileSize,
+    note: 'base64 dan localUri menunjuk bita berbeda; base64 diabaikan dan berkas dibaca dari localUri',
+    uriPrefix: input.localUri.slice(0, 48),
+  });
+
+  readAttempts.push(`base64_out_of_sync: base64=${base64Size} file=${localFileSize}`);
+
+  return false;
 }
 
 async function readImageFileWithFetch(input: {

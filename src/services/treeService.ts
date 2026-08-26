@@ -3,6 +3,7 @@ import type {
   CreateTreeData,
   CreateTreeInput,
   GetTreeDetailInput,
+  GetTreePlantingsInput,
   GetTreesInput,
   GrowthPhase,
   MemberRole,
@@ -15,11 +16,14 @@ import type {
   Tree,
   TreeArchiveInput,
   TreeConditionStatus,
+  TreePlanting,
   UpdateTreeInput,
   UUID,
 } from '../types/domain';
 import {
+  mapTreePlanting,
   readActivePlanting,
+  TREE_PLANTING_COLUMNS,
   TREE_SELECT_WITH_ACTIVE_PLANTING,
   type TreePlantingRow,
 } from './treePlantingShared';
@@ -53,17 +57,6 @@ type MembershipRow = {
   role: MemberRole;
   status: MemberStatus;
 };
-
-// tree_code SENGAJA tidak ada di sini. Kolomnya generated sejak migrasi 054;
-// menyertakannya di payload UPDATE membuat Postgres menolak seluruh statement
-// dengan "column tree_code can only be updated to DEFAULT".
-//
-// variety dan planted_at juga tidak ada: keduanya pindah ke tree_plantings di
-// migrasi 055, dan kolomnya sudah tidak ada lagi di trees.
-type TreeUpdateRow = Partial<{
-  row_position: number;
-  column_position: string;
-}>;
 
 export async function getTrees(input: GetTreesInput): Promise<ServiceResult<Tree[]>> {
   const accessResult = await ensureActiveFarmMember(input.farmId);
@@ -152,6 +145,51 @@ export async function getTreeDetail(
   }
 
   return ok(mapTree(data));
+}
+
+// SELURUH siklus tanam sebuah posisi, terurut cycle_no menaik — termasuk yang
+// sudah ditutup.
+//
+// Sengaja TIDAK digabung ke getTreeDetail. Query di sana wajib membawa filter
+// `.is('tree_plantings.ended_at', null)`; melonggarkannya akan membuat
+// readActivePlanting mengambil baris [0] yang bisa jadi siklus lama, dan itu
+// merusak SELURUH pemanggil getTrees/getTreeDetail sekaligus. Siklus lama
+// karenanya diambil lewat query terpisah yang hanya dipanggil layar yang
+// benar-benar membutuhkannya.
+//
+// Dua pemakainya: keterangan pada posisi yang sedang kosong (kapan dan kenapa
+// pohon sebelumnya berakhir) dan pembatas siklus di riwayat pohon.
+//
+// Pekerja ikut boleh membacanya — riwayat pohon memang terbuka untuk pekerja
+// aktif, dan grant select pada tree_plantings (055:3) memberikannya ke seluruh
+// anggota kebun aktif, bukan hanya pemilik.
+export async function listTreePlantings(
+  input: GetTreePlantingsInput
+): Promise<ServiceResult<TreePlanting[]>> {
+  const farmIdResult = await getAccessibleTreeFarmId(input.treeId);
+
+  if (farmIdResult.error) {
+    return fail(farmIdResult.error);
+  }
+
+  const accessResult = await ensureActiveFarmMember(farmIdResult.data);
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  const { data, error } = await supabase
+    .from('tree_plantings')
+    .select(TREE_PLANTING_COLUMNS)
+    .eq('tree_id', input.treeId)
+    .order('cycle_no', { ascending: true })
+    .returns<TreePlantingRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat siklus tanam pohon.');
+  }
+
+  return ok((data ?? []).map(mapTreePlanting));
 }
 
 export async function createTree(
@@ -246,9 +284,26 @@ export async function startTreePlanting(
   });
 }
 
+// MENGOREKSI data pohon: posisinya di trees, dan varietas serta tanggal tanam
+// pada siklus tanam yang SEDANG AKTIF.
+//
+// Koreksi, bukan penanaman ulang. cycle_no tidak naik dan tidak ada siklus baru
+// yang lahir — kalau pohonnya sungguh diganti, itu endTreePlanting lalu
+// startTreePlanting, bukan fungsi ini.
+//
+// Lewat RPC, bukan UPDATE langsung. Satu edit menyentuh DUA tabel; kalau
+// dikirim sebagai dua panggilan terpisah, edit yang mengubah posisi sekaligus
+// varietas bisa berhasil separuh dan tidak ada cara membatalkannya dari sini.
+// RPC-nya juga menolak posisi yang tidak punya siklus aktif.
 export async function updateTree(
   input: UpdateTreeInput
 ): Promise<ServiceResult<SuccessData>> {
+  const position = normalizeTreePosition(input.rowPosition, input.columnPosition);
+
+  if (position instanceof Error) {
+    return fail(position);
+  }
+
   const farmIdResult = await getAccessibleTreeFarmId(input.treeId);
 
   if (farmIdResult.error) {
@@ -261,19 +316,13 @@ export async function updateTree(
     return fail(accessResult.error);
   }
 
-  const updates = buildTreeUpdates(input);
-
-  if (updates instanceof Error) {
-    return fail(updates);
-  }
-
-  if (Object.keys(updates).length === 0) {
-    return ok({
-      success: true,
-    });
-  }
-
-  const { error } = await supabase.from('trees').update(updates).eq('id', input.treeId);
+  const { error } = await supabase.rpc('update_tree_with_planting', {
+    p_column_position: position.columnPosition,
+    p_planted_at: normalizeOptionalText(input.plantedAt),
+    p_row_position: position.rowPosition,
+    p_tree_id: input.treeId,
+    p_variety: normalizeOptionalText(input.variety),
+  });
 
   if (error) {
     return fail(error, 'Gagal memperbarui data pohon.');
@@ -404,26 +453,6 @@ async function getCurrentUserMembership(
   }
 
   return ok(data);
-}
-
-function buildTreeUpdates(input: UpdateTreeInput): TreeUpdateRow | Error {
-  const updates: TreeUpdateRow = {};
-
-  // Baris dan kolom diperlakukan sebagai SATU kesatuan: keduanya NOT NULL di
-  // database dan bersama-sama membentuk tree_code, jadi menyentuh salah satu
-  // saja tidak masuk akal. Kalau salah satunya disebut, keduanya harus sah.
-  if (input.rowPosition !== undefined || input.columnPosition !== undefined) {
-    const position = normalizeTreePosition(input.rowPosition, input.columnPosition);
-
-    if (position instanceof Error) {
-      return position;
-    }
-
-    updates.row_position = position.rowPosition;
-    updates.column_position = position.columnPosition;
-  }
-
-  return updates;
 }
 
 function mapTree(row: TreeRow): Tree {

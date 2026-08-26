@@ -2,7 +2,10 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
-import { formatCareTarget } from '../../../../src/components/care-schedule-components';
+import {
+  TargetTreeCodeList,
+  formatCareTarget,
+} from '../../../../src/components/care-schedule-components';
 import { Icon } from '../../../../src/components/icons';
 import { WorkResultList } from '../../../../src/components/work-result-list';
 import {
@@ -142,6 +145,19 @@ export default function WorkerTaskDetailScreen() {
       </View>
 
       <DueDatePillView pill={pill} />
+
+      {/* Daftar kode pohon yang LENGKAP, sengaja di atas instruksi dan di atas
+          tombol catat hasil kerja. Pekerja harus tahu pohon mana saja yang
+          harus dikerjakan SEBELUM menandai selesai — satu kali selesai
+          menautkan pekerjaan ke SEMUA pohon di jadwal ini (complete_task,
+          migrasi 057), jadi meringkasnya jadi angka di sini berarti ia
+          menandai selesai tanpa pernah diberi tahu pohon yang mana. */}
+      {activeTask.targetType === 'tree' ? (
+        <TargetTreeCodeList
+          targetTreeCodes={activeTask.targetTreeCodes}
+          targetTreeId={activeTask.targetTreeId}
+        />
+      ) : null}
 
       {isCancelledByOwner ? (
         <Card variant="danger">

@@ -3,7 +3,11 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { BottomSheet, ConfirmDialog } from '../../../../src/components/bottom-sheet';
-import { FormChipGroup, formatCareTarget } from '../../../../src/components/care-schedule-components';
+import {
+  FormChipGroup,
+  TargetTreeCodeList,
+  formatCareTarget,
+} from '../../../../src/components/care-schedule-components';
 import { Icon, type IconName } from '../../../../src/components/icons';
 import { WorkResultList } from '../../../../src/components/work-result-list';
 import {
@@ -359,6 +363,13 @@ export default function CareScheduleDetailScreen() {
           {`${formatCareCategory(activeSchedule.category)} · ${formatCareTarget(activeSchedule)}`}
         </Text>
       </View>
+
+      {activeSchedule.targetType === 'tree' ? (
+        <TargetTreeCodeList
+          targetTreeCodes={activeSchedule.targetTreeCodes}
+          targetTreeId={activeSchedule.targetTreeId}
+        />
+      ) : null}
 
       {needsWorker ? (
         <AssignWorkerNotice

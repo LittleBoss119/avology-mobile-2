@@ -34,6 +34,7 @@ import {
 } from './photoAttachmentService';
 import type { TaskProofPhoto } from '../types/media';
 import { sweepMissedSchedules } from './missedScheduleSweep';
+import { resolveTreeTargetCodes } from './scheduleTreeService';
 import { fail, ok } from '../utils/serviceResult';
 
 const CARE_TASK_SELECT =
@@ -110,7 +111,7 @@ export async function getWorkerTasks(
     return fail(activeTasksResult.error);
   }
 
-  return ok(activeTasksResult.data.map((task) => mapCareTask(task)));
+  return ok(await attachTaskTreeTargets(activeTasksResult.data.map((task) => mapCareTask(task))));
 }
 
 export async function getFarmTasks(
@@ -139,7 +140,44 @@ export async function getFarmTasks(
     return fail(error, 'Gagal memuat daftar tugas kebun.');
   }
 
-  return ok((data ?? []).map((task) => mapCareTask(task)));
+  return ok(await attachTaskTreeTargets((data ?? []).map((task) => mapCareTask(task))));
+}
+
+// Mengisi daftar pohon untuk sekumpulan tugas SEKALIGUS, lewat
+// care_schedule_id ke care_schedule_trees.
+//
+// Tidak ada care_task_trees: tugas meminjam daftar milik jadwalnya. Dua tugas
+// dari jadwal yang sama karenanya berbagi satu pembacaan.
+//
+// SENGAJA TIDAK mengembalikan galat -- lihat alasan yang sama di
+// attachTreeTargets (careScheduleService). Daftar tugas pekerja tidak boleh
+// gagal total hanya karena kode pohonnya tidak terbaca; tampilannya jatuh
+// balik ke bayangan lewat formatCareTarget.
+async function attachTaskTreeTargets(tasks: CareTask[]): Promise<CareTask[]> {
+  // Hanya tugas bertarget pohon yang punya daftar untuk dibaca. Tugas 'farm'
+  // dan 'custom' tidak menyentuh jembatan sama sekali, jadi tidak ikut masuk
+  // ke query string .in().
+  const treeTasks = tasks.filter((task) => task.targetType === 'tree');
+
+  if (treeTasks.length === 0) {
+    return tasks;
+  }
+
+  const result = await resolveTreeTargetCodes(
+    treeTasks.map((task) => ({
+      key: task.id,
+      scheduleId: task.careScheduleId,
+      fallbackTreeId: task.targetTreeId,
+    }))
+  );
+
+  const resolved = result.data ?? {};
+
+  return tasks.map((task) => ({
+    ...task,
+    targetTreeIds: resolved[task.id]?.treeIds,
+    targetTreeCodes: resolved[task.id]?.treeCodes,
+  }));
 }
 
 export async function getTaskDetail(
@@ -182,10 +220,16 @@ export async function getTaskDetail(
     return fail(activitiesResult.error, 'Gagal memuat hasil kerja tugas.');
   }
 
+  const task = mapCareTask(taskResult.data, {
+    scheduleIsCancelled: scheduleCancellationResult.data,
+  });
+  const [taskWithTrees] = await attachTaskTreeTargets([task]);
+
   return ok({
-    ...mapCareTask(taskResult.data, {
-      scheduleIsCancelled: scheduleCancellationResult.data,
-    }),
+    ...taskWithTrees,
+    // scheduleIsCancelled tidak ikut terbawa attachTaskTreeTargets karena ia
+    // bukan bagian dari CareTask dasar; dikembalikan eksplisit di sini.
+    scheduleIsCancelled: task.scheduleIsCancelled,
     activities: (activitiesResult.data ?? []).map(mapCareActivity),
   });
 }

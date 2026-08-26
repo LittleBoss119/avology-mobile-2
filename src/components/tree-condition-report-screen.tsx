@@ -6,7 +6,7 @@ import { tokens } from '../constants/theme';
 import { createTreeConditionReport } from '../services/conditionReportService';
 import { uploadConditionRecordPhoto } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
-import { pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
+import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type { Tree, TreeConditionStatus } from '../types/domain';
 import type { PickedPhotoAsset } from '../types/media';
 import { formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
@@ -40,6 +40,7 @@ export function TreeConditionReportScreen({
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
   const [pendingConditionRecordId, setPendingConditionRecordId] = React.useState<string | null>(null);
+  const [processingPhoto, setProcessingPhoto] = React.useState(false);
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [tree, setTree] = React.useState<Tree | null>(null);
@@ -212,30 +213,42 @@ export function TreeConditionReportScreen({
   }
 
   async function handlePickPhotoFromGallery() {
-    const result = await pickImageFromGallery();
+    setProcessingPhoto(true);
 
-    if (result.error) {
-      setError(result.error.message);
-      return;
-    }
+    try {
+      const result = await pickImageFromGallery();
 
-    if (result.data) {
-      setError(null);
-      setSelectedPhoto(result.data);
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
     }
   }
 
   async function handleTakePhotoFromCamera() {
-    const result = await takePhotoFromCamera();
+    setProcessingPhoto(true);
 
-    if (result.error) {
-      setError(result.error.message);
-      return;
-    }
+    try {
+      const result = await takePhotoFromCamera();
 
-    if (result.data) {
-      setError(null);
-      setSelectedPhoto(result.data);
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
     }
   }
 
@@ -292,6 +305,7 @@ export function TreeConditionReportScreen({
       <ConditionPhotoPicker
         disabled={submitting}
         photo={selectedPhoto}
+        processing={processingPhoto}
         onCameraPress={handleTakePhotoFromCamera}
         onGalleryPress={handlePickPhotoFromGallery}
         onRemove={() => setSelectedPhoto(null)}
@@ -300,25 +314,31 @@ export function TreeConditionReportScreen({
   );
 }
 
+// `processing` dipisahkan dari `disabled` dengan sengaja: `disabled` berarti
+// formulirnya sedang disimpan, `processing` berarti fotonya sedang diperkecil.
+// Bagi pengguna keduanya kejadian yang berbeda, dan hanya yang kedua yang perlu
+// menerangkan dirinya lewat teks.
 function ConditionPhotoPicker({
   disabled,
   onCameraPress,
   onGalleryPress,
   onRemove,
   photo,
+  processing,
 }: {
   disabled: boolean;
   onCameraPress: () => void;
   onGalleryPress: () => void;
   onRemove: () => void;
   photo: PickedPhotoAsset | null;
+  processing: boolean;
 }) {
   return (
     <PhotoPickerCard
       choosePhotoLabel="Pilih Galeri"
-      description="Opsional, untuk mendokumentasikan kondisi pohon."
+      description={processing ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan kondisi pohon.'}
       imageUri={photo?.uri}
-      loading={disabled}
+      loading={disabled || processing}
       removeLabel="Hapus Foto"
       takePhotoLabel="Ambil Foto"
       title="Foto kondisi"

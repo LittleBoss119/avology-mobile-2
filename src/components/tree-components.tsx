@@ -11,13 +11,16 @@ import type {
   CareActivityOrigin,
   TreeHistoryItem,
   TreeHistoryType,
+  TreePlanting,
 } from '../types/domain';
 import type {
   ConditionRecordPhotoMap,
   PickedPhotoAsset,
 } from '../types/media';
 import { colors, radius, spacing, tokens, typography } from '../constants/theme';
+import { PHOTO_PROCESSING_MESSAGE } from '../lib/media';
 import { formatCareCategory, formatPersonDisplayName } from '../utils/displayFormat';
+import { formatCycleDividerLabel, groupTreeHistoryByCycle } from '../utils/treeCycle';
 import {
   buildTreeDisplayCode,
   formatGrowthPhase,
@@ -52,9 +55,6 @@ export type TreeFormProps = {
   errors?: TreeFormErrors;
   values: TreeFormValues;
   onChange: (values: TreeFormValues) => void;
-  // Lihat catatan di TreeForm. Default true (alur tambah pohon); layar edit
-  // mengirim false karena varietas & tanggal tanam milik siklus tanam.
-  includePlantingFields?: boolean;
 };
 
 export type TreeMainPhotoFormSectionProps = {
@@ -62,6 +62,10 @@ export type TreeMainPhotoFormSectionProps = {
   deleteRequested?: boolean;
   disabled: boolean;
   photo: PickedPhotoAsset | null;
+  // Dipisahkan dari `disabled` dengan sengaja: `disabled` berarti formulirnya
+  // sedang disimpan, `processing` berarti fotonya sedang diperkecil. Bagi
+  // pengguna keduanya kejadian yang berbeda.
+  processing?: boolean;
   onCameraPress: () => void;
   onDeleteExisting?: () => void;
   onGalleryPress: () => void;
@@ -102,6 +106,11 @@ export type TreeHistoryTimelineProps = {
   currentUserId?: string | null;
   history: TreeHistoryItem[];
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
+  // Seluruh siklus tanam posisi ini, dipakai HANYA untuk menyisipkan pembatas
+  // dan meredupkan kejadian milik siklus lama. Opsional dengan sengaja: kalau
+  // pengambilannya gagal atau pemanggil tidak menyediakannya, timeline kembali
+  // ke bentuk datar seperti sebelumnya alih-alih ikut kosong.
+  plantings?: TreePlanting[];
   viewerMode?: TreeHistoryViewerMode;
 };
 
@@ -130,6 +139,10 @@ export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest' | 'ca
 // perlu dikenali sekilas, sedangkan bentuk panjangnya tetap ada di layar detail.
 const TREE_ROW_THUMBNAIL = 72;
 const TREE_ROW_MIN_HEIGHT = 96;
+
+// Cukup redup untuk terbaca sebagai lapisan kedua, masih cukup pekat untuk
+// dibaca — kejadian siklus lama tetap harus bisa dibuka dan dibaca isinya.
+const PAST_CYCLE_OPACITY = 0.55;
 
 export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
@@ -283,17 +296,15 @@ export function TreeVisualPlaceholder({
   );
 }
 
-// includePlantingFields memisahkan dua field yang sejak migrasi 055 BUKAN milik
-// posisi melainkan milik siklus tanam:
+// Varietas dan tanggal tanam dirender di KEDUA alur, dengan makna berbeda:
 //
-//   Tambah pohon  -> true (default). Membuat pohon sekaligus membuka siklus
-//                    pertamanya, jadi varietas & tanggal tanam diisi di sini.
-//   Edit pohon    -> false. Mengubah keduanya berarti mengubah fakta penanaman
-//                    yang sudah terjadi; yang boleh diubah tinggal posisinya.
+//   Tambah pohon  -> keduanya mengisi siklus tanam PERTAMA posisi ini.
+//   Edit pohon    -> keduanya MENGOREKSI siklus yang sedang aktif (migrasi
+//                    056). Koreksi, bukan penanaman ulang: cycle_no tidak naik.
 //
-// Tata letak field yang tersisa TIDAK berubah — kedua field ini hanya tidak
-// dirender, bukan dipindah.
-export function TreeForm({ errors, includePlantingFields = true, onChange, values }: TreeFormProps) {
+// Penanaman ulang yang sungguhan punya jalurnya sendiri (end_tree_planting lalu
+// start_tree_planting) dan bukan lewat form ini.
+export function TreeForm({ errors, onChange, values }: TreeFormProps) {
   const previewCode = buildTreeDisplayCode(values);
 
   function updateTextValue(field: 'rowPosition' | 'columnPosition' | 'variety', value: string) {
@@ -361,25 +372,21 @@ export function TreeForm({ errors, includePlantingFields = true, onChange, value
             />
           </View>
         </View>
-        {includePlantingFields ? (
-          <Field
-            error={errors?.variety}
-            label="Varietas *"
-            onChangeText={(value) => updateTextValue('variety', value)}
-            placeholder="Contoh: Alpukat mentega"
-            value={values.variety}
-          />
-        ) : null}
+        <Field
+          error={errors?.variety}
+          label="Varietas *"
+          onChangeText={(value) => updateTextValue('variety', value)}
+          placeholder="Contoh: Alpukat mentega"
+          value={values.variety}
+        />
       </TreeFormSection>
 
-      {includePlantingFields ? (
-        <DateField
-          error={errors?.plantedAt}
-          label="Tanggal tanam *"
-          value={formatDateForDb(values.plantedAt)}
-          onChangeDate={(value) => updateDateValue(parseDbDate(value))}
-        />
-      ) : null}
+      <DateField
+        error={errors?.plantedAt}
+        label="Tanggal tanam *"
+        value={formatDateForDb(values.plantedAt)}
+        onChangeDate={(value) => updateDateValue(parseDbDate(value))}
+      />
     </View>
   );
 }
@@ -393,14 +400,7 @@ export function TreeForm({ errors, includePlantingFields = true, onChange, value
 //
 // Yang TIDAK diperiksa di sini: apakah posisinya muat di ukuran kebun. Itu
 // milik trigger validate_tree_position, yang perlu membaca baris farms.
-//
-// includePlantingFields harus sepadan dengan yang dioper ke TreeForm. Kalau
-// tidak, layar edit akan menolak submit karena varietas kosong — padahal
-// fieldnya memang sengaja tidak dirender di sana.
-export function validateTreeForm(
-  values: TreeFormValues,
-  { includePlantingFields = true }: { includePlantingFields?: boolean } = {}
-): TreeFormErrors {
+export function validateTreeForm(values: TreeFormValues): TreeFormErrors {
   const errors: TreeFormErrors = {};
 
   const rowPosition = values.rowPosition.trim();
@@ -420,14 +420,12 @@ export function validateTreeForm(
     errors.columnPosition = 'Kolom harus satu huruf A sampai Z.';
   }
 
-  if (includePlantingFields) {
-    if (!values.variety.trim()) {
-      errors.variety = 'Varietas wajib diisi.';
-    }
+  if (!values.variety.trim()) {
+    errors.variety = 'Varietas wajib diisi.';
+  }
 
-    if (!values.plantedAt) {
-      errors.plantedAt = 'Tanggal tanam wajib dipilih.';
-    }
+  if (!values.plantedAt) {
+    errors.plantedAt = 'Tanggal tanam wajib dipilih.';
   }
 
   return errors;
@@ -465,6 +463,7 @@ export function TreeMainPhotoFormSection({
   onRemoveSelected,
   onRestoreExisting,
   photo,
+  processing = false,
 }: TreeMainPhotoFormSectionProps) {
   const previewUri = photo?.uri ?? (deleteRequested ? null : currentPhotoUrl);
   const hasExistingPhoto = Boolean(currentPhotoUrl);
@@ -483,9 +482,10 @@ export function TreeMainPhotoFormSection({
     <View style={{ gap: spacing.md }}>
       <PhotoPickerCard
         choosePhotoLabel="Pilih Galeri"
+        description={processing ? PHOTO_PROCESSING_MESSAGE : undefined}
         emptyLabel="Tambah foto pohon"
         imageUri={previewUri}
-        loading={disabled}
+        loading={disabled || processing}
         removeLabel="Hapus Foto"
         takePhotoLabel="Ambil Foto"
         title="Foto pohon"
@@ -591,6 +591,7 @@ export function TreeHistoryTimeline({
   currentUserId,
   history,
   onRecordPress,
+  plantings,
   viewerMode = 'owner',
 }: TreeHistoryTimelineProps) {
   if (history.length === 0) {
@@ -602,17 +603,78 @@ export function TreeHistoryTimeline({
     );
   }
 
+  // Pembatas hanya muncul kalau memang ADA yang dipisahkan. Posisi yang baru
+  // sekali ditanami — dan itu keadaan hampir semua pohon — tidak mendapat garis
+  // apa pun, karena satu pembatas tunggal di dasar riwayat tidak memberi tahu
+  // pembacanya hal baru dan cuma menambah baris yang harus dilewati.
+  const cycleGroups = (plantings?.length ?? 0) > 1 ? groupTreeHistoryByCycle(history, plantings ?? []) : [];
+
+  if (cycleGroups.length === 0) {
+    return (
+      <View style={{ gap: spacing.md }}>
+        {history.map((item, index) => (
+          <TreeHistoryTimelineItem
+            key={buildHistoryItemKey(item, index)}
+            currentUserId={currentUserId}
+            item={item}
+            onRecordPress={onRecordPress}
+            viewerMode={viewerMode}
+          />
+        ))}
+      </View>
+    );
+  }
+
   return (
     <View style={{ gap: spacing.md }}>
-      {history.map((item, index) => (
-        <TreeHistoryTimelineItem
-          key={buildHistoryItemKey(item, index)}
-          currentUserId={currentUserId}
-          item={item}
-          onRecordPress={onRecordPress}
-          viewerMode={viewerMode}
-        />
+      {cycleGroups.map((group) => (
+        <View key={group.planting.id} style={{ gap: spacing.md }}>
+          {group.items.map((item, index) => (
+            <View
+              key={buildHistoryItemKey(item, index)}
+              // Kejadian milik siklus lama diredupkan supaya terlihat mana yang
+              // milik pohon yang sekarang. Lewat opacity, bukan warna teks
+              // pengganti: satu nilai meredupkan seluruh isi kartu sekaligus —
+              // badge, ikon, dan foto ikut — tanpa memaksa setiap teks di
+              // dalamnya punya varian warna kedua.
+              style={group.isLatestCycle ? undefined : { opacity: PAST_CYCLE_OPACITY }}
+            >
+              <TreeHistoryTimelineItem
+                currentUserId={currentUserId}
+                item={item}
+                onRecordPress={onRecordPress}
+                viewerMode={viewerMode}
+              />
+            </View>
+          ))}
+          <TreeCycleDivider label={formatCycleDividerLabel(group.planting)} />
+        </View>
       ))}
+    </View>
+  );
+}
+
+// Pembatas awal sebuah siklus: '-- Ditanam ulang * 12 Mar 2023 * Aligator --'.
+//
+// Duduk di BAWAH kejadian-kejadian milik siklusnya, bukan di atas. Riwayat
+// tersusun menurun (terbaru dulu), jadi membacanya ke bawah berarti mundur ke
+// masa lalu — dan penanaman adalah hal paling awal yang terjadi pada siklus itu.
+function TreeCycleDivider({ label }: { label: string }) {
+  return (
+    <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.xs }}>
+      <View style={{ backgroundColor: colors.border, flex: 1, height: 1 }} />
+      <Text
+        selectable
+        style={{
+          color: colors.textMuted,
+          fontSize: typography.meta.fontSize,
+          fontWeight: '700',
+          lineHeight: typography.meta.lineHeight,
+        }}
+      >
+        {label}
+      </Text>
+      <View style={{ backgroundColor: colors.border, flex: 1, height: 1 }} />
     </View>
   );
 }

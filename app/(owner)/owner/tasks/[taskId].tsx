@@ -3,6 +3,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 
 import {
+  TargetTreeCodeList,
   formatCareTarget,
   formatTaskSource,
   formatTaskStatus,
@@ -139,6 +140,15 @@ export default function OwnerTaskDetailScreen() {
           <MetaRow label="Bukti foto" value={task.requiresPhoto ? 'Wajib' : 'Tidak wajib'} />
         </View>
       </Card>
+
+      {/* Pemilik melihat daftar yang SAMA dengan yang dilihat pekerja. Baris
+          "Target" di atas hanya ringkasan; kalau keduanya melihat hal yang
+          berbeda, tidak ada yang bisa memastikan pekerjaan mana yang dimaksud. */}
+      {task.targetType === 'tree' ? (
+        <Card>
+          <TargetTreeCodeList targetTreeCodes={task.targetTreeCodes} targetTreeId={task.targetTreeId} />
+        </Card>
+      ) : null}
 
       <Card>
         <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
