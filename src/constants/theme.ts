@@ -174,7 +174,17 @@ export const tokens = {
       harvest:   { text: '#9A4C0A', bg: '#FDEBD9', border: '#F2C69B' },
       care:      { text: '#184E91', bg: '#E7EEF8', border: '#C2D4EC' },
     },
-    overlay: { scrim: 'rgba(23,35,27,0.45)', scrimLight: 'rgba(23,35,27,0.12)' },
+    // `viewer` SENGAJA bukan `scrim`, dan keduanya tidak boleh disatukan.
+    // scrim menggelapkan layar di balik lembar/sheet yang isinya masih perlu
+    // terbaca sebagian; viewer menggelapkan latar di balik SATU foto yang sedang
+    // diperiksa, jadi ia lebih gelap dan lebih pekat supaya mata tidak terganggu
+    // apa pun di sekitarnya. Nilai viewer diambil apa adanya dari viewer foto
+    // yang sudah dipakai sejak sebelum token ini ada, bukan diturunkan dari scrim.
+    overlay: {
+      scrim: 'rgba(23,35,27,0.45)',
+      scrimLight: 'rgba(23,35,27,0.12)',
+      viewer: 'rgba(18,28,22,0.78)',
+    },
   },
   space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32, xxxxl: 40 },
   layout: {

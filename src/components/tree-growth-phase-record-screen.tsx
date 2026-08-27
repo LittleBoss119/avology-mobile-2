@@ -4,12 +4,15 @@ import { Text, View } from 'react-native';
 
 import { tokens } from '../constants/theme';
 import { createGrowthPhaseRecord } from '../services/growthPhaseService';
+import { uploadGrowthPhaseRecordPhoto } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
+import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type { GrowthPhase, Tree } from '../types/domain';
+import type { PickedPhotoAsset } from '../types/media';
 import { formatGrowthPhase, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { GrowthPhaseBadge } from './tree-components';
 import { useSnackbar } from './snackbar';
-import { Button, Card, DateField, ErrorBanner, Field, FormSection, LoadingState, MetaRow, OptionGroup, Screen, TopAppBar } from './ui';
+import { Button, Card, DateField, ErrorBanner, Field, FormSection, LoadingState, MetaRow, OptionGroup, PhotoPickerCard, Screen, TopAppBar } from './ui';
 
 type PhaseFormErrors = { phase?: string };
 
@@ -34,7 +37,10 @@ export function TreeGrowthPhaseRecordScreen({
   const [fieldErrors, setFieldErrors] = React.useState<PhaseFormErrors>({});
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
+  const [pendingRecordId, setPendingRecordId] = React.useState<string | null>(null);
   const [phase, setPhase] = React.useState<GrowthPhase | null>(null);
+  const [processingPhoto, setProcessingPhoto] = React.useState(false);
+  const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [tree, setTree] = React.useState<Tree | null>(null);
 
@@ -84,6 +90,14 @@ export function TreeGrowthPhaseRecordScreen({
       return;
     }
 
+    // Catatannya SUDAH tersimpan dan yang gagal cuma fotonya: tombol yang sama
+    // sekarang berarti "coba unggah lagi", bukan "simpan lagi". Tanpa cabang
+    // ini, menekan Simpan akan membuat catatan kedua yang isinya sama.
+    if (pendingRecordId) {
+      await retryPendingPhotoUpload(pendingRecordId);
+      return;
+    }
+
     if (!phase) {
       setFieldErrors({ phase: 'Fase wajib dipilih.' });
       return;
@@ -107,7 +121,109 @@ export function TreeGrowthPhaseRecordScreen({
       return;
     }
 
+    if (selectedPhoto) {
+      const photoUploaded = await uploadSelectedPhoto(result.data.recordId);
+
+      if (!photoUploaded) {
+        setPendingRecordId(result.data.recordId);
+        setSubmitting(false);
+        setError(
+          'Catatan fase tersimpan, tetapi foto gagal diunggah. Tekan Simpan lagi untuk mencoba unggah foto.'
+        );
+        return;
+      }
+    }
+
+    setSelectedPhoto(null);
     finishGrowthPhaseRecord();
+  }
+
+  async function retryPendingPhotoUpload(recordId: string) {
+    if (!tree) {
+      setError('Data pohon tidak ditemukan.');
+      return;
+    }
+
+    if (!selectedPhoto) {
+      setPendingRecordId(null);
+      router.replace(`${basePath}/${tree.id}`);
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    const photoUploaded = await uploadSelectedPhoto(recordId);
+
+    if (!photoUploaded) {
+      setSubmitting(false);
+      setError(
+        'Foto masih gagal diunggah. Periksa koneksi atau pilih ulang foto, lalu coba lagi.'
+      );
+      return;
+    }
+
+    setPendingRecordId(null);
+    setSelectedPhoto(null);
+    setSubmitting(false);
+    router.replace(`${basePath}/${tree.id}`);
+  }
+
+  async function uploadSelectedPhoto(recordId: string): Promise<boolean> {
+    if (!tree || !selectedPhoto) {
+      return true;
+    }
+
+    const photoResult = await uploadGrowthPhaseRecordPhoto({
+      base64: selectedPhoto.base64,
+      farmId: tree.farmId,
+      fileName: selectedPhoto.fileName,
+      growthPhaseRecordId: recordId,
+      localUri: selectedPhoto.uri,
+      mimeType: selectedPhoto.mimeType,
+    });
+
+    return !photoResult.error;
+  }
+
+  async function handlePickPhotoFromGallery() {
+    setProcessingPhoto(true);
+
+    try {
+      const result = await pickImageFromGallery();
+
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
+    }
+  }
+
+  async function handleTakePhotoFromCamera() {
+    setProcessingPhoto(true);
+
+    try {
+      const result = await takePhotoFromCamera();
+
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
+    }
   }
 
   function finishGrowthPhaseRecord() {
@@ -176,6 +292,23 @@ export function TreeGrowthPhaseRecordScreen({
       <FormSection title="Catatan" description="Catat tanda pertumbuhan yang terlihat di pohon.">
         <Field label="" multiline onChangeText={setNote} placeholder="Opsional" value={note} />
       </FormSection>
+
+      {/* `processing` dipisahkan dari `disabled` dengan sengaja: `disabled`
+          berarti formulirnya sedang disimpan, `processing` berarti fotonya
+          sedang diperkecil. Bagi pengguna keduanya kejadian yang berbeda, dan
+          hanya yang kedua yang perlu menerangkan dirinya lewat teks. */}
+      <PhotoPickerCard
+        choosePhotoLabel="Pilih Galeri"
+        description={processingPhoto ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan fase pertumbuhan pohon.'}
+        imageUri={selectedPhoto?.uri}
+        loading={submitting || processingPhoto}
+        removeLabel="Hapus Foto"
+        takePhotoLabel="Ambil Foto"
+        title="Foto fase"
+        onChoosePhoto={handlePickPhotoFromGallery}
+        onRemovePhoto={selectedPhoto ? () => setSelectedPhoto(null) : undefined}
+        onTakePhoto={handleTakePhotoFromCamera}
+      />
     </Screen>
   );
 }

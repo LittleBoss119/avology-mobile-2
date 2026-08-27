@@ -1,9 +1,10 @@
 import React from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '../../constants/theme';
 import type { PhotoAttachmentPreviewItem } from '../../types/media';
 import { Icon } from '../icons';
+import { PhotoViewerModal } from './PhotoViewerModal';
 
 export type PhotoAttachmentPreviewListProps = {
   disabled?: boolean;
@@ -144,24 +145,11 @@ export function PhotoAttachmentPreviewList({
         ))}
       </View>
 
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setPreviewUrl(null)}
-        transparent
+      <PhotoViewerModal
+        onClose={() => setPreviewUrl(null)}
+        photoUrl={previewUrl}
         visible={Boolean(previewUrl)}
-      >
-        <View style={{ backgroundColor: 'rgba(18, 28, 22, 0.78)', flex: 1, justifyContent: 'center', padding: 20 }}>
-          <Pressable accessibilityRole="button" onPress={() => setPreviewUrl(null)} style={{ flex: 1, justifyContent: 'center' }}>
-            {previewUrl ? (
-              <Image
-                resizeMode="contain"
-                source={{ uri: previewUrl }}
-                style={{ borderRadius: radius.lg, height: '82%', width: '100%' }}
-              />
-            ) : null}
-          </Pressable>
-        </View>
-      </Modal>
+      />
     </>
   );
 }

@@ -10,8 +10,11 @@ import {
 } from '../constants/gradePanen';
 import { tokens } from '../constants/theme';
 import { createHarvestRecord } from '../services/harvestService';
+import { uploadHarvestRecordPhoto } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
+import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type { Tree } from '../types/domain';
+import type { PickedPhotoAsset } from '../types/media';
 import { MAX_ANGKA_DESIMAL, parseDecimalInput, sanitizeDecimalInput } from '../utils/decimalInput';
 import { formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
 import { useSnackbar } from './snackbar';
@@ -25,6 +28,7 @@ import {
   LoadingState,
   MetaRow,
   OptionGroup,
+  PhotoPickerCard,
   Screen,
   TopAppBar,
 } from './ui';
@@ -47,6 +51,9 @@ export function TreeHarvestRecordScreen({
   const [fruitCount, setFruitCount] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [note, setNote] = React.useState('');
+  const [pendingRecordId, setPendingRecordId] = React.useState<string | null>(null);
+  const [processingPhoto, setProcessingPhoto] = React.useState(false);
+  const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [tree, setTree] = React.useState<Tree | null>(null);
 
@@ -96,6 +103,15 @@ export function TreeHarvestRecordScreen({
       return;
     }
 
+    // Catatannya SUDAH tersimpan dan yang gagal cuma fotonya: tombol yang sama
+    // sekarang berarti "coba unggah lagi", bukan "simpan lagi". Tanpa cabang
+    // ini, menekan Simpan akan membuat catatan panen kedua yang isinya sama --
+    // dan panen ganda langsung merusak angka target kebun.
+    if (pendingRecordId) {
+      await retryPendingPhotoUpload(pendingRecordId);
+      return;
+    }
+
     const jumlahMessage = validateJumlahPanen();
 
     if (jumlahMessage) {
@@ -123,9 +139,111 @@ export function TreeHarvestRecordScreen({
       return;
     }
 
+    if (selectedPhoto) {
+      const photoUploaded = await uploadSelectedPhoto(result.data.recordId);
+
+      if (!photoUploaded) {
+        setPendingRecordId(result.data.recordId);
+        setSubmitting(false);
+        setError(
+          'Catatan panen tersimpan, tetapi foto gagal diunggah. Tekan Simpan lagi untuk mencoba unggah foto.'
+        );
+        return;
+      }
+    }
+
+    setSelectedPhoto(null);
     setSubmitting(false);
     showSnackbar('Panen tercatat');
     router.replace(`${basePath}/${tree.id}`);
+  }
+
+  async function retryPendingPhotoUpload(recordId: string) {
+    if (!tree) {
+      setError('Data pohon tidak ditemukan.');
+      return;
+    }
+
+    if (!selectedPhoto) {
+      setPendingRecordId(null);
+      router.replace(`${basePath}/${tree.id}`);
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    const photoUploaded = await uploadSelectedPhoto(recordId);
+
+    if (!photoUploaded) {
+      setSubmitting(false);
+      setError(
+        'Foto masih gagal diunggah. Periksa koneksi atau pilih ulang foto, lalu coba lagi.'
+      );
+      return;
+    }
+
+    setPendingRecordId(null);
+    setSelectedPhoto(null);
+    setSubmitting(false);
+    router.replace(`${basePath}/${tree.id}`);
+  }
+
+  async function uploadSelectedPhoto(recordId: string): Promise<boolean> {
+    if (!tree || !selectedPhoto) {
+      return true;
+    }
+
+    const photoResult = await uploadHarvestRecordPhoto({
+      base64: selectedPhoto.base64,
+      farmId: tree.farmId,
+      fileName: selectedPhoto.fileName,
+      harvestRecordId: recordId,
+      localUri: selectedPhoto.uri,
+      mimeType: selectedPhoto.mimeType,
+    });
+
+    return !photoResult.error;
+  }
+
+  async function handlePickPhotoFromGallery() {
+    setProcessingPhoto(true);
+
+    try {
+      const result = await pickImageFromGallery();
+
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
+    }
+  }
+
+  async function handleTakePhotoFromCamera() {
+    setProcessingPhoto(true);
+
+    try {
+      const result = await takePhotoFromCamera();
+
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
+    }
   }
 
   // Minimal salah satu dari berat atau jumlah buah. Cerminan constraint
@@ -236,6 +354,23 @@ export function TreeHarvestRecordScreen({
       <FormSection title="Catatan tambahan">
         <Field label="" multiline onChangeText={setNote} placeholder="Opsional" value={note} />
       </FormSection>
+
+      {/* `processing` dipisahkan dari `disabled` dengan sengaja: `disabled`
+          berarti formulirnya sedang disimpan, `processing` berarti fotonya
+          sedang diperkecil. Bagi pengguna keduanya kejadian yang berbeda, dan
+          hanya yang kedua yang perlu menerangkan dirinya lewat teks. */}
+      <PhotoPickerCard
+        choosePhotoLabel="Pilih Galeri"
+        description={processingPhoto ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan hasil panen.'}
+        imageUri={selectedPhoto?.uri}
+        loading={submitting || processingPhoto}
+        removeLabel="Hapus Foto"
+        takePhotoLabel="Ambil Foto"
+        title="Foto panen"
+        onChoosePhoto={handlePickPhotoFromGallery}
+        onRemovePhoto={selectedPhoto ? () => setSelectedPhoto(null) : undefined}
+        onTakePhoto={handleTakePhotoFromCamera}
+      />
     </Screen>
   );
 }

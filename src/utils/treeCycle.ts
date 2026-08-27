@@ -56,6 +56,46 @@ export function groupTreeHistoryByCycle(
   return groups.reverse();
 }
 
+// Apakah sebuah foto boleh tampil pada siklus yang sedang dilihat.
+//
+// SATU-SATUNYA tempat aturan ini ditulis. Jalur baca foto mana pun yang perlu
+// menyaring per siklus wajib lewat sini — bukan karena rapi, tapi karena aturan
+// NULL di bawah gampang sekali "disederhanakan" jadi salah di tempat kedua.
+//
+// ATURANNYA, DAN KENAPA:
+//
+//   photoPlantingId === null  -> TAMPIL. Selalu.
+//
+//     NULL berarti "siklusnya TIDAK DIKETAHUI", bukan "milik siklus lain".
+//     Migrasi 059 sengaja tidak menebak: foto yang siklusnya tak bisa
+//     ditentukan dibiarkan NULL, dan seluruh 'task_proof' memang selalu NULL.
+//     Migrasi 060 menambah satu sumber NULL lagi dengan alasan yang sama:
+//     'initiative_care_proof' yang aktivitasnya menaut lebih dari satu pohon.
+//     Yang menaut tepat satu pohon TERISI, jadi ia ikut aturan biasa di bawah.
+//     Menyembunyikannya berarti foto yang selama ini terlihat mendadak lenyap
+//     dari layar pemilik — kehilangan data yang terlihat, akibat perbaikan.
+//     Foto yang salah tampil jauh lebih ringan daripada foto yang hilang.
+//
+//   photoPlantingId === cyclePlantingId -> TAMPIL.
+//
+//   selain itu -> SEMBUNYIKAN. Ini satu-satunya kasus yang disaring: siklusnya
+//     DIKETAHUI dan BERBEDA dari yang sedang dilihat.
+//
+// cyclePlantingId null berarti posisinya sedang kosong — tidak ada siklus yang
+// sedang dilihat, jadi setiap siklus yang diketahui otomatis "berbeda" dan hanya
+// foto ber-NULL yang lolos. Itu konsisten dengan aturan di atas, bukan
+// pengecualian terhadapnya.
+export function isPhotoVisibleInCycle(
+  photoPlantingId: string | null,
+  cyclePlantingId: string | null
+): boolean {
+  if (photoPlantingId === null) {
+    return true;
+  }
+
+  return photoPlantingId === cyclePlantingId;
+}
+
 // Siklus TERAKHIR yang sudah ditutup. Dasar keterangan pada posisi kosong.
 export function findLastEndedPlanting(plantings: TreePlanting[]): TreePlanting | null {
   const ended = plantings.filter((planting) => planting.endedAt !== null);

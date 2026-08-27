@@ -34,6 +34,7 @@ import type {
 } from '../types/media';
 import { findLastEndedPlanting, formatPlantingEndSummary } from '../utils/treeCycle';
 import { formatTreeAge, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
+import { PhotoViewerModal } from './media';
 import {
   ConditionReportList,
   ConditionStatusBadge,
@@ -135,10 +136,15 @@ export function TreeDetailScreen({
 
     setTree(treeResult.data);
 
+    // Siklus aktif dibaca dari getTreeDetail, yang sudah membawanya sebagai
+    // embedded resource — tidak perlu query tambahan, dan nilainya sudah ada
+    // sebelum kedua pengambilan foto di bawah berjalan. null = posisi kosong.
+    const activePlantingId = treeResult.data.activePlanting?.id ?? null;
+
     const [reportsResult, historyResult, photoResult, plantingsResult] = await Promise.all([
       getTreeConditionReports({ treeId }),
       getTreeHistory({ treeId }),
-      getTreeMainPhoto(treeResult.data.farmId, treeResult.data.id),
+      getTreeMainPhoto(treeResult.data.farmId, treeResult.data.id, activePlantingId),
       listTreePlantings({ treeId }),
     ]);
 
@@ -170,6 +176,7 @@ export function TreeDetailScreen({
 
     if (reportsResult.data && reportsResult.data.length > 0) {
       const conditionPhotoResult = await listConditionRecordPhotosForTree({
+        activePlantingId,
         conditionRecordIds: reportsResult.data.map((report) => report.id),
         farmId: treeResult.data.farmId,
         treeId: treeResult.data.id,
@@ -781,14 +788,42 @@ function TreePhotoArea({
   onPhotoPress: () => void;
   photoUrl?: string | null;
 }) {
+  const [previewOpen, setPreviewOpen] = React.useState(false);
+
+  // Foto utama bisa diganti atau dihapus tanpa meninggalkan layar ini. Kalau
+  // fotonya berganti selagi viewer terbuka, viewer harus ikut tutup -- bukan
+  // diam-diam memperlihatkan foto yang sudah tidak ada lagi.
+  React.useEffect(() => {
+    setPreviewOpen(false);
+  }, [photoUrl]);
+
   if (photoUrl) {
     return (
       <>
-        <Image
-          resizeMode="cover"
-          source={{ uri: photoUrl }}
+        {/*
+          Foto utama pohon kini dibuka lewat viewer bersama yang sama dengan
+          foto catatan, foto bukti kerja, dan foto kondisi. Sebelumnya ia
+          satu-satunya foto di aplikasi yang tidak bisa dicubit sama sekali,
+          padahal justru foto ini yang paling sering dibuka pemilik.
+
+          Tombol kamera di bawah SENGAJA dibiarkan utuh sebagai kontrol
+          terpisah: mengetuk fotonya berarti "lihat lebih besar", mengetuk
+          tombol kamera berarti "ganti atau hapus". Keduanya tidak pernah
+          bertukar arti, dan tombol kamera dirender setelah Pressable ini
+          sehingga tetap berada di atas dan tetap menerima tekanannya sendiri.
+        */}
+        <Pressable
+          accessibilityLabel="Lihat foto pohon ukuran penuh"
+          accessibilityRole="imagebutton"
+          onPress={() => setPreviewOpen(true)}
           style={{ bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 }}
-        />
+        >
+          <Image
+            resizeMode="cover"
+            source={{ uri: photoUrl }}
+            style={{ height: '100%', width: '100%' }}
+          />
+        </Pressable>
         {mode === 'owner' ? (
           <Pressable
             accessibilityLabel="Ubah foto pohon"
@@ -809,6 +844,11 @@ function TreePhotoArea({
             <Icon name="camera" size={tokens.icon.md} color={tokens.color.brand.on} />
           </Pressable>
         ) : null}
+        <PhotoViewerModal
+          onClose={() => setPreviewOpen(false)}
+          photoUrl={photoUrl}
+          visible={previewOpen}
+        />
       </>
     );
   }

@@ -19,6 +19,9 @@ import {
 import { getFarmActorDisplayProfiles } from '../services/memberService';
 import {
   getConditionRecordPhotos,
+  getGrowthPhaseRecordPhotos,
+  getHarvestRecordPhotos,
+  getInitiativeCareProofPhotos,
 } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
 import { useAuth } from '../context/auth-context';
@@ -29,7 +32,7 @@ import type {
   Tree,
   UUID,
 } from '../types/domain';
-import type { PhotoAttachmentPreviewItem } from '../types/media';
+import type { PhotoAttachmentEntityType, PhotoAttachmentPreviewItem } from '../types/media';
 import {
   formatCareCategory,
   formatPersonDisplayName,
@@ -74,6 +77,23 @@ type DetailState = {
   recordLabel: string;
   // Badge sekunder (mis. asal perawatan Terjadwal/Inisiatif), tone muted. Opsional.
   originLabel?: string | null;
+  // Jenis foto yang dimiliki catatan INI, bukan jenis catatannya.
+  //
+  // Perbedaannya nyata sejak migrasi 060: recordType 'care' menampung DUA jenis
+  // baris, dan hanya yang inisiatif punya foto di layar ini. Yang terjadwal
+  // fotonya 'task_proof' dan ditampilkan di layar tugas, bukan di sini -- kalau
+  // ia ikut dinilai dari recordType saja, layar detail perawatan terjadwal akan
+  // memunculkan kotak "Foto catatan" yang selamanya kosong.
+  //
+  // Fase & panen dulu punya masalah yang sama dan itulah yang B3d hapus: kotak
+  // foto tanpa jalur unggah di baliknya. Sejak migrasi 061 keduanya PUNYA
+  // jalur itu -- entity_type sendiri, policy sendiri, pemilih foto di layar
+  // pencatatannya -- jadi keduanya diisi di sini dengan alasan yang membuat
+  // B3d tidak berlaku lagi untuk mereka. Yang masih berlaku: JANGAN mengisi
+  // medan ini untuk perawatan terjadwal.
+  //
+  // null/undefined = catatan ini tidak punya kotak foto sama sekali.
+  photoEntityType?: PhotoAttachmentEntityType | null;
   rows: Array<{ label: string; value: string | null }>;
   // false untuk record read-only-by-design (perawatan): sembunyikan hint
   // "hanya bisa diubah oleh pelapor" yang tidak relevan. Default (undefined) = tampil.
@@ -127,7 +147,7 @@ export function TreeRecordDetailScreen({
     }
 
     setDetail(detailResult.data);
-    const photoResult = await loadRecordPhotos(normalizedType, detailResult.data.farmId, recordId);
+    const photoResult = await loadRecordPhotos(detailResult.data, recordId);
     setPhotos(photoResult.data ?? []);
   }, [normalizedType, recordId, treeId]);
 
@@ -204,7 +224,7 @@ export function TreeRecordDetailScreen({
         </View>
       </Card>
 
-      {recordTypeHasPhotos(normalizedType) ? (
+      {detail.photoEntityType ? (
         <Card>
           <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
             Foto catatan
@@ -214,14 +234,6 @@ export function TreeRecordDetailScreen({
       ) : null}
     </Screen>
   );
-}
-
-// Hanya condition_record yang masih menyimpan foto. Foto untuk phase & harvest
-// dihapus di B3a/B3b, sehingga section "Foto catatan" disembunyikan untuk kedua
-// tipe itu (bukan dirender kosong). task_proof & operational report punya foto
-// tapi ditangani layar lain, bukan di sini.
-function recordTypeHasPhotos(recordType: TreeRecordRouteType | null): boolean {
-  return recordType === 'condition';
 }
 
 function normalizeRecordType(value?: string): TreeRecordRouteType | null {
@@ -257,6 +269,7 @@ async function loadRecordDetail(
         eventLabel: 'Tanggal catatan',
         farmId: result.data.farmId,
         note: result.data.note,
+        photoEntityType: 'condition_record',
         recordLabel: 'Kondisi',
         rows: [{ label: 'Status kondisi', value: formatTreeConditionStatus(result.data.conditionStatus) }],
         title: 'Detail catatan kondisi',
@@ -287,6 +300,7 @@ async function loadRecordDetail(
         eventLabel: 'Tanggal catatan',
         farmId: result.data.farmId,
         note: result.data.note,
+        photoEntityType: 'growth_phase_record',
         recordLabel: 'Fase',
         rows: [{ label: 'Fase pertumbuhan', value: formatGrowthPhase(result.data.phase) }],
         title: 'Detail catatan fase',
@@ -317,6 +331,7 @@ async function loadRecordDetail(
         eventLabel: 'Tanggal panen',
         farmId: result.data.farmId,
         note: result.data.note,
+        photoEntityType: 'harvest_record',
         recordLabel: 'Panen',
         // Baris yang nilainya null TIDAK ditambahkan sama sekali, bukan
         // ditampilkan sebagai "-": sejak migrasi 045 panen boleh dicatat lewat
@@ -379,6 +394,9 @@ async function loadRecordDetail(
         farmId: care.farmId,
         note: care.note,
         originLabel: care.asal === 'terjadwal' ? 'Terjadwal' : 'Inisiatif',
+        // Hanya yang inisiatif. Foto perawatan terjadwal adalah 'task_proof'
+        // dan hidup di layar tugas; lihat catatan pada DetailState.
+        photoEntityType: care.asal === 'inisiatif' ? 'initiative_care_proof' : null,
         recordLabel: 'Perawatan',
         rows,
         supportsEdit: false,
@@ -415,29 +433,41 @@ async function resolveRecordAuthor(
   };
 }
 
+// Dinilai dari JENIS FOTO yang dipegang catatan itu, bukan dari recordType --
+// alasannya di catatan pada DetailState.photoEntityType.
+//
+// Sengaja TIDAK memakai guard eksahustif seperti loadRecordDetail: yang
+// diperiksa di sini bukan union recordType melainkan union entity_type foto,
+// dan dua dari enam anggotanya ('tree_main', 'task_proof') memang tidak pernah
+// tampil di layar ini. Default "tidak ada foto" adalah jawaban yang benar untuk
+// keduanya, bukan kasus yang terlewat.
 async function loadRecordPhotos(
-  recordType: TreeRecordRouteType,
-  farmId: UUID,
+  detail: DetailState,
   recordId: UUID
 ): Promise<ServiceResult<PhotoAttachmentPreviewItem[]>> {
-  if (recordType === 'condition') {
-    const result = await getConditionRecordPhotos({ conditionRecordId: recordId, farmId });
+  if (detail.photoEntityType === 'condition_record') {
+    const result = await getConditionRecordPhotos({ conditionRecordId: recordId, farmId: detail.farmId });
     return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl)), error: null };
   }
 
-  if (recordType === 'phase') {
-    return { data: [], error: null };
+  if (detail.photoEntityType === 'initiative_care_proof') {
+    const result = await getInitiativeCareProofPhotos({ activityId: recordId, farmId: detail.farmId });
+    return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl)), error: null };
   }
 
-  if (recordType === 'harvest') {
-    return { data: [], error: null };
+  if (detail.photoEntityType === 'growth_phase_record') {
+    const result = await getGrowthPhaseRecordPhotos({ farmId: detail.farmId, growthPhaseRecordId: recordId });
+    return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl)), error: null };
   }
 
-  if (recordType === 'care') {
-    return { data: [], error: null };
+  if (detail.photoEntityType === 'harvest_record') {
+    const result = await getHarvestRecordPhotos({ farmId: detail.farmId, harvestRecordId: recordId });
+    return result.error ? result : { data: result.data.map((photo) => toPreviewPhoto(photo.attachment.id, photo.signedUrl)), error: null };
   }
 
-  return unknownRecordType(recordType);
+  // tree_main, task_proof, dan perawatan TERJADWAL: tidak punya kotak foto di
+  // layar ini, jadi tidak ada yang perlu dimuat.
+  return { data: [], error: null };
 }
 
 // Guard eksahustif: recordType sudah dipersempit ke never di titik ini, jadi

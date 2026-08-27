@@ -9,6 +9,7 @@ import {
   expectDeniedOrNoRows,
   expectFailure,
   expectSuccess,
+  findFreeTreePosition,
   firstRpcRow,
   joinWorkerToFarm,
   makeRunId,
@@ -24,9 +25,14 @@ import {
 // foto.
 //
 // Definisi yang diuji:
-//   * tiga policy public.photo_attachments  -- migrasi 053 bagian E.1
-//   * tiga policy storage.objects           -- migrasi 053 bagian E.2
+//   * tiga policy public.photo_attachments  -- migrasi 060 bagian 3.1
+//                                              (asal 053 E.1, + cabang keempat)
+//   * tiga policy storage.objects           -- migrasi 060 bagian 3.2
+//                                              (asal 053 E.2, + cabang keempat)
 //   * empat fungsi pendukung                -- migrasi 019 (126, 145, 207, 232)
+//   * dua fungsi pendukung                  -- migrasi 060 bagian 2
+//   * trigger set_photo_attachment_planting -- migrasi 059 bagian 4, ditulis
+//                                              ulang di 060 bagian 5
 //   * CHECK entity_type / folder / entity_id / farm_id / file_size / mime_type
 //
 // YANG PALING PENTING DI SINI ADALAH ASERSI PENOLAKAN.
@@ -132,13 +138,19 @@ await runStage(STAGE, async () => {
 
   // ---------- Bahan uji: satu pohon, satu catatan kondisi, satu aktivitas ----------
 
+  // Koordinatnya DITURUNKAN dari grid kebun ini, tidak diketik. Stage ini tidak
+  // pernah memeriksa tree_code, jadi posisi mana pun yang bebas sama saja
+  // baiknya -- dan menebaknya berarti tes ini pecah begitu grid kebun uji
+  // berubah lewat set_farm_grid.
+  const treePosition = await findFreeTreePosition(STAGE, owner.client, farm.id);
+
   const treeId = await expectSuccess(
     STAGE,
     'owner creates a tree with its first planting',
     owner.client.rpc('create_tree_with_planting', {
       p_farm_id: farm.id,
-      p_row_position: 1,
-      p_column_position: 'A',
+      p_row_position: treePosition.rowPosition,
+      p_column_position: treePosition.columnPosition,
       p_variety: 'Alpukat Mentega',
       p_planted_at: todayIso(),
     }),
@@ -1127,4 +1139,1752 @@ await runStage(STAGE, async () => {
     1,
     'The owner branch must be able to clean up any object in their farm.'
   );
+
+  // ================================================================
+  // 9. planting_id -- foto terikat siklus tanam (migrasi 059)
+  // ================================================================
+  //
+  // Yang diuji di sini adalah SISI DATABASE-nya: trigger
+  // set_photo_attachment_planting menurunkan nilainya sendiri, dan penyaringan
+  // per siklus jadi mungkin karena nilai itu benar. Penyaringan tampilannya
+  // sendiri hidup di klien (isPhotoVisibleInCycle di src/utils/treeCycle.ts) dan
+  // tidak bisa dijangkau dari lapisan ini.
+  //
+  // Seluruh baris foto dari bagian 1-8 sudah terhapus, jadi bagian ini mulai
+  // dari keadaan bersih.
+
+  async function readPlantingId(photoId) {
+    const row = await expectSuccess(
+      STAGE,
+      `read planting_id of ${photoId.slice(0, 8)}`,
+      owner.client.from('photo_attachments').select('planting_id').eq('id', photoId).single(),
+      'Owner can read any photo row in their own farm.'
+    );
+
+    return row.planting_id;
+  }
+
+  const cycleOne = await expectSuccess(
+    STAGE,
+    'the active planting cycle of the tree is readable',
+    owner.client
+      .from('tree_plantings')
+      .select('id, cycle_no')
+      .eq('tree_id', treeId)
+      .is('ended_at', null)
+      .single(),
+    'tree_plantings_one_active_per_tree guarantees at most one active cycle.'
+  );
+
+  const cycleOnePhoto = await expectSuccess(
+    STAGE,
+    'the owner uploads a tree_main photo during cycle 1',
+    insertPhoto(
+      owner.client,
+      photoRow({
+        entityType: 'tree_main',
+        entityId: treeId,
+        storagePath: photoPath({ folder: 'trees', entityId: treeId, label: 'siklus1' }),
+        uploadedBy: owner.userId,
+      })
+    ),
+    'Nothing about migration 059 may change who is allowed to upload.'
+  );
+
+  assertEqual(
+    STAGE,
+    'a tree_main photo is stamped with the active cycle',
+    await readPlantingId(cycleOnePhoto.id),
+    cycleOne.id,
+    'The trigger derives planting_id from the tree active cycle.'
+  );
+
+  const conditionCyclePhoto = await expectSuccess(
+    STAGE,
+    'the reporter uploads a condition photo during cycle 1',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'condition_record',
+        entityId: conditionRecordId,
+        storagePath: photoPath({
+          folder: 'condition-reports',
+          entityId: conditionRecordId,
+          label: 'siklus1',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'Condition uploads still require the reporter.'
+  );
+
+  assertEqual(
+    STAGE,
+    'a condition photo is stamped with the cycle of its record',
+    await readPlantingId(conditionCyclePhoto.id),
+    cycleOne.id,
+    'The reference time is the record created_at, resolved to the cycle in force then.'
+  );
+
+  // task_proof SELALU null: satu aktivitas bisa menyentuh banyak pohon di banyak
+  // posisi sekaligus (care_activity_trees), jadi satu siklus tidak pernah bisa
+  // mewakilinya.
+  const proofCyclePhoto = await expectSuccess(
+    STAGE,
+    'the worker uploads a task_proof photo',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'task_proof',
+        entityId: activityId,
+        storagePath: photoPath({ folder: 'task-proofs', entityId: activityId, label: 'siklus1' }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'task_proof uploads are unchanged by migration 059.'
+  );
+
+  assertEqual(
+    STAGE,
+    'a task_proof photo is never stamped with a cycle',
+    await readPlantingId(proofCyclePhoto.id),
+    null,
+    'One activity can touch many trees; a single planting_id would be wrong for all but one.'
+  );
+
+  // Baris ber-planting_id NULL WAJIB tetap terbaca. NULL berarti "siklus tidak
+  // diketahui", bukan "milik siklus lain" -- kalau ia disaring, foto lama yang
+  // tidak bisa ditentukan siklusnya akan lenyap dari layar pemilik.
+  await assertVisible(
+    'a photo whose planting_id is NULL is still readable',
+    owner.client,
+    proofCyclePhoto.id,
+    'NULL must never make a row invisible.'
+  );
+
+  // Klien TIDAK boleh bisa menentukan nilainya. Policy INSERT tidak memeriksa
+  // planting_id dan sengaja tidak diubah, jadi trigger-lah yang menutup celah
+  // itu dengan cara menimpa apa pun yang dikirim.
+  // Posisi kedua, juga diturunkan dari grid. findFreeTreePosition membaca ulang
+  // pohon yang sudah ada, jadi ia tidak akan mengembalikan posisi yang sudah
+  // dipakai pohon pertama stage ini.
+  const otherPosition = await findFreeTreePosition(STAGE, owner.client, farm.id);
+
+  const otherTreeId = await expectSuccess(
+    STAGE,
+    'owner creates a second position to borrow a foreign cycle id from',
+    owner.client.rpc('create_tree_with_planting', {
+      p_farm_id: farm.id,
+      p_row_position: otherPosition.rowPosition,
+      p_column_position: otherPosition.columnPosition,
+      p_variety: 'Alpukat Lain',
+      p_planted_at: todayIso(),
+    }),
+    'Check create_tree_with_planting(uuid, smallint, text, text, date).'
+  );
+  const otherCycle = await expectSuccess(
+    STAGE,
+    'the second position has its own cycle',
+    owner.client
+      .from('tree_plantings')
+      .select('id')
+      .eq('tree_id', otherTreeId)
+      .is('ended_at', null)
+      .single(),
+    'create_tree_with_planting always opens cycle 1.'
+  );
+
+  const spoofedPhoto = await expectSuccess(
+    STAGE,
+    'the owner uploads a tree_main photo while sending a foreign planting_id',
+    insertPhoto(
+      owner.client,
+      photoRow({
+        entityType: 'tree_main',
+        entityId: otherTreeId,
+        storagePath: photoPath({ folder: 'trees', entityId: otherTreeId, label: 'palsu' }),
+        uploadedBy: owner.userId,
+        overrides: { planting_id: cycleOne.id },
+      })
+    ),
+    'The insert itself must still succeed; only the supplied value is discarded.'
+  );
+
+  assertEqual(
+    STAGE,
+    'a client supplied planting_id is overwritten, never trusted',
+    await readPlantingId(spoofedPhoto.id),
+    otherCycle.id,
+    'The trigger always derives the value; a client cannot pin a photo to a foreign cycle.'
+  );
+
+  // Foto yang tidak punya satu pun siklus memenuhi syarat dibiarkan NULL, BUKAN
+  // dipasangkan ke siklus terdekat. Dibuat dengan created_at yang mendahului
+  // kelahiran pohonnya.
+  const orphanPhoto = await expectSuccess(
+    STAGE,
+    'a photo timestamped before any cycle existed is accepted',
+    insertPhoto(
+      owner.client,
+      photoRow({
+        entityType: 'tree_main',
+        entityId: treeId,
+        storagePath: photoPath({ folder: 'trees', entityId: treeId, label: 'yatim' }),
+        uploadedBy: owner.userId,
+        overrides: { created_at: '2020-01-01T00:00:00.000Z' },
+      })
+    ),
+    'Nothing constrains created_at; the row must still be accepted.'
+  );
+
+  assertEqual(
+    STAGE,
+    'a photo with no qualifying cycle is left NULL, not guessed',
+    await readPlantingId(orphanPhoto.id),
+    null,
+    'The rule never falls back to the nearest cycle -- unknown stays unknown.'
+  );
+
+  // ---------- Tanam ulang: inti dari cacat yang diperbaiki ----------
+
+  await expectSuccess(
+    STAGE,
+    'the owner closes cycle 1',
+    owner.client.rpc('end_tree_planting', {
+      p_tree_id: treeId,
+      p_end_reason: 'mati',
+      p_ended_at: todayIso(),
+    }),
+    'Check end_tree_planting(uuid, text, date).'
+  );
+
+  const cycleTwoId = await expectSuccess(
+    STAGE,
+    'the owner replants the position as cycle 2',
+    owner.client.rpc('start_tree_planting', {
+      p_tree_id: treeId,
+      p_variety: 'Alpukat Miki',
+      p_planted_at: todayIso(),
+    }),
+    'Check start_tree_planting(uuid, text, date).'
+  );
+
+  assertEqual(
+    STAGE,
+    'the cycle 1 photo keeps pointing at cycle 1 after replanting',
+    await readPlantingId(cycleOnePhoto.id),
+    cycleOne.id,
+    'Replanting must never rewrite the stamp of an existing photo.'
+  );
+
+  const cycleTwoPhoto = await expectSuccess(
+    STAGE,
+    'the owner uploads a tree_main photo during cycle 2',
+    insertPhoto(
+      owner.client,
+      photoRow({
+        entityType: 'tree_main',
+        entityId: treeId,
+        storagePath: photoPath({ folder: 'trees', entityId: treeId, label: 'siklus2' }),
+        uploadedBy: owner.userId,
+      })
+    ),
+    'The position is planted again, so a new main photo is allowed.'
+  );
+
+  assertEqual(
+    STAGE,
+    'the new photo is stamped with cycle 2, not cycle 1',
+    await readPlantingId(cycleTwoPhoto.id),
+    cycleTwoId,
+    'This is the whole point of migration 059.'
+  );
+
+  // Inilah bentuk kueri yang dipakai jalur baca: siklus yang sedang dilihat,
+  // ATAU tidak diketahui. Foto siklus lampau harus rontok; foto ber-NULL tidak.
+  const visibleInCycleTwo = await expectSuccess(
+    STAGE,
+    'photos visible for cycle 2 are readable',
+    owner.client
+      .from('photo_attachments')
+      .select('id, planting_id')
+      .eq('entity_type', 'tree_main')
+      .eq('entity_id', treeId)
+      .or(`planting_id.eq.${cycleTwoId},planting_id.is.null`),
+    'This mirrors isPhotoVisibleInCycle on the client.'
+  );
+
+  const visibleIds = (visibleInCycleTwo ?? []).map((row) => row.id).sort();
+
+  assertCondition(
+    STAGE,
+    'the cycle 1 photo does not surface as a cycle 2 photo',
+    !visibleIds.includes(cycleOnePhoto.id),
+    'The cycle 1 photo is still visible while viewing cycle 2 -- defect 1 is not fixed.',
+    'A known planting_id that differs from the viewed cycle must be filtered out.'
+  );
+
+  assertCondition(
+    STAGE,
+    'the cycle 2 photo and the unknown-cycle photo both survive the filter',
+    visibleIds.includes(cycleTwoPhoto.id) && visibleIds.includes(orphanPhoto.id),
+    `Expected both ${cycleTwoPhoto.id} and ${orphanPhoto.id}, got ${visibleIds.join(', ')}`,
+    'NULL means unknown, not foreign -- those rows must never be hidden.'
+  );
+
+  // Foto yang diunggah SESUDAH tanam ulang untuk catatan kondisi LAMA harus
+  // tetap jatuh ke siklus 1. Waktu acuannya milik catatannya, bukan milik
+  // fotonya -- kalau ini melenceng, foto catatan lama akan menempel ke pohon
+  // yang sekarang.
+  const lateConditionPhoto = await expectSuccess(
+    STAGE,
+    'the reporter uploads a photo for the old record after replanting',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'condition_record',
+        entityId: conditionRecordId,
+        storagePath: photoPath({
+          folder: 'condition-reports',
+          entityId: conditionRecordId,
+          label: 'telat',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'Uploading late for an existing record is a supported path (the retry button).'
+  );
+
+  assertEqual(
+    STAGE,
+    'a late upload follows the record cycle, not the current one',
+    await readPlantingId(lateConditionPhoto.id),
+    cycleOne.id,
+    'The reference time is the record created_at, so a late upload cannot drift into cycle 2.'
+  );
+
+  // ---------- Pembersihan ----------
+
+  for (const [label, photoId] of [
+    ['cycle 1 tree_main', cycleOnePhoto.id],
+    ['cycle 1 condition', conditionCyclePhoto.id],
+    ['task_proof', proofCyclePhoto.id],
+    ['spoofed', spoofedPhoto.id],
+    ['unknown-cycle', orphanPhoto.id],
+    ['cycle 2 tree_main', cycleTwoPhoto.id],
+    ['late condition', lateConditionPhoto.id],
+  ]) {
+    await assertDeleteAllowed(
+      `the owner cleans up the ${label} photo`,
+      owner.client,
+      photoId,
+      'is_active_owner covers every entity type on delete.'
+    );
+  }
+
+  // ================================================================
+  // 10. initiative_care_proof -- foto perawatan inisiatif (migrasi 060)
+  // ================================================================
+  //
+  // Sebelum 060, separuh baris care_activities tidak bisa berfoto sama sekali:
+  // can_upload_task_proof_photo menjoin care_tasks lewat ca.care_task_id, yang
+  // untuk baris 'inisiatif' NULL, sehingga join-nya kosong dan policy-nya
+  // selalu false.
+  //
+  // DUA HAL YANG PALING PENTING DIKUNCI DI SINI:
+  //
+  //   1. PATOKANNYA is_active_farm_member, BUKAN is_active_worker. Pemilik juga
+  //      boleh mencatat perawatan inisiatif (policy 027), jadi ia harus bisa
+  //      mengunggah foto untuk catatannya SENDIRI. Ini satu-satunya tempat
+  //      aturan itu diuji; kalau seseorang kelak menyalin bentuk task_proof
+  //      apa adanya, pemiliknya terkunci keluar dari fotonya sendiri dan tidak
+  //      ada asersi lain yang akan berbunyi.
+  //
+  //   2. BACANYA TETAP SEMPIT. `mate` anggota aktif yang sah dan tetap tidak
+  //      boleh membacanya -- sama seperti task_proof. Kalau cabang baru ini
+  //      diam-diam memakai bentuk can_access_condition_record_photo (yang
+  //      membuka ke SELURUH anggota aktif), asersi itulah yang menangkapnya.
+  //
+  // Pohonnya sengaja pohon KETIGA, bukan `treeId`: bagian 9 sudah menutup
+  // siklus 1 pohon itu dan menanamnya ulang, dan bagian ini butuh posisi yang
+  // siklusnya lurus supaya asersi planting_id-nya membaca satu hal saja.
+
+  const carePosition = await findFreeTreePosition(STAGE, owner.client, farm.id);
+
+  const careTreeId = await expectSuccess(
+    STAGE,
+    'owner creates a third position for the initiative care fixtures',
+    owner.client.rpc('create_tree_with_planting', {
+      p_farm_id: farm.id,
+      p_row_position: carePosition.rowPosition,
+      p_column_position: carePosition.columnPosition,
+      p_variety: 'Alpukat Inisiatif',
+      p_planted_at: todayIso(),
+    }),
+    'Check create_tree_with_planting(uuid, smallint, text, text, date).'
+  );
+
+  const careCycle = await expectSuccess(
+    STAGE,
+    'the third position has its own active cycle',
+    owner.client
+      .from('tree_plantings')
+      .select('id')
+      .eq('tree_id', careTreeId)
+      .is('ended_at', null)
+      .single(),
+    'create_tree_with_planting always opens cycle 1.'
+  );
+
+  // Dicatat PEKERJA. Aktivitas inisiatif tidak punya tugas induk, jadi
+  // care_task_id-nya NULL -- itu justru bentuk yang sedang diuji.
+  const workerCareActivityId = await expectSuccess(
+    STAGE,
+    'the worker records an initiative care activity for one tree',
+    worker.client.rpc('create_care_activity', {
+      p_farm_id: farm.id,
+      p_category: 'watering',
+      p_tree_ids: [careTreeId],
+      p_note: `Inisiatif pekerja ${runId}`,
+      p_produk: null,
+      p_performed_at: null,
+    }),
+    'Check create_care_activity(uuid, care_category, uuid[], text, text, timestamptz) from migration 027.'
+  );
+
+  // Dicatat PEMILIK. Inilah asersi yang membedakan is_active_farm_member dari
+  // is_active_worker.
+  const ownerCareActivityId = await expectSuccess(
+    STAGE,
+    'the owner records an initiative care activity of their own',
+    owner.client.rpc('create_care_activity', {
+      p_farm_id: farm.id,
+      p_category: 'fertilizing',
+      p_tree_ids: [careTreeId],
+      p_note: `Inisiatif owner ${runId}`,
+      p_produk: null,
+      p_performed_at: null,
+    }),
+    'Policy "Active members can insert initiative activities" (027) uses is_active_farm_member, so owners may record too.'
+  );
+
+  // Menaut DUA pohon. Dari antarmuka hari ini tidak mungkin, tapi RPC-nya
+  // menerima uuid[] berkardinalitas N dan layar multi-pohon disebut di komentar
+  // 027 sebagai rencana. Baris inilah yang membuktikan trigger 060 MENGHITUNG
+  // tautannya, bukan mengasumsikan selalu satu.
+  const multiTreeCareActivityId = await expectSuccess(
+    STAGE,
+    'the worker records an initiative care activity spanning two trees',
+    worker.client.rpc('create_care_activity', {
+      p_farm_id: farm.id,
+      p_category: 'weeding',
+      p_tree_ids: [careTreeId, otherTreeId],
+      p_note: `Inisiatif dua pohon ${runId}`,
+      p_produk: null,
+      p_performed_at: null,
+    }),
+    'create_care_activity accepts many trees through care_activity_trees.'
+  );
+
+  // ---------- 10.1 Yang berhak unggah, berhasil ----------
+
+  const careProofPhoto = await expectSuccess(
+    STAGE,
+    'the recording worker uploads a photo for their own initiative care activity',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: workerCareActivityId,
+        storagePath: photoPath({
+          folder: 'initiative-care-proofs',
+          entityId: workerCareActivityId,
+          label: 'inisiatif',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'can_upload_initiative_care_proof_photo requires ca.performed_by = auth.uid().'
+  );
+
+  const ownerCareProofPhoto = await expectSuccess(
+    STAGE,
+    'the owner uploads a photo for the activity THEY recorded',
+    insertPhoto(
+      owner.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: ownerCareActivityId,
+        storagePath: photoPath({
+          folder: 'initiative-care-proofs',
+          entityId: ownerCareActivityId,
+          label: 'inisiatif-owner',
+        }),
+        uploadedBy: owner.userId,
+      })
+    ),
+    'THE point of is_active_farm_member: an owner who recorded the activity may upload its photo.'
+  );
+
+  // ---------- 10.2 Yang tidak berhak unggah, ditolak ----------
+
+  await expectFailure(
+    STAGE,
+    'another active member cannot upload a photo for an initiative activity that is not theirs',
+    insertPhoto(
+      mate.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: workerCareActivityId,
+        storagePath: photoPath({
+          folder: 'initiative-care-proofs',
+          entityId: workerCareActivityId,
+          label: 'inisiatif-mate',
+        }),
+        uploadedBy: mate.userId,
+      })
+    ),
+    'Being an active member is not enough; can_upload_initiative_care_proof_photo pins performed_by.'
+  );
+
+  // Pemilik boleh mengunggah untuk catatannya sendiri (10.1) tapi TIDAK atas
+  // nama pekerjanya. Kedua asersi ini harus dibaca berpasangan -- yang satu
+  // tanpa yang lain akan salah dimengerti sebagai "owner boleh apa saja" atau
+  // "owner tidak boleh apa-apa".
+  await expectFailure(
+    STAGE,
+    'the owner cannot upload a photo for the worker initiative activity',
+    insertPhoto(
+      owner.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: workerCareActivityId,
+        storagePath: photoPath({
+          folder: 'initiative-care-proofs',
+          entityId: workerCareActivityId,
+          label: 'inisiatif-owner-curi',
+        }),
+        uploadedBy: owner.userId,
+      })
+    ),
+    'There is no owner branch on upload; only the recorder may attach the photo.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a non-member cannot upload an initiative_care_proof photo',
+    insertPhoto(
+      outsider.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: workerCareActivityId,
+        storagePath: photoPath({
+          folder: 'initiative-care-proofs',
+          entityId: workerCareActivityId,
+          label: 'inisiatif-outsider',
+        }),
+        uploadedBy: outsider.userId,
+      })
+    ),
+    'Non-members satisfy no branch of the insert policy.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a pending applicant cannot upload an initiative_care_proof photo',
+    insertPhoto(
+      pending.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: workerCareActivityId,
+        storagePath: photoPath({
+          folder: 'initiative-care-proofs',
+          entityId: workerCareActivityId,
+          label: 'inisiatif-pending',
+        }),
+        uploadedBy: pending.userId,
+      })
+    ),
+    'is_active_farm_member filters on status = active; a pending row must not qualify.'
+  );
+
+  // ---------- 10.3 Baca ----------
+
+  await assertVisible(
+    'the owner reads the worker initiative care photo',
+    owner.client,
+    careProofPhoto.id,
+    'can_access_initiative_care_proof_photo has an explicit is_active_owner branch.'
+  );
+
+  await assertVisible(
+    'the recording worker reads their own initiative care photo',
+    worker.client,
+    careProofPhoto.id,
+    'The recorder branch of the read rule applies.'
+  );
+
+  // PERHATIAN, ini BUKAN kebocoran dan bukan kesalahan tes -- sama persis
+  // seperti asersi task_proof di bagian 3. Bukti kerja inisiatif TIDAK terbuka
+  // ke seluruh anggota aktif; cabangnya cuma dua, owner aktif atau pencatatnya.
+  await assertHidden(
+    'another active member cannot read the initiative care photo',
+    mate.client,
+    careProofPhoto.id,
+    'initiative_care_proof read is owner + recorder only, by design -- do not widen it to any active member.'
+  );
+
+  await assertHidden(
+    'the recording worker cannot read the owner initiative care photo',
+    worker.client,
+    ownerCareProofPhoto.id,
+    'The recorder branch is per-activity; recording one activity grants nothing on another.'
+  );
+
+  await assertHidden(
+    'a pending applicant cannot read the initiative care photo',
+    pending.client,
+    careProofPhoto.id,
+    'A pending farm_members row is not an active membership.'
+  );
+
+  await assertHidden(
+    'the owner of another farm cannot read the initiative care photo',
+    ownerB.client,
+    careProofPhoto.id,
+    'Every read branch is farm-scoped.'
+  );
+
+  await assertHidden(
+    'a non-member cannot read the initiative care photo',
+    outsider.client,
+    careProofPhoto.id,
+    'Non-members satisfy no read branch.'
+  );
+
+  // ---------- 10.4 CHECK constraint pada bentuk path ----------
+  //
+  // Cabang task-proofs punya LIMA segmen dengan id tugas di segmen keempat.
+  // Aktivitas inisiatif tidak punya id tugas, dan asersi berikutnya adalah
+  // alasan seluruh entity_type ini ada: bentuk path itu TIDAK BISA dipakai
+  // ulang tanpa mengarang isi segmen keempat.
+
+  await expectFailure(
+    STAGE,
+    'an initiative_care_proof stored under the task-proofs folder is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: workerCareActivityId,
+        storagePath: photoPath({
+          folder: 'task-proofs',
+          entityId: workerCareActivityId,
+          label: 'salah-folder',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'photo_attachments_storage_path_entity_folder_check maps initiative_care_proof to exactly initiative-care-proofs.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'an initiative_care_proof stored under the condition-reports folder is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: workerCareActivityId,
+        storagePath: photoPath({
+          folder: 'condition-reports',
+          entityId: workerCareActivityId,
+          label: 'salah-folder2',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'photo_attachments_storage_path_entity_folder_check maps each entity_type to exactly one folder.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'an initiative_care_proof path whose entity segment is not the activity id is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: workerCareActivityId,
+        storagePath: photoPath({
+          folder: 'initiative-care-proofs',
+          entityId: careTreeId,
+          label: 'salah-entity',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'For initiative-care-proofs the entity id lives in segment 4, like every folder except task-proofs.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'an initiative_care_proof path pointing at another farm is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: workerCareActivityId,
+        storagePath: photoPath({
+          folder: 'initiative-care-proofs',
+          entityId: workerCareActivityId,
+          farmId: farmB.id,
+          label: 'salah-farm',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'Both the insert policy and photo_attachments_storage_path_farm_check pin segment 2 to farm_id.'
+  );
+
+  // ---------- 10.5 planting_id ----------
+
+  assertEqual(
+    STAGE,
+    'a single-tree initiative care photo is stamped with the cycle of that tree',
+    await readPlantingId(careProofPhoto.id),
+    careCycle.id,
+    'The trigger resolves the one linked tree and the cycle in force at care_activities.performed_at.'
+  );
+
+  // Dua pohon -> NULL. Satu planting_id akan benar untuk satu pohon dan salah
+  // untuk sisanya, alasan yang sama persis dengan pengecualian task_proof di
+  // 059.
+  const multiTreeCarePhoto = await expectSuccess(
+    STAGE,
+    'the worker uploads a photo for the two-tree initiative activity',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: multiTreeCareActivityId,
+        storagePath: photoPath({
+          folder: 'initiative-care-proofs',
+          entityId: multiTreeCareActivityId,
+          label: 'inisiatif-dua-pohon',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'Nothing about the tree count may change who is allowed to upload.'
+  );
+
+  assertEqual(
+    STAGE,
+    'an initiative care photo spanning two trees is left NULL, not pinned to one of them',
+    await readPlantingId(multiTreeCarePhoto.id),
+    null,
+    'The trigger counts care_activity_trees; it must never pick one tree out of many.'
+  );
+
+  // Klien tetap tidak boleh menentukan nilainya, sama seperti tree_main di
+  // bagian 9.
+  const spoofedCarePhoto = await expectSuccess(
+    STAGE,
+    'the worker uploads an initiative care photo while sending a foreign planting_id',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'initiative_care_proof',
+        entityId: workerCareActivityId,
+        storagePath: photoPath({
+          folder: 'initiative-care-proofs',
+          entityId: workerCareActivityId,
+          label: 'inisiatif-palsu',
+        }),
+        uploadedBy: worker.userId,
+        overrides: { planting_id: otherCycle.id },
+      })
+    ),
+    'The insert itself must still succeed; only the supplied value is discarded.'
+  );
+
+  assertEqual(
+    STAGE,
+    'a client supplied planting_id is overwritten for initiative_care_proof too',
+    await readPlantingId(spoofedCarePhoto.id),
+    careCycle.id,
+    'The trigger always derives the value, for every entity type it stamps.'
+  );
+
+  // task_proof TETAP tidak pernah terstempel. Migrasi 060 menambah cabang di
+  // fungsi trigger yang sama, jadi asersi ini memastikan cabang lamanya tidak
+  // ikut tergeser saat badan fungsinya ditulis ulang.
+  const proofStillNullPhoto = await expectSuccess(
+    STAGE,
+    'the worker uploads another task_proof photo after migration 060',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'task_proof',
+        entityId: activityId,
+        storagePath: photoPath({ folder: 'task-proofs', entityId: activityId, label: 'pasca-060' }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'task_proof uploads are unchanged by migration 060.'
+  );
+
+  assertEqual(
+    STAGE,
+    'task_proof is still never stamped with a cycle after migration 060',
+    await readPlantingId(proofStillNullPhoto.id),
+    null,
+    'Rewriting the trigger body must not disturb the task_proof branch.'
+  );
+
+  // ---------- 10.6 Hapus ----------
+
+  await assertDeleteBlocked(
+    'another active member cannot delete the initiative care photo',
+    mate.client,
+    careProofPhoto.id,
+    'The delete policy needs uploaded_by = auth.uid() AND can_upload_initiative_care_proof_photo.'
+  );
+
+  await assertDeleteBlocked(
+    'a non-member cannot delete the initiative care photo',
+    outsider.client,
+    careProofPhoto.id,
+    'Non-members satisfy no delete branch.'
+  );
+
+  await assertDeleteAllowed(
+    'the uploader who is also the recorder deletes their own initiative care photo',
+    worker.client,
+    spoofedCarePhoto.id,
+    'Delete allows uploaded_by = auth.uid() together with can_upload_initiative_care_proof_photo.'
+  );
+
+  await assertDeleteAllowed(
+    'the owner deletes an initiative care photo uploaded by somebody else',
+    owner.client,
+    careProofPhoto.id,
+    'is_active_owner is the first branch of the delete policy and covers every entity type.'
+  );
+
+  // ---------- 10.7 storage.objects untuk folder baru ----------
+  //
+  // Tiga policy storage.objects ikut ditulis ulang oleh 060. Tanpa bagian ini
+  // cabang barunya tidak teruji sama sekali, dan metadata bisa dijaga rapat
+  // sementara berkasnya terbuka.
+
+  const storageCarePath =
+    `farms/${farm.id}/initiative-care-proofs/${workerCareActivityId}/objek-${runId}.jpg`;
+
+  await expectFailure(
+    STAGE,
+    'a member who is not the recorder cannot upload an initiative-care-proofs object',
+    uploadObject(mate.client, storageCarePath),
+    'The storage insert policy calls can_upload_initiative_care_proof_photo, which pins performed_by.'
+  );
+
+  await expectSuccess(
+    STAGE,
+    'the recording worker uploads an initiative-care-proofs object',
+    uploadObject(worker.client, storageCarePath),
+    'The recorder satisfies can_upload_initiative_care_proof_photo.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'another active member cannot download the initiative-care-proofs object',
+    mate.client.storage.from(BUCKET).download(storageCarePath),
+    'The storage read branch mirrors the table read rule: owner + recorder only.'
+  );
+
+  await expectSuccess(
+    STAGE,
+    'the owner can download the initiative-care-proofs object',
+    owner.client.storage.from(BUCKET).download(storageCarePath),
+    'is_active_owner is a branch of can_access_initiative_care_proof_photo.'
+  );
+
+  const removedCareObject = await expectSuccess(
+    STAGE,
+    'the owner removes the initiative-care-proofs object',
+    owner.client.storage.from(BUCKET).remove([storageCarePath]),
+    'is_active_owner is the first branch of the storage delete policy.'
+  );
+  assertEqual(
+    STAGE,
+    'the owner removal actually removed the initiative-care-proofs object',
+    removedCareObject?.length ?? 0,
+    1,
+    'The owner branch must be able to clean up any object in their farm.'
+  );
+
+  // ================================================================
+  // 11. growth_phase_record & harvest_record -- foto fase & panen (migrasi 061)
+  // ================================================================
+  //
+  // Migrasi 020 dulu sudah membangun keduanya; 031 membuangnya karena Iterasi A
+  // dipangkas. 061 memasangnya kembali dari cetak biru yang sama.
+  //
+  // YANG PALING PENTING DIKUNCI DI SINI, dan bacalah berpasangan dengan
+  // bagian 10 -- kedua bagian ini SENGAJA berlawanan pada satu titik:
+  //
+  //   1. BACANYA LONGGAR, dan itu memang benar. `mate` anggota aktif yang
+  //      bukan pencatat, dan ia HARUS bisa membaca foto fase & panen -- beda
+  //      dari task_proof dan initiative_care_proof yang mengunci `mate` keluar.
+  //      Fase dan panen adalah catatan KEBUN, bukan bukti kerja seseorang, dan
+  //      catatannya sendiri sudah terbuka ke seluruh anggota aktif lewat policy
+  //      tabelnya. Kalau seseorang kelak menyalin bentuk task_proof ke sini,
+  //      asersi assertVisible untuk `mate`-lah yang akan berbunyi.
+  //
+  //   2. UNGGAHNYA TETAP SEMPIT. Longgar di baca tidak berarti longgar di
+  //      tulis: hanya pencatatnya sendiri yang boleh melampirkan foto, dan
+  //      PEMILIK PUN TIDAK BOLEH atas nama pekerjanya. Setiap "boleh membaca"
+  //      di bawah berpasangan dengan "tidak boleh mengunggah" dari pelaku yang
+  //      sama.
+  //
+  //   3. PATOKANNYA is_active_farm_member, BUKAN is_active_worker. Kedua
+  //      catatan ini boleh dibuat pemilik (policy INSERT tabelnya memakai
+  //      is_active_farm_member), jadi pemilik harus bisa mengunggah foto untuk
+  //      catatannya SENDIRI.
+  //
+  // Pohonnya memakai kembali careTreeId dari bagian 10: siklusnya lurus (tidak
+  // pernah ditanam ulang seperti treeId di bagian 9), jadi asersi planting_id
+  // di bawah membaca satu hal saja. Catatannya sendiri baru dan terpisah dari
+  // aktivitas perawatan bagian 10.
+
+  // ---------- Bahan uji ----------
+  //
+  // Ditulis lewat INSERT langsung, BUKAN RPC -- itu memang jalur tulis kedua
+  // tabel ini (lihat createGrowthPhaseRecord / createHarvestRecord), dan
+  // policy INSERT-nya yang memaku recorded_by / harvested_by ke auth.uid().
+
+  const workerPhaseRecord = await expectSuccess(
+    STAGE,
+    'the worker records a growth phase entry as its recorder',
+    worker.client
+      .from('growth_phase_records')
+      .insert({
+        farm_id: farm.id,
+        tree_id: careTreeId,
+        recorded_by: worker.userId,
+        phase: 'vegetative',
+        note: `Fase pekerja ${runId}`,
+      })
+      .select('id')
+      .single(),
+    'Policy "Active members can insert growth phase records" (007:335) pins recorded_by = auth.uid().'
+  );
+  const workerPhaseRecordId = workerPhaseRecord.id;
+
+  // Dicatat PEMILIK. Inilah asersi yang membedakan is_active_farm_member dari
+  // is_active_worker untuk fase.
+  const ownerPhaseRecord = await expectSuccess(
+    STAGE,
+    'the owner records a growth phase entry of their own',
+    owner.client
+      .from('growth_phase_records')
+      .insert({
+        farm_id: farm.id,
+        tree_id: careTreeId,
+        recorded_by: owner.userId,
+        phase: 'flowering',
+        note: `Fase owner ${runId}`,
+      })
+      .select('id')
+      .single(),
+    'The insert policy uses is_active_farm_member, so owners may record growth phases too.'
+  );
+  const ownerPhaseRecordId = ownerPhaseRecord.id;
+
+  const workerHarvestRecord = await expectSuccess(
+    STAGE,
+    'the worker records a harvest entry as its recorder',
+    worker.client
+      .from('harvest_records')
+      .insert({
+        farm_id: farm.id,
+        tree_id: careTreeId,
+        harvested_by: worker.userId,
+        fruit_count: 12,
+        note: `Panen pekerja ${runId}`,
+      })
+      .select('id')
+      .single(),
+    'Policy "Active members can insert harvest records" (020:261) pins harvested_by = auth.uid().'
+  );
+  const workerHarvestRecordId = workerHarvestRecord.id;
+
+  const ownerHarvestRecord = await expectSuccess(
+    STAGE,
+    'the owner records a harvest entry of their own',
+    owner.client
+      .from('harvest_records')
+      .insert({
+        farm_id: farm.id,
+        tree_id: careTreeId,
+        harvested_by: owner.userId,
+        fruit_count: 7,
+        note: `Panen owner ${runId}`,
+      })
+      .select('id')
+      .single(),
+    'The insert policy uses is_active_farm_member, so owners may record harvests too.'
+  );
+  const ownerHarvestRecordId = ownerHarvestRecord.id;
+
+  // ---------- 11.1 Yang berhak unggah, berhasil ----------
+
+  const phasePhoto = await expectSuccess(
+    STAGE,
+    'the recording worker uploads a photo for their own growth phase record',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: workerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'growth-phase-records',
+          entityId: workerPhaseRecordId,
+          label: 'fase',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'can_upload_growth_phase_record_photo requires gpr.recorded_by = auth.uid().'
+  );
+
+  const ownerPhasePhoto = await expectSuccess(
+    STAGE,
+    'the owner uploads a photo for the growth phase record THEY recorded',
+    insertPhoto(
+      owner.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: ownerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'growth-phase-records',
+          entityId: ownerPhaseRecordId,
+          label: 'fase-owner',
+        }),
+        uploadedBy: owner.userId,
+      })
+    ),
+    'THE point of is_active_farm_member: an owner who recorded the entry may upload its photo.'
+  );
+
+  const harvestPhoto = await expectSuccess(
+    STAGE,
+    'the recording worker uploads a photo for their own harvest record',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: workerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'harvest-records',
+          entityId: workerHarvestRecordId,
+          label: 'panen',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'can_upload_harvest_record_photo requires hr.harvested_by = auth.uid().'
+  );
+
+  const ownerHarvestPhoto = await expectSuccess(
+    STAGE,
+    'the owner uploads a photo for the harvest record THEY recorded',
+    insertPhoto(
+      owner.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: ownerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'harvest-records',
+          entityId: ownerHarvestRecordId,
+          label: 'panen-owner',
+        }),
+        uploadedBy: owner.userId,
+      })
+    ),
+    'THE point of is_active_farm_member: an owner who recorded the harvest may upload its photo.'
+  );
+
+  // ---------- 11.2 Yang tidak berhak unggah, ditolak ----------
+  //
+  // Baca berpasangan dengan 11.3: pelaku yang sama boleh MEMBACA foto ini dan
+  // tetap tidak boleh MENGUNGGAHNYA. Yang satu tanpa yang lain akan salah
+  // dimengerti.
+
+  await expectFailure(
+    STAGE,
+    'another active member cannot upload a photo for a growth phase record that is not theirs',
+    insertPhoto(
+      mate.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: workerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'growth-phase-records',
+          entityId: workerPhaseRecordId,
+          label: 'fase-mate',
+        }),
+        uploadedBy: mate.userId,
+      })
+    ),
+    'Being an active member is enough to READ but never to upload; can_upload_growth_phase_record_photo pins recorded_by.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'the owner cannot upload a photo for the worker growth phase record',
+    insertPhoto(
+      owner.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: workerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'growth-phase-records',
+          entityId: workerPhaseRecordId,
+          label: 'fase-owner-curi',
+        }),
+        uploadedBy: owner.userId,
+      })
+    ),
+    'There is no owner branch on upload; only the recorder may attach the photo.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a non-member cannot upload a growth_phase_record photo',
+    insertPhoto(
+      outsider.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: workerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'growth-phase-records',
+          entityId: workerPhaseRecordId,
+          label: 'fase-outsider',
+        }),
+        uploadedBy: outsider.userId,
+      })
+    ),
+    'Non-members satisfy no branch of the insert policy.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a pending applicant cannot upload a growth_phase_record photo',
+    insertPhoto(
+      pending.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: workerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'growth-phase-records',
+          entityId: workerPhaseRecordId,
+          label: 'fase-pending',
+        }),
+        uploadedBy: pending.userId,
+      })
+    ),
+    'is_active_farm_member filters on status = active; a pending row must not qualify.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'another active member cannot upload a photo for a harvest record that is not theirs',
+    insertPhoto(
+      mate.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: workerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'harvest-records',
+          entityId: workerHarvestRecordId,
+          label: 'panen-mate',
+        }),
+        uploadedBy: mate.userId,
+      })
+    ),
+    'Being an active member is enough to READ but never to upload; can_upload_harvest_record_photo pins harvested_by.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'the owner cannot upload a photo for the worker harvest record',
+    insertPhoto(
+      owner.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: workerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'harvest-records',
+          entityId: workerHarvestRecordId,
+          label: 'panen-owner-curi',
+        }),
+        uploadedBy: owner.userId,
+      })
+    ),
+    'There is no owner branch on upload; only the recorder may attach the photo.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a non-member cannot upload a harvest_record photo',
+    insertPhoto(
+      outsider.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: workerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'harvest-records',
+          entityId: workerHarvestRecordId,
+          label: 'panen-outsider',
+        }),
+        uploadedBy: outsider.userId,
+      })
+    ),
+    'Non-members satisfy no branch of the insert policy.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a pending applicant cannot upload a harvest_record photo',
+    insertPhoto(
+      pending.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: workerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'harvest-records',
+          entityId: workerHarvestRecordId,
+          label: 'panen-pending',
+        }),
+        uploadedBy: pending.userId,
+      })
+    ),
+    'is_active_farm_member filters on status = active; a pending row must not qualify.'
+  );
+
+  // ---------- 11.3 Baca ----------
+  //
+  // INI YANG MEMBEDAKAN 061 DARI 060. Dua asersi pertama SENGAJA assertVisible
+  // untuk `mate` -- kalau salah satunya kelak jadi assertHidden, seseorang
+  // sudah menyempitkan can_access_*_record_photo ke bentuk task_proof.
+
+  await assertVisible(
+    'another active member reads the growth phase photo',
+    mate.client,
+    phasePhoto.id,
+    'can_access_growth_phase_record_photo opens to every active farm member, like condition_record -- do not narrow it to the recorder.'
+  );
+
+  await assertVisible(
+    'another active member reads the harvest photo',
+    mate.client,
+    harvestPhoto.id,
+    'can_access_harvest_record_photo opens to every active farm member, like condition_record -- do not narrow it to the recorder.'
+  );
+
+  await assertVisible(
+    'the owner reads the worker growth phase photo',
+    owner.client,
+    phasePhoto.id,
+    'The owner is an active farm member.'
+  );
+
+  await assertVisible(
+    'the owner reads the worker harvest photo',
+    owner.client,
+    harvestPhoto.id,
+    'The owner is an active farm member.'
+  );
+
+  await assertVisible(
+    'the recording worker reads the owner growth phase photo',
+    worker.client,
+    ownerPhasePhoto.id,
+    'Reading is per-farm, not per-record; every active member sees every farm record photo.'
+  );
+
+  await assertHidden(
+    'a pending applicant cannot read the growth phase photo',
+    pending.client,
+    phasePhoto.id,
+    'A pending farm_members row is not an active membership.'
+  );
+
+  await assertHidden(
+    'a pending applicant cannot read the harvest photo',
+    pending.client,
+    harvestPhoto.id,
+    'A pending farm_members row is not an active membership.'
+  );
+
+  await assertHidden(
+    'the owner of another farm cannot read the growth phase photo',
+    ownerB.client,
+    phasePhoto.id,
+    'Every read branch is farm-scoped.'
+  );
+
+  await assertHidden(
+    'the owner of another farm cannot read the harvest photo',
+    ownerB.client,
+    harvestPhoto.id,
+    'Every read branch is farm-scoped.'
+  );
+
+  await assertHidden(
+    'a non-member cannot read the growth phase photo',
+    outsider.client,
+    phasePhoto.id,
+    'Non-members satisfy no read branch.'
+  );
+
+  await assertHidden(
+    'a non-member cannot read the harvest photo',
+    outsider.client,
+    harvestPhoto.id,
+    'Non-members satisfy no read branch.'
+  );
+
+  // ---------- 11.4 CHECK constraint pada bentuk path ----------
+  //
+  // Kedua folder ini EMPAT segmen dan memakai cabang generik
+  // avology_storage_path_entity_id. Asersi pertama tiap pasangan menutup
+  // godaan menyimpannya di bawah task-proofs, yang segmen keempatnya id tugas
+  // dan tidak akan pernah cocok.
+
+  await expectFailure(
+    STAGE,
+    'a growth_phase_record stored under the task-proofs folder is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: workerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'task-proofs',
+          entityId: workerPhaseRecordId,
+          label: 'fase-salah-folder',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'photo_attachments_storage_path_entity_folder_check maps growth_phase_record to exactly growth-phase-records.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a growth_phase_record stored under the harvest-records folder is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: workerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'harvest-records',
+          entityId: workerPhaseRecordId,
+          label: 'fase-salah-folder2',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'The two new folders must not be interchangeable with each other.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a growth_phase_record path whose entity segment is not the record id is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: workerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'growth-phase-records',
+          entityId: careTreeId,
+          label: 'fase-salah-entity',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'For growth-phase-records the entity id lives in segment 4, like every folder except task-proofs.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a growth_phase_record path pointing at another farm is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: workerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'growth-phase-records',
+          entityId: workerPhaseRecordId,
+          farmId: farmB.id,
+          label: 'fase-salah-farm',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'Both the insert policy and photo_attachments_storage_path_farm_check pin segment 2 to farm_id.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a harvest_record stored under the task-proofs folder is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: workerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'task-proofs',
+          entityId: workerHarvestRecordId,
+          label: 'panen-salah-folder',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'photo_attachments_storage_path_entity_folder_check maps harvest_record to exactly harvest-records.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a harvest_record stored under the growth-phase-records folder is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: workerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'growth-phase-records',
+          entityId: workerHarvestRecordId,
+          label: 'panen-salah-folder2',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'The two new folders must not be interchangeable with each other.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a harvest_record path whose entity segment is not the record id is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: workerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'harvest-records',
+          entityId: careTreeId,
+          label: 'panen-salah-entity',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'For harvest-records the entity id lives in segment 4, like every folder except task-proofs.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a harvest_record path pointing at another farm is rejected',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: workerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'harvest-records',
+          entityId: workerHarvestRecordId,
+          farmId: farmB.id,
+          label: 'panen-salah-farm',
+        }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'Both the insert policy and photo_attachments_storage_path_farm_check pin segment 2 to farm_id.'
+  );
+
+  // ---------- 11.5 planting_id ----------
+  //
+  // Kedua tabel terikat SATU pohon lewat kolom tree_id NOT NULL, jadi tidak ada
+  // kasus "banyak pohon -> NULL" seperti pada task_proof dan
+  // initiative_care_proof. Keduanya SELALU terstempel.
+
+  assertEqual(
+    STAGE,
+    'a growth phase photo is stamped with the cycle of its record tree',
+    await readPlantingId(phasePhoto.id),
+    careCycle.id,
+    'The reference time is growth_phase_records.created_at, resolved to the cycle in force then.'
+  );
+
+  assertEqual(
+    STAGE,
+    'a harvest photo is stamped with the cycle of its record tree',
+    await readPlantingId(harvestPhoto.id),
+    careCycle.id,
+    'The reference time is harvest_records.created_at, resolved to the cycle in force then.'
+  );
+
+  // Klien tetap tidak boleh menentukan nilainya, sama seperti tree_main di
+  // bagian 9 dan initiative_care_proof di bagian 10.
+  const spoofedPhasePhoto = await expectSuccess(
+    STAGE,
+    'the worker uploads a growth phase photo while sending a foreign planting_id',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'growth_phase_record',
+        entityId: workerPhaseRecordId,
+        storagePath: photoPath({
+          folder: 'growth-phase-records',
+          entityId: workerPhaseRecordId,
+          label: 'fase-palsu',
+        }),
+        uploadedBy: worker.userId,
+        overrides: { planting_id: otherCycle.id },
+      })
+    ),
+    'The insert itself must still succeed; only the supplied value is discarded.'
+  );
+
+  assertEqual(
+    STAGE,
+    'a client supplied planting_id is overwritten for growth_phase_record too',
+    await readPlantingId(spoofedPhasePhoto.id),
+    careCycle.id,
+    'The trigger always derives the value, for every entity type it stamps.'
+  );
+
+  const spoofedHarvestPhoto = await expectSuccess(
+    STAGE,
+    'the worker uploads a harvest photo while sending a foreign planting_id',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'harvest_record',
+        entityId: workerHarvestRecordId,
+        storagePath: photoPath({
+          folder: 'harvest-records',
+          entityId: workerHarvestRecordId,
+          label: 'panen-palsu',
+        }),
+        uploadedBy: worker.userId,
+        overrides: { planting_id: otherCycle.id },
+      })
+    ),
+    'The insert itself must still succeed; only the supplied value is discarded.'
+  );
+
+  assertEqual(
+    STAGE,
+    'a client supplied planting_id is overwritten for harvest_record too',
+    await readPlantingId(spoofedHarvestPhoto.id),
+    careCycle.id,
+    'The trigger always derives the value, for every entity type it stamps.'
+  );
+
+  // task_proof TETAP tidak pernah terstempel. Migrasi 061 menulis ulang badan
+  // fungsi trigger yang sama untuk ketiga kalinya, jadi asersi ini memastikan
+  // cabang lamanya tidak ikut tergeser.
+  const proofStillNullAfter061 = await expectSuccess(
+    STAGE,
+    'the worker uploads another task_proof photo after migration 061',
+    insertPhoto(
+      worker.client,
+      photoRow({
+        entityType: 'task_proof',
+        entityId: activityId,
+        storagePath: photoPath({ folder: 'task-proofs', entityId: activityId, label: 'pasca-061' }),
+        uploadedBy: worker.userId,
+      })
+    ),
+    'task_proof uploads are unchanged by migration 061.'
+  );
+
+  assertEqual(
+    STAGE,
+    'task_proof is still never stamped with a cycle after migration 061',
+    await readPlantingId(proofStillNullAfter061.id),
+    null,
+    'Rewriting the trigger body must not disturb the task_proof branch.'
+  );
+
+  // ---------- 11.6 Hapus ----------
+  //
+  // Anggota aktif lain BOLEH MEMBACA foto ini (11.3) dan tetap TIDAK BOLEH
+  // menghapusnya. Itu pasangan asersi yang paling mudah longgar: policy DELETE
+  // menuntut uploaded_by = auth.uid() DAN can_upload_*, bukan sekadar
+  // keanggotaan.
+
+  await assertDeleteBlocked(
+    'another active member cannot delete the growth phase photo they can read',
+    mate.client,
+    phasePhoto.id,
+    'The delete policy needs uploaded_by = auth.uid() AND can_upload_growth_phase_record_photo.'
+  );
+
+  await assertDeleteBlocked(
+    'another active member cannot delete the harvest photo they can read',
+    mate.client,
+    harvestPhoto.id,
+    'The delete policy needs uploaded_by = auth.uid() AND can_upload_harvest_record_photo.'
+  );
+
+  await assertDeleteBlocked(
+    'a non-member cannot delete the growth phase photo',
+    outsider.client,
+    phasePhoto.id,
+    'Non-members satisfy no delete branch.'
+  );
+
+  await assertDeleteBlocked(
+    'a non-member cannot delete the harvest photo',
+    outsider.client,
+    harvestPhoto.id,
+    'Non-members satisfy no delete branch.'
+  );
+
+  await assertDeleteAllowed(
+    'the uploader who is also the recorder deletes their own growth phase photo',
+    worker.client,
+    spoofedPhasePhoto.id,
+    'Delete allows uploaded_by = auth.uid() together with can_upload_growth_phase_record_photo.'
+  );
+
+  await assertDeleteAllowed(
+    'the uploader who is also the recorder deletes their own harvest photo',
+    worker.client,
+    spoofedHarvestPhoto.id,
+    'Delete allows uploaded_by = auth.uid() together with can_upload_harvest_record_photo.'
+  );
+
+  await assertDeleteAllowed(
+    'the owner deletes a growth phase photo uploaded by somebody else',
+    owner.client,
+    phasePhoto.id,
+    'is_active_owner is the first branch of the delete policy and covers every entity type.'
+  );
+
+  await assertDeleteAllowed(
+    'the owner deletes a harvest photo uploaded by somebody else',
+    owner.client,
+    harvestPhoto.id,
+    'is_active_owner is the first branch of the delete policy and covers every entity type.'
+  );
+
+  // ---------- 11.7 storage.objects untuk kedua folder baru ----------
+  //
+  // Tiga policy storage.objects ikut ditulis ulang oleh 061. Tanpa bagian ini
+  // cabang barunya tidak teruji sama sekali, dan metadata bisa dijaga rapat
+  // sementara berkasnya terbuka -- atau sebaliknya, berkasnya dikunci lebih
+  // rapat daripada metadatanya dan foto yang boleh dibaca gagal dimuat.
+
+  const storagePhasePath =
+    `farms/${farm.id}/growth-phase-records/${workerPhaseRecordId}/objek-${runId}.jpg`;
+  const storageHarvestPath =
+    `farms/${farm.id}/harvest-records/${workerHarvestRecordId}/objek-${runId}.jpg`;
+
+  await expectFailure(
+    STAGE,
+    'a member who is not the recorder cannot upload a growth-phase-records object',
+    uploadObject(mate.client, storagePhasePath),
+    'The storage insert policy calls can_upload_growth_phase_record_photo, which pins recorded_by.'
+  );
+
+  await expectSuccess(
+    STAGE,
+    'the recording worker uploads a growth-phase-records object',
+    uploadObject(worker.client, storagePhasePath),
+    'The recorder satisfies can_upload_growth_phase_record_photo.'
+  );
+
+  // Berpasangan dengan asersi di atas, dan berlawanan dengan bagian 10.7:
+  // `mate` tidak boleh MENGUNGGAH tapi harus bisa MENGUNDUH.
+  await expectSuccess(
+    STAGE,
+    'another active member can download the growth-phase-records object',
+    mate.client.storage.from(BUCKET).download(storagePhasePath),
+    'The storage read branch mirrors the table read rule: every active farm member.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a non-member cannot download the growth-phase-records object',
+    outsider.client.storage.from(BUCKET).download(storagePhasePath),
+    'Storage reads are farm-scoped.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a member who is not the recorder cannot upload a harvest-records object',
+    uploadObject(mate.client, storageHarvestPath),
+    'The storage insert policy calls can_upload_harvest_record_photo, which pins harvested_by.'
+  );
+
+  await expectSuccess(
+    STAGE,
+    'the recording worker uploads a harvest-records object',
+    uploadObject(worker.client, storageHarvestPath),
+    'The recorder satisfies can_upload_harvest_record_photo.'
+  );
+
+  await expectSuccess(
+    STAGE,
+    'another active member can download the harvest-records object',
+    mate.client.storage.from(BUCKET).download(storageHarvestPath),
+    'The storage read branch mirrors the table read rule: every active farm member.'
+  );
+
+  await expectFailure(
+    STAGE,
+    'a non-member cannot download the harvest-records object',
+    outsider.client.storage.from(BUCKET).download(storageHarvestPath),
+    'Storage reads are farm-scoped.'
+  );
+
+  const removedNewObjects = await expectSuccess(
+    STAGE,
+    'the owner removes both new-folder objects',
+    owner.client.storage.from(BUCKET).remove([storagePhasePath, storageHarvestPath]),
+    'is_active_owner is the first branch of the storage delete policy.'
+  );
+  assertEqual(
+    STAGE,
+    'the owner removal actually removed both new-folder objects',
+    removedNewObjects?.length ?? 0,
+    2,
+    'The owner branch must be able to clean up any object in their farm.'
+  );
+
+  // ---------- Pembersihan ----------
+
+  for (const [label, photoId] of [
+    ['owner initiative care', ownerCareProofPhoto.id],
+    ['two-tree initiative care', multiTreeCarePhoto.id],
+    ['post-060 task_proof', proofStillNullPhoto.id],
+    ['owner growth phase', ownerPhasePhoto.id],
+    ['owner harvest', ownerHarvestPhoto.id],
+    ['post-061 task_proof', proofStillNullAfter061.id],
+  ]) {
+    await assertDeleteAllowed(
+      `the owner cleans up the ${label} photo`,
+      owner.client,
+      photoId,
+      'is_active_owner covers every entity type on delete.'
+    );
+  }
 });

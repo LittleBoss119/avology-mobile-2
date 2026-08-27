@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Modal, Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
 import type {
   CareCategory,
@@ -27,6 +27,7 @@ import {
   formatTreeAge,
   formatTreeDisplayCode,
 } from '../utils/treeFormat';
+import { PhotoViewerModal } from './media';
 import { Badge, Button, Card, DateField, EmptyState, Field, MetaRow, PhotoPickerCard } from './ui';
 import { AlertTriangleIcon, BasketIcon, ChevronRightIcon, FlowerIcon, Icon, SprayIcon } from './icons';
 
@@ -819,52 +820,75 @@ function PhotoThumbnail({ photoUrl }: { photoUrl: string }) {
     setImageFailed(false);
   }, [photoUrl]);
 
-  if (imageFailed) {
-    return null;
-  }
-
+  // Signed URL foto berumur 10 menit, jadi kegagalan muat adalah kejadian biasa
+  // pada layar yang dibiarkan terbuka.
+  //
+  // Kegagalan mengganti THUMBNAIL-nya saja, tidak menghentikan render. Dua hal
+  // pernah salah di sini dan keduanya sudah diperbaiki: dulu cabang ini me-render
+  // null sehingga thumbnail lenyap tanpa jejak, lalu setelah itu ia early-return
+  // sehingga viewer ikut ter-unmount dan menutup sendiri di tengah gerakan
+  // pengguna. Sejak ada cubit-zoom orang memandangi satu foto jauh lebih lama
+  // daripada umur URL-nya, jadi viewer harus tetap berdiri sampai pengguna
+  // sendiri yang menutupnya.
+  //
+  // Kotak placeholder sengaja memakai ukuran thumbnail yang sama (84x112) supaya
+  // tata letak di sekitarnya tidak bergeser, dan TIDAK bisa ditap: membuka viewer
+  // untuk gambar yang gagal dimuat hanya menghasilkan layar kosong.
   return (
     <>
-      <Pressable
-        accessibilityRole="imagebutton"
-        onPress={() => setPreviewOpen(true)}
-        style={{
-          alignSelf: 'flex-start',
-          borderColor: colors.border,
-          borderCurve: 'continuous',
-          borderRadius: radius.md,
-          borderWidth: 1,
-          overflow: 'hidden',
-        }}
-      >
-        <Image
-          onError={() => setImageFailed(true)}
-          resizeMode="cover"
-          source={{ uri: photoUrl }}
-          style={{ height: 84, width: 112 }}
-        />
-      </Pressable>
-      <Modal animationType="fade" transparent visible={previewOpen} onRequestClose={() => setPreviewOpen(false)}>
-        <Pressable
-          onPress={() => setPreviewOpen(false)}
+      {imageFailed ? (
+        <View
           style={{
             alignItems: 'center',
-            backgroundColor: 'rgba(30,42,36,0.72)',
-            flex: 1,
+            alignSelf: 'flex-start',
+            backgroundColor: colors.photoPlaceholder,
+            borderColor: colors.border,
+            borderCurve: 'continuous',
+            borderRadius: radius.md,
+            borderWidth: 1,
+            height: 84,
             justifyContent: 'center',
-            padding: 22,
+            padding: spacing.xs,
+            width: 112,
+          }}
+        >
+          <Text
+            selectable
+            style={{
+              color: colors.textMuted,
+              lineHeight: typography.small.lineHeight,
+              textAlign: 'center',
+            }}
+          >
+            Foto belum dapat dimuat.
+          </Text>
+        </View>
+      ) : (
+        <Pressable
+          accessibilityRole="imagebutton"
+          onPress={() => setPreviewOpen(true)}
+          style={{
+            alignSelf: 'flex-start',
+            borderColor: colors.border,
+            borderCurve: 'continuous',
+            borderRadius: radius.md,
+            borderWidth: 1,
+            overflow: 'hidden',
           }}
         >
           <Image
-            resizeMode="contain"
+            onError={() => setImageFailed(true)}
+            resizeMode="cover"
             source={{ uri: photoUrl }}
-            style={{ borderRadius: 14, height: '78%', width: '100%' }}
+            style={{ height: 84, width: 112 }}
           />
-          <Text selectable style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginTop: 14 }}>
-            Tutup
-          </Text>
         </Pressable>
-      </Modal>
+      )}
+      <PhotoViewerModal
+        onClose={() => setPreviewOpen(false)}
+        photoUrl={photoUrl}
+        visible={previewOpen}
+      />
     </>
   );
 }

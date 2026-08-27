@@ -8,7 +8,13 @@ import type {
   DeleteTreeMainPhotoInput,
   DeletePhotoAttachmentInput,
   GetConditionRecordPhotosInput,
+  GetGrowthPhaseRecordPhotosInput,
+  GetHarvestRecordPhotosInput,
+  GetInitiativeCareProofPhotosInput,
   GetTreeMainPhotoData,
+  GrowthPhaseRecordPhoto,
+  HarvestRecordPhoto,
+  InitiativeCareProofPhoto,
   GetPhotoSignedUrlData,
   ListConditionRecordPhotosForTreeInput,
   ListEntityPhotosInput,
@@ -25,6 +31,9 @@ import type {
   TreeMainPhotoMap,
   UploadConditionRecordPhotoInput,
   UploadEntityPhotoInput,
+  UploadGrowthPhaseRecordPhotoInput,
+  UploadHarvestRecordPhotoInput,
+  UploadInitiativeCareProofPhotoInput,
   UploadTaskProofPhotoInput,
   UploadTreeMainPhotoInput,
   UploadPhotoAttachmentData,
@@ -33,6 +42,7 @@ import type {
 } from '../types/media';
 import { base64ByteLength } from '../utils/base64Size';
 import { fail, ok } from '../utils/serviceResult';
+import { isPhotoVisibleInCycle } from '../utils/treeCycle';
 
 export const PHOTO_STORAGE_BUCKET = 'avology-photos';
 export const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024;
@@ -42,16 +52,22 @@ export const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024;
 const BASE64_SYNC_TOLERANCE_BYTES = 1024;
 
 const PHOTO_ATTACHMENT_SELECT =
-  'id, farm_id, uploaded_by, entity_type, entity_id, bucket, storage_path, file_name, mime_type, file_size, caption, is_primary, created_at';
+  'id, farm_id, uploaded_by, entity_type, entity_id, bucket, storage_path, file_name, mime_type, file_size, caption, is_primary, planting_id, created_at';
 
 const allowedEntityTypes: PhotoAttachmentEntityType[] = [
   'tree_main',
   'condition_record',
   'task_proof',
+  'initiative_care_proof',
+  'growth_phase_record',
+  'harvest_record',
 ];
 
 const entityPathFolders: Record<PhotoAttachmentEntityType, PhotoAttachmentPathFolder> = {
   condition_record: 'condition-reports',
+  growth_phase_record: 'growth-phase-records',
+  harvest_record: 'harvest-records',
+  initiative_care_proof: 'initiative-care-proofs',
   task_proof: 'task-proofs',
   tree_main: 'trees',
 };
@@ -69,6 +85,9 @@ type PhotoAttachmentRow = {
   file_size: number | null;
   caption: string | null;
   is_primary: boolean;
+  // Diisi trigger set_photo_attachment_planting (migrasi 059), TIDAK pernah
+  // dikirim klien. NULL = siklus tidak diketahui; selalu NULL untuk task_proof.
+  planting_id: string | null;
   created_at: string;
 };
 
@@ -311,11 +330,19 @@ export async function replaceSinglePhotoAttachment(
   return ok(uploadResult.data);
 }
 
+// `activePlantingId` WAJIB dikirim, dan sengaja tidak diberi nilai bawaan.
+//
+// Kalau ia opsional, pemanggil baru yang lupa mengirimnya akan diam-diam
+// mendapat perilaku lama — foto terikat POSISI, yaitu persis cacat yang migrasi
+// 059 perbaiki. Lebih baik typecheck yang menagihnya.
+//
+// null berarti posisinya sedang kosong; lihat isPhotoVisibleInCycle().
 export async function getTreeMainPhoto(
   farmId: UUID,
-  treeId: UUID
+  treeId: UUID,
+  activePlantingId: UUID | null
 ): Promise<ServiceResult<GetTreeMainPhotoData>> {
-  const photoResult = await getPrimaryTreeMainPhotoRow(farmId, treeId);
+  const photoResult = await getPrimaryTreeMainPhotoRow(farmId, treeId, activePlantingId);
 
   if (photoResult.error) {
     return fail(photoResult.error);
@@ -441,8 +468,17 @@ export async function deleteTreeMainPhoto(
   });
 }
 
+// Daftar pohon satu kebun. Pemanggilnya WAJIB mengirim siklus aktif tiap posisi
+// -- kunci peta = trees.id, nilai = tree_plantings.id yang sedang berjalan (null
+// kalau posisinya kosong).
+//
+// Fungsi ini mengidap cacat yang sama persis dengan foto utama di layar detail,
+// dan sempat luput dari daftar jalur baca: ia memetakan entity_id -> foto untuk
+// SELURUH kebun tanpa tahu siklus, sehingga posisi yang ditanami ulang
+// menampilkan foto pohon lama di daftar pohon.
 export async function listTreeMainPhotosForFarm(
-  farmId: UUID
+  farmId: UUID,
+  activePlantingIdByTree: Record<UUID, UUID | null>
 ): Promise<ServiceResult<TreeMainPhotoMap>> {
   const normalizedFarmId = normalizeRequiredText(farmId, 'Kebun tidak valid.');
 
@@ -466,6 +502,13 @@ export async function listTreeMainPhotosForFarm(
   const uniqueRowsByTree = new Map<string, PhotoAttachmentRow>();
 
   for (const row of data ?? []) {
+    // Disaring SEBELUM menempati slot posisinya. Kalau urutannya dibalik, foto
+    // siklus lampau merebut slot lalu dibuang, dan posisi itu kehilangan foto
+    // siklus sekarang yang sebenarnya sah.
+    if (!isPhotoVisibleInCycle(row.planting_id, activePlantingIdByTree[row.entity_id] ?? null)) {
+      continue;
+    }
+
     if (!uniqueRowsByTree.has(row.entity_id)) {
       uniqueRowsByTree.set(row.entity_id, row);
     }
@@ -627,6 +670,14 @@ export async function listConditionRecordPhotosForTree(
   const uniqueRowsByRecord = new Map<string, PhotoAttachmentRow>();
 
   for (const row of data ?? []) {
+    // Catatan kondisi dari siklus lampau TETAP tampil di daftar — yang ditahan
+    // hanya fotonya, dan hanya kalau siklusnya diketahui dan berbeda. Foto
+    // ber-planting_id NULL lolos, termasuk seluruh foto yang dibuat sebelum
+    // migrasi 059 dan tidak bisa ditentukan siklusnya.
+    if (!isPhotoVisibleInCycle(row.planting_id, input.activePlantingId)) {
+      continue;
+    }
+
     if (!uniqueRowsByRecord.has(row.entity_id)) {
       uniqueRowsByRecord.set(row.entity_id, row);
     }
@@ -812,6 +863,252 @@ export async function listTaskProofPhotosForActivities(
     Object.fromEntries(
       entries.filter((entry): entry is [string, TaskProofPhoto] => entry !== null)
     )
+  );
+}
+
+// Bukti kerja perawatan INISIATIF (migrasi 060).
+//
+// Sengaja TIDAK memakai uploadTaskProofPhoto: entity_type-nya berbeda, dan
+// yang lebih menentukan, path-nya berbeda bentuk. 'task-proofs' menuntut id
+// tugas di segmen keempat; aktivitas inisiatif tidak punya id tugas, jadi
+// foldernya sendiri yang berbeda dan path-nya cuma empat segmen.
+// buildPhotoStoragePath sudah menangani itu lewat cabang generiknya -- tidak
+// ada `taskId` yang perlu dikirim dari sini, dan memang tidak boleh ada.
+export async function uploadInitiativeCareProofPhoto(
+  input: UploadInitiativeCareProofPhotoInput
+): Promise<ServiceResult<InitiativeCareProofPhoto>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const activityId = normalizeRequiredText(input.activityId, 'Catatan perawatan tidak valid.');
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (activityId instanceof Error) {
+    return fail(activityId);
+  }
+
+  const uploadResult = await uploadPhotoAttachment({
+    base64: input.base64,
+    caption: input.caption,
+    entityId: activityId,
+    entityType: 'initiative_care_proof',
+    farmId,
+    fileName: input.fileName,
+    isPrimary: false,
+    localUri: input.localUri,
+    mimeType: input.mimeType,
+  });
+
+  if (uploadResult.error) {
+    return fail(uploadResult.error, 'Foto gagal diunggah.');
+  }
+
+  const signedUrlResult = await getPhotoSignedUrl(uploadResult.data.attachment.storagePath);
+
+  if (signedUrlResult.error) {
+    return fail(signedUrlResult.error, 'Foto berhasil diunggah, tetapi pratinjau gagal dimuat.');
+  }
+
+  return ok({
+    attachment: uploadResult.data.attachment,
+    signedUrl: signedUrlResult.data.signedUrl,
+  });
+}
+
+export async function getInitiativeCareProofPhotos(
+  input: GetInitiativeCareProofPhotosInput
+): Promise<ServiceResult<InitiativeCareProofPhoto[]>> {
+  const photoResult = await listPhotoAttachments({
+    entityId: input.activityId,
+    entityType: 'initiative_care_proof',
+    farmId: input.farmId,
+  });
+
+  if (photoResult.error) {
+    return fail(photoResult.error, 'Gagal memuat foto perawatan.');
+  }
+
+  const photos = await Promise.all(
+    photoResult.data.map(async (attachment) => {
+      const signedUrlResult = await getPhotoSignedUrl(attachment.storagePath);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return {
+        attachment,
+        signedUrl: signedUrlResult.data.signedUrl,
+      };
+    })
+  );
+
+  return ok(
+    photos.filter((photo): photo is InitiativeCareProofPhoto => photo !== null)
+  );
+}
+
+// Foto catatan FASE PERTUMBUHAN (migrasi 061).
+//
+// Path-nya empat segmen lewat cabang generik buildPhotoStoragePath, sama
+// seperti condition-reports: tidak ada `taskId` yang perlu dikirim, dan memang
+// tidak boleh ada.
+export async function uploadGrowthPhaseRecordPhoto(
+  input: UploadGrowthPhaseRecordPhotoInput
+): Promise<ServiceResult<GrowthPhaseRecordPhoto>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const growthPhaseRecordId = normalizeRequiredText(
+    input.growthPhaseRecordId,
+    'Catatan fase tidak valid.'
+  );
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (growthPhaseRecordId instanceof Error) {
+    return fail(growthPhaseRecordId);
+  }
+
+  const uploadResult = await uploadPhotoAttachment({
+    base64: input.base64,
+    caption: input.caption,
+    entityId: growthPhaseRecordId,
+    entityType: 'growth_phase_record',
+    farmId,
+    fileName: input.fileName,
+    isPrimary: false,
+    localUri: input.localUri,
+    mimeType: input.mimeType,
+  });
+
+  if (uploadResult.error) {
+    return fail(uploadResult.error, 'Foto gagal diunggah.');
+  }
+
+  const signedUrlResult = await getPhotoSignedUrl(uploadResult.data.attachment.storagePath);
+
+  if (signedUrlResult.error) {
+    return fail(signedUrlResult.error, 'Foto berhasil diunggah, tetapi pratinjau gagal dimuat.');
+  }
+
+  return ok({
+    attachment: uploadResult.data.attachment,
+    signedUrl: signedUrlResult.data.signedUrl,
+  });
+}
+
+export async function getGrowthPhaseRecordPhotos(
+  input: GetGrowthPhaseRecordPhotosInput
+): Promise<ServiceResult<GrowthPhaseRecordPhoto[]>> {
+  const photoResult = await listPhotoAttachments({
+    entityId: input.growthPhaseRecordId,
+    entityType: 'growth_phase_record',
+    farmId: input.farmId,
+  });
+
+  if (photoResult.error) {
+    return fail(photoResult.error, 'Gagal memuat foto fase.');
+  }
+
+  const photos = await Promise.all(
+    photoResult.data.map(async (attachment) => {
+      const signedUrlResult = await getPhotoSignedUrl(attachment.storagePath);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return {
+        attachment,
+        signedUrl: signedUrlResult.data.signedUrl,
+      };
+    })
+  );
+
+  return ok(
+    photos.filter((photo): photo is GrowthPhaseRecordPhoto => photo !== null)
+  );
+}
+
+// Foto catatan PANEN (migrasi 061). Bentuknya sama persis dengan fase di atas;
+// yang berbeda hanya entity_type dan nama catatannya di pesan galat.
+export async function uploadHarvestRecordPhoto(
+  input: UploadHarvestRecordPhotoInput
+): Promise<ServiceResult<HarvestRecordPhoto>> {
+  const farmId = normalizeRequiredText(input.farmId, 'Kebun tidak valid.');
+  const harvestRecordId = normalizeRequiredText(
+    input.harvestRecordId,
+    'Catatan panen tidak valid.'
+  );
+
+  if (farmId instanceof Error) {
+    return fail(farmId);
+  }
+
+  if (harvestRecordId instanceof Error) {
+    return fail(harvestRecordId);
+  }
+
+  const uploadResult = await uploadPhotoAttachment({
+    base64: input.base64,
+    caption: input.caption,
+    entityId: harvestRecordId,
+    entityType: 'harvest_record',
+    farmId,
+    fileName: input.fileName,
+    isPrimary: false,
+    localUri: input.localUri,
+    mimeType: input.mimeType,
+  });
+
+  if (uploadResult.error) {
+    return fail(uploadResult.error, 'Foto gagal diunggah.');
+  }
+
+  const signedUrlResult = await getPhotoSignedUrl(uploadResult.data.attachment.storagePath);
+
+  if (signedUrlResult.error) {
+    return fail(signedUrlResult.error, 'Foto berhasil diunggah, tetapi pratinjau gagal dimuat.');
+  }
+
+  return ok({
+    attachment: uploadResult.data.attachment,
+    signedUrl: signedUrlResult.data.signedUrl,
+  });
+}
+
+export async function getHarvestRecordPhotos(
+  input: GetHarvestRecordPhotosInput
+): Promise<ServiceResult<HarvestRecordPhoto[]>> {
+  const photoResult = await listPhotoAttachments({
+    entityId: input.harvestRecordId,
+    entityType: 'harvest_record',
+    farmId: input.farmId,
+  });
+
+  if (photoResult.error) {
+    return fail(photoResult.error, 'Gagal memuat foto panen.');
+  }
+
+  const photos = await Promise.all(
+    photoResult.data.map(async (attachment) => {
+      const signedUrlResult = await getPhotoSignedUrl(attachment.storagePath);
+
+      if (signedUrlResult.error) {
+        return null;
+      }
+
+      return {
+        attachment,
+        signedUrl: signedUrlResult.data.signedUrl,
+      };
+    })
+  );
+
+  return ok(
+    photos.filter((photo): photo is HarvestRecordPhoto => photo !== null)
   );
 }
 
@@ -1490,6 +1787,7 @@ function mapPhotoAttachment(row: PhotoAttachmentRow): PhotoAttachment {
     id: row.id,
     isPrimary: row.is_primary,
     mimeType: row.mime_type,
+    plantingId: row.planting_id,
     storagePath: row.storage_path,
     uploadedBy: row.uploaded_by,
   };
@@ -1593,7 +1891,8 @@ async function listTreeMainPhotoRows(
 
 async function getPrimaryTreeMainPhotoRow(
   farmId: UUID,
-  treeId: UUID
+  treeId: UUID,
+  activePlantingId: UUID | null
 ): Promise<ServiceResult<PhotoAttachmentRow | null>> {
   const photosResult = await listTreeMainPhotoRows(farmId, treeId);
 
@@ -1601,7 +1900,14 @@ async function getPrimaryTreeMainPhotoRow(
     return fail(photosResult.error);
   }
 
-  return ok(photosResult.data.find((photo) => photo.is_primary) ?? photosResult.data[0] ?? null);
+  // Disaring SEBELUM pemilihan is_primary. Kalau urutannya dibalik, foto siklus
+  // lampau yang kebetulan is_primary akan terpilih lebih dulu lalu terbuang,
+  // dan foto siklus sekarang yang sah ikut hilang bersamanya.
+  const visible = photosResult.data.filter((photo) =>
+    isPhotoVisibleInCycle(photo.planting_id, activePlantingId)
+  );
+
+  return ok(visible.find((photo) => photo.is_primary) ?? visible[0] ?? null);
 }
 
 async function deleteSupersededTreeMainPhotos(

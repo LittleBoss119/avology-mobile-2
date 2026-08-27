@@ -1,8 +1,9 @@
 import React from 'react';
-import { Image, Modal, Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
 import type { PickedPhotoAsset, TaskProofPhoto } from '../types/media';
 import { colors, radius, spacing } from '../constants/theme';
+import { PhotoViewerModal } from './media';
 import { PhotoPickerCard } from './ui';
 
 export function TaskProofPhotoPicker({
@@ -54,74 +55,66 @@ export function TaskProofPhotoPreview({
     setPreviewOpen(false);
   }, [photo?.signedUrl]);
 
-  if (!photo) {
-    if (!emptyText) {
-      return null;
-    }
-
-    return (
-      <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
-        {emptyText}
-      </Text>
-    );
-  }
-
-  if (imageFailed) {
-    return (
-      <View
-        style={{
-          alignItems: 'center',
-          backgroundColor: colors.primarySoft,
-          borderColor: colors.primaryBorder,
-          borderRadius: radius.lg,
-          borderWidth: 1,
-          minHeight: 96,
-          justifyContent: 'center',
-          padding: spacing.md,
-        }}
-      >
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 20, textAlign: 'center' }}>
-          Bukti foto belum dapat dimuat.
-        </Text>
-      </View>
-    );
-  }
-
+  // TIDAK ADA early-return di sini, dan itu disengaja.
+  //
+  // Baik hilangnya foto maupun gagalnya foto dimuat hanya mengganti THUMBNAIL-
+  // nya, tidak menghentikan render. Dulu keduanya early-return sehingga viewer
+  // ikut ter-unmount: viewer yang sedang terbuka lenyap begitu saja di tengah
+  // gerakan pengguna, bukan menutup dengan semestinya. Sejak ada cubit-zoom
+  // orang memandangi satu foto jauh lebih lama daripada umur signed URL yang
+  // cuma 10 menit, jadi viewer harus tetap berdiri sampai pengguna sendiri yang
+  // menutupnya.
   return (
     <>
-      <Pressable accessibilityRole="imagebutton" onPress={() => setPreviewOpen(true)}>
-        <Image
-          resizeMode="cover"
-          source={{ uri: photo.signedUrl }}
-          onError={() => setImageFailed(true)}
+      {!photo ? (
+        emptyText ? (
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 20 }}>
+            {emptyText}
+          </Text>
+        ) : null
+      ) : imageFailed ? (
+        <View
           style={{
-            borderRadius,
-            height: 118,
-            width: '100%',
+            alignItems: 'center',
+            backgroundColor: colors.primarySoft,
+            borderColor: colors.primaryBorder,
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            minHeight: 96,
+            justifyContent: 'center',
+            padding: spacing.md,
           }}
-        />
-      </Pressable>
-
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setPreviewOpen(false)}
-        transparent
-        visible={previewOpen}
-      >
-        <View style={{ backgroundColor: 'rgba(18, 28, 22, 0.78)', flex: 1, justifyContent: 'center', padding: 20 }}>
-          <Pressable accessibilityRole="button" onPress={() => setPreviewOpen(false)} style={{ flex: 1, justifyContent: 'center' }}>
-            <Image
-              resizeMode="contain"
-              source={{ uri: photo.signedUrl }}
-              style={{
-                borderRadius: radius.lg,
-                height: '82%',
-                width: '100%',
-              }}
-            />
-          </Pressable>
+        >
+          <Text selectable style={{ color: colors.textMuted, lineHeight: 20, textAlign: 'center' }}>
+            Bukti foto belum dapat dimuat.
+          </Text>
         </View>
-      </Modal>
+      ) : (
+        <Pressable accessibilityRole="imagebutton" onPress={() => setPreviewOpen(true)}>
+          <Image
+            resizeMode="cover"
+            source={{ uri: photo.signedUrl }}
+            onError={() => setImageFailed(true)}
+            style={{
+              borderRadius,
+              height: 118,
+              width: '100%',
+            }}
+          />
+        </Pressable>
+      )}
+
+      {/*
+        `visible` ikut menimbang ada-tidaknya foto, bukan hanya previewOpen.
+        Efek di atas memang sudah menutup viewer saat foto hilang, tapi efek
+        berjalan SESUDAH render -- tanpa penjaga ini ada satu bingkai di mana
+        viewer masih terbuka dengan kotak kosong sebelum efeknya sempat jalan.
+      */}
+      <PhotoViewerModal
+        onClose={() => setPreviewOpen(false)}
+        photoUrl={photo?.signedUrl ?? null}
+        visible={previewOpen && Boolean(photo)}
+      />
     </>
   );
 }

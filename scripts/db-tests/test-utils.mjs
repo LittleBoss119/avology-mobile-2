@@ -184,6 +184,77 @@ export async function createIsolatedFarmWithWorker(stage, { runId, slug, workerP
   return { owner, worker: { ...worker, membershipId }, farm };
 }
 
+// Posisi tanam BEBAS berikutnya di sebuah kebun, DITURUNKAN dari grid kebun itu
+// sendiri -- bukan ditebak.
+//
+// KENAPA ADA:
+//
+// Koordinat yang diketik langsung di dalam tes menyandera tes itu ke satu ukuran
+// grid tertentu. farms.grid_rows/grid_columns bawaannya 26x9 (migrasi 054), tapi
+// RPC set_farm_grid bisa mengubahnya kapan saja, dan create_tree_with_planting
+// menolak koordinat di luar rentang dengan 'Kolom X di luar ukuran kebun.'.
+// Tes yang menebak hurufnya akan hijau hari ini dan pecah nanti tanpa satu pun
+// petunjuk kenapa -- pesan galatnya bicara soal kebun, bukan soal tes.
+//
+// Occupancy ikut diperiksa supaya pemanggilan kedua di stage yang sama tidak
+// menabrak pohon yang baru saja ia buat sendiri.
+//
+// SENGAJA tidak mencetak baris lolos: ini bahan penyiapan, bukan asersi. Kalau
+// pembacaannya gagal, stage-nya berhenti dengan TestFailure yang jelas.
+export async function findFreeTreePosition(stage, client, farmId) {
+  const farm = await client
+    .from('farms')
+    .select('grid_rows, grid_columns')
+    .eq('id', farmId)
+    .single();
+
+  if (farm.error) {
+    fail(
+      stage,
+      'read farm grid',
+      farm.error.message,
+      'Active members should be able to read grid_rows/grid_columns of their own farm (migration 054).'
+    );
+  }
+
+  const occupied = await client
+    .from('trees')
+    .select('row_position, column_position')
+    .eq('farm_id', farmId);
+
+  if (occupied.error) {
+    fail(
+      stage,
+      'read occupied tree positions',
+      occupied.error.message,
+      'Active members should be able to read trees in their farm.'
+    );
+  }
+
+  const taken = new Set(
+    (occupied.data ?? []).map((row) => `${row.row_position}-${row.column_position}`)
+  );
+
+  for (let rowPosition = 1; rowPosition <= farm.data.grid_rows; rowPosition += 1) {
+    for (let columnIndex = 0; columnIndex < farm.data.grid_columns; columnIndex += 1) {
+      // Kolom dilambangkan satu huruf kapital: indeks 0 -> 'A'. Batas 26 pada
+      // farms_grid_columns_check memang berasal dari jumlah huruf itu (054:144).
+      const columnPosition = String.fromCharCode(65 + columnIndex);
+
+      if (!taken.has(`${rowPosition}-${columnPosition}`)) {
+        return { columnPosition, rowPosition };
+      }
+    }
+  }
+
+  fail(
+    stage,
+    'find free tree position',
+    `No free position left in a ${farm.data.grid_rows}x${farm.data.grid_columns} grid`,
+    'The stage created more trees than the farm grid can hold; widen the grid with set_farm_grid or create fewer trees.'
+  );
+}
+
 export function loadState() {
   try {
     return JSON.parse(readFileSync(STATE_FILE_PATH, 'utf8'));

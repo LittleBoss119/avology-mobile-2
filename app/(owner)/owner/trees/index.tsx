@@ -127,7 +127,14 @@ export default function OwnerTreeListScreen() {
 
     setTrees(result.data);
 
-    const photoResult = await listTreeMainPhotosForFarm(farmId);
+    // Siklus aktif tiap posisi, diambil dari daftar pohon yang baru saja dimuat
+    // — getTrees sudah membawa activePlanting sebagai embedded resource, jadi
+    // tidak ada query tambahan. Tanpa peta ini, posisi yang ditanami ulang akan
+    // menampilkan foto pohon lama di daftar.
+    const photoResult = await listTreeMainPhotosForFarm(
+      farmId,
+      Object.fromEntries(result.data.map((tree) => [tree.id, tree.activePlanting?.id ?? null]))
+    );
 
     if (photoResult.error) {
       setPhotoMap({});

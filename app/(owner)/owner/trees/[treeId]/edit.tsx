@@ -88,7 +88,13 @@ export default function OwnerEditTreeScreen() {
       });
       setFarmId(result.data.farmId);
 
-      const photoResult = await getTreeMainPhoto(result.data.farmId, result.data.id);
+      // Foto siklus lampau tidak boleh muncul sebagai foto yang sedang diedit:
+      // menyimpan form akan membuatnya seolah foto pohon yang sekarang.
+      const photoResult = await getTreeMainPhoto(
+        result.data.farmId,
+        result.data.id,
+        result.data.activePlanting?.id ?? null
+      );
 
       if (!isMounted) {
         return;

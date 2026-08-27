@@ -127,7 +127,13 @@ export default function WorkerTreeListScreen() {
 
     setTrees(result.data);
 
-    const photoResult = await listTreeMainPhotosForFarm(farmId);
+    // Sama seperti daftar pohon sisi pemilik: siklus aktif tiap posisi diambil
+    // dari data yang sudah dimuat, supaya posisi yang ditanami ulang tidak
+    // menampilkan foto pohon lama.
+    const photoResult = await listTreeMainPhotosForFarm(
+      farmId,
+      Object.fromEntries(result.data.map((tree) => [tree.id, tree.activePlanting?.id ?? null]))
+    );
 
     if (photoResult.error) {
       setPhotoMap({});
