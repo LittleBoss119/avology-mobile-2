@@ -185,7 +185,12 @@ export default function OwnerFarmGridScreen() {
   }
 
   if (loading) {
-    return <LoadingState message="Memuat ukuran kebun..." />;
+    return (
+      <LoadingState
+        header={<TopAppBar title="Ukuran denah kebun" onBack={() => router.back()} />}
+        message="Memuat ukuran kebun..."
+      />
+    );
   }
 
   const previewCode = buildPreviewCode(rows, columns);

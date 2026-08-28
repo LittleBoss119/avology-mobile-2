@@ -56,7 +56,7 @@ export function FarmIdentityBlock({
 // DUA segmen, bukan tiga: sumber angkanya hanya membedakan `healthy` dari
 // "selain healthy" (dashboardService.countProblemTrees), dan memecah "rusak"
 // jadi potongan sendiri berarti query baru. Bar ini menampilkan persis apa yang
-// diketahui — sehat versus perlu perhatian — bukan kategori yang datanya belum
+// diketahui — sehat versus perlu dicek — bukan kategori yang datanya belum
 // ada.
 //
 // `size` membedakan pemakaiannya: 'lg' di Beranda pemilik, tempat blok ini
@@ -91,9 +91,24 @@ export function TreeConditionSummary({
           value={healthyTrees}
           valueStyle={valueStyle}
         />
+        {/* "Perlu dicek", BUKAN "Perhatian". Angkanya adalah SELURUH pohon
+            non-sehat — termasuk yang mati — sedangkan "Perhatian" di layar lain
+            (badge kartu pohon, chip filter, legenda peta) berarti tepat satu
+            status: needs_attention. Memakai kata yang sama untuk dua himpunan
+            yang berbeda membuat pemilik menghitung "Perhatian 3" di sini lalu
+            tidak menemukan satu pun pohon berlabel "Perhatian" di daftar.
+
+            YANG DIGANTI HANYA KATANYA. Angkanya sengaja tetap seluruh non-sehat:
+            mengurangi pohon mati akan mengosongkan ruas ini dari bar, dan karena
+            kedua ruas ConditionBar memakai `flex` dan selalu memenuhi lebar
+            penuh, kebun yang mayoritas pohonnya mati justru akan tampil sebagai
+            bar hijau penuh. Beranda pekerja juga menghitung angka ini sendiri
+            (worker/index.tsx countTreeConditions) dengan definisi yang sengaja
+            disamakan; mengubah satu sisi saja membuat kedua Beranda berselisih
+            untuk kebun yang sama. */}
         <ConditionMetric
           color={problemTrees > 0 ? tokens.color.status.warning.text : tokens.color.text.primary}
-          label="Perhatian"
+          label="Perlu dicek"
           value={problemTrees}
           valueStyle={valueStyle}
         />

@@ -977,6 +977,15 @@ export function ChipButton({
   onPress: () => void;
 }) {
   const contentColor = active ? '#FFFFFF' : colors.text;
+  // Terpilih ditandai CENTANG, bukan cuma latar hijau. Aturan proyek: warna
+  // tidak boleh jadi satu-satunya penanda keadaan — dan chip inilah hal pertama
+  // yang disentuh orang di daftar pohon, di layar ponsel yang mungkin terbaca
+  // di bawah cahaya matahari.
+  //
+  // Lewat prop `icon` yang SUDAH ADA, bukan jalur baru. Chip yang mengirim
+  // ikonnya sendiri tetap memakai ikon itu; centang hanya mengisi chip yang
+  // tidak punya ikon dan sedang terpilih.
+  const resolvedIcon = icon ?? (active ? 'check' : undefined);
 
   return (
     <Pressable
@@ -993,7 +1002,9 @@ export function ChipButton({
         paddingVertical: spacing.sm + 1,
       }}
     >
-      {icon ? <Icon name={icon} size={tokens.icon.sm} color={active ? contentColor : colors.primary} /> : null}
+      {resolvedIcon ? (
+        <Icon name={resolvedIcon} size={tokens.icon.sm} color={active ? contentColor : colors.primary} />
+      ) : null}
       <Text selectable style={{ color: contentColor, fontSize: 14, fontWeight: '700' }}>
         {count === undefined ? label : `${label} · ${count}`}
       </Text>
@@ -1799,9 +1810,28 @@ export function SuccessBanner({ message }: { message?: string | null }) {
   );
 }
 
-export function LoadingState({ message = 'Memuat data...' }: { message?: string }) {
+// `header` OPSIONAL, dan ketiadaannya adalah perilaku lama PERSIS: tanpa prop
+// itu Screen tidak merender slot header sama sekali, seperti sejak awal.
+//
+// KENAPA IA ADA. Layar memakai LoadingState sebagai `return` lebih awal, jadi
+// selama memuat SELURUH layar diganti — termasuk TopAppBar beserta tombol
+// kembalinya. Pada layar bertab itu tidak berbahaya: bottom nav tetap berdiri
+// dan orang masih punya jalan keluar. Pada layar yang DIDORONG KE STACK,
+// satu-satunya jalan keluar yang tersisa adalah tombol back perangkat — dan itu
+// yang bisa menghentikan pengguna yang tidak terbiasa, tepat di tengah alur.
+//
+// Pemanggil yang mengoper header WAJIB mengirim header yang sama dengan yang
+// dipakai layarnya setelah selesai memuat, supaya judul dan tombol kembali
+// tidak berpindah tempat saat pemintalnya hilang.
+export function LoadingState({
+  header,
+  message = 'Memuat data...',
+}: {
+  header?: React.ReactNode;
+  message?: string;
+}) {
   return (
-    <Screen>
+    <Screen header={header}>
       <View style={{ flex: 1, justifyContent: 'center', gap: spacing.md }}>
         <ActivityIndicator color={colors.primary} />
         <Text selectable style={{ color: colors.muted, textAlign: 'center' }}>

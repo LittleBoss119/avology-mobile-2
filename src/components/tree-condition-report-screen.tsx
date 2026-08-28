@@ -253,7 +253,12 @@ export function TreeConditionReportScreen({
   }
 
   if (loading) {
-    return <LoadingState message="Memuat pohon..." />;
+    return (
+      <LoadingState
+        header={<TopAppBar title="Catat Kondisi" onBack={() => router.back()} />}
+        message="Memuat pohon..."
+      />
+    );
   }
 
   return (

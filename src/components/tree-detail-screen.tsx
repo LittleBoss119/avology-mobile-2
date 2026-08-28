@@ -250,7 +250,16 @@ export function TreeDetailScreen({
   }
 
   if (loading) {
-    return <LoadingState message="Memuat detail pohon..." />;
+    // Judulnya statis "Detail Pohon" — sama dengan cabang galat di bawah. Judul
+    // sesungguhnya ("Detail Pohon" lawan "Detail Posisi") baru bisa ditentukan
+    // setelah siklus tanamnya terbaca, dan menebaknya di sini berarti judul
+    // berkedip ganti begitu datanya datang.
+    return (
+      <LoadingState
+        header={<TopAppBar title="Detail Pohon" onBack={() => router.back()} />}
+        message="Memuat detail pohon..."
+      />
+    );
   }
 
   const basePath = mode === 'owner' ? '/owner/trees' : '/worker/trees';

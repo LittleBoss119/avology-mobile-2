@@ -272,7 +272,22 @@ export function TreeRecordEditScreen({
   }
 
   if (loading) {
-    return <LoadingState message="Memuat catatan..." />;
+    // Judulnya BUKAN tebakan: normalizedType diturunkan dari parameter rute
+    // (recordType), jadi ia sudah diketahui sebelum satu pun permintaan jalan —
+    // judul saat memuat persis sama dengan judul setelah selesai memuat.
+    // Cadangan 'Edit catatan' hanya untuk tipe rute yang tidak dikenali, dan
+    // teksnya sama dengan cabang yang menangani keadaan itu di bawah.
+    return (
+      <LoadingState
+        header={
+          <TopAppBar
+            title={normalizedType ? getEditTitle(normalizedType) : 'Edit catatan'}
+            onBack={() => router.back()}
+          />
+        }
+        message="Memuat catatan..."
+      />
+    );
   }
 
   if (!normalizedType || !recordId) {

@@ -25,6 +25,7 @@ import {
   buildTreeDisplayCode,
   formatGrowthPhase,
   formatTreeAge,
+  formatTreeConditionStatus,
   formatTreeDisplayCode,
 } from '../utils/treeFormat';
 import { PhotoViewerModal } from './media';
@@ -548,13 +549,13 @@ function TreeFormSection({
 export function ConditionStatusBadge({ size, status }: ConditionStatusBadgeProps) {
   const tone = getConditionTone(status);
 
-  return <Badge label={formatCompactConditionStatus(status)} maxWidth={180} size={size} tone={tone} />;
+  return <Badge label={formatTreeConditionStatus(status)} maxWidth={180} size={size} tone={tone} />;
 }
 
 export function GrowthPhaseBadge({ phase }: GrowthPhaseBadgeProps) {
   const tone = getGrowthPhaseTone(phase);
 
-  return <Badge label={formatCompactGrowthPhase(phase)} maxWidth={180} tone={tone} />;
+  return <Badge label={formatGrowthPhase(phase)} maxWidth={180} tone={tone} />;
 }
 
 export function ConditionReportList({
@@ -1079,7 +1080,7 @@ function formatCareOrigin(asal?: CareActivityOrigin | null): string | null {
 
 function formatHistoryTitle(item: TreeHistoryItem): string {
   if (item.historyType === 'condition' && isTreeConditionStatus(item.title)) {
-    return formatCompactConditionStatus(item.title);
+    return formatTreeConditionStatus(item.title);
   }
 
   if (item.historyType === 'phase' && isGrowthPhase(item.title)) {
@@ -1121,30 +1122,11 @@ function isCareCategory(value?: string | null): value is CareCategory {
   );
 }
 
-function formatCompactConditionStatus(status: TreeConditionStatus): string {
-  const labels: Record<TreeConditionStatus, string> = {
-    damaged: 'Rusak',
-    dead: 'Mati',
-    disease_indicated: 'Penyakit',
-    healthy: 'Sehat',
-    needs_attention: 'Perhatian',
-    pest_attacked: 'Hama',
-  };
-
-  return labels[status];
-}
-
-function formatCompactGrowthPhase(phase: GrowthPhase): string {
-  const labels: Record<GrowthPhase, string> = {
-    flowering: 'Berbunga',
-    fruiting: 'Berbuah',
-    harvesting: 'Panen',
-    initial_planting: 'Awal',
-    vegetative: 'Vegetatif',
-  };
-
-  return labels[phase];
-}
+// formatCompactConditionStatus dan formatCompactGrowthPhase DICABUT. Keduanya
+// adalah daftar label ketiga dan keempat; sejak displayFormat.ts memakai bentuk
+// pendek, isinya sudah identik dan menyimpannya hanya menyediakan tempat untuk
+// menyimpang lagi. Badge dan judul linimasa sekarang memanggil formatter
+// bersama yang sama dengan peta dan layar pencatatan.
 
 function isTreeConditionStatus(value: string): value is TreeConditionStatus {
   return [

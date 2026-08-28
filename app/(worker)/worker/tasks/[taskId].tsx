@@ -85,7 +85,12 @@ export default function WorkerTaskDetailScreen() {
   );
 
   if (loading) {
-    return <LoadingState message="Memuat detail tugas..." />;
+    return (
+      <LoadingState
+        header={<TopAppBar title="Detail Tugas" onBack={() => router.back()} />}
+        message="Memuat detail tugas..."
+      />
+    );
   }
 
   if (!task) {

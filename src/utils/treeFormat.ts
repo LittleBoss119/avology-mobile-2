@@ -4,22 +4,11 @@ import {
   formatTreeCondition,
 } from './displayFormat';
 
-export const treeConditionStatusLabels: Record<TreeConditionStatus, string> = {
-  healthy: 'Sehat',
-  needs_attention: 'Perlu Perhatian',
-  pest_attacked: 'Terserang Hama',
-  disease_indicated: 'Terindikasi Penyakit',
-  damaged: 'Rusak',
-  dead: 'Mati',
-};
-
-export const growthPhaseLabels: Record<GrowthPhase, string> = {
-  initial_planting: 'Awal Tanam',
-  vegetative: 'Vegetatif',
-  flowering: 'Berbunga',
-  fruiting: 'Berbuah',
-  harvesting: 'Panen',
-};
+// treeConditionStatusLabels dan growthPhaseLabels DICABUT: keduanya konstanta
+// bentuk panjang dengan nol pemanggil, dan membiarkannya berdiri berarti
+// menyimpan daftar label keenam yang bisa menyimpang lagi. Satu-satunya daftar
+// sekarang ada di displayFormat.ts, dan kedua fungsi di bawah meneruskan ke
+// sana.
 
 export function formatTreeConditionStatus(status: TreeConditionStatus): string {
   return formatTreeCondition(status);

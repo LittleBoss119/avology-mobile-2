@@ -418,11 +418,19 @@ export default function WorkerTaskRecordScreen() {
     router.back();
   }
 
-  if (loading) {
-    return <LoadingState message="Memuat tugas..." />;
-  }
-
+  // DIANGKAT ke atas cabang memuat: judulnya hanya bergantung pada `mode`, yang
+  // sudah diketahui dari params sejak render pertama, sehingga cabang memuat
+  // bisa memakai judul yang SAMA dengan layar setelah selesai memuat.
   const headerTitle = mode === 'edit' ? 'Perbaiki catatan' : 'Catat hasil kerja';
+
+  if (loading) {
+    return (
+      <LoadingState
+        header={<TopAppBar title={headerTitle} onBack={() => router.back()} />}
+        message="Memuat tugas..."
+      />
+    );
+  }
 
   if (!task) {
     return (

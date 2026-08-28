@@ -157,7 +157,16 @@ export function TreeRecordDetailScreen({
   }, [loadDetail]);
 
   if (loading) {
-    return <LoadingState message="Memuat detail catatan..." />;
+    // Judul statis "Detail catatan", sama dengan cabang tanpa-data di bawah.
+    // Judul sesungguhnya adalah detail.title, yang baru ada SETELAH catatannya
+    // terbaca — jadi ia tidak bisa dipakai di sini tanpa menebak isinya.
+    // Idiomnya sama dengan tree-detail-screen.tsx.
+    return (
+      <LoadingState
+        header={<TopAppBar title="Detail catatan" onBack={() => router.back()} />}
+        message="Memuat detail catatan..."
+      />
+    );
   }
 
   if (!detail || !normalizedType) {

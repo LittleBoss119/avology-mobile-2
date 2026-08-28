@@ -124,9 +124,18 @@ function SnackbarHost({
         transform: [{ translateY }],
       }}
     >
+      {/* alignItems 'flex-start', BUKAN 'center': begitu teksnya boleh dua
+          baris, 'center' akan menaruh ikon centang di tengah blok dua baris —
+          sejajar dengan celah antar baris, bukan dengan baris pertama.
+          'flex-start' menjaga centangnya sebaris dengan kata pertama, dan pada
+          pesan satu baris hasilnya tidak berbeda dari sebelumnya.
+
+          flexShrink 1 pada teks WAJIB menemani numberOfLines 2: tanpa itu blok
+          teks menolak menyusut, pil melampaui maxWidth '100%', dan kalimat
+          panjang terpotong di tepi layar alih-alih membungkus. */}
       <View
         style={{
-          alignItems: 'center',
+          alignItems: 'flex-start',
           backgroundColor: tokens.color.text.primary,
           borderCurve: 'continuous',
           borderRadius: tokens.radius.pill,
@@ -140,9 +149,10 @@ function SnackbarHost({
       >
         <Icon name="check" size={tokens.icon.sm} color={tokens.color.status.success.border} />
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           style={{
             color: tokens.color.text.onBrand,
+            flexShrink: 1,
             fontSize: tokens.type.bodyStrong.fontSize,
             fontWeight: tokens.type.bodyStrong.fontWeight,
             lineHeight: tokens.type.bodyStrong.lineHeight,

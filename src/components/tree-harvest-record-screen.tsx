@@ -284,7 +284,12 @@ export function TreeHarvestRecordScreen({
   }
 
   if (loading) {
-    return <LoadingState message="Memuat pohon..." />;
+    return (
+      <LoadingState
+        header={<TopAppBar title="Catat panen" onBack={() => router.back()} />}
+        message="Memuat pohon..."
+      />
+    );
   }
 
   return (

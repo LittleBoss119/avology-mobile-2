@@ -34,14 +34,26 @@ export function formatMemberStatus(status: MemberStatus | string | null | undefi
   return status && status in labels ? labels[status as MemberStatus] : 'Belum diketahui';
 }
 
+// SATU-SATUNYA daftar label kondisi di seluruh aplikasi.
+//
+// Dulu ada lima: dua bentuk panjang (di sini dan treeConditionStatusLabels di
+// treeFormat.ts, yang nol pemanggil) dan tiga bentuk pendek
+// (formatCompactConditionStatus di tree-components.tsx, plus conditionOptions
+// yang ditulis tangan di kedua layar daftar pohon). Akibatnya satu status
+// disebut dua nama di dua layar — pemilik memfilter "Perhatian" di daftar
+// pohon lalu menemukan "Perlu Perhatian" di peta.
+//
+// BENTUK PENDEK yang dipilih, bukan panjang: label ini duduk di badge dan chip
+// yang lebarnya terbatas, dan bentuk panjang berisiko membungkus di tempat yang
+// belum pernah diuji.
 export function formatTreeCondition(status: TreeConditionStatus): string {
   const labels: Record<TreeConditionStatus, string> = {
     damaged: 'Rusak',
     dead: 'Mati',
-    disease_indicated: 'Terindikasi Penyakit',
+    disease_indicated: 'Penyakit',
     healthy: 'Sehat',
-    needs_attention: 'Perlu Perhatian',
-    pest_attacked: 'Terserang Hama',
+    needs_attention: 'Perhatian',
+    pest_attacked: 'Hama',
   };
 
   return labels[status];
@@ -52,11 +64,13 @@ export function formatGrowthPhase(phase?: GrowthPhase | null): string {
     return 'Belum dicatat';
   }
 
+  // SATU-SATUNYA daftar label fase, dengan alasan yang sama seperti
+  // formatTreeCondition di atas. Bentuk pendek: 'Awal', bukan 'Awal Tanam'.
   const labels: Record<GrowthPhase, string> = {
     flowering: 'Berbunga',
     fruiting: 'Berbuah',
     harvesting: 'Panen',
-    initial_planting: 'Awal Tanam',
+    initial_planting: 'Awal',
     vegetative: 'Vegetatif',
   };
 

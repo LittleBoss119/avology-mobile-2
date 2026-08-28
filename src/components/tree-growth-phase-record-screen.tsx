@@ -238,7 +238,12 @@ export function TreeGrowthPhaseRecordScreen({
   }
 
   if (loading) {
-    return <LoadingState message="Memuat pohon..." />;
+    return (
+      <LoadingState
+        header={<TopAppBar title="Catat Fase" onBack={() => router.back()} />}
+        message="Memuat pohon..."
+      />
+    );
   }
 
   return (

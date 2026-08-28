@@ -21,7 +21,11 @@ import { listTreeMainPhotosForFarm } from '../../../../src/services/photoAttachm
 import { getTrees } from '../../../../src/services/treeService';
 import type { GrowthPhase, Tree, TreeConditionStatus } from '../../../../src/types/domain';
 import type { TreeMainPhotoMap } from '../../../../src/types/media';
-import { formatTreeDisplayCode } from '../../../../src/utils/treeFormat';
+import {
+  formatGrowthPhase,
+  formatTreeConditionStatus,
+  formatTreeDisplayCode,
+} from '../../../../src/utils/treeFormat';
 
 type TreeAgeRange = 'lt_1' | '1_3' | 'gt_3';
 
@@ -47,22 +51,17 @@ const PROBLEM_CONDITIONS: TreeConditionStatus[] = [
   'damaged',
 ];
 
-const conditionOptions: Array<{ label: string; value: TreeConditionStatus }> = [
-  { label: 'Sehat', value: 'healthy' },
-  { label: 'Perhatian', value: 'needs_attention' },
-  { label: 'Hama', value: 'pest_attacked' },
-  { label: 'Penyakit', value: 'disease_indicated' },
-  { label: 'Rusak', value: 'damaged' },
-  { label: 'Mati', value: 'dead' },
-];
+// Label DITURUNKAN dari formatter bersama, tidak ditulis tangan lagi. Menyalin
+// teksnya ke sini persis yang membuat chip di layar ini menyebut nama yang
+// berbeda dari badge di kartu pohon dan dari legenda peta. Urutannya tetap
+// ditulis eksplisit — itu urutan tampil, bukan label.
+const conditionOptions: Array<{ label: string; value: TreeConditionStatus }> = (
+  ['healthy', 'needs_attention', 'pest_attacked', 'disease_indicated', 'damaged', 'dead'] as const
+).map((value) => ({ label: formatTreeConditionStatus(value), value }));
 
-const phaseOptions: Array<{ label: string; value: GrowthPhase }> = [
-  { label: 'Awal', value: 'initial_planting' },
-  { label: 'Vegetatif', value: 'vegetative' },
-  { label: 'Berbunga', value: 'flowering' },
-  { label: 'Berbuah', value: 'fruiting' },
-  { label: 'Panen', value: 'harvesting' },
-];
+const phaseOptions: Array<{ label: string; value: GrowthPhase }> = (
+  ['initial_planting', 'vegetative', 'flowering', 'fruiting', 'harvesting'] as const
+).map((value) => ({ label: formatGrowthPhase(value), value }));
 
 const ageRangeOptions: Array<{ label: string; value: TreeAgeRange }> = [
   { label: '<1 tahun', value: 'lt_1' },

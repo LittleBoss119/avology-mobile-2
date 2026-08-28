@@ -427,7 +427,12 @@ export function FarmCareRecordScreen() {
   }
 
   if (loading) {
-    return <LoadingState message="Menyiapkan catatan perawatan..." />;
+    return (
+      <LoadingState
+        header={<TopAppBar title="Catat perawatan" onBack={goBackToMap} />}
+        message="Menyiapkan catatan perawatan..."
+      />
+    );
   }
 
   return (
