@@ -5,6 +5,8 @@ import type {
   CurrentUserFarm,
   Farm,
   ServiceResult,
+  SetFarmGridData,
+  SetFarmGridInput,
   UpdateFarmProfileData,
   UpdateFarmProfileInput,
   UUID,
@@ -192,6 +194,54 @@ export async function updateFarmProfile(
 
   if (error) {
     return fail(new Error(mapUpdateFarmProfileError(error)));
+  }
+
+  return ok({
+    success: true,
+  });
+}
+
+// Ukuran petak kebun, lewat RPC set_farm_grid (migrasi 054, pesannya diperbaiki
+// di 063). Bukan lewat update_farm_profile: dimensinya sengaja punya RPC sendiri
+// supaya signature RPC profil tidak berubah.
+//
+// TANPA PEMETAAN STRING GALAT, dan itu keputusan yang disengaja — berbeda dari
+// updateFarmProfile di atas yang punya mapUpdateFarmProfileError.
+//
+// Kelima penjagaan set_farm_grid melempar exception berbahasa Indonesia yang
+// SUDAH layak dibaca pengguna, dan yang paling penting di antaranya — penolakan
+// pengecilan — memuat jumlah pohon penghalang beserta satu contoh kode posisi.
+// toServiceError mengabaikan fallbackMessage begitu error punya message, dan
+// pesan itu tidak cocok dengan entri friendlyMessages mana pun maupun pola
+// isTechnicalMessage, jadi ia sampai ke layar apa adanya. Memetakannya ke
+// kalimat tetap justru MEMBUANG angka dan contoh kode yang membuat pesan itu
+// berguna. Fallback di bawah hanya berlaku kalau error datang tanpa message
+// sama sekali.
+//
+// Satu pengecualian yang diketahui dan sengaja dibiarkan: penjagaan autentikasi
+// berbunyi 'Authentication required' dalam bahasa Inggris (054:340).
+export async function setFarmGrid(
+  input: SetFarmGridInput
+): Promise<ServiceResult<SetFarmGridData>> {
+  // Pagar tipis sebelum menyeberang, sepadan dengan penjagaan nama kosong di
+  // updateFarmProfile: ia hanya mencegat panggilan yang PASTI ditolak. Batas
+  // sesungguhnya tetap ditegakkan RPC dan constraint tabel.
+  if (!Number.isInteger(input.rows) || input.rows < 1 || input.rows > 999) {
+    return fail(new Error('Jumlah baris harus bilangan bulat antara 1 dan 999.'));
+  }
+
+  if (!Number.isInteger(input.columns) || input.columns < 1 || input.columns > 26) {
+    return fail(new Error('Jumlah kolom harus bilangan bulat antara 1 dan 26.'));
+  }
+
+  const { error } = await supabase.rpc('set_farm_grid', {
+    p_columns: input.columns,
+    p_farm_id: input.farmId,
+    p_rows: input.rows,
+  });
+
+  if (error) {
+    return fail(error, 'Gagal menyimpan ukuran kebun.');
   }
 
   return ok({

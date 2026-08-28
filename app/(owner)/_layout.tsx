@@ -119,6 +119,7 @@ export default function OwnerLayout() {
           />
           <Stack.Screen name="owner/profile-password" options={{ headerShown: false, title: 'Ubah Password' }} />
           <Stack.Screen name="owner/farm-profile" options={{ headerShown: false, title: 'Edit kebun' }} />
+          <Stack.Screen name="owner/farm-grid" options={{ headerShown: false, title: 'Ukuran denah kebun' }} />
         </Stack>
       </View>
       <RoleBottomNavigation role="owner" />

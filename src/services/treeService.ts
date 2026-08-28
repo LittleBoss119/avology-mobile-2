@@ -16,7 +16,6 @@ import type {
   StartTreePlantingData,
   StartTreePlantingInput,
   Tree,
-  TreeArchiveInput,
   TreeConditionStatus,
   TreePlanting,
   UpdateTreeInput,
@@ -109,7 +108,7 @@ export async function getTrees(input: GetTreesInput): Promise<ServiceResult<Tree
       // `!inner` join yang mengubah bentuk query dan diam-diam membuang pohon
       // berposisi kosong.
       //
-      // Tidak mendesak: penyaring `search` ini TIDAK PERNAH dipakai. Kelima
+      // Tidak mendesak: penyaring `search` ini TIDAK PERNAH dipakai. Ketujuh
       // pemanggil getTrees hanya mengirim farmId dan archived; pencarian yang
       // benar-benar dilihat pengguna dilakukan di sisi klien pada layar daftar
       // pohon, dan di sana varietas tetap ikut tercari.
@@ -437,44 +436,15 @@ export async function updateTree(
   });
 }
 
-export async function archiveTree(
-  input: TreeArchiveInput
-): Promise<ServiceResult<SuccessData>> {
-  return setTreeArchived(input.treeId, true);
-}
-
-export async function restoreTree(
-  input: TreeArchiveInput
-): Promise<ServiceResult<SuccessData>> {
-  return setTreeArchived(input.treeId, false);
-}
-
-async function setTreeArchived(
-  treeId: UUID,
-  isArchived: boolean
-): Promise<ServiceResult<SuccessData>> {
-  const farmIdResult = await getAccessibleTreeFarmId(treeId);
-
-  if (farmIdResult.error) {
-    return fail(farmIdResult.error);
-  }
-
-  const accessResult = await ensureActiveOwner(farmIdResult.data);
-
-  if (accessResult.error) {
-    return fail(accessResult.error);
-  }
-
-  const { error } = await supabase.from('trees').update({ is_archived: isArchived }).eq('id', treeId);
-
-  if (error) {
-    return fail(error, isArchived ? 'Gagal mengarsipkan pohon.' : 'Gagal mengaktifkan kembali pohon.');
-  }
-
-  return ok({
-    success: true,
-  });
-}
+// archiveTree/restoreTree/setTreeArchived DICABUT bersama UI arsip pohon.
+// Ketiganya adalah satu-satunya jalur di aplikasi yang pernah MENULIS
+// is_archived, dan ia menulis lewat PostgREST langsung, bukan lewat RPC.
+//
+// Kolomnya sendiri TETAP, begitu pula policy UPDATE trees dari migrasi 056 yang
+// dulu mengizinkan tulisan itu. Yang tersisa hanya PEMBACAAN: parameter
+// `archived` di getTrees, Tree.isArchived, penyaring di growthPhaseService dan
+// dashboardService, serta cabang 'farm' di complete_task. Jangan cabut itu —
+// posisi berarsip tetap harus terhitung terisi (invarian 062).
 
 async function getAccessibleTreeFarmId(treeId: UUID): Promise<ServiceResult<UUID>> {
   const { data, error } = await supabase

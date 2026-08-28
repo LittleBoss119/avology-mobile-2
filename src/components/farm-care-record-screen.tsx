@@ -299,9 +299,9 @@ export function FarmCareRecordScreen() {
       for (const treeId of pendingTreeIds) {
         const tree = treeById.get(treeId);
 
-        // Tidak ketemu berarti posisinya diarsipkan atau hilang setelah peta
-        // memuatnya. Kodenya tidak bisa disebut karena barisnya memang tidak
-        // ada di tangan kita — yang bisa dilaporkan tinggal jumlahnya.
+        // Tidak ketemu berarti barisnya hilang setelah peta memuatnya. Kodenya
+        // tidak bisa disebut karena barisnya memang tidak ada di tangan kita —
+        // yang bisa dilaporkan tinggal jumlahnya.
         if (!tree) {
           droppedTotal += 1;
           continue;

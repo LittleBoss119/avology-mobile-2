@@ -132,7 +132,7 @@ const ownerNavigationItems: NavigationItem[] = [
     href: '/owner',
     icon: 'home',
     label: 'Beranda',
-    match: ['/owner', '/owner/farm', '/owner/farm-profile', '/owner/workers'],
+    match: ['/owner', '/owner/farm', '/owner/farm-grid', '/owner/farm-profile', '/owner/workers'],
   },
   {
     href: '/owner/trees',

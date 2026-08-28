@@ -27,14 +27,12 @@ type TreeAgeRange = 'lt_1' | '1_3' | 'gt_3';
 
 type TreeFilterCriteria = {
   ageRanges: TreeAgeRange[];
-  archived: boolean; // owner saja
   conditions: TreeConditionStatus[];
   phases: GrowthPhase[];
 };
 
 const DEFAULT_CRITERIA: TreeFilterCriteria = {
   ageRanges: [],
-  archived: false,
   conditions: [],
   phases: [],
 };
@@ -113,8 +111,12 @@ export default function WorkerTreeListScreen() {
 
     setError(null);
 
+    // archived: false sebagai literal, sama dengan enam pemanggil getTrees lain
+    // di repo. Sebelumnya nilainya dibaca dari criteria, tapi sumbu arsipnya
+    // sudah dipagari includeStatus={false} di layar ini dan kini dicabut
+    // seluruhnya. Parameternya sendiri TETAP ada di getTrees.
     const result = await getTrees({
-      archived: criteria.archived,
+      archived: false,
       farmId,
     });
 
@@ -141,7 +143,7 @@ export default function WorkerTreeListScreen() {
     }
 
     setPhotoMap(photoResult.data);
-  }, [criteria.archived, farmId]);
+  }, [farmId]);
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -172,13 +174,11 @@ export default function WorkerTreeListScreen() {
   // di tombol Filter hanya boleh mewakili yang tersembunyi di balik tombol itu,
   // sedangkan kondisi sudah terpampang sebagai chip yang aktif.
   const activeGroupCount =
-    (criteria.phases.length > 0 ? 1 : 0) +
-    (criteria.ageRanges.length > 0 ? 1 : 0) +
-    (criteria.archived ? 1 : 0);
+    (criteria.phases.length > 0 ? 1 : 0) + (criteria.ageRanges.length > 0 ? 1 : 0);
 
-  // Pekerja tidak punya sumbu arsip (criteria.archived selalu false di layar
-  // ini), jadi daftar kosong memang berarti kebunnya belum punya pohon.
-  const isFarmEmpty = trees.length === 0 && !criteria.archived;
+  // Daftar kosong di sini memang berarti kebunnya belum punya pohon. Nol hasil
+  // karena filter ditangani cabang empty state yang lain.
+  const isFarmEmpty = trees.length === 0;
 
   function openFilterSheet() {
     setDraft(criteria);
@@ -245,7 +245,6 @@ export default function WorkerTreeListScreen() {
 
       <TreeFilterSheet
         draft={draft}
-        includeStatus={false}
         onApply={applyDraft}
         onClose={() => setFilterSheetOpen(false)}
         onDraftChange={setDraft}
@@ -298,14 +297,12 @@ function ResultCount({ count }: { count: number }) {
 
 function TreeFilterSheet({
   draft,
-  includeStatus,
   onApply,
   onClose,
   onDraftChange,
   visible,
 }: {
   draft: TreeFilterCriteria;
-  includeStatus: boolean;
   onApply: () => void;
   onClose: () => void;
   onDraftChange: (next: TreeFilterCriteria) => void;
@@ -314,8 +311,7 @@ function TreeFilterSheet({
   // conditions TIDAK ikut diperiksa: sumbu itu sudah tidak ada di sheet ini, dan
   // "Atur ulang" di sini hanya boleh mengatur ulang apa yang terlihat di sini.
   // Chip kondisi di layar punya "Semua" sebagai jalan atur ulangnya sendiri.
-  const isDefault =
-    draft.ageRanges.length === 0 && draft.archived === false && draft.phases.length === 0;
+  const isDefault = draft.ageRanges.length === 0 && draft.phases.length === 0;
 
   function togglePhase(value: GrowthPhase) {
     onDraftChange({ ...draft, phases: toggleArrayValue(draft.phases, value) });
@@ -375,18 +371,6 @@ function TreeFilterSheet({
             ))}
           </FilterChipsRow>
         </View>
-
-        {includeStatus ? (
-          <View style={styles.filterGroup}>
-            <Text selectable style={styles.filterLabel}>
-              Status pohon
-            </Text>
-            <FilterChipsRow>
-              <ChipButton active={!draft.archived} label="Aktif" onPress={() => onDraftChange({ ...draft, archived: false })} />
-              <ChipButton active={draft.archived} label="Diarsipkan" onPress={() => onDraftChange({ ...draft, archived: true })} />
-            </FilterChipsRow>
-          </View>
-        ) : null}
 
         <Button title="Terapkan" variant="primary" onPress={onApply} />
       </View>

@@ -149,6 +149,16 @@ export default function OwnerDashboardScreen() {
               title="Anggota kebun"
               onPress={() => router.push('/owner/farm')}
             />
+            {/* Ukuran petak kebun. Jalan masuknya SENGAJA hanya dari sini, bukan
+                dari peta denah: peta punya persoalan offset gulung yang belum
+                diselesaikan, dan menambah jalur ke sana sekarang berarti
+                menautkan dua persoalan yang belum tentu selesai bersamaan. */}
+            <View style={styles.divider} />
+            <NavRow
+              icon="adjustments-horizontal"
+              title="Ukuran denah kebun"
+              onPress={() => router.push('/owner/farm-grid')}
+            />
           </View>
         </View>
       )}

@@ -395,10 +395,8 @@ function PhaseMark({ color, shape, size }: { color: string; shape: PhaseMarkShap
 // Satu sel
 // ---------------------------------------------------------------------------
 
-// Posisi yang TIDAK punya baris trees: belum pernah ditanami, atau sedang
-// diarsipkan (peta memuat archived: false, jadi posisi arsip memang tidak
-// terbawa). Kodenya tetap dicetak — supaya posisi kosong pun bisa disebutkan
-// lewat telepon.
+// Posisi yang TIDAK punya baris trees: belum pernah ditanami. Kodenya tetap
+// dicetak — supaya posisi kosong pun bisa disebutkan lewat telepon.
 //
 // DI LUAR MODE PILIH IA TETAP TIDAK MENANGGAPI TEKANAN: tidak ada pohon untuk
 // dibuka. Yang berubah hanya selama mode pilih, tempat ia menjadi calon anggota
@@ -880,7 +878,7 @@ function LegendSheet({ onClose, visible }: { onClose: () => void; visible: boole
           swatch={<LegendCell condition="dead" />}
         />
         <LegendRow
-          description="Belum pernah ditanami, atau sedang diarsipkan. Tidak bisa ditekan."
+          description="Belum pernah ditanami. Tidak bisa ditekan."
           label="Posisi kosong"
           swatch={<EmptyMapCell cellSize={size} code="—" />}
         />
@@ -1346,8 +1344,11 @@ export function FarmMapScreen({ basePath }: { basePath: '/owner/trees' | '/worke
     // ratusan permintaan sekaligus. Peta tidak menampilkan foto di sel.
     const [farmResult, treesResult] = await Promise.all([
       getFarmDetail(farmId),
-      // archived: false — posisi berarsip memang sengaja tidak muncul di peta.
-      // Arsip tetap bisa dilihat dari daftar pohon lewat filter status di sana.
+      // archived: false, sama dengan seluruh pemanggil getTrees lain. Sejak UI
+      // arsip dicabut tidak ada lagi jalan membuat baris berarsip baru dari
+      // aplikasi; yang lama tetap tidak terbawa ke peta, dan itu memang yang
+      // diinginkan — posisinya toh masih terhitung terisi oleh
+      // create_trees_at_positions (062), jadi ia tidak bisa ditanami ulang.
       getTrees({ archived: false, farmId }),
     ]);
 

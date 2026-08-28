@@ -18,6 +18,7 @@ import type { CreateTreesAtPositionsData } from '../types/domain';
 import { formatFullDate } from '../utils/taskDueDate';
 import { ConfirmDialog } from './bottom-sheet';
 import { Icon } from './icons';
+import { useSnackbar } from './snackbar';
 import { Button, ErrorBanner, Field, FormSection, DateField, Screen, TopAppBar } from './ui';
 
 // Menambahkan pohon ke BANYAK posisi kosong sekaligus, dari himpunan yang
@@ -177,6 +178,7 @@ function ResultBlock({
 
 export function FarmAddTreesScreen() {
   const { currentFarm } = useAuth();
+  const showSnackbar = useSnackbar();
   const [confirmVisible, setConfirmVisible] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState(false);
@@ -286,6 +288,19 @@ export function FarmAddTreesScreen() {
       return;
     }
 
+    // GERBANG "BERSIH". Hanya hasil yang sepenuhnya bersih yang melewati layar
+    // hasil; sisanya jatuh ke bawah dan mengisi `result` seperti sebelumnya.
+    if (isCleanResult(created.data)) {
+      // Snackbar DULU, baru pindah layar. Providernya duduk di root
+      // (app/_layout.tsx), jadi pesannya bertahan melewati navigasi — pola yang
+      // sama dipakai farm-profile.tsx. Urutan terbalik juga akan tampil, tapi
+      // menaruh pesannya lebih dulu membuat urutan bacanya sama dengan urutan
+      // kodenya.
+      showSnackbar(buildSuccessMessage(created.data.createdCodes.length, trimmedVariety));
+      goBackToMap();
+      return;
+    }
+
     // TANPA navigasi di sini. Yang memindahkan layar adalah tombol di layar
     // hasil — kalau dipanggil sekarang, hasilnya tidak akan pernah sempat
     // terbaca. Pola tunda-muat-ulang yang sama dipakai farm-care-record-screen
@@ -347,7 +362,7 @@ export function FarmAddTreesScreen() {
         {result.rejectedOccupied.length > 0 ? (
           <ResultBlock
             codes={result.rejectedOccupied}
-            message="Posisi ini sudah punya pohon, termasuk pohon yang sedang diarsipkan. Kode posisi tidak pernah dibebaskan oleh pengarsipan, jadi posisinya tetap terpakai."
+            message="Posisi ini sudah punya pohon. Kode posisi tidak pernah dibebaskan, jadi posisinya tetap terpakai."
             title={`${result.rejectedOccupied.length} posisi sudah ditempati`}
             tone="warning"
           />
@@ -510,13 +525,62 @@ export function FarmAddTreesScreen() {
   );
 }
 
+// Satu-satunya keadaan yang boleh MELEWATI layar hasil.
+//
+// TIGA ember penolakan, dan ketiganya saling lepas: 062 menyaring berlapis —
+// bentuk, lalu petak, lalu keterisian — sehingga satu kode masuk ke tepat satu
+// ember. Kosongnya ketiga berarti tidak ada satu pun kode yang ditolak.
+//
+// created_codes.length > 0 BUKAN pengulangan dari ketiganya. Ia menutup keadaan
+// "nol ditolak, nol dibuat": kalau itu mungkin terjadi, ia harus tetap masuk
+// layar hasil, bukan dilaporkan sebagai sukses yang tidak melahirkan apa pun.
+//
+// duplicate_codes dan blank_count SENGAJA TIDAK ikut. Keduanya bukan kegagalan:
+//
+//   * duplicate_codes — kode yang terkirim dua kali TETAP DIBUAT satu kali dan
+//     ikut muncul di created_codes (062:210-214). Ia dilaporkan supaya klien
+//     yang mengira mengirim N tahu kenapa yang lahir kurang dari N, bukan
+//     karena ada yang gagal. Menahan pemilik di layar hasil untuk itu berarti
+//     menyebut peleburan sebagai penolakan.
+//   * blank_count — entri kosong dilewati, dan tidak ada kode yang bisa
+//     disebutkan kembali untuknya.
+//
+// Keduanya tetap PUNYA bloknya sendiri di layar hasil, jadi kalau ada penolakan
+// sungguhan yang menahan pemilik di sana, keterangannya tetap terbaca.
+function isCleanResult(data: CreateTreesAtPositionsData): boolean {
+  return (
+    data.rejectedOccupied.length === 0 &&
+    data.rejectedOutOfGrid.length === 0 &&
+    data.rejectedMalformed.length === 0 &&
+    data.createdCodes.length > 0
+  );
+}
+
+// Kalimat snackbar untuk cabang bersih.
+//
+// Kalimat keduanya ADA KARENA layar hasil dilompati. Di sana, blok created
+// membawa keterangan bahwa varietas kosong bisa dilengkapi dari detail tiap
+// pohon; itu satu-satunya informasi yang hilang saat cabang bersih memotong
+// jalan, jadi ia dibawa serta ke sini dalam bentuk sependek mungkin.
+//
+// Jumlahnya dari created_codes, bukan created_tree_ids. Keduanya selalu
+// sepanjang yang sama — 062 merakitnya dari SATU array_agg atas CTE new_trees
+// yang sama dengan ORDER BY yang sama — tapi kode posisi adalah yang benar-benar
+// dihitung pemilik saat menandai sel di peta.
+function buildSuccessMessage(createdCount: number, variety: string): string {
+  const base = `${createdCount} pohon dibuat`;
+
+  return variety ? base : `${base}. Varietas bisa dilengkapi nanti.`;
+}
+
 // Kalimat konfirmasi. Menyebut jumlah, tanggal, dan varietas kalau diisi, lalu
 // menutup dengan akibat yang tidak bisa ditarik kembali.
 //
 // Kalimat terakhirnya BUKAN basa-basi hukum: baris trees tidak bisa dihapus
-// (prevent_tree_delete_trigger) dan mengarsipkannya tidak membebaskan kodenya
-// (trees_unique_code_per_farm bukan constraint partial). Ini satu-satunya
-// tempat pemilik diberi tahu itu sebelum keadaannya menjadi permanen.
+// (prevent_tree_delete_trigger), dan kodenya tidak pernah dibebaskan oleh apa
+// pun karena trees_unique_code_per_farm bukan constraint partial. Ini
+// satu-satunya tempat pemilik diberi tahu itu sebelum keadaannya menjadi
+// permanen.
 function buildConfirmMessage({
   count,
   plantedAt,
@@ -530,7 +594,7 @@ function buildConfirmMessage({
 
   return (
     `${count} pohon akan dibuat dengan tanggal tanam ${formatFullDate(plantedAt)}.${varietyPart}` +
-    ' Pohon yang sudah dibuat TIDAK BISA DIHAPUS, dan mengarsipkannya tidak membebaskan posisinya.' +
+    ' Pohon yang sudah dibuat TIDAK BISA DIHAPUS, dan posisinya tidak bisa dipakai ulang.' +
     ' Periksa daftar posisinya sekali lagi sebelum melanjutkan.'
   );
 }

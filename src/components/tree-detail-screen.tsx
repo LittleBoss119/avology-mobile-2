@@ -12,11 +12,9 @@ import {
   uploadTreeMainPhoto,
 } from '../services/photoAttachmentService';
 import {
-  archiveTree,
   endTreePlanting,
   getTreeDetail,
   listTreePlantings,
-  restoreTree,
   startTreePlanting,
 } from '../services/treeService';
 import { useAuth } from '../context/auth-context';
@@ -74,10 +72,8 @@ export function TreeDetailScreen({
 }) {
   const { profile } = useAuth();
   const showSnackbar = useSnackbar();
-  const [actionLoading, setActionLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [menuOpen, setMenuOpen] = React.useState(false);
   const [recordSheetOpen, setRecordSheetOpen] = React.useState(false);
   const [history, setHistory] = React.useState<TreeHistoryItem[]>([]);
   const [plantings, setPlantings] = React.useState<TreePlanting[]>([]);
@@ -195,54 +191,6 @@ export function TreeDetailScreen({
     }, [loadDetail])
   );
 
-  async function handleArchiveToggle() {
-    if (!tree) {
-      return;
-    }
-
-    const nextArchived = !tree.isArchived;
-    const title = nextArchived ? 'Arsipkan pohon?' : 'Pulihkan pohon?';
-    const message = nextArchived
-      ? 'Pohon akan disembunyikan dari daftar aktif, tetapi riwayatnya tetap tersimpan.'
-      : 'Pohon akan kembali muncul di daftar aktif.';
-
-    Alert.alert(title, message, [
-      {
-        text: 'Batal',
-        style: 'cancel',
-      },
-      {
-        text: nextArchived ? 'Arsipkan' : 'Pulihkan',
-        style: nextArchived ? 'destructive' : 'default',
-        onPress: () => {
-          runArchiveToggle();
-        },
-      },
-    ]);
-  }
-
-  async function runArchiveToggle() {
-    if (!tree) {
-      return;
-    }
-
-    setActionLoading(true);
-    setError(null);
-
-    const result = tree.isArchived
-      ? await restoreTree({ treeId: tree.id })
-      : await archiveTree({ treeId: tree.id });
-
-    if (result.error) {
-      setError(result.error.message);
-      setActionLoading(false);
-      return;
-    }
-
-    await loadDetail();
-    setActionLoading(false);
-  }
-
   // Kedua aksi siklus di bawah menutup sheet-nya DULU, baru memuat ulang.
   //
   // Bukan urutan bebas: sheet adalah konfirmasinya, jadi pemuatan ulang hanya
@@ -321,7 +269,6 @@ export function TreeDetailScreen({
   }
 
   function handleOpenPhotoSource() {
-    setMenuOpen(false);
     setPhotoSourceOpen(true);
   }
 
@@ -407,8 +354,6 @@ export function TreeDetailScreen({
   }
 
   function handleDeletePhoto() {
-    setMenuOpen(false);
-
     if (!treeMainPhoto || !tree) {
       return;
     }
@@ -483,11 +428,7 @@ export function TreeDetailScreen({
   return (
     <Screen
       header={
-        <TreeDetailTopBar
-          mode={mode}
-          onMenuPress={() => setMenuOpen(true)}
-          title={activePlanting ? 'Detail Pohon' : 'Detail Posisi'}
-        />
+        <TreeDetailTopBar title={activePlanting ? 'Detail Pohon' : 'Detail Posisi'} />
       }
     >
       <ErrorBanner message={error} />
@@ -508,17 +449,6 @@ export function TreeDetailScreen({
       ) : (
         <EmptyPositionHeader displayCode={displayCode} tree={tree} />
       )}
-      {mode === 'owner' ? (
-        <OwnerTreeMenu
-          onArchiveToggle={() => {
-            setMenuOpen(false);
-            handleArchiveToggle();
-          }}
-          onClose={() => setMenuOpen(false)}
-          tree={tree}
-          visible={menuOpen}
-        />
-      ) : null}
       <PhotoSourceSheet
         hasPhoto={Boolean(treeMainPhoto)}
         onCameraPress={handleTakePhotoFromCamera}
@@ -627,37 +557,13 @@ export function TreeDetailScreen({
   );
 }
 
-function TreeDetailTopBar({
-  mode,
-  onMenuPress,
-  title,
-}: {
-  mode: TreeDetailMode;
-  onMenuPress: () => void;
-  title: string;
-}) {
-  const right =
-    mode === 'owner' ? (
-      <Pressable
-        hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
-        onPress={onMenuPress}
-        style={{
-          alignItems: 'center',
-          backgroundColor: tokens.color.surface.card,
-          borderColor: colors.border,
-          borderCurve: 'continuous',
-          borderRadius: 11,
-          borderWidth: 1,
-          height: 32,
-          justifyContent: 'center',
-          width: 32,
-        }}
-      >
-        <Icon name="dots" size={20} color={tokens.color.brand.base} />
-      </Pressable>
-    ) : undefined;
-
-  return <TopAppBar right={right} title={title} onBack={() => router.back()} />;
+// Slot kanan TopAppBar sengaja DIBIARKAN KOSONG. Dulu ia berisi tombol
+// titik-tiga milik pemilik, dan menu di baliknya cuma punya satu baris: arsip.
+// Begitu arsip dicabut, menunya tidak punya isi — jadi tombolnya ikut pergi,
+// bukan dibiarkan membuka sheet kosong. Prop `mode` ikut hilang karena ia hanya
+// pernah dipakai untuk memagari tombol itu.
+function TreeDetailTopBar({ title }: { title: string }) {
+  return <TopAppBar title={title} onBack={() => router.back()} />;
 }
 
 function TreeDetailHero({
@@ -1007,38 +913,13 @@ function RecordActivitySheet({
   );
 }
 
-// Tinggal arsip. "Edit Pohon" DIPINDAH keluar dari sini menjadi tombol lebar
-// "Ubah data pohon" di badan layar; menyisakan salinannya di menu berarti dua
-// jalan berbeda ke layar yang sama, dan pembaca yang harus menebak apakah
-// keduanya melakukan hal yang berbeda.
+// OwnerTreeMenu ("Kelola data pohon") DICABUT bersama fitur arsip.
 //
-// Arsip tidak ikut naik jadi tombol: ia bukan bagian dari siklus tanam, jarang
-// dipakai, dan menaikkannya akan menambah tombol keempat yang menyaingi tiga
-// tombol yang benar-benar dipakai.
-function OwnerTreeMenu({
-  onArchiveToggle,
-  onClose,
-  tree,
-  visible,
-}: {
-  onArchiveToggle: () => void;
-  onClose: () => void;
-  tree: Tree;
-  visible: boolean;
-}) {
-  return (
-    <BottomSheet onClose={onClose} title="Kelola data pohon" visible={visible}>
-      <View style={{ gap: tokens.space.sm }}>
-        <SheetActionRow
-          icon="building-warehouse"
-          iconTone="neutral"
-          title={tree.isArchived ? 'Pulihkan Pohon' : 'Arsipkan Pohon'}
-          onPress={onArchiveToggle}
-        />
-      </View>
-    </BottomSheet>
-  );
-}
+// Ia sempat berisi dua baris; "Edit Pohon" lebih dulu pindah keluar menjadi
+// tombol lebar "Ubah data pohon" di badan layar, menyisakan arsip sendirian.
+// Begitu arsip pergi, menunya kosong — jadi menu, tombol titik-tiga yang
+// membukanya, dan state menuOpen ikut dicabut sekaligus. Semua aksi yang
+// tersisa di layar ini sudah punya tempatnya sendiri di badan layar.
 
 function SectionTitle({ subtitle, title }: { subtitle?: string; title: string }) {
   return (

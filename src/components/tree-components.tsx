@@ -147,7 +147,7 @@ const PAST_CYCLE_OPACITY = 0.55;
 
 export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
-  const isInactive = tree.isArchived || tree.currentCondition === 'dead';
+  const isInactive = tree.currentCondition === 'dead';
   const phaseText = tree.currentGrowthPhase ? formatGrowthPhase(tree.currentGrowthPhase) : 'Fase -';
   // filter(Boolean) sebelum join: pohon tanpa tanggal tanam kehilangan bagian
   // umurnya BESERTA pemisahnya, bukan menyisakan "· " yang menggantung.
@@ -214,11 +214,7 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
       {/* flexShrink 0: badge kondisi adalah alasan utama baris ini dipindai,
           jadi teks di kolom tengah yang terpotong duluan saat ruang sempit. */}
       <View style={{ flexShrink: 0 }}>
-        {tree.isArchived ? (
-          <Badge label="Arsip" size="md" tone="muted" />
-        ) : (
-          <ConditionStatusBadge size="md" status={tree.currentCondition} />
-        )}
+        <ConditionStatusBadge size="md" status={tree.currentCondition} />
       </View>
     </View>
   );

@@ -544,10 +544,6 @@ export type GetTreePlantingsInput = {
   treeId: UUID;
 };
 
-export type TreeArchiveInput = {
-  treeId: UUID;
-};
-
 export type CreateTreeConditionReportInput = {
   farmId: UUID;
   treeId: UUID;
@@ -919,6 +915,24 @@ export type UpdateFarmProfileInput = {
 };
 
 export type UpdateFarmProfileData = {
+  success: true;
+};
+
+// Ukuran petak kebun. TERPISAH dari UpdateFarmProfileInput dengan sengaja:
+// dimensinya diubah lewat RPC-nya sendiri (set_farm_grid, migrasi 054), bukan
+// lewat update_farm_profile — menggabungkannya berarti menambah parameter pada
+// RPC yang sudah dipanggil klien dengan signature tetap.
+//
+// rows dan columns bertipe number di sini walau kolomnya smallint di database:
+// PostgREST menerima angka JSON dan Postgres yang mengecilkannya. Batas 1-999
+// dan 1-26 ditegakkan RPC serta constraint tabel, bukan tipe ini.
+export type SetFarmGridInput = {
+  farmId: UUID;
+  rows: number;
+  columns: number;
+};
+
+export type SetFarmGridData = {
   success: true;
 };
 

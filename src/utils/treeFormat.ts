@@ -21,8 +21,6 @@ export const growthPhaseLabels: Record<GrowthPhase, string> = {
   harvesting: 'Panen',
 };
 
-export type TreeArchiveStatus = 'active' | 'archived';
-
 export function formatTreeConditionStatus(status: TreeConditionStatus): string {
   return formatTreeCondition(status);
 }
@@ -125,14 +123,6 @@ export function formatTreeAge(plantedAt?: string | null): string {
   }
 
   return `${Math.floor(monthDiff / 12)} tahun`;
-}
-
-export function formatTreeArchiveStatus(isArchived: boolean): TreeArchiveStatus {
-  return isArchived ? 'archived' : 'active';
-}
-
-export function formatTreeArchiveStatusLabel(isArchived: boolean): string {
-  return isArchived ? 'Diarsipkan' : 'Aktif';
 }
 
 function normalizeOptionalText(value: string | null | undefined): string | null {
