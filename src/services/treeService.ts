@@ -2,6 +2,8 @@ import { supabase } from '../lib/supabase';
 import type {
   CreateTreeData,
   CreateTreeInput,
+  CreateTreesAtPositionsData,
+  CreateTreesAtPositionsInput,
   GetTreeDetailInput,
   GetTreePlantingsInput,
   GetTreesInput,
@@ -29,6 +31,19 @@ import {
 } from './treePlantingShared';
 import { fail, ok } from '../utils/serviceResult';
 const TREE_SELECT = TREE_SELECT_WITH_ACTIVE_PLANTING;
+
+// Bentuk mentah satu baris kembalian create_trees_at_positions (migrasi 062),
+// dalam penamaan snake_case apa adanya dari PostgREST. Dipetakan ke
+// CreateTreesAtPositionsData di createTreesAtPositions().
+type CreateTreesAtPositionsRow = {
+  created_tree_ids: string[] | null;
+  created_codes: string[] | null;
+  rejected_occupied: string[] | null;
+  rejected_out_of_grid: string[] | null;
+  rejected_malformed: string[] | null;
+  duplicate_codes: string[] | null;
+  blank_count: number | null;
+};
 
 type TreeRow = {
   id: string;
@@ -234,6 +249,95 @@ export async function createTree(
   return ok({
     treeId: data as UUID,
   });
+}
+
+// Membuat BANYAK posisi sekaligus, lewat create_trees_at_positions (migrasi
+// 062). Hanya untuk posisi yang BELUM PERNAH ditanami.
+//
+// KENAPA BUKAN createTree() DIULANG. 196 panggilan berarti 196 transaksi
+// terpisah, dan gagal di tengah meninggalkan baris trees yang TIDAK BISA
+// dikoreksi: prevent_tree_delete_trigger menolak setiap DELETE ke trees, dan
+// mengarsipkan tidak membebaskan kodenya karena trees_unique_code_per_farm
+// bukan constraint partial. Satu RPC berarti satu transaksi: semua jadi, atau
+// tidak sama sekali.
+//
+// SATU PANGGILAN, JADI TIDAK ADA YANG PERLU DIANGKAT KELUAR LOOP. ensureActiveOwner
+// tetap dipanggil sekali di sini, sama seperti createTree — biayanya satu
+// permintaan untuk seluruh himpunan, bukan satu per posisi. Tidak ada yang
+// mengejutkan di sini; yang mahal justru versi yang TIDAK dipakai.
+//
+// RPC-nya MENYARING lalu MELAPORKAN; ia tidak melempar saat sebagian ditolak,
+// dan tidak melempar pula saat SELURUHNYA ditolak. Nol dibuat adalah hasil yang
+// sah, bukan galat — pemanggil yang memperlakukannya sebagai galat akan
+// membuang laporan yang justru satu-satunya hal berguna pada keadaan itu.
+export async function createTreesAtPositions(
+  input: CreateTreesAtPositionsInput
+): Promise<ServiceResult<CreateTreesAtPositionsData>> {
+  const positionCodes = normalizePositionCodes(input.positionCodes);
+
+  if (positionCodes.length === 0) {
+    return fail(new Error('Belum ada posisi yang dipilih.'));
+  }
+
+  const accessResult = await ensureActiveOwner(input.farmId);
+
+  if (accessResult.error) {
+    return fail(accessResult.error);
+  }
+
+  const { data, error } = await supabase.rpc('create_trees_at_positions', {
+    p_farm_id: input.farmId,
+    p_planted_at: normalizeOptionalText(input.plantedAt),
+    p_position_codes: positionCodes,
+    p_variety: normalizeOptionalText(input.variety),
+  });
+
+  if (error) {
+    return fail(error, 'Gagal menambahkan pohon.');
+  }
+
+  // `returns table (...)` sampai di klien sebagai ARRAY berisi satu baris.
+  // Pola yang sama dipakai careScheduleService terhadap create_manual_schedule.
+  const row = Array.isArray(data) ? data[0] : data;
+
+  if (!row) {
+    return fail(new Error('RPC create_trees_at_positions tidak mengembalikan hasil.'));
+  }
+
+  const summary = row as CreateTreesAtPositionsRow;
+
+  // Ketujuh field dipetakan, nol dibuang. Layar hasil membutuhkan seluruhnya:
+  // ketiga ember penolakan punya arti yang berbeda bagi pembacanya, dan
+  // menggabungkannya di sini akan membuang perbedaan yang sengaja dijaga
+  // migrasi 062.
+  //
+  // coalesce di sisi database sudah menjamin array-nya tidak pernah NULL, tapi
+  // `?? []` tetap dipasang: yang menyeberang ke sini adalah JSON, dan sebuah
+  // field yang hilang di masa depan akan menjadi `undefined`, bukan array
+  // kosong — dan layar hasil membaca `.length` pada keenamnya.
+  return ok({
+    blankCount: summary.blank_count ?? 0,
+    createdCodes: summary.created_codes ?? [],
+    createdTreeIds: (summary.created_tree_ids ?? []) as UUID[],
+    duplicateCodes: summary.duplicate_codes ?? [],
+    rejectedMalformed: summary.rejected_malformed ?? [],
+    rejectedOccupied: summary.rejected_occupied ?? [],
+    rejectedOutOfGrid: summary.rejected_out_of_grid ?? [],
+  });
+}
+
+// Membuang entri kosong dan merapikan spasi SEBELUM dikirim.
+//
+// Bukan mengambil alih validasi RPC: bentuk kanoniknya tetap diputuskan di sana,
+// dan kode yang salah bentuk tetap dikirim supaya ia balik sebagai
+// rejected_malformed dan bisa disebutkan ke pengguna. Yang dibuang di sini
+// hanya entri yang tidak punya apa pun untuk dilaporkan.
+function normalizePositionCodes(codes: readonly string[] | null | undefined): string[] {
+  if (!Array.isArray(codes)) {
+    return [];
+  }
+
+  return codes.map((code) => code?.trim()).filter((code): code is string => Boolean(code));
 }
 
 // Menutup siklus tanam yang sedang berjalan di sebuah posisi.

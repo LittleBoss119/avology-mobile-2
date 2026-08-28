@@ -17,6 +17,9 @@ type FarmRow = {
   location: string | null;
   area_size: number | string | null;
   join_code: string;
+  // smallint di database; PostgREST mengirimnya sebagai number.
+  grid_rows: number | null;
+  grid_columns: number | null;
   created_by?: string;
   created_at?: string;
   updated_at?: string | null;
@@ -154,7 +157,9 @@ async function mapCurrentUserAccessResult(
 export async function getFarmDetail(farmId: UUID): Promise<ServiceResult<Farm>> {
   const { data, error } = await supabase
     .from('farms')
-    .select('id, name, location, area_size, join_code, created_by, created_at, updated_at')
+    .select(
+      'id, name, location, area_size, join_code, grid_rows, grid_columns, created_by, created_at, updated_at'
+    )
     .eq('id', farmId)
     .single<FarmRow>();
 
@@ -214,6 +219,13 @@ function mapFarm(row: FarmRow): Farm {
     location: row.location,
     areaSize: row.area_size === null ? null : Number(row.area_size),
     joinCode: row.join_code,
+    // `?? undefined`, BUKAN `?? 26`. Kedua kolom NOT NULL di database, jadi null
+    // di sini hanya mungkin kalau bentuk barisnya tidak seperti yang dikira —
+    // dan menambal dengan angka default berarti menyalin nilai bawaan database
+    // ke sisi klien, tempat ia tidak bisa ikut berubah saat kebunnya berubah.
+    // undefined jujur mengatakan "tidak terbaca"; pemakai yang memutuskan.
+    gridRows: row.grid_rows ?? undefined,
+    gridColumns: row.grid_columns ?? undefined,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

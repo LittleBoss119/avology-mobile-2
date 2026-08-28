@@ -14,6 +14,10 @@ import {
 import { ConfirmDialog } from '../../../../src/components/bottom-sheet';
 import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
+import {
+  consumePendingScheduleTrees,
+  peekPendingScheduleTrees,
+} from '../../../../src/lib/pendingScheduleTrees';
 import { createManualSchedule } from '../../../../src/services/careScheduleService';
 import { getActiveWorkers } from '../../../../src/services/memberService';
 import { getTrees } from '../../../../src/services/treeService';
@@ -48,6 +52,31 @@ function selectableTrees(trees: Tree[]): Tree[] {
   return trees.filter((tree) => tree.activePlanting !== null);
 }
 
+// Nilai awal form, dengan pilihan yang diserahkan peta denah kalau memang ada.
+//
+// Menyerahkan pilihan berarti pemilik sudah menyatakan targetnya pohon, jadi
+// targetType ikut disetel 'tree' -- tanpa itu pemilih pohonnya bahkan tidak
+// dirender dan daftar yang baru saja dipilih tidak terlihat di mana pun.
+//
+// Peta hanya mengizinkan memilih posisi yang punya siklus tanam aktif, syarat
+// yang SAMA dengan selectableTrees di atas. Kalau sebuah siklus kebetulan
+// ditutup di sela peta dan layar ini, id-nya tetap terbawa di sini tapi tidak
+// punya baris di pemilih; create_manual_schedule yang menolaknya, dan dialog
+// "sebagian pohon tidak ikut" di bawah sudah menangani persis keadaan itu.
+function buildInitialValues(): ManualScheduleFormValues {
+  const pendingTreeIds = peekPendingScheduleTrees();
+
+  if (!pendingTreeIds || pendingTreeIds.length === 0) {
+    return initialValues;
+  }
+
+  return {
+    ...initialValues,
+    targetTreeIds: [...pendingTreeIds],
+    targetType: 'tree',
+  };
+}
+
 export default function CreateManualScheduleScreen() {
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
@@ -57,7 +86,7 @@ export default function CreateManualScheduleScreen() {
   const [createdScheduleId, setCreatedScheduleId] = React.useState<string | null>(null);
   const [rejectedMessage, setRejectedMessage] = React.useState<string | null>(null);
   const [trees, setTrees] = React.useState<Tree[]>([]);
-  const [values, setValues] = React.useState<ManualScheduleFormValues>(initialValues);
+  const [values, setValues] = React.useState<ManualScheduleFormValues>(buildInitialValues);
   const [workers, setWorkers] = React.useState<WorkerMembership[]>([]);
 
   const scrollRef = React.useRef<ScrollView>(null);
@@ -65,6 +94,15 @@ export default function CreateManualScheduleScreen() {
   const fieldOffsets = React.useRef<Record<string, number>>({});
 
   const farmId = currentFarm?.farmId;
+
+  // Serah-terima dari peta denah dipakai TEPAT SEKALI. Dihapus di sini, bukan
+  // saat dibaca: buildInitialValues jalan di dalam penginisialisasi useState,
+  // yang boleh dipanggil lebih dari sekali, dan menghapus di sana akan
+  // mengosongkan pilihan pada pemanggilan kedua. Effect kosong-dependensi ini
+  // jalan tepat sekali setelah pemasangan, saat nilainya sudah masuk state.
+  React.useEffect(() => {
+    consumePendingScheduleTrees();
+  }, []);
 
   React.useEffect(() => {
     let isMounted = true;

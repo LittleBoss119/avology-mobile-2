@@ -197,7 +197,14 @@ export default function WorkerTreeListScreen() {
   return (
     <Screen
       header={
-        <MainTabHeader title="Pohon" />
+        <MainTabHeader
+          title="Pohon"
+          right={
+            <View style={{ flexShrink: 0 }}>
+              <ChipButton active={false} label="Denah" onPress={() => router.push('/worker/trees/map')} />
+            </View>
+          }
+        />
       }
     >
       <ErrorBanner message={error} />

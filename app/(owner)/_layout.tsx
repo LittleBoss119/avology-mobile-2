@@ -92,6 +92,9 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/growth-monitoring" options={{ title: 'Monitoring Fase' }} />
           <Stack.Screen name="owner/trees/index" options={{ headerShown: false, title: 'Pohon' }} />
           <Stack.Screen name="owner/trees/create" options={{ headerShown: false, title: 'Tambah Pohon' }} />
+          <Stack.Screen name="owner/trees/map" options={{ headerShown: false, title: 'Denah Kebun' }} />
+          <Stack.Screen name="owner/trees/record-care" options={{ headerShown: false, title: 'Catat Perawatan' }} />
+          <Stack.Screen name="owner/trees/add-trees" options={{ headerShown: false, title: 'Tambah Pohon Massal' }} />
           <Stack.Screen name="owner/trees/[treeId]" options={{ headerShown: false, title: 'Detail Pohon' }} />
           <Stack.Screen name="owner/trees/[treeId]/edit" options={{ headerShown: false, title: 'Edit Pohon' }} />
           <Stack.Screen name="owner/trees/[treeId]/report" options={{ headerShown: false, title: 'Catat Kondisi' }} />

@@ -89,6 +89,18 @@ export type Farm = {
   // mengembalikan namanya. Sebelumnya kolom ini diisi string kosong supaya tipe
   // terpenuhi — nilai yang benar secara maksud tapi bohong secara tipe.
   joinCode?: string;
+  // Ukuran petak kebun: berapa baris dan berapa kolom posisi tanam yang ada.
+  // Baris dilambangkan angka mulai 1, kolom satu huruf A-Z — jadi gridColumns
+  // tidak pernah lebih dari 26 (farms_grid_columns_check, migrasi 054).
+  //
+  // Opsional untuk alasan yang SAMA PERSIS dengan joinCode di atas, bukan karena
+  // nilainya boleh kosong di database: di sana keduanya NOT NULL dengan default
+  // 26 dan 9. Yang opsional adalah PEMBACAANNYA — relasi non-aktif tidak boleh
+  // membaca baris farms sama sekali, dan mapFarmNameOnly memang hanya bisa
+  // mengisi nama. Pemakai wajib memperlakukan undefined sebagai "belum terbaca",
+  // bukan sebagai nol.
+  gridRows?: number;
+  gridColumns?: number;
   createdBy?: UUID;
   createdAt?: string;
   updatedAt?: string | null;
@@ -439,6 +451,51 @@ export type CreateTreeInput = {
 
 export type CreateTreeData = {
   treeId: UUID;
+};
+
+// ---- Pembuatan pohon massal (migrasi 062) ----
+//
+// positionCodes berisi KODE POSISI kanonik ('12-C'), bukan UUID: posisi yang
+// belum pernah ditanami belum punya baris trees, jadi ia belum punya id. Itu
+// yang membedakan jalur ini dari CreateTreeInput, yang menerima baris dan kolom
+// terpisah dari field form.
+//
+// Kanonik berarti persis seperti tree_code menuliskannya (054:237): baris 1-999
+// tanpa nol di depan, satu huruf kapital. RPC MENOLAK bentuk lain alih-alih
+// merapikannya — '012-C' dan '12-c' ditolak, bukan diubah jadi '12-C'.
+//
+// variety dan plantedAt berlaku untuk SELURUH himpunan, dan keduanya boleh
+// null. Layar tambah pohon satu-satu tetap mewajibkan varietas lewat
+// validateTreeForm; yang melonggar hanya jalur massal, dan itu keputusan
+// antarmuka, bukan keputusan database — RPC-nya menerima null sejak 055.
+export type CreateTreesAtPositionsInput = {
+  farmId: UUID;
+  positionCodes: readonly string[];
+  variety?: string | null;
+  plantedAt?: string | null;
+};
+
+// Tujuh field kembalian create_trees_at_positions, dipetakan apa adanya.
+//
+// KETIGA EMBER PENOLAKAN SENGAJA TIDAK DIGABUNG. Migrasi 062 memilih tidak
+// mengembalikan satu rejected_message justru supaya sisi aplikasi bisa
+// menjelaskan tiap alasan dengan kalimatnya sendiri; menggabungkannya di sini
+// akan membuang keputusan itu satu lapis lebih awal.
+//
+// duplicateCodes BUKAN penolakan. Kode yang dikirim dua kali TETAP DIBUAT satu
+// kali dan ikut muncul di createdCodes. Ia dilaporkan supaya pemanggil yang
+// mengira mengirim N tahu kenapa yang lahir kurang dari N.
+//
+// blankCount hanya angka: entri null atau berisi spasi tidak punya kode yang
+// bisa disebutkan kembali ke pengguna.
+export type CreateTreesAtPositionsData = {
+  createdTreeIds: UUID[];
+  createdCodes: string[];
+  rejectedOccupied: string[];
+  rejectedOutOfGrid: string[];
+  rejectedMalformed: string[];
+  duplicateCodes: string[];
+  blankCount: number;
 };
 
 // Lihat catatan di CreateTreeInput soal ketiadaan treeCode.

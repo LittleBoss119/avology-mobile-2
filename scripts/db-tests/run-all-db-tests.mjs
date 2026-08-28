@@ -22,6 +22,7 @@ const stages = [
   '15-tree-planting-cycle.test.mjs',
   '16-multi-tree-schedule.test.mjs',
   '17-photo-attachment-policies.test.mjs',
+  '18-bulk-tree-creation.test.mjs',
 ];
 
 const summary = {

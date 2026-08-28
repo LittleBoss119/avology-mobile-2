@@ -207,7 +207,8 @@ export default function OwnerTreeListScreen() {
         <MainTabHeader
           title="Pohon"
           right={
-            <View style={{ flexShrink: 0 }}>
+            <View style={{ flexDirection: 'row', flexShrink: 0, gap: spacing.sm }}>
+              <ChipButton active={false} label="Denah" onPress={() => router.push('/owner/trees/map')} />
               <ChipButton
                 active={false}
                 icon="plus"

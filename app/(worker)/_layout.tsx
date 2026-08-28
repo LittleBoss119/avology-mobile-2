@@ -91,6 +91,7 @@ export default function WorkerLayout() {
         >
           <Stack.Screen name="worker/index" options={{ headerShown: false, title: 'Pekerja' }} />
           <Stack.Screen name="worker/trees/index" options={{ headerShown: false, title: 'Pohon' }} />
+          <Stack.Screen name="worker/trees/map" options={{ headerShown: false, title: 'Denah Kebun' }} />
           <Stack.Screen name="worker/trees/[treeId]" options={{ headerShown: false, title: 'Detail Pohon' }} />
           <Stack.Screen name="worker/trees/[treeId]/report" options={{ headerShown: false, title: 'Catat Kondisi' }} />
           <Stack.Screen name="worker/trees/[treeId]/phase" options={{ headerShown: false, title: 'Catat Fase' }} />
