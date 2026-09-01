@@ -89,7 +89,7 @@ export default function OwnerLayout() {
           }}
         >
           <Stack.Screen name="owner/index" options={{ headerShown: false, title: 'Pemilik' }} />
-          <Stack.Screen name="owner/growth-monitoring" options={{ headerShown: false, title: 'Monitoring Fase' }} />
+          <Stack.Screen name="owner/growth-monitoring" options={{ headerShown: false, title: 'Fase pohon' }} />
           <Stack.Screen name="owner/trees/index" options={{ headerShown: false, title: 'Pohon' }} />
           <Stack.Screen name="owner/trees/create" options={{ headerShown: false, title: 'Tambah Pohon' }} />
           <Stack.Screen name="owner/trees/map" options={{ headerShown: false, title: 'Denah Kebun' }} />
@@ -107,7 +107,7 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/schedules/[scheduleId]/edit" options={{ headerShown: false, title: 'Edit Jadwal' }} />
           <Stack.Screen name="owner/tasks/index" options={{ title: 'Tugas Pekerja' }} />
           <Stack.Screen name="owner/tasks/[taskId]" options={{ headerShown: false, title: 'Detail Tugas' }} />
-          <Stack.Screen name="owner/farm" options={{ headerShown: false, title: 'Kebun' }} />
+          <Stack.Screen name="owner/farm" options={{ headerShown: false, title: 'Anggota' }} />
           <Stack.Screen name="owner/workers" options={{ title: 'Riwayat akses' }} />
           <Stack.Screen name="owner/profile" options={{ headerShown: false, title: 'Profil Akun' }} />
           {/* gestureEnabled:false disengaja — swipe-back iOS tidak bisa dicegat lewat
@@ -118,7 +118,7 @@ export default function OwnerLayout() {
             options={{ gestureEnabled: false, headerShown: false, title: 'Edit Profil' }}
           />
           <Stack.Screen name="owner/profile-password" options={{ headerShown: false, title: 'Ubah Password' }} />
-          <Stack.Screen name="owner/farm-profile" options={{ headerShown: false, title: 'Edit kebun' }} />
+          <Stack.Screen name="owner/farm-profile" options={{ headerShown: false, title: 'Data kebun' }} />
           <Stack.Screen name="owner/farm-grid" options={{ headerShown: false, title: 'Ukuran denah kebun' }} />
         </Stack>
       </View>

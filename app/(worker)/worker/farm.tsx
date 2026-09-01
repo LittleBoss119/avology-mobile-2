@@ -1,11 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { ConfirmDialog } from '../../../src/components/bottom-sheet';
 import { MemberRow } from '../../../src/components/member-row';
 import { useSnackbar } from '../../../src/components/snackbar';
-import { Button, Card, ErrorBanner, LoadingState, MainTabHeader, Screen } from '../../../src/components/ui';
+import { Button, Card, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../src/components/ui';
 import { colors, spacing, typography } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
 import { getFarmDetail } from '../../../src/services/farmService';
@@ -94,9 +94,15 @@ export default function WorkerFarmHubScreen() {
     router.replace('/removed-access');
   }
 
-  const header = (
-    <MainTabHeader title="Kebun" />
-  );
+  // TopAppBar ber-onBack, BUKAN MainTabHeader. Layar ini bukan tab root: ia
+  // dibuka lewat push dari baris "Anggota" di Beranda, dan MainTabHeader tidak
+  // pernah merender tombol kembali (TopAppBar hanya merendernya kalau `onBack`
+  // dikirim, dan MainTabHeader tidak mengirimnya). Sebelum ini layar tersebut
+  // sama sekali tidak punya afordans mundur di layarnya sendiri.
+  //
+  // Judulnya "Anggota", sama dengan label baris di Beranda yang mengantar ke
+  // sini.
+  const header = <TopAppBar title="Anggota" onBack={() => router.back()} />;
 
   if (loading) {
     return <LoadingState message="Memuat kebun..." />;
@@ -115,7 +121,24 @@ export default function WorkerFarmHubScreen() {
   }
 
   return (
-    <Screen header={header}>
+    <Screen
+      header={header}
+      // stickyFooter, BUKAN tombol yang menempel di bawah daftar. Aksi ini
+      // MENCABUT AKSES pekerja atas kebunnya sendiri, dan tombol yang ikut
+      // menggulung bisa berada persis di bawah jempol saat daftar anggota
+      // berhenti bergulir. Di sini ia selalu di tempat yang sama, di atas
+      // navigasi bawah, dan tidak pernah lewat di bawah jari yang sedang
+      // menggulung.
+      //
+      // Ini juga menjawab kekhawatiran "layarnya bisa lebih panjang dari satu
+      // layar penuh": stickyFooter dipatok ke tepi bawah, jadi panjang daftar
+      // anggota tidak mengubah letaknya sama sekali. Screen sendiri yang
+      // menyediakan ruang bawah sebesar tinggi footer ini (stickyFooterReserve
+      // di ui.tsx), jadi baris terakhir daftar tidak pernah tertutup.
+      stickyFooter={
+        <Button title="Keluar kebun" variant="danger" onPress={() => setConfirmLeave(true)} />
+      }
+    >
       <ErrorBanner message={error} />
 
       {/* Kartu identitas kebun — nama, lokasi, luas — PINDAH ke Beranda, tempat
@@ -143,28 +166,25 @@ export default function WorkerFarmHubScreen() {
         </View>
       </Card>
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => setConfirmLeave(true)}
-        style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingVertical: spacing.md })}
-      >
-        <Text
-          style={{
-            color: colors.danger,
-            fontSize: typography.bodyStrong.fontSize,
-            fontWeight: '700',
-            textAlign: 'center',
-          }}
-        >
-          Keluar dari kebun
-        </Text>
-      </Pressable>
+      {/* Tombol "Keluar kebun" PINDAH ke stickyFooter Screen di atas. Ia dulu
+          berdiri di sini sebagai teks merah yang bisa diketuk — tanpa bentuk
+          tombol, dan ikut menggulung bersama daftar anggota. */}
 
       <ConfirmDialog
         cancelLabel="Batal"
         confirmLabel="Keluar"
         loading={busy}
-        message="Kamu perlu kode bergabung untuk masuk lagi."
+        // DUA kata diganti, bukan kalimatnya ditulis ulang.
+        //
+        // "kode bergabung" -> "kode kebun": benda yang sama dinamai "kode kebun"
+        // di delapan tempat lain, termasuk kartu yang memajangnya di layar
+        // pemilik dan layar /removed-access yang dilihat pekerja ini PERSIS
+        // sesudah keluar. Berkas inilah satu-satunya yang menyebutnya lain.
+        //
+        // "masuk lagi" -> "bergabung lagi": "masuk" sudah dipakai dialog Keluar
+        // akun untuk arti LOGIN. Dua dialog keluar yang berdampingan tidak boleh
+        // memakai satu kata untuk dua hal yang berbeda.
+        message="Kamu perlu kode kebun untuk bergabung lagi."
         onCancel={() => {
           if (!busy) {
             setConfirmLeave(false);

@@ -13,7 +13,6 @@ import {
   ErrorBanner,
   FilterChipsRow,
   LoadingState,
-  MainTabHeader,
   Screen,
   SearchFilterRow,
   SegmentedControl,
@@ -359,15 +358,12 @@ export default function CareScheduleListScreen() {
 
   return (
     <Screen
-      header={
-        // Slot kanan KOSONG. "Tambah" dulu duduk di sini sebagai ChipButton;
-        // sekarang ia tombol lebar berlabel di stickyFooter, di atas navigasi
-        // bawah — target sentuh yang jauh lebih besar dan selalu berada di
-        // tempat yang sama, tidak ikut menyempit mengikuti panjang judul.
-        // Tanpa slot kanan, judul duduk persis di tengah seperti keempat
-        // destinasi top-level lain.
-        <MainTabHeader title="Perawatan" />
-      }
+      // Tanpa prop `header`: judul layar dibuang karena tab bar di bawah sudah
+      // menamai layar ini dan menyalakannya. `applyTopInset` WAJIB ikut —
+      // inset atas selama ini datang dari TopAppBar di dalam MainTabHeader
+      // (ui.tsx), bukan dari Screen, jadi tanpa prop ini isi layar menempel ke
+      // status bar.
+      applyTopInset
       // Screen sendiri yang menyediakan ruang bawah sebesar tinggi footer ini
       // (stickyFooterReserve di ui.tsx), jadi baris terakhir daftar tidak
       // pernah tertutup dan tidak ada angka padding yang perlu ditebak di sini.

@@ -152,7 +152,6 @@ export function ProfileEditScreen() {
         cancelLabel="Buang perubahan"
         cancelTone="danger"
         confirmLabel="Lanjut isi"
-        icon="alert-triangle"
         message="Perubahan pada profil belum disimpan. Kalau keluar sekarang, perubahan itu hilang."
         onCancel={() => {
           setConfirmDiscard(false);

@@ -505,7 +505,6 @@ export function FarmAddTreesScreen() {
       <ConfirmDialog
         cancelLabel="Periksa lagi"
         confirmLabel="Ya, tambahkan sekarang"
-        icon="alert-triangle"
         loading={submitting}
         message={buildConfirmMessage({
           count: codes.length,

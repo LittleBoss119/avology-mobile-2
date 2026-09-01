@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
@@ -12,14 +12,36 @@ import { formatGrowthPhase, formatTreeLocation } from '../utils/treeFormat';
 // GrowthPhaseBadge — komponen yang sama yang dipakai layar detail pohon —
 // sehingga kedua layar menghasilkan bentuk teks yang sama persis
 // ('Berbunga · 96 hari') dari kolom yang sama. Komponennya tetap ada di repo.
-import { GrowthPhaseBadge } from './tree-components';
-import { Button, Card, EmptyState, ErrorBanner, LoadingState, MetaRow, Screen, TopAppBar } from './ui';
+import { GrowthPhaseBadge, TreeCard } from './tree-components';
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorBanner,
+  LoadingState,
+  MetaRow,
+  Screen,
+  SegmentedControl,
+  TopAppBar,
+} from './ui';
+
+// Dua fase yang dipantau layar ini. SENGAJA bukan GrowthPhase penuh: enum itu
+// punya nilai lain (vegetatif, panen, ...) yang tidak pernah jadi segmen di
+// sini, dan menyempitkan tipenya membuat penyempitan itu dijaga compiler alih-
+// alih dijaga kedisiplinan pemanggil.
+type PhaseSegment = 'flowering' | 'fruiting';
 
 export function OwnerGrowthMonitoringScreen() {
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [trees, setTrees] = React.useState<FloweringMonitoringTree[]>([]);
+  // SELALU 'flowering' saat dibuka, berapa pun isinya. Perilaku yang bisa
+  // ditebak menang atas perilaku yang pintar: segmen yang berpindah sendiri
+  // menurut data membuat pemilik yang membuka layar ini dua hari berturut-turut
+  // mendapati dirinya di tempat yang berbeda tanpa menyentuh apa pun. Jumlah di
+  // label kedua segmen sudah mengabarkan ada apa di seberang tanpa perlu pindah.
+  const [phase, setPhase] = React.useState<PhaseSegment>('flowering');
 
   const farmId = currentFarm?.farmId;
 
@@ -53,62 +75,166 @@ export function OwnerGrowthMonitoringScreen() {
   if (loading) {
     return (
       <LoadingState
-        header={<TopAppBar title="Monitoring Fase" onBack={() => router.back()} />}
-        message="Memuat monitoring fase..."
+        header={<TopAppBar title="Fase pohon" onBack={() => router.back()} />}
+        message="Memuat fase pohon..."
       />
     );
   }
 
-  const floweringTrees = trees.filter((tree) => tree.currentGrowthPhase === 'flowering');
-  const fruitingTrees = trees.filter((tree) => tree.currentGrowthPhase === 'fruiting');
+  const floweringTrees = sortByPhaseAge(trees.filter((tree) => tree.currentGrowthPhase === 'flowering'));
+  const fruitingTrees = sortByPhaseAge(trees.filter((tree) => tree.currentGrowthPhase === 'fruiting'));
+  const displayedTrees = phase === 'flowering' ? floweringTrees : fruitingTrees;
 
   return (
     /* Judulnya ADA, dan itu bukan pengecualian terhadap aturan "layar detail
        tanpa judul": ini layar DAFTAR yang dicapai dari Beranda, bukan detail
        satu benda yang namanya sudah tercetak besar di badan layar.
 
-       PageIntro dicabut karena judulnya kini di TopAppBar. Sebelumnya keduanya
-       berdiri bersama header navigator, sehingga "Monitoring Fase" tercetak DUA
-       KALI di layar yang sama. applyTopInset ikut pergi: TopAppBar menerapkan
-       safe-area atas sendiri, dan membiarkan keduanya berarti inset ganda. */
-    <Screen
-      header={
-        <TopAppBar
-          title="Monitoring Fase"
-          subtitle="Pantau pohon yang sedang berbunga dan berbuah berdasarkan fase terbaru."
-          onBack={() => router.back()}
-        />
-      }
-    >
+       "Fase pohon", sama persis dengan label baris di Beranda yang mengantar ke
+       sini. Judul yang berbeda dari pintu masuknya membuat orang bertanya-tanya
+       apakah ia sampai di tempat yang benar.
+
+       Subjudul dicabut: segmented tepat di bawahnya sudah mengatakan hal yang
+       sama — dua fase, dengan jumlahnya — dalam bentuk yang bisa ditekan. */
+    <Screen header={<TopAppBar title="Fase pohon" onBack={() => router.back()} />}>
       <ErrorBanner message={error} />
 
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <View style={{ flex: 1 }}>
-          <SummaryCard count={floweringTrees.length} label="Pohon Berbunga" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <SummaryCard count={fruitingTrees.length} label="Pohon Berbuah" />
-        </View>
-      </View>
-
-      <TreePhaseSection
-        emptySubtitle="Pohon dengan fase Berbunga akan muncul di sini setelah dicatat dari detail pohon."
-        emptyTitle="Belum ada pohon berbunga"
-        phase="flowering"
-        title="Pohon Berbunga"
-        trees={floweringTrees}
+      {/* Jumlahnya masuk KE DALAM label, bukan jadi dua kartu angka terpisah di
+          atas. Dua kartu itu memakan tinggi satu layar penuh untuk mengatakan
+          dua angka, lalu daftar di bawahnya tetap harus digulung jauh untuk
+          sampai ke fase kedua. Di sini satu pandangan menjawab dua-duanya, dan
+          berpindah fase satu ketukan. */}
+      <SegmentedControl
+        onChange={(key) => setPhase(key === 'fruiting' ? 'fruiting' : 'flowering')}
+        options={[
+          { key: 'flowering', label: `Berbunga ${floweringTrees.length}` },
+          { key: 'fruiting', label: `Berbuah ${fruitingTrees.length}` },
+        ]}
+        value={phase}
       />
 
-      <TreePhaseSection
-        emptySubtitle="Pohon dengan fase Berbuah akan muncul di sini setelah dicatat dari detail pohon."
-        emptyTitle="Belum ada pohon berbuah"
-        phase="fruiting"
-        title="Pohon Berbuah"
-        trees={fruitingTrees}
-      />
+      {/* Segmen yang TIDAK terpilih tidak dirender sama sekali — bukan
+          disembunyikan, bukan digulung lewat. */}
+      {displayedTrees.length === 0 ? (
+        <Text selectable style={styles.emptyText}>
+          {phase === 'flowering' ? 'Belum ada pohon berbunga.' : 'Belum ada pohon berbuah.'}
+        </Text>
+      ) : (
+        // Satu kolom dengan garis rambut antar baris, sama seperti daftar Pohon.
+        // Baris terakhir tidak diberi garis supaya daftarnya tidak menggantung.
+        <View>
+          {displayedTrees.map((tree, index) => {
+            const phaseAgeText = buildPhaseAgeText(tree);
+
+            return (
+              <React.Fragment key={tree.id}>
+                {index > 0 ? <View style={styles.rowDivider} /> : null}
+                {/* TreeCard yang SAMA dengan daftar Pohon, kontraknya tidak
+                    disentuh. Chip di sisi kanannya tetap terikat ke KONDISI
+                    pohon, bukan ke fase — pohon berbuah yang kena hama harus
+                    tetap terlihat kena hama di layar ini, dan fase sudah
+                    dinyatakan oleh segmen yang sedang terbuka.
+
+                    photoUrl sengaja TIDAK dioper: fotonya datang dari jalur
+                    pengambilan terpisah yang tidak dipakai layar ini, dan
+                    menambahkannya berarti menambah permintaan jaringan.
+                    TreeCard jatuh ke placeholder-nya sendiri. */}
+                <TreeCard tree={tree} onPress={() => router.push(`/owner/trees/${tree.id}`)}>
+                  {phaseAgeText ? (
+                    <Text selectable numberOfLines={1} style={styles.phaseAge}>
+                      {phaseAgeText}
+                    </Text>
+                  ) : null}
+                </TreeCard>
+              </React.Fragment>
+            );
+          })}
+        </View>
+      )}
     </Screen>
   );
 }
+
+// Paling lama di fase itu DI ATAS, yaitu currentGrowthPhaseSince menaik.
+//
+// Disalin sebelum diurutkan: `trees` adalah state, dan Array.sort mengubah
+// tempat. Mengurutkan langsung akan memutasi array yang dipegang React.
+//
+// Diurutkan DI SINI, bukan di service: aturan sesi melarang menyentuh
+// src/services/, dan jumlah barisnya paling banyak ratusan.
+//
+// TANGGAL KOSONG DITARUH PALING BAWAH. Menurut komentar migrasi 066 baris
+// seperti itu seharusnya tidak ada untuk fase berbunga dan berbuah —
+// current_growth_phase_since ditulis dari baris catatan yang sama dengan
+// current_growth_phase — tapi itu janji yang tidak bisa diverifikasi dari kode
+// terhadap data nyata, jadi ditangani apa adanya.
+//
+// tree_code jadi pemecah seri supaya urutannya DETERMINISTIK: tanpa itu dua
+// pohon yang masuk fase pada tanggal yang sama (jalur nyatanya pencatatan
+// massal) bisa bertukar tempat antar pemuatan tanpa ada yang berubah.
+function sortByPhaseAge(trees: FloweringMonitoringTree[]): FloweringMonitoringTree[] {
+  return [...trees].sort((first, second) => {
+    const firstSince = first.currentGrowthPhaseSince;
+    const secondSince = second.currentGrowthPhaseSince;
+
+    if (firstSince !== secondSince) {
+      if (!firstSince) {
+        return 1;
+      }
+
+      if (!secondSince) {
+        return -1;
+      }
+
+      // 'YYYY-MM-DD' — urutan leksikografis sama dengan urutan kronologis, jadi
+      // tidak perlu diubah jadi Date hanya untuk dibandingkan.
+      return firstSince < secondSince ? -1 : 1;
+    }
+
+    if (first.treeCode === second.treeCode) {
+      return 0;
+    }
+
+    return first.treeCode < second.treeCode ? -1 : 1;
+  });
+}
+
+// "96 hari di fase ini".
+//
+// FRASA BARU, dan itu disengaja walau ada dua frasa bertetangga di repo:
+//   * GrowthPhaseBadge  -> 'Berbunga · 96 hari' (chip di detail pohon). Ia
+//     menyebut nama fasenya, yang di layar ini sudah dinyatakan segmen yang
+//     sedang terbuka — mengulangnya di tiap baris berarti mencetak kata yang
+//     sama sebanyak jumlah pohon.
+//   * FloweringAgeMarker -> '96 hari sejak berbunga' (pita, kini tanpa
+//     pemanggil). Ia mengukur HAL LAIN: hari sejak fase berbunga, bukan hari di
+//     fase yang sedang berjalan. Untuk pohon berbuah keduanya menjawab
+//     pertanyaan yang berbeda.
+//
+// null berarti tanggalnya tidak diketahui, dan barisnya tidak mendapat
+// keterangan sama sekali — BUKAN '0 hari', yang akan terbaca sebagai "baru hari
+// ini" padahal artinya "tidak tahu". Nol sendiri angka yang benar untuk fase
+// yang dicatat hari ini, dan daysSinceLocal memang mengembalikan 0 untuk itu.
+function buildPhaseAgeText(tree: FloweringMonitoringTree): string | null {
+  if (!tree.currentGrowthPhaseSince) {
+    return null;
+  }
+
+  const days = daysSinceLocal(tree.currentGrowthPhaseSince);
+
+  return days === null ? null : `${days} hari di fase ini`;
+}
+
+const styles = StyleSheet.create({
+  rowDivider: {
+    backgroundColor: tokens.color.line.hairline,
+    height: StyleSheet.hairlineWidth,
+  },
+  // Rata tengah: keadaan kosong satu-satunya hal yang boleh rata tengah di
+  // layar ini. Tanpa kartu, tanpa tombol.
+  emptyText: { ...tokens.type.body, color: tokens.color.text.secondary, textAlign: 'center' },
+  phaseAge: { ...tokens.type.meta, color: tokens.color.text.tertiary },
+});
 
 // Empat hex mentah di berkas ini dipetakan ke token TEKS, dan pemetaannya
 // ditentukan PERANNYA, bukan kemiripan angkanya:

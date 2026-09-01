@@ -149,13 +149,18 @@ export function PhotoSourceSheet({
 
 // Dialog konfirmasi terpusat (overlay, satu file dengan BottomSheet). Aksi
 // konfirmasi sengaja di ATAS supaya posisi paling gampang dijangkau jempol diisi
-// aksi konfirmasi; "Kembali" (aman) di bawah.
-// `cancelTone` dan `icon` sengaja opsional dengan default = perilaku lama persis,
-// jadi empat pemakai yang sudah ada tidak berubah sedikit pun. Keduanya ada untuk
-// kasus di mana aksi AMAN yang pantas duduk di atas (mis. "Lanjut isi" pada dialog
-// perubahan belum disimpan), sementara aksi destruktifnya ada di tombol bawah dan
-// tetap harus terbaca merah — pewarnaan tombol dan pilihan ikon jadi tidak lagi
+// aksi konfirmasi; tombol batal (aman) di bawah.
+//
+// `cancelTone` sengaja opsional dengan default = perilaku lama persis. Ia ada
+// untuk kasus di mana aksi AMAN yang pantas duduk di atas (mis. "Lanjut isi"
+// pada dialog perubahan belum disimpan), sementara aksi destruktifnya ada di
+// tombol bawah dan tetap harus terbaca merah — pewarnaan tombol jadi tidak lagi
 // terikat mati pada satu prop `tone`.
+//
+// `icon` DULU bekerja berpasangan dengan itu. Sejak kotak ikon dicabut ia tidak
+// dibaca sama sekali; propnya dibiarkan di tipe supaya pemanggil lama tidak
+// gagal typecheck, tapi mengopernya tidak mengubah apa pun. Alasan pencabutan
+// ada di badan komponen.
 export function ConfirmDialog({
   cancelLabel = 'Kembali',
   cancelTone = 'default',
@@ -182,9 +187,21 @@ export function ConfirmDialog({
   visible: boolean;
 }) {
   const isDanger = tone === 'danger';
-  const iconName: IconName = icon ?? (isDanger ? 'alert-triangle' : 'check');
-  const iconBg = isDanger ? tokens.color.status.danger.bg : tokens.color.brand.soft;
-  const iconColor = isDanger ? tokens.color.status.danger.text : tokens.color.brand.base;
+  // KOTAK IKON DICABUT, untuk SEMUA pemanggil — bukan lewat prop, karena dua
+  // bentuk dialog yang berdampingan di satu aplikasi lebih buruk daripada satu
+  // bentuk yang mana pun.
+  //
+  // Diperiksa satu per satu sebelum dicabut: kesepuluh pemanggil memakai ikon
+  // yang cuma mengulang nada yang sudah dibawa judulnya. Empat yang mengoper
+  // 'alert-triangle' semuanya sudah menulis peringatannya sebagai KALIMAT
+  // ("TIDAK BISA DIHAPUS", "tidak bisa dibatalkan atau dihapus setelah
+  // tersimpan", "perubahan itu hilang", "sebagian pohon tidak ikut"), dan enam
+  // sisanya memakai bawaan. Salah satu bawaan itu bahkan menyesatkan: dialog
+  // "Hentikan pengulangan?" bernada default, jadi ia mendapat centang — glif
+  // persetujuan di atas pertanyaan yang meminta penghentian.
+  //
+  // Tidak ada informasi yang hilang: peringatannya ada di kata, bukan di glif.
+  // Prop `icon` sengaja DIBIARKAN di tipe propnya, tidak dihapus.
   const confirmBg = isDanger ? tokens.color.status.danger.bg : tokens.color.brand.base;
   const confirmBorder = isDanger ? tokens.color.status.danger.border : tokens.color.brand.base;
   const confirmText = isDanger ? tokens.color.status.danger.text : tokens.color.brand.on;
@@ -208,9 +225,6 @@ export function ConfirmDialog({
           style={confirmStyles.backdrop}
         />
         <View style={confirmStyles.card}>
-          <View style={[confirmStyles.iconBox, { backgroundColor: iconBg }]}>
-            <Icon name={iconName} size={tokens.icon.md} color={iconColor} />
-          </View>
           <Text selectable style={confirmStyles.title}>
             {title}
           </Text>
@@ -267,9 +281,19 @@ const confirmStyles = StyleSheet.create({
     padding: 18,
     width: '100%',
   },
+  // TIDAK LAGI DIPAKAI sejak kotak ikon dicabut. Dibiarkan, tidak dihapus.
   iconBox: { alignItems: 'center', borderRadius: 11, height: 38, justifyContent: 'center', width: 38 },
-  title: { ...tokens.type.bodyStrong, color: tokens.color.text.primary },
-  message: { color: tokens.color.text.secondary, fontSize: 12, lineHeight: 19 },
+  // RATA TENGAH keduanya. Dengan kotak ikon pergi, tidak ada lagi apa pun di
+  // kartu ini yang menambatkan pandangan ke tepi kiri — dan dua tombol yang
+  // labelnya sudah rata tengah di bawahnya membuat teks rata kiri terlihat
+  // seperti sisa yang lupa diikutkan.
+  title: { ...tokens.type.bodyStrong, color: tokens.color.text.primary, textAlign: 'center' },
+  message: {
+    color: tokens.color.text.secondary,
+    fontSize: 12,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
   actions: { gap: tokens.space.sm },
   confirmButton: {
     alignItems: 'center',

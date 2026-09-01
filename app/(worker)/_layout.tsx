@@ -100,7 +100,7 @@ export default function WorkerLayout() {
           <Stack.Screen name="worker/tasks/index" options={{ headerShown: false, title: 'Tugas' }} />
           <Stack.Screen name="worker/tasks/[taskId]" options={{ headerShown: false, title: 'Detail Tugas' }} />
           <Stack.Screen name="worker/tasks/[taskId]/record" options={{ headerShown: false, title: 'Catat Hasil Kerja' }} />
-          <Stack.Screen name="worker/farm" options={{ headerShown: false, title: 'Kebun' }} />
+          <Stack.Screen name="worker/farm" options={{ headerShown: false, title: 'Anggota' }} />
           <Stack.Screen name="worker/profile" options={{ headerShown: false, title: 'Profil Akun' }} />
           {/* gestureEnabled:false disengaja — swipe-back iOS tidak bisa dicegat lewat
               API publik expo-router, jadi dimatikan supaya perubahan yang belum

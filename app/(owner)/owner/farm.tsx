@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Linking, Platform, Pressable, Share, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { BottomSheet } from '../../../src/components/bottom-sheet';
@@ -13,9 +13,9 @@ import {
   Card,
   ErrorBanner,
   LoadingState,
-  MainTabHeader,
   MetaRow,
   Screen,
+  TopAppBar,
 } from '../../../src/components/ui';
 import { tokens } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
@@ -190,9 +190,16 @@ export default function OwnerFarmHubScreen() {
     showSnackbar(`Akses ${worker.fullName} dinonaktifkan`);
   }
 
-  const header = (
-    <MainTabHeader title="Kebun" />
-  );
+  // TopAppBar ber-onBack, BUKAN MainTabHeader. Layar ini bukan tab root: ia
+  // dibuka lewat push dari baris "Anggota" di Beranda, dan MainTabHeader tidak
+  // pernah merender tombol kembali (TopAppBar hanya merendernya kalau `onBack`
+  // dikirim, dan MainTabHeader tidak mengirimnya). Sebelum ini layar tersebut
+  // sama sekali tidak punya afordans mundur di layarnya sendiri.
+  //
+  // Judulnya "Anggota", sama dengan label baris di Beranda yang mengantar ke
+  // sini — judul yang berbeda dari pintu masuknya membuat orang bertanya-tanya
+  // apakah ia sampai di tempat yang benar.
+  const header = <TopAppBar title="Anggota" onBack={() => router.back()} />;
 
   if (loading) {
     return <LoadingState message="Memuat kebun..." />;
@@ -218,40 +225,57 @@ export default function OwnerFarmHubScreen() {
           ke Beranda, tempat ia jadi judul halaman yang sesungguhnya. Layar ini
           tinggal berisi orang: kode untuk mengundang, pengajuan yang masuk,
           anggota yang ada, dan jejak akses. Jalan ke /owner/farm-profile kini
-          lewat chip "Ubah data kebun" di Beranda. */}
+          lewat baris "Data kebun" di kelompok navigasi Beranda — chip "Ubah
+          data kebun" yang dulu disebut di sini sudah ikut dicabut. */}
 
       {/* Satu-satunya kartu yang dipertahankan di layar ini: isinya benda yang
-          disalin dan dibagikan, bukan sekadar teks. */}
-      <SectionLabel title="Kode kebun" />
-      <Card>
-        <View style={{ alignItems: 'center', flexDirection: 'row', gap: tokens.space.md, justifyContent: 'space-between' }}>
-          <Text
-            selectable
-            style={{
-              color: tokens.color.text.primary,
-              flex: 1,
-              fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-              fontSize: 24,
-              fontWeight: '700',
-              letterSpacing: 2,
-            }}
-          >
+          disalin dan dibagikan, bukan sekadar teks.
+
+          DUA TOMBOL IKON-SAJA DICABUT. Ikon tanpa label adalah bahasa yang
+          harus dipelajari lebih dulu, dan sebagian pemakai aplikasi ini orang
+          lanjut usia yang belum pernah mempelajarinya. Salin pindah ke kodenya
+          sendiri — benda yang memang ingin disalin — dan Bagikan jadi tombol
+          berlabel di bawah kartu. */}
+      <Card padding={tokens.layout.cardPadding}>
+        <Text selectable style={styles.cardLabel}>
+          Kode kebun
+        </Text>
+        {/* Pressable membungkus, bukan onPress di Text: pembungkus memberi
+            target sentuh setinggi tapTarget, sedangkan tinggi Text sendiri
+            hanya sebesar barisnya.
+
+            `selectable` DIPERTAHANKAN pada Text-nya. Ia tidak memasang
+            penanggap tekan sendiri, jadi ketukan tetap sampai ke Pressable;
+            yang ia tambahkan hanya seleksi teks pada tekan-lama. Kalau di
+            perangkat ternyata seleksi menelan ketukannya, KETUKAN yang menang
+            dan `selectable` yang dibuang — bukan sebaliknya. */}
+        <Pressable
+          accessibilityHint="Menyalin kode kebun ke papan klip"
+          accessibilityLabel={`Salin kode kebun ${farm.joinCode}`}
+          accessibilityRole="button"
+          onPress={handleCopyJoinCode}
+          style={({ pressed }) => ({
+            justifyContent: 'center',
+            minHeight: tokens.layout.tapTarget,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Text selectable style={styles.joinCode}>
             {farm.joinCode}
           </Text>
-          <View style={{ flexDirection: 'row', gap: tokens.space.sm }}>
-            <IconActionButton
-              label="Salin kode"
-              onPress={handleCopyJoinCode}
-              icon={<Icon name="copy" size={20} color={tokens.color.brand.base} />}
-            />
-            <IconActionButton
-              label="Bagikan kode"
-              onPress={handleShareJoinCode}
-              icon={<ShareGlyph color={tokens.color.brand.base} />}
-            />
-          </View>
-        </View>
+        </Pressable>
+        {/* Aksinya harus DIKATAKAN. Tanpa baris ini tidak ada apa pun yang
+            memberi tahu bahwa kodenya bisa diketuk — teks tidak terlihat seperti
+            tombol, dan itu memang disengaja supaya kodenya tetap terbaca sebagai
+            kode. */}
+        <Text selectable style={styles.joinCodeHint}>
+          Ketuk kode untuk menyalin
+        </Text>
       </Card>
+
+      {/* Tombol lebar berlabel, satu kata. Tanpa umpan balik tambahan: sheet
+          bagikan milik sistem yang muncul sesudahnya sudah jadi umpan baliknya. */}
+      <Button title="Bagikan" variant="secondary" onPress={handleShareJoinCode} />
 
       {/* Hilang total kalau tidak ada pengajuan — pemilik tidak perlu diberi tahu
           bahwa tidak ada yang perlu dia kerjakan. */}
@@ -822,3 +846,30 @@ function formatDateTimeFull(value?: string | null): string | null {
     year: 'numeric',
   });
 }
+
+const styles = StyleSheet.create({
+  // Label kartu, bentuknya sama dengan judul kartu di Beranda pemilik supaya
+  // kartu di dua layar berbeda tidak punya dua tingkat judul yang berbeda.
+  // Rata KIRI: ia label, dan aturan desain hanya memusatkan kode kebunnya.
+  cardLabel: { ...tokens.type.label, color: tokens.color.text.secondary },
+
+  // RATA TENGAH — kode kebun salah satu dari tiga hal yang boleh rata tengah di
+  // layar ini. Monospace supaya angka nol dan huruf O tidak tertukar saat
+  // dibacakan lewat telepon, dan letterSpacing supaya karakternya bisa dieja
+  // satu per satu.
+  joinCode: {
+    color: tokens.color.text.primary,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  // Ikut rata tengah karena ia keterangan dari kode di atasnya, bukan label yang
+  // berdiri sendiri.
+  joinCodeHint: {
+    ...tokens.type.meta,
+    color: tokens.color.text.secondary,
+    textAlign: 'center',
+  },
+});

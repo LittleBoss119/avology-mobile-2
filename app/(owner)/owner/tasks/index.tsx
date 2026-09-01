@@ -96,8 +96,13 @@ export default function OwnerTaskListScreen() {
     return <LoadingState message="Memuat tugas pekerja..." />;
   }
 
+  // TANPA applyTopInset, dan itu disengaja. Layar ini bukan tab root: ia
+  // butuh tombol kembali, dan yang menyediakannya adalah header native dari
+  // Stack.Screen "owner/tasks/index" di app/(owner)/_layout.tsx — yang sengaja
+  // TIDAK menyetel headerShown:false. Header itu sudah menerapkan safe-area
+  // atas sendiri, jadi applyTopInset di sini menghitungnya untuk kedua kali.
   return (
-    <Screen applyTopInset>
+    <Screen>
       <PageIntro title="Tugas Lapangan" subtitle="Lihat semua tugas perawatan dalam kebun aktif." />
       <ErrorBanner message={error} />
 

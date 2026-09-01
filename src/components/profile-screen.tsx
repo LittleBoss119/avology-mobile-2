@@ -12,7 +12,7 @@ import { isOwnerActive, isWorkerActive } from '../utils/routeGuard';
 import { ConfirmDialog } from './bottom-sheet';
 import { Avatar } from './member-row';
 import { useSnackbar } from './snackbar';
-import { Button, EmptyState, ErrorBanner, MainTabHeader, Screen, TopAppBar } from './ui';
+import { Button, EmptyState, ErrorBanner, Screen, TopAppBar } from './ui';
 
 const PENDING_FEEDBACK_MESSAGES: Record<string, string | undefined> = {
   password_updated: 'Password diperbarui',
@@ -70,30 +70,26 @@ export function ProfileScreen() {
 
   return (
     <Screen
+      // Dipasangkan dengan `header` di bawah, dan HARUS ikut bercabang bersamanya.
+      // Cabang anggota kebun tidak punya header sama sekali, jadi tidak ada lagi
+      // yang menerapkan safe-area atas dan Screen yang harus melakukannya. Cabang
+      // onboarding masih punya TopAppBar, yang menerapkan insetnya SENDIRI —
+      // menyalakan prop ini di sana berarti inset dihitung dua kali.
+      applyTopInset={isFarmMember}
       header={
-        // DUA bentuk header, dipisah oleh isFarmMember — bukan satu TopAppBar
-        // yang di-tweak.
+        // SATU bentuk header yang tersisa, dan ia hanya untuk jalur onboarding.
         //
-        // Anggota kebun aktif membuka layar ini sebagai tujuan bottom nav, jadi
-        // ia memakai MainTabHeader yang sama persis dengan Beranda, Pohon, dan
-        // Perawatan: judul rata tengah, TANPA tombol kembali. Tidak ada tempat
-        // untuk "mundur" dari sebuah tab.
+        // Cabang anggota kebun aktif dulu memakai MainTabHeader; judulnya dibuang
+        // bersama judul tiga tab root lain, karena tab bar di bawah sudah menamai
+        // layar ini dan menyalakannya. Tidak ada tempat untuk "mundur" dari sebuah
+        // tab, jadi tidak ada yang hilang selain judulnya.
         //
-        // Perataan itu dulu rata kiri, dengan alasan bahwa rata tengah membuat
-        // satu destinasi terlihat seperti layar turunan. Alasan itu sudah
-        // dicabut: yang menandai layar turunan adalah CHEVRON-nya, bukan
-        // perataannya, dan kelima destinasi kini rata tengah bersama-sama.
-        // Catatan lengkapnya ada di atas MainTabHeader di ui.tsx.
-        //
-        // Di konteks onboarding layar ini tetap dibuka lewat push, jadi
-        // bentuknya tetap layar turunan — dan yang membedakannya sekarang
-        // sepenuhnya chevron itu, bukan lagi letak judulnya.
-        // Tanpa chevron itu, user yang membukanya dari layar pilih akses
-        // terkurung sampai menutup aplikasi. Mundur satu langkah sudah cukup;
-        // '/' hanya cadangan kalau layar ini jadi entri pertama.
-        isFarmMember ? (
-          <MainTabHeader title="Profil" />
-        ) : (
+        // Di konteks onboarding layar ini dibuka lewat push dari layar pilih akses
+        // atau layar pemberitahuan — bukan tab root — jadi headernya TETAP. Tanpa
+        // chevron itu, user yang membukanya dari layar pilih akses terkurung sampai
+        // menutup aplikasi. Mundur satu langkah sudah cukup; '/' hanya cadangan
+        // kalau layar ini jadi entri pertama.
+        isFarmMember ? null : (
           <TopAppBar
             title="Profil"
             onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
@@ -118,7 +114,14 @@ export function ProfileScreen() {
               masuk, dan ia tidak bisa diubah. Tempatnya di bawah nama. */}
           <View style={{ alignItems: 'center', gap: tokens.space.sm }}>
             <Avatar name={profile.fullName} size="lg" tone="accent" />
+            {/* KONDISIONAL, bukan tanpa syarat. Di cabang anggota kebun judul
+                layar sudah dibuang, jadi baris ini satu-satunya calon heading
+                yang tersisa dan ia memang judul isi layar. Di cabang onboarding
+                TopAppBar masih merender judul "Profil" dan sudah membawa peran
+                heading sendiri — peran kedua di sini akan membuat layar itu
+                punya dua heading. */}
             <Text
+              accessibilityRole={isFarmMember ? 'header' : undefined}
               selectable
               style={{
                 color: tokens.color.text.primary,

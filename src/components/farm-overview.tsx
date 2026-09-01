@@ -20,6 +20,13 @@ import { ChipButton } from './ui';
 // `onEditPress` opsional — hanya pemilik yang boleh mengubah data kebun, jadi
 // di Beranda pekerja chip-nya tidak dirender sama sekali (bukan dirender lalu
 // dinonaktifkan).
+//
+// SEJAK PUTARAN INI PROP ITU TIDAK PUNYA SATU PUN PEMANGGIL. Chip "Ubah data
+// kebun" dicabut dari Beranda pemilik; jalan ke /owner/farm-profile sekarang
+// lewat baris "Data kebun" di kelompok navigasi Beranda. Propnya sengaja
+// DIBIARKAN, tidak dihapus — pembersihannya bukan bagian putaran ini, dan
+// menghapus API komponen bersama sambil mengubah tata letak dua Beranda
+// menggabungkan dua perubahan yang seharusnya bisa ditinjau terpisah.
 export function FarmIdentityBlock({
   farm,
   onEditPress,
@@ -32,7 +39,13 @@ export function FarmIdentityBlock({
 
   return (
     <View style={styles.identity}>
-      <Text selectable style={styles.identityName}>
+      {/* accessibilityRole="header" dipasang setelah judul layar dibuang dari
+          kedua Beranda. Sebelumnya heading layar ini dipegang TopAppBar di
+          dalam MainTabHeader; tanpa ini, kedua Beranda jadi layar tanpa satu
+          pun heading, dan TalkBack kehilangan titik lompat pertamanya. Baris
+          ini memang judul isi layar — ia menjawab "kebun yang mana" — jadi
+          perannya nyata, bukan teks tersembunyi yang dikarang. */}
+      <Text accessibilityRole="header" selectable style={styles.identityName}>
         {name ? name : 'Kebun'}
       </Text>
       {/* Baris kosong TIDAK dirender: kebun yang belum mengisi lokasi maupun
@@ -51,7 +64,79 @@ export function FarmIdentityBlock({
   );
 }
 
+// Tiga angka pohon: Total, Sehat, Perlu dicek. TANPA bar proporsi.
+//
+// Lahir di Beranda pemilik lalu DIPINDAH ke sini begitu Beranda pekerja
+// membutuhkan bentuk yang sama persis. Disalin ke dua tempat, aturan warna di
+// bawah akan hidup dua kali dan bisa berbeda tanpa ada yang gagal typecheck —
+// dan dua Beranda yang mewarnai angka berbeda untuk kebun yang sama adalah
+// persis jenis selisih yang paling lama tidak ketahuan.
+//
+// Kontraknya sengaja SEMPIT: tiga angka, tidak lebih. Tidak ada prop ukuran,
+// tidak ada prop warna, tidak ada slot. Kedua Beranda kini satu gaya, jadi
+// perbedaan ukuran yang dulu dibawa TreeConditionSummary lewat `size` tidak
+// punya pemakai lagi.
+//
+// "Perlu dicek" adalah SELURUH pohon non-sehat, termasuk yang mati — cerminan
+// dashboardService.countProblemTrees (current_condition <> 'healthy') dan
+// countTreeConditions di Beranda pekerja, yang keduanya memakai pembelahan yang
+// sama. Definisinya tidak disentuh di putaran ini.
+export function TreeStatRow({
+  healthyTrees,
+  problemTrees,
+  totalTrees,
+}: {
+  healthyTrees: number;
+  problemTrees: number;
+  totalTrees: number;
+}) {
+  return (
+    <View style={styles.statRow}>
+      <StatColumn color={tokens.color.text.primary} label="Total" value={totalTrees} />
+      <StatColumn color={tokens.color.status.success.text} label="Sehat" value={healthyTrees} />
+      {/* Warna hanya menyala saat angkanya benar-benar ada isinya; nol tetap
+          netral supaya kebun sehat tidak diberi warna peringatan. Warna di sini
+          penegas, bukan pembawa pesan — labelnya yang mengatakan apa artinya. */}
+      <StatColumn
+        color={problemTrees > 0 ? tokens.color.status.warning.text : tokens.color.text.primary}
+        label="Perlu dicek"
+        value={problemTrees}
+      />
+    </View>
+  );
+}
+
+// Satu kolom angka rata tengah. Diekspor karena kartu Tugas di Beranda pekerja
+// memakai bentuk yang sama dengan DUA kolom, bukan tiga — dan menyalin
+// tipografinya ke sana berarti dua kartu bersebelahan di satu layar yang bisa
+// diam-diam berbeda ukuran angkanya.
+export function StatColumn({
+  color,
+  label,
+  value,
+}: {
+  color: string;
+  label: string;
+  value: number;
+}) {
+  return (
+    <View style={styles.statCol}>
+      <Text selectable style={[styles.statValue, { color }]}>
+        {value}
+      </Text>
+      <Text selectable style={styles.statLabel}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 // Bar proporsi + tiga angka.
+//
+// TIDAK LAGI DIPAKAI sejak kedua Beranda pindah ke TreeStatRow di atas.
+// Dibiarkan utuh, tidak dihapus: ia menyimpan keputusan tentang bagaimana
+// proporsi sehat/perlu-dicek digambarkan, dan itu mungkin dipakai lagi setelah
+// UAT. Pembersihannya keputusan tersendiri.
 //
 // DUA segmen, bukan tiga: sumber angkanya hanya membedakan `healthy` dari
 // "selain healthy" (dashboardService.countProblemTrees), dan memecah "rusak"
@@ -163,10 +248,33 @@ function ConditionMetric({
 }
 
 const styles = StyleSheet.create({
-  identity: { gap: tokens.space.xs },
-  identityName: { ...tokens.type.display, color: tokens.color.brand.base },
-  identityMeta: { ...tokens.type.bodySmall, color: tokens.color.text.secondary },
+  // RATA TENGAH, dan itu berlaku untuk KEDUA peran — blok ini dipakai bersama
+  // Beranda pemilik dan Beranda pekerja, dan perataan tengahnya memang
+  // diinginkan di keduanya. Nama kebun adalah hero layar, satu dari empat hal
+  // yang boleh rata tengah menurut aturan desain yang berlaku (nama kebun, blok
+  // angka statistik, keadaan kosong, tombol utama).
+  //
+  // `alignItems` DAN `textAlign` dua-duanya perlu: alignItems memusatkan kotak
+  // Text-nya, textAlign memusatkan baris di dalamnya saat nama kebun cukup
+  // panjang untuk membungkus jadi dua baris.
+  identity: { alignItems: 'center', gap: tokens.space.xs },
+  identityName: { ...tokens.type.display, color: tokens.color.brand.base, textAlign: 'center' },
+  identityMeta: { ...tokens.type.bodySmall, color: tokens.color.text.secondary, textAlign: 'center' },
   identityChip: { alignSelf: 'flex-start', paddingTop: tokens.space.sm },
+
+  // Blok angka statistik — rata tengah. Nilainya dipindah APA ADANYA dari
+  // app/(owner)/owner/index.tsx supaya kartu Pohon di Beranda pemilik tidak
+  // bergeser sedikit pun oleh pemindahan ini. `flex: 1` membagi lebar rata,
+  // jadi angka satu digit dan tiga digit tetap duduk di kolom yang sama lebarnya.
+  statRow: { flexDirection: 'row', gap: tokens.space.md },
+  statCol: { alignItems: 'center', flex: 1 },
+  statValue: { ...tokens.type.title },
+  statLabel: {
+    ...tokens.type.meta,
+    color: tokens.color.text.secondary,
+    marginTop: tokens.space.xs,
+    textAlign: 'center',
+  },
 
   conditionGroup: { gap: tokens.space.md },
   bar: {

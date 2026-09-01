@@ -8,7 +8,6 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
-  MainTabHeader,
   Screen,
   SegmentedControl,
 } from '../../../../src/components/ui';
@@ -157,14 +156,11 @@ export default function WorkerTaskListScreen() {
   const sections = isArchive ? [] : buildTaskSections(displayedTasks, buckets);
 
   return (
-    <Screen
-      header={
-        // "Tugas", bukan "Perawatan". Pekerja tidak menyusun perawatan; ia
-        // mengerjakan tugas yang sudah ditetapkan, dan kata itulah yang dipakai
-        // di seluruh layar ini.
-        <MainTabHeader title="Tugas" />
-      }
-    >
+    // Tanpa prop `header`: judul layar dibuang karena tab bar di bawah sudah
+    // menamai layar ini dan menyalakannya. `applyTopInset` WAJIB ikut — inset
+    // atas selama ini datang dari TopAppBar di dalam MainTabHeader (ui.tsx),
+    // bukan dari Screen, jadi tanpa prop ini isi layar menempel ke status bar.
+    <Screen applyTopInset>
       <ErrorBanner message={error} />
 
       {error ? null : (

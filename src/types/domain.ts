@@ -459,6 +459,34 @@ export type GetCareActivityDetailInput = {
   activityId: UUID;
 };
 
+export type GetRecentFarmCareActivitiesInput = {
+  farmId: UUID;
+};
+
+// Satu baris kartu "Terakhir dikerjakan" di Beranda pemilik.
+//
+// URUTAN BIDANGNYA MENYATAKAN SUBJEKNYA, dan itu bukan kebetulan: jenis
+// pekerjaan dan jumlah pohon lebih dulu, nama pencatat belakangan sebagai
+// ATRIBUSI. Aplikasi ini sistem manajemen kebun, bukan manajemen pekerja —
+// bentuk yang menaruh orang sebagai subjek akan membuat kartunya terbaca
+// sebagai daftar absensi.
+export type RecentFarmCareActivity = {
+  // NULL hanya kalau baris 'terjadwal' punya category kosong DAN tugas induknya
+  // tidak terbaca. Baris 'inisiatif' dijamin terisi oleh
+  // care_activities_asal_source_check (migrasi 025).
+  category: CareCategory | null;
+  id: UUID;
+  performedAt: string;
+  // NULL kalau RPC nama aktor gagal atau pencatatnya sudah tidak ada di daftar
+  // anggota kebun. Barisnya tetap ditampilkan tanpa atribusi — pekerjaan yang
+  // tercatat tetap terjadi walau namanya tidak terbaca.
+  performerName: string | null;
+  // Cadangan TERAKHIR untuk jenis pekerjaan. Diketik pemilik, panjangnya tidak
+  // terkendali; pemakainya wajib memotongnya.
+  taskTitle: string | null;
+  treeCount: number;
+};
+
 // Masukan bersama keempat fungsi hapus lunak catatan. Bentuknya sengaja seragam
 // walau RPC-nya empat: yang membedakan hanya tabelnya, bukan apa yang perlu
 // diketahui pemanggil. `reason` opsional dan hari ini SELALU null — layar detail

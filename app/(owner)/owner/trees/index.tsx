@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '../../../../src/components/bottom-sheet';
 import { Icon } from '../../../../src/components/icons';
@@ -13,7 +14,6 @@ import {
   ErrorBanner,
   FilterChipsRow,
   LoadingState,
-  MainTabHeader,
   SearchFilterRow,
   Screen,
   SegmentedControl,
@@ -103,6 +103,14 @@ const CONDITION_CHIP_ALL = 'all';
 // foto milik daftar. Harganya: berpindah tampilan memuat ulang datanya, dan
 // posisi gulung petak hilang. Keduanya diterima.
 export default function OwnerTreesScreen() {
+  // Inset atas diterapkan DI SINI, bukan lewat prop `applyTopInset` pada
+  // Screen seperti keempat tab root lain. Alasannya bentuk layar ini:
+  // `headerWrap` adalah elemen teratas yang nyata untuk KEDUA cabang,
+  // sementara Screen hanya ada di dalam cabang daftar — di bawah segmented,
+  // dan sama sekali tidak ada di cabang denah (FarmMapScreen). Padding di
+  // headerWrap ikut menyelamatkan cabang denah itu.
+  const insets = useSafeAreaInsets();
+
   // Dibaca di FASE RENDER, di dalam penginisialisasi useState. Kalau dibaca di
   // effect, layar selalu melukis Daftar sekali lebih dulu lalu bertukar ke
   // Denah satu frame kemudian — kedipan yang terlihat jelas justru pada
@@ -129,11 +137,15 @@ export default function OwnerTreesScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.headerWrap}>
-        {/* MainTabHeader, sama dengan keempat destinasi top-level lain. Tanpa
-            slot kanan: "Denah" ada di segmented tepat di bawahnya, dan
-            "Tambah" melekat di atas navigasi bawah. */}
-        <MainTabHeader title="Pohon" />
+      {/* Judul layar dibuang: tab bar di bawah sudah menamai layar ini dan
+          menyalakannya. Angkanya dirakit saat render, bukan di
+          StyleSheet.create, karena insets.top baru diketahui saat itu.
+
+          `spacing.xl + insets.top` DISENGAJA, bukan Math.max(insets.top,
+          spacing.sm) seperti TopAppBar: ini rumus yang sama persis dengan yang
+          dipakai Screen saat applyTopInset menyala (ui.tsx), sehingga jarak
+          atas layar Pohon identik dengan ketiga tab root lainnya. */}
+      <View style={[styles.headerWrap, { paddingTop: spacing.xl + insets.top }]}>
         <View style={styles.segmentedWrap}>
           <SegmentedControl onChange={changeView} options={SEGMENT_OPTIONS} value={view} />
         </View>

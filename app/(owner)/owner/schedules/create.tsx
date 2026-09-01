@@ -313,7 +313,6 @@ export default function CreateManualScheduleScreen() {
       <ConfirmDialog
         cancelLabel="Kembali ke daftar jadwal"
         confirmLabel="Lihat jadwal ini"
-        icon="alert-triangle"
         message={rejectedMessage ?? ''}
         title="Jadwal dibuat, sebagian pohon tidak ikut"
         visible={Boolean(rejectedMessage && createdScheduleId)}

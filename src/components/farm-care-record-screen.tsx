@@ -552,7 +552,6 @@ export function FarmCareRecordScreen() {
       <ConfirmDialog
         cancelLabel="Periksa lagi"
         confirmLabel="Ya, catat sekarang"
-        icon="alert-triangle"
         loading={submitting}
         message={`${categoryLabel} akan dicatat untuk ${trees.length} pohon pada ${formatFullDate(eventDate)}. Catatan perawatan tidak bisa dibatalkan atau dihapus setelah tersimpan.`}
         title="Catat perawatan sekarang?"

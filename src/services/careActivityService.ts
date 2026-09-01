@@ -6,8 +6,10 @@ import type {
   CreateCareActivityData,
   CreateCareActivityInput,
   GetCareActivityDetailInput,
+  GetRecentFarmCareActivitiesInput,
   MemberRole,
   MemberStatus,
+  RecentFarmCareActivity,
   ServiceResult,
   SoftDeleteRecordInput,
   SuccessData,
@@ -18,6 +20,7 @@ import {
   mapCareActivity,
   type CareActivityRow,
 } from './careActivityShared';
+import { getFarmActorDisplayProfiles } from './memberService';
 import { fail, ok } from '../utils/serviceResult';
 
 // Pencatatan hasil kerja perawatan (care_activities), baik yang berasal dari
@@ -226,4 +229,152 @@ function isCareCategory(value: string | null | undefined): value is CareCategory
 function normalizeOptionalText(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+// ---------------------------------------------------------------------------
+// Tiga perawatan terakhir SATU KEBUN, untuk kartu "Terakhir dikerjakan" di
+// Beranda pemilik.
+//
+// FUNGSI BACA BARU, tidak ada yang lama disentuh. Ia tinggal di sini, bukan di
+// dashboardService, karena dashboardService seluruhnya penghitung agregat
+// (CountResult, `head: true`, tanpa satu pun pemetaan baris) sementara ini
+// mengembalikan DAFTAR baris care_activities — pekerjaan yang sudah jadi milik
+// berkas ini beserta konvensi baris dan mappernya.
+//
+// KENAPA QUERY LANGSUNG, bukan view. tree_history_view punya farm_id dan sudah
+// menyaring is_deleted, tapi cabang perawatannya join ke care_activity_trees —
+// jadi ia menghasilkan SATU BARIS PER PASANGAN aktivitas-pohon. `limit 3` di
+// sana membatasi tautan pohon, bukan aktivitas, dan satu aktivitas atas 196
+// pohon akan memenuhi seluruh limitnya sendirian.
+//
+// SUBJEKNYA PEKERJAAN, BUKAN ORANG. Nama pencatat ikut, tapi sebagai atribusi —
+// urutan bidang di RecentFarmCareActivity dan urutan baris di kartunya
+// mengikuti itu, dan jangan dibalik. Aplikasi ini manajemen kebun, bukan
+// manajemen pekerja.
+const RECENT_CARE_ACTIVITY_LIMIT = 3;
+
+type RecentCareActivityRow = {
+  id: string;
+  asal: string;
+  category: CareCategory | null;
+  care_task_id: string | null;
+  performed_at: string;
+  performed_by: string;
+  // Embedded, satu baris per pohon yang tercakup aktivitas ini. Hanya
+  // JUMLAHNYA yang dipakai; tree_id-nya sendiri tidak pernah dibaca.
+  care_activity_trees: { tree_id: string }[] | null;
+};
+
+type RecentCareTaskRow = {
+  id: string;
+  title: string | null;
+  category: CareCategory | null;
+};
+
+export async function getRecentFarmCareActivities(
+  input: GetRecentFarmCareActivitiesInput
+): Promise<ServiceResult<RecentFarmCareActivity[]>> {
+  // Urutan keduanya cerminan getTreeHistory: performed_at adalah KAPAN
+  // KEJADIANNYA (dipilih pencatat, boleh dimundurkan, dan untuk sebagian besar
+  // jalur tulis ia tanggal-saja yang jadi tengah malam), created_at adalah
+  // kapan barisnya ditulis. Tanpa pemecah seri kedua, dua catatan pada hari
+  // yang sama punya performed_at IDENTIK dan urutannya tidak dijanjikan apa pun.
+  const { data, error } = await supabase
+    .from('care_activities')
+    .select('id, asal, category, care_task_id, performed_at, performed_by, care_activity_trees(tree_id)')
+    .eq('farm_id', input.farmId)
+    .eq('is_deleted', false)
+    .order('performed_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(RECENT_CARE_ACTIVITY_LIMIT)
+    .returns<RecentCareActivityRow[]>();
+
+  if (error) {
+    return fail(error, 'Gagal memuat perawatan terakhir.');
+  }
+
+  const rows = data ?? [];
+
+  if (rows.length === 0) {
+    return ok([]);
+  }
+
+  const [taskById, nameByUserId] = await Promise.all([
+    fetchCareTaskLabels(rows),
+    fetchPerformerNames(input.farmId),
+  ]);
+
+  return ok(
+    rows.map((row) => {
+      const task = row.care_task_id ? taskById[row.care_task_id] : undefined;
+
+      return {
+        // category baris 'inisiatif' DIJAMIN terisi oleh
+        // care_activities_asal_source_check (migrasi 025). Baris 'terjadwal'
+        // boleh NULL, dan jenisnya ada di care_tasks — karena itu fallback ke
+        // task.category, bukan ke judulnya.
+        category: row.category ?? task?.category ?? null,
+        id: row.id,
+        performedAt: row.performed_at,
+        performerName: nameByUserId[row.performed_by] ?? null,
+        // Cadangan TERAKHIR untuk jenis pekerjaan, dipakai hanya kalau kedua
+        // kolom category kosong. Judul ini DIKETIK PEMILIK dan panjangnya tidak
+        // terkendali, jadi pemakainya wajib memotongnya.
+        taskTitle: normalizeOptionalText(task?.title),
+        treeCount: (row.care_activity_trees ?? []).length,
+      };
+    })
+  );
+}
+
+// Satu query untuk seluruh tugas yang dirujuk ketiga baris, bukan satu query
+// per baris. Baris 'inisiatif' tidak punya care_task_id (dijamin constraint),
+// jadi kebun yang seluruh perawatannya inisiatif tidak menyentuh jaringan sama
+// sekali di sini.
+//
+// Galatnya DITELAN, bukan dinaikkan: judul dan kategori tugas hanya melengkapi
+// label, dan kartu yang kehilangan satu label masih jauh lebih berguna daripada
+// kartu yang hilang seluruhnya. Polanya sama dengan getCareActivityDetail, yang
+// membiarkan taskTitle null saat tugasnya tidak terbaca.
+async function fetchCareTaskLabels(
+  rows: RecentCareActivityRow[]
+): Promise<Record<string, RecentCareTaskRow>> {
+  const taskIds = Array.from(
+    new Set(rows.map((row) => row.care_task_id).filter((taskId): taskId is string => Boolean(taskId)))
+  );
+
+  if (taskIds.length === 0) {
+    return {};
+  }
+
+  const { data, error } = await supabase
+    .from('care_tasks')
+    .select('id, title, category')
+    .in('id', taskIds)
+    .returns<RecentCareTaskRow[]>();
+
+  if (error) {
+    return {};
+  }
+
+  return Object.fromEntries((data ?? []).map((task) => [task.id, task]));
+}
+
+// Nama pencatat lewat RPC, BUKAN join ke profiles. Policy profiles
+// (can_view_profile, migrasi 007) hanya mengizinkan seseorang membaca profilnya
+// SENDIRI, jadi join akan mengembalikan nama kosong pada setiap baris —
+// kegagalan diam-diam yang pernah benar-benar terjadi dan ditambal migrasi 033.
+//
+// get_farm_actor_display_profiles dijaga is_active_farm_member, jadi pemilik
+// aktif berhak memanggilnya. Polanya disalin dari getHistoryActorDisplays di
+// historyService; galatnya ditelan dengan alasan yang sama seperti di atas —
+// baris tanpa nama masih menyampaikan pekerjaan apa atas berapa pohon.
+async function fetchPerformerNames(farmId: UUID): Promise<Record<string, string>> {
+  const result = await getFarmActorDisplayProfiles(farmId);
+
+  if (result.error) {
+    return {};
+  }
+
+  return Object.fromEntries(result.data.map((profile) => [profile.userId, profile.fullName]));
 }

@@ -1,13 +1,15 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
+import { Icon } from '../../../src/components/icons';
 import {
   Button,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MenuRowGroup,
   Screen,
   TopAppBar,
 } from '../../../src/components/ui';
@@ -28,6 +30,14 @@ export default function OwnerFarmProfileScreen() {
   const [name, setName] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const [submitted, setSubmitted] = React.useState(false);
+  // Ukuran petak, DARI BARIS Farm YANG SAMA yang sudah diambil layar ini lewat
+  // getFarmDetail — tidak ada query tambahan. Sebelumnya nilainya ikut terbaca
+  // lalu dibuang karena syncForm hanya menyimpan tiga medan formulir.
+  //
+  // Keduanya opsional di tipe Farm dan `undefined` berarti "belum terbaca",
+  // BUKAN nol (lihat catatan pada Farm.gridRows di types/domain.ts). Karena itu
+  // label sampingannya hanya dirender saat dua-duanya benar-benar ada.
+  const [grid, setGrid] = React.useState<{ columns?: number; rows?: number }>({});
 
   const farmId = currentFarm?.farmId;
   const fieldErrors = submitted ? computeFieldErrors(name, areaSize) : {};
@@ -36,6 +46,7 @@ export default function OwnerFarmProfileScreen() {
     setName(nextFarm.name);
     setLocation(nextFarm.location ?? '');
     setAreaSize(nextFarm.areaSize === null || nextFarm.areaSize === undefined ? '' : String(nextFarm.areaSize));
+    setGrid({ columns: nextFarm.gridColumns, rows: nextFarm.gridRows });
   }, []);
 
   useFocusEffect(
@@ -122,8 +133,8 @@ export default function OwnerFarmProfileScreen() {
   if (!isOwnerActive(currentFarm)) {
     return (
       <Screen>
-        <TopAppBar title="Edit kebun" onBack={() => router.back()} />
-        <EmptyState title="Akses tidak tersedia" subtitle="Edit kebun hanya tersedia untuk pemilik aktif." />
+        <TopAppBar title="Data kebun" onBack={() => router.back()} />
+        <EmptyState title="Akses tidak tersedia" subtitle="Data kebun hanya tersedia untuk pemilik aktif." />
       </Screen>
     );
   }
@@ -134,7 +145,7 @@ export default function OwnerFarmProfileScreen() {
 
   return (
     <Screen>
-      <TopAppBar title="Edit kebun" onBack={() => router.back()} />
+      <TopAppBar title="Data kebun" onBack={() => router.back()} />
       <ErrorBanner message={formError ?? authError?.message} />
 
       <Card>
@@ -156,7 +167,70 @@ export default function OwnerFarmProfileScreen() {
         />
         <Button title="Simpan perubahan" loading={saving} onPress={handleSave} />
       </Card>
+
+      {/* Ukuran denah SENGAJA bukan isian di formulir di atas, dan itu bukan
+          soal ruang: mengubah jumlah baris/kolom petak adalah keputusan
+          struktural — ia menentukan posisi mana yang boleh ditanami — sedangkan
+          formulir di atas hanya mengganti keterangan kebun. Menaruh keduanya di
+          satu tombol simpan berarti satu ketukan bisa memindahkan dua hal yang
+          risikonya jauh berbeda.
+
+          Layar ini kini SATU-SATUNYA jalan masuk ke /owner/farm-grid, setelah
+          barisnya dicabut dari Beranda dalam perubahan yang sama. */}
+      <Card padding={tokens.layout.cardPadding}>
+        <MenuRowGroup>
+          <GridRow grid={grid} onPress={() => router.push('/owner/farm-grid')} />
+        </MenuRowGroup>
+      </Card>
     </Screen>
+  );
+}
+
+// Baris "Ukuran denah". Bentuknya mengikuti NavRow di Beranda pemilik: ikon,
+// judul, keterangan di kanan, chevron.
+//
+// Keterangannya hanya dirender saat KEDUA angkanya terbaca. `undefined` pada
+// gridRows/gridColumns berarti barisnya farms memang belum terbaca, bukan nol —
+// dan "0 × 0" adalah angka bohong yang terlihat persis seperti angka benar.
+function GridRow({
+  grid,
+  onPress,
+}: {
+  grid: { columns?: number; rows?: number };
+  onPress: () => void;
+}) {
+  const meta =
+    grid.rows === undefined || grid.columns === undefined
+      ? undefined
+      : `${grid.rows} × ${grid.columns}`;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: tokens.space.md,
+        minHeight: tokens.layout.controlHeight,
+        opacity: pressed ? 0.6 : 1,
+      })}
+    >
+      <Icon name="adjustments-horizontal" size={tokens.icon.md} color={tokens.color.brand.base} />
+      <Text selectable style={{ ...tokens.type.body, color: tokens.color.text.primary, flex: 1 }}>
+        Ukuran denah
+      </Text>
+      {meta ? (
+        <Text
+          selectable
+          numberOfLines={1}
+          style={{ ...tokens.type.meta, color: tokens.color.text.secondary }}
+        >
+          {meta}
+        </Text>
+      ) : null}
+      <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+    </Pressable>
   );
 }
 

@@ -7,11 +7,15 @@ import {
   Card,
   ErrorBanner,
   LoadingState,
-  MainTabHeader,
+  MenuRowGroup,
   Screen,
   SectionHeader,
 } from '../../../src/components/ui';
-import { FarmIdentityBlock, TreeConditionSummary } from '../../../src/components/farm-overview';
+import {
+  FarmIdentityBlock,
+  StatColumn,
+  TreeStatRow,
+} from '../../../src/components/farm-overview';
 import { Icon, type IconName } from '../../../src/components/icons';
 import { useAuth } from '../../../src/context/auth-context';
 import { getWorkerDashboardSummary } from '../../../src/services/dashboardService';
@@ -87,8 +91,12 @@ export default function WorkerDashboardScreen() {
 
   const farm = currentFarm?.farm;
 
+  // Tanpa prop `header`: judul layar dibuang karena tab bar di bawah sudah
+  // menamai layar ini dan menyalakannya. `applyTopInset` WAJIB ikut — inset
+  // atas selama ini datang dari TopAppBar di dalam MainTabHeader (ui.tsx),
+  // bukan dari Screen, jadi tanpa prop ini isi layar menempel ke status bar.
   return (
-    <Screen header={<MainTabHeader title="Beranda" />}>
+    <Screen applyTopInset>
       {/* Tanpa chip "Ubah data kebun": hanya pemilik yang boleh mengubah data
           kebun, jadi di sini blok identitas murni penanda tempat. */}
       {farm ? <FarmIdentityBlock farm={farm} /> : null}
@@ -96,51 +104,26 @@ export default function WorkerDashboardScreen() {
 
       {summary === null ? null : (
         <View style={styles.sections}>
-          <TodayTaskCard summary={summary} />
+          <TaskCard summary={summary} />
 
-          <View style={styles.section}>
-            <SectionHeader title="Ringkasan kerja" />
-            <WorkSummaryList summary={summary} />
-          </View>
-
-          {/* Sengaja TANPA surface dan dengan angka lebih kecil daripada versi
-              pemilik. Pekerja datang ke layar ini untuk tahu apa yang harus
-              dikerjakan hari ini; kondisi kebun adalah latar, bukan tugasnya.
-              Kalau blok ini ikut jadi kartu putih, ia bersaing dengan "Tugas
-              hari ini" dan keduanya sama-sama kehilangan bobot. */}
-          {treeCounts ? (
-            <View style={styles.section}>
-              <SectionHeader title="Kondisi kebun" />
-              {/* Kebun tanpa pohon: satu baris teks, tanpa tombol. Pekerja tidak
-                  boleh menambah pohon, jadi menawarkan jalan masuk ke sana cuma
-                  memberi tugas yang bukan miliknya. Yang perlu dia tahu hanya
-                  kenapa angkanya tidak ada. */}
-              {treeCounts.totalTrees === 0 ? (
-                <Text selectable style={styles.emptyConditionText}>
-                  Kebun ini belum punya data pohon.
-                </Text>
-              ) : (
-                <TreeConditionSummary
-                  healthyTrees={treeCounts.healthyTrees}
-                  problemTrees={treeCounts.problemTrees}
-                  size="sm"
-                  totalTrees={treeCounts.totalTrees}
-                />
-              )}
-            </View>
-          ) : null}
+          {/* HILANG SELURUHNYA saat daftar pohon gagal dimuat — treeCounts null
+              berarti angkanya tidak diketahui, bukan nol, dan kartu berisi tiga
+              nol adalah angka bohong. Galatnya sudah dikabarkan ErrorBanner di
+              atas. */}
+          {treeCounts ? <TreesCard treeCounts={treeCounts} /> : null}
 
           {/* Jalan masuk ke Kebun setelah ia dicabut dari bottom nav. Tanpa
-              angka: WorkerDashboardSummary tidak menghitung anggota, dan
-              menambah hitungan berarti menambah request — bukan menata
+              label sampingan: WorkerDashboardSummary tidak menghitung anggota,
+              dan menambah hitungan berarti menambah request — bukan menata
               navigasi.
 
               Baris kedua ("Laporan") ikut dibuang bersama modul laporan
               operasional di migrasi 053. */}
-          <View style={styles.destinations}>
-            <View style={styles.divider} />
-            <NavRow icon="user" title="Anggota kebun" onPress={() => router.push('/worker/farm')} />
-          </View>
+          <Card padding={tokens.layout.cardPadding}>
+            <MenuRowGroup>
+              <NavRow icon="user" title="Anggota" onPress={() => router.push('/worker/farm')} />
+            </MenuRowGroup>
+          </Card>
         </View>
       )}
     </Screen>
@@ -180,10 +163,103 @@ function TodayTaskCard({ summary }: { summary: WorkerDashboardSummary }) {
   );
 }
 
+// Kartu Tugas. SATU angka: unfinishedTasks, berlabel "Belum selesai".
+//
+// WorkerDashboardSummary punya tiga angka (dashboardService), dan dua di
+// antaranya sengaja TIDAK dipakai di sini:
+//
+//   unfinishedTasks -- TANPA batas tanggal, status pending/postponed. DIPAKAI.
+//
+//   completedTasks  -- TANPA batas tanggal, status completed. DIBUANG. Ia
+//     akumulasi seumur keanggotaan: hanya naik, tidak pernah turun, dan
+//     setelah beberapa bulan jadi angka besar yang artinya tidak berubah dari
+//     hari ke hari. Angka semacam itu bukan informasi, dan berdampingan dengan
+//     angka yang menuntut tindakan ia mengundang salah baca.
+//
+//   todayTasks      -- due_date = HARI INI, status pending/postponed. DIBUANG,
+//     dan BUKAN sebagai pengganti kolom yang hilang: ia HIMPUNAN BAGIAN dari
+//     unfinishedTasks (penyaring status dan pengecualiannya sama persis, hanya
+//     ditambah batas due_date). Menaruh keduanya berdampingan berarti memajang
+//     dua angka yang tumpang tindih, dan orang akan menjumlahkannya.
+//
+// Judulnya "Tugas", bukan "Tugas hari ini": angkanya memang bukan angka hari
+// ini, dan pembaca layar ini akan membaca labelnya apa adanya.
+function TaskCard({ summary }: { summary: WorkerDashboardSummary }) {
+  return (
+    <Pressable onPress={() => router.push('/worker/tasks')}>
+      <Card padding={tokens.layout.cardPadding}>
+        <View style={styles.cardHeader}>
+          <Text selectable style={styles.cardTitle}>
+            Tugas
+          </Text>
+          <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+        </View>
+        {/* Pembungkus barisnya TETAP ada walau isinya tinggal satu kolom:
+            StatColumn ber-`flex: 1` dan butuh induk berarah baris untuk
+            memenuhi lebar penuh lalu memusatkan isinya. Dengan begitu angka di
+            kartu ini persis seukuran angka di kartu Pohon di bawahnya — sama
+            komponennya, sama gayanya, bukan sekadar mirip. */}
+        <View style={styles.statRow}>
+          {/* Warna hanya menyala saat masih ada yang menunggu dikerjakan; nol
+              tetap netral. Labelnya yang membawa pesan, warnanya penegas. */}
+          <StatColumn
+            color={
+              summary.unfinishedTasks > 0 ? tokens.color.brand.base : tokens.color.text.primary
+            }
+            label="Belum selesai"
+            value={summary.unfinishedTasks}
+          />
+        </View>
+      </Card>
+    </Pressable>
+  );
+}
+
+// Kartu Pohon. Bentuknya sama persis dengan kartu Pohon di Beranda pemilik —
+// TreeStatRow yang sama, dari berkas yang sama.
+//
+// Rute dan cabang tampilannya TIDAK diubah: '/worker/trees' membuka Daftar atau
+// Denah menurut treeBrowseState, yaitu tampilan yang terakhir dipakai. Sudah
+// diputuskan tidak dipaksa ke salah satunya.
+function TreesCard({ treeCounts }: { treeCounts: TreeConditionCounts }) {
+  // Kebun tanpa pohon: satu kalimat, TANPA tombol dan tanpa bisa diketuk.
+  // Pekerja tidak boleh menambah pohon, jadi menawarkan jalan masuk ke sana cuma
+  // memberi tugas yang bukan miliknya — dan mengantar ke daftar yang pasti
+  // kosong hanya memberi jalan buntu. Yang perlu dia tahu hanya kenapa angkanya
+  // tidak ada.
+  if (treeCounts.totalTrees === 0) {
+    return (
+      <Card padding={tokens.layout.cardPadding}>
+        <Text selectable style={styles.emptyConditionText}>
+          Kebun ini belum punya data pohon.
+        </Text>
+      </Card>
+    );
+  }
+
+  return (
+    <Pressable onPress={() => router.push('/worker/trees')}>
+      <Card padding={tokens.layout.cardPadding}>
+        <View style={styles.cardHeader}>
+          <Text selectable style={styles.cardTitle}>
+            Pohon
+          </Text>
+          <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+        </View>
+        <TreeStatRow
+          healthyTrees={treeCounts.healthyTrees}
+          problemTrees={treeCounts.problemTrees}
+          totalTrees={treeCounts.totalTrees}
+        />
+      </Card>
+    </Pressable>
+  );
+}
+
 function NavRow({ icon, onPress, title }: { icon: IconName; onPress: () => void; title: string }) {
   return (
-    <Pressable onPress={onPress} style={styles.row}>
-      <Icon name={icon} size={tokens.icon.md} color={tokens.color.text.tertiary} />
+    <Pressable accessibilityRole="button" onPress={onPress} style={styles.navRow}>
+      <Icon name={icon} size={tokens.icon.md} color={tokens.color.brand.base} />
       <Text selectable style={styles.rowTitle}>
         {title}
       </Text>
@@ -238,17 +314,41 @@ const styles = StyleSheet.create({
   section: { gap: tokens.space.md },
 
   taskCard: { gap: 0 },
+  // `marginBottom` DICABUT. Ia dulu mengganti jarak yang dimatikan
+  // `taskCard: { gap: 0 }` pada kartu lama. Kartu-kartu baru memakai Card
+  // apa adanya, yang sudah punya `gap` sendiri — membiarkan marginBottom di
+  // sini membuat kartu Beranda pekerja 8px lebih longgar daripada kartu
+  // Beranda pemilik yang bentuknya seharusnya sama persis.
   cardHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: tokens.space.sm,
   },
   cardTitleActive: { ...tokens.type.label, color: tokens.color.brand.base },
   cardTitleIdle: { ...tokens.type.label, color: tokens.color.text.secondary },
   cardNumberActive: { ...tokens.type.display, color: tokens.color.brand.base },
   cardNumberIdle: { ...tokens.type.display, color: tokens.color.text.tertiary },
   cardCaption: { ...tokens.type.bodySmall, color: tokens.color.text.secondary, marginTop: tokens.space.xs },
+
+  // Judul kartu, sama persis dengan Beranda pemilik — kedua Beranda kini satu
+  // gaya, jadi tidak ada lagi varian aktif/idle yang membedakan bobotnya.
+  cardTitle: { ...tokens.type.label, color: tokens.color.text.secondary },
+
+  // Kolomnya sendiri (statCol/statValue/statLabel) hidup di farm-overview.tsx
+  // bersama StatColumn. Yang tinggal di sini hanya PEMBUNGKUS barisnya, karena
+  // kartu Tugas memakai dua kolom sedangkan TreeStatRow memakai tiga — dan
+  // nilainya sengaja identik dengan statRow di sana supaya kedua kartu di layar
+  // yang sama punya jarak antarkolom yang sama.
+  statRow: { flexDirection: 'row', gap: tokens.space.md },
+
+  // Baris navigasi di dalam kartu. minHeight mengikuti controlHeight seperti
+  // MenuRow di ui.tsx dan NavRow di Beranda pemilik.
+  navRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: tokens.space.md,
+    minHeight: tokens.layout.controlHeight,
+  },
 
   destinations: { gap: 0 },
   divider: {
@@ -263,7 +363,13 @@ const styles = StyleSheet.create({
     minHeight: tokens.layout.rowMinHeight,
     paddingVertical: tokens.space.md,
   },
-  emptyConditionText: { ...tokens.type.body, color: tokens.color.text.secondary },
+  // Rata tengah: keadaan kosong salah satu dari empat hal yang boleh rata
+  // tengah menurut aturan desain yang berlaku.
+  emptyConditionText: {
+    ...tokens.type.body,
+    color: tokens.color.text.secondary,
+    textAlign: 'center',
+  },
   rowLabel: { ...tokens.type.body, color: tokens.color.text.secondary },
   rowTitle: { ...tokens.type.body, color: tokens.color.text.primary, flex: 1 },
   rowValue: { ...tokens.type.bodyStrong, color: tokens.color.text.primary },
