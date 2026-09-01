@@ -9,6 +9,7 @@ import type {
   MemberRole,
   MemberStatus,
   ServiceResult,
+  SoftDeleteRecordInput,
   SuccessData,
   UpdateHarvestRecordInput,
   UUID,
@@ -148,10 +149,13 @@ export async function getHarvestRecordDetail(
     return fail(currentUserIdResult.error);
   }
 
+  // is_deleted disaring di query; alasannya sama dengan
+  // getConditionReportDetail.
   const { data, error } = await supabase
     .from('harvest_records')
     .select(HARVEST_RECORD_SELECT)
     .eq('id', recordId)
+    .eq('is_deleted', false)
     .maybeSingle<HarvestRecordRow>();
 
   if (error) {
@@ -168,10 +172,33 @@ export async function getHarvestRecordDetail(
     return fail(accessResult.error);
   }
 
+  const isAuthor = data.harvested_by === currentUserIdResult.data;
+
   return ok({
     ...mapHarvestRecord(data),
-    canEdit: data.harvested_by === currentUserIdResult.data && data.is_deleted !== true,
+    canEdit: isAuthor && data.is_deleted !== true,
+    canDelete: (isAuthor || accessResult.data.role === 'owner') && data.is_deleted !== true,
   });
+}
+
+// Hapus lunak. Izinnya ditegakkan RPC (migrasi 067). Tidak ada recalculate yang
+// menyusul: tidak satu pun kolom turunan di trees berasal dari harvest_records.
+export async function softDeleteHarvestRecord(
+  input: SoftDeleteRecordInput | UUID
+): Promise<ServiceResult<SuccessData>> {
+  const recordId = typeof input === 'string' ? input : input.recordId;
+  const reason = typeof input === 'string' ? null : input.reason ?? null;
+
+  const { error } = await supabase.rpc('soft_delete_harvest_record', {
+    p_reason: normalizeOptionalText(reason),
+    p_record_id: recordId,
+  });
+
+  if (error) {
+    return fail(error, 'Catatan panen gagal dihapus.');
+  }
+
+  return ok({ success: true });
 }
 
 export async function updateOwnHarvestRecord(
@@ -217,7 +244,11 @@ async function getAccessibleTreeFarmId(treeId: UUID): Promise<ServiceResult<UUID
   return ok(data.farm_id);
 }
 
-async function ensureActiveOwnerOrWorker(farmId: UUID): Promise<ServiceResult<SuccessData>> {
+// Mengembalikan KEANGGOTAANNYA, bukan sekadar SuccessData. Pemanggil lama hanya
+// memeriksa `.error` dan tidak berubah; getHarvestRecordDetail memakai `role` di
+// dalamnya untuk memutuskan canDelete tanpa query kedua — barisnya memang sudah
+// diambil di sini sebagai pemeriksaan akses.
+async function ensureActiveOwnerOrWorker(farmId: UUID): Promise<ServiceResult<MembershipRow>> {
   const membershipResult = await getCurrentUserMembership(farmId);
 
   if (membershipResult.error) {
@@ -234,9 +265,7 @@ async function ensureActiveOwnerOrWorker(farmId: UUID): Promise<ServiceResult<Su
     return fail(new Error('Hanya pemilik atau pekerja aktif yang dapat mencatat panen.'));
   }
 
-  return ok({
-    success: true,
-  });
+  return ok(membership);
 }
 
 async function getCurrentUserMembership(

@@ -16,7 +16,7 @@ import { isSatuanBahan, type SatuanBahan } from '../constants/satuanBahan';
 import type { ActivityStatus, CareActivity, CareActivityOrigin, CareCategory } from '../types/domain';
 
 export const CARE_ACTIVITY_SELECT =
-  'id, farm_id, care_task_id, performed_by, status, note, performed_at, asal, category, produk, produk_jumlah, produk_satuan, edited_at';
+  'id, farm_id, care_task_id, performed_by, status, note, performed_at, asal, category, produk, produk_jumlah, produk_satuan, edited_at, is_deleted';
 
 export type CareActivityRow = {
   id: string;
@@ -36,6 +36,11 @@ export type CareActivityRow = {
   produk_jumlah: string | number | null;
   produk_satuan: string | null;
   edited_at: string | null;
+  // Ada sejak migrasi 067. Dibaca dari select bersama ini karena
+  // getCareActivityDetail perlu menolak catatan yang sudah dihapus; pemakai lain
+  // (careTaskService) mengabaikannya, dan itu tidak apa-apa -- jalur terjadwal
+  // memang tidak bisa dihapus sama sekali.
+  is_deleted: boolean;
 };
 
 export function mapCareActivity(row: CareActivityRow): CareActivity {

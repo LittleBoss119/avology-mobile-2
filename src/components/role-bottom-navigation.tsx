@@ -164,9 +164,21 @@ function isActivePath(pathname: string, match: string): boolean {
 
 // Bentuknya sejajar dengan ownerNavigationItems di atas, termasuk alasannya.
 //
-// Label item ketiga "Perawatan", bukan "Tugas", meski href-nya '/worker/tasks'.
-// Itu DISENGAJA: kedua peran menyebut hal yang sama dengan kata yang sama,
-// walau pekerja masuk lewat daftar tugasnya sendiri dan pemilik lewat jadwal.
+// Label item ketiga "Tugas", bukan "Perawatan" seperti padanannya di sisi
+// pemilik. Itu DISENGAJA, dan ia MENGGANTIKAN aturan lama yang menyeragamkan
+// kedua peran pada satu kata.
+//
+// Aturan lama itu masuk akal selama judul layar pekerja juga berbunyi
+// "Perawatan"; begitu judulnya jadi "Tugas", label tab yang masih berbunyi
+// "Perawatan" mengantar ke layar berjudul lain, dan tab yang tidak menyebut
+// nama tempat yang ditujunya adalah kesalahan yang lebih besar daripada dua
+// peran memakai dua kata.
+//
+// Yang membuat perbedaan kata ini aman: seorang pengguna hanya pernah memegang
+// SATU peran dalam satu kebun, jadi tidak ada layar yang menampilkan kedua
+// navigasi sekaligus dan tidak ada seorang pun yang melihat keduanya
+// berdampingan. Masing-masing memakai kata yang dipakai perannya sendiri —
+// pemilik menyusun perawatan, pekerja mengerjakan tugas.
 const workerNavigationItems: NavigationItem[] = [
   {
     href: '/worker',
@@ -183,7 +195,7 @@ const workerNavigationItems: NavigationItem[] = [
   {
     href: '/worker/tasks',
     icon: 'checklist',
-    label: 'Perawatan',
+    label: 'Tugas',
     match: ['/worker/tasks'],
   },
   {

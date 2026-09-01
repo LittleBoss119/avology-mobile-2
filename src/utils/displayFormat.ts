@@ -89,10 +89,14 @@ export function formatCareCategory(category: CareCategory): string {
   return labels[category];
 }
 
+// 'pending' berbunyi "Belum dikerjakan", bukan "Belum". Satu kata itu tidak
+// berdiri sendiri — belum apa? Pembaca yang tidak sedang menebak konteks chip
+// butuh kata kerjanya ikut. Padanannya di sisi jadwal (formatScheduleStatus di
+// layar detail jadwal owner) sudah memakai kata yang sama.
 export function formatTaskStatus(status: TaskStatus): string {
   const labels: Record<TaskStatus, string> = {
     completed: 'Selesai',
-    pending: 'Belum',
+    pending: 'Belum dikerjakan',
     postponed: 'Ditunda',
   };
 
@@ -171,11 +175,24 @@ export function formatDateOnly(value: string): string {
   });
 }
 
+// Label yang DILIHAT pengguna, bukan nama enumnya. Nilai 'farm' | 'tree' |
+// 'custom' di database tidak ikut berubah.
+//
+// 'farm' berbunyi "Semua pohon", bukan "Seluruh Kebun" seperti dulu. Kata lama
+// itu berbohong ke dua arah: secara harfiah ia menjanjikan pekerjaan di seluruh
+// kebun termasuk yang bukan pohon (gali parit, pindah pupuk kandang), padahal
+// yang benar-benar terjadi adalah tugas dibuat untuk semua pohon yang punya
+// siklus tanam aktif — posisi kosong dilewati (migrasi 058).
+//
+// Karena 'farm' tidak lagi mengklaim seluruh kebun, 'custom' jadi masuk akal
+// sebagai "Area lain": ia memang mendeskripsikan area, dan sekarang ia punya
+// lawan kata yang jelas. 'tree' jadi "Pilih pohon" karena itulah yang dilakukan
+// pemilik saat memilihnya — memilih pohon satu per satu.
 export function formatTargetType(targetType: TargetType): string {
   const labels: Record<TargetType, string> = {
-    custom: 'Target Khusus',
-    farm: 'Seluruh Kebun',
-    tree: 'Pohon',
+    custom: 'Area lain',
+    farm: 'Semua pohon',
+    tree: 'Pilih pohon',
   };
 
   return labels[targetType as TargetType];

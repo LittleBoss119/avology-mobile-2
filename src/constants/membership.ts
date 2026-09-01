@@ -53,11 +53,20 @@ export const MEMBER_ROLE_LABELS: Record<MemberRole, string> = {
   worker: 'Pekerja',
 };
 
+// Sentence case, bukan Title Case. Diturunkan saat layar Profil jadi pemakai
+// PERTAMA konstanta ini — sebelum itu ia nol pemanggil. Karena tidak ada berkas
+// lain yang membacanya, penurunan ini tidak bisa menggeser tampilan layar mana
+// pun. 'Menunggu persetujuan' sekaligus jadi sama persis dengan judul layar
+// status akses, yang memang sudah sentence case.
+//
+// PERHATIAN: ada salinan kedua nilai-nilai ini di formatMemberStatus()
+// (utils/displayFormat.ts), yang juga nol pemanggil dan MASIH Title Case. Dua
+// sumber itu sekarang berbeda. Yang dipakai layar adalah yang di berkas ini.
 export const MEMBER_STATUS_LABELS: Record<MemberStatus, string> = {
   active: 'Aktif',
-  pending: 'Menunggu Persetujuan',
+  pending: 'Menunggu persetujuan',
   rejected: 'Ditolak',
-  removed: 'Akses Dinonaktifkan',
+  removed: 'Akses dinonaktifkan',
 };
 
 // Label event ditulis dari sudut pandang pembaca riwayat (pemilik kebun), jadi

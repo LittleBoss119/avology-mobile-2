@@ -87,6 +87,29 @@ const friendlyMessages: Array<[string, string]> = [
   ['schema cache', 'Aplikasi belum tersambung penuh ke server. Tunggu sebentar lalu coba lagi.'],
   ['Failed to fetch', 'Gagal memuat data. Periksa koneksi internet Anda.'],
   ['Network request failed', 'Gagal memuat data. Periksa koneksi internet Anda.'],
+  // Pembatas laju GoTrue. Sebelum entri ini, pesannya lolos ke cabang terakhir
+  // toFriendlyMessage() dan tampil utuh dalam bahasa Inggris — isTechnicalMessage
+  // hanya mengenali penanda Postgres/PostgREST, tidak satu pun penanda GoTrue.
+  //
+  // Kuncinya sengaja POTONGAN, bukan kalimat penuh: "For security purposes, you
+  // can only request this after 47 seconds." membawa detik yang berubah-ubah,
+  // jadi kalimat penuh tidak akan pernah cocok. Pencocokan di toFriendlyMessage
+  // memakai includes(), jadi potongan sudah cukup.
+  //
+  // Detiknya TIDAK ikut ditampilkan. Menyebut angka pasti menuntut mengurai
+  // pesannya, dan angka itu sendiri tidak menolong siapa pun yang tidak bisa
+  // berbuat apa-apa selain menunggu.
+  ['For security purposes', 'Tunggu sebentar, lalu coba lagi.'],
+  // Dua penanda untuk satu keadaan: yang pertama teks pesan GoTrue, yang kedua
+  // kode error_code yang ikut terbawa di sebagian respons. Keduanya diperlukan
+  // karena toServiceError hanya membaca `message`, dan bentuk mana yang sampai
+  // ke sana bergantung versi GoTrue.
+  ['Email rate limit exceeded', 'Terlalu banyak percobaan dari jaringan ini. Coba lagi beberapa menit.'],
+  ['over_email_send_rate_limit', 'Terlalu banyak percobaan dari jaringan ini. Coba lagi beberapa menit.'],
+  ['Too many requests', 'Terlalu banyak percobaan. Coba lagi beberapa menit.'],
+  ['Request rate limit reached', 'Terlalu banyak percobaan. Coba lagi beberapa menit.'],
+  ['Signup is disabled', 'Pendaftaran sedang ditutup.'],
+  ['Password is known to be weak', 'Password terlalu mudah ditebak. Ganti yang lain.'],
 ];
 
 export function ok<T>(data: T): ServiceResult<T> {

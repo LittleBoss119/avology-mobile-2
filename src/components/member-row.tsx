@@ -15,8 +15,27 @@ const AVATAR_TONE: Record<MemberRowTone, { background: string; text: string }> =
   neutral: { background: tokens.color.surface.subtle, text: tokens.color.text.secondary },
 };
 
-export function Avatar({ name, tone = 'neutral' }: { name?: string | null; tone?: MemberRowTone }) {
+// DUA ukuran, dengan pola yang sama seperti `size` di Button dan
+// TreeConditionSummary: 'sm' adalah bentuk lama PERSIS (34, caption) sehingga
+// setiap pemanggil yang ada — MemberRow di berkas ini, dan owner/farm.tsx —
+// tidak bergeser sepiksel pun. 'lg' dipakai blok identitas di layar Profil,
+// tempat lingkaran inisial berdiri sendiri sebagai elemen paling atas dan
+// bukan penghias baris daftar. Angka 64 bukan angka baru: ia ukuran lingkaran
+// yang sama dengan modal di access-status-screen dan create-farm.
+const AVATAR_SIZE = { sm: 34, lg: 64 } as const;
+
+export function Avatar({
+  name,
+  size = 'sm',
+  tone = 'neutral',
+}: {
+  name?: string | null;
+  size?: 'sm' | 'lg';
+  tone?: MemberRowTone;
+}) {
   const palette = AVATAR_TONE[tone];
+  const box = AVATAR_SIZE[size];
+  const textStyle = size === 'lg' ? tokens.type.heading : tokens.type.caption;
 
   return (
     <View
@@ -24,12 +43,12 @@ export function Avatar({ name, tone = 'neutral' }: { name?: string | null; tone?
         alignItems: 'center',
         backgroundColor: palette.background,
         borderRadius: tokens.radius.pill,
-        height: 34,
+        height: box,
         justifyContent: 'center',
-        width: 34,
+        width: box,
       }}
     >
-      <Text selectable={false} style={{ color: palette.text, fontSize: tokens.type.caption.fontSize, fontWeight: '700' }}>
+      <Text selectable={false} style={{ color: palette.text, fontSize: textStyle.fontSize, fontWeight: '700' }}>
         {getInitials(name)}
       </Text>
     </View>

@@ -14,8 +14,17 @@ import type {
 } from '../types/domain';
 import { fail, ok } from '../utils/serviceResult';
 
+// `kategori` ditambahkan migrasi 065. Ia melengkapi `description`, bukan
+// menggantikannya: pada cabang perawatan, view mengisi description dengan
+// catatan ATAU kategori (coalesce, 045:273), sehingga kategori hilang begitu
+// pekerja menulis catatan. Kolom ini membawanya terpisah supaya keduanya bisa
+// tampil bersama.
+// `dibuat_pada` ditambahkan migrasi 066: waktu baris catatan itu DITULIS, dari
+// keempat cabang view. Ia bukan pengganti happened_at dan tidak pernah
+// ditampilkan — perannya tunggal, jadi pemecah seri urutan (lihat query di
+// bawah).
 const TREE_HISTORY_SELECT =
-  'source_id, tree_id, farm_id, history_type, title, description, actor_id, happened_at, asal, produk';
+  'source_id, tree_id, farm_id, history_type, title, description, actor_id, happened_at, asal, produk, kategori, dibuat_pada';
 
 type TreeHistoryRow = {
   source_id: string | null;
@@ -28,6 +37,8 @@ type TreeHistoryRow = {
   happened_at: string;
   asal: CareActivityOrigin | null;
   produk: string | null;
+  kategori: string | null;
+  dibuat_pada: string;
 };
 
 type TreeFarmRow = {
@@ -60,11 +71,46 @@ export async function getTreeHistory(
     return fail(accessResult.error);
   }
 
+  // URUTAN SEKUNDER dibuat_pada, MENGGANTIKAN source_id.
+  //
+  // Kenapa perlu urutan sekunder sama sekali: happened_at pada view ini berasal
+  // dari empat kolom timestamptz yang seluruh jalur tulisnya — kecuali
+  // complete_task — mengisi dengan string tanggal saja ('2026-08-28') yang
+  // di-cast Postgres jadi tengah malam. Semua catatan pada hari yang sama punya
+  // happened_at IDENTIK, bukan sekadar berdekatan, dan `order by` satu kolom
+  // pada nilai yang seri tidak menjanjikan urutan apa pun.
+  //
+  // KENAPA source_id DIGANTI. Ia menyelesaikan separuh masalah: sebagai primary
+  // key ia unik, jadi urutannya STABIL — sama setiap kali dimuat. Tapi nilainya
+  // uuid acak, jadi urutan di dalam satu hari juga acak. Riwayat hari itu tidak
+  // pernah berpindah-pindah, ia hanya salah urut secara tetap.
+  //
+  // dibuat_pada (migrasi 066) memberi keduanya. Ia timestamptz `default now()`
+  // yang ditulis database saat barisnya lahir — bukan tanggal yang diketik
+  // pencatat — jadi ia satu-satunya kolom di view ini yang tahu urutan
+  // SEBENARNYA dari dua catatan pada hari yang sama. Dengan desc, catatan yang
+  // ditulis belakangan tampil lebih dulu, sepadan dengan happened_at desc di
+  // atasnya.
+  //
+  // Ia TIDAK PERNAH ditampilkan. Layar tetap menulis '28 Agu' tanpa jam —
+  // jamnya nyata untuk kolom ini, tapi menampilkannya berarti dua waktu di satu
+  // baris yang bisa berbeda hari (catatan bertanggal mundur), dan pembacanya
+  // tidak punya cara tahu mana yang mana.
+  //
+  // KEUNIKAN TIDAK LAGI DIJAMIN, dan itu diterima. Dua baris bisa punya
+  // dibuat_pada identik kalau ditulis dalam transaksi yang sama — jalur nyatanya
+  // complete_task pada jadwal multi-pohon, yang membuat satu care_activities
+  // untuk banyak pohon. Tapi baris-baris itu milik POHON yang berbeda, sedangkan
+  // query ini disaring ke satu tree_id: di dalam satu pohon mereka tidak pernah
+  // bertemu. Sisanya perlu dua catatan lahir pada mikrodetik yang sama untuk
+  // pohon yang sama — dan kalaupun terjadi, akibatnya kembali persis ke keadaan
+  // sebelum baris ini ada.
   const { data, error } = await supabase
     .from('tree_history_view')
     .select(TREE_HISTORY_SELECT)
     .eq('tree_id', input.treeId)
     .order('happened_at', { ascending: false })
+    .order('dibuat_pada', { ascending: false })
     .returns<TreeHistoryRow[]>();
 
   if (error) {
@@ -189,6 +235,8 @@ function mapTreeHistoryItem(row: TreeHistoryRow): TreeHistoryItem {
     happenedAt: row.happened_at,
     asal: row.asal,
     produk: row.produk,
+    kategori: row.kategori,
+    dibuatPada: row.dibuat_pada,
   };
 }
 

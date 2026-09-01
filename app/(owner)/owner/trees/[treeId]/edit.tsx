@@ -14,14 +14,26 @@ import {
   type TreeFormValues,
 } from '../../../../../src/components/tree-components';
 import { useSnackbar } from '../../../../../src/components/snackbar';
-import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../../src/components/ui';
+import {
+  EndTreePlantingSheet,
+  type EndTreePlantingFormValues,
+} from '../../../../../src/components/tree-planting-sheets';
+import {
+  Button,
+  EmptyState,
+  ErrorBanner,
+  LoadingState,
+  Screen,
+  TopAppBar,
+} from '../../../../../src/components/ui';
 import { pickImageFromGallery, takePhotoFromCamera } from '../../../../../src/lib/media';
+import { setPendingFeedback } from '../../../../../src/lib/pendingFeedback';
 import {
   deleteTreeMainPhoto,
   getTreeMainPhoto,
   uploadTreeMainPhoto,
 } from '../../../../../src/services/photoAttachmentService';
-import { getTreeDetail, updateTree } from '../../../../../src/services/treeService';
+import { endTreePlanting, getTreeDetail, updateTree } from '../../../../../src/services/treeService';
 import type { PickedPhotoAsset, TreeMainPhoto } from '../../../../../src/types/media';
 import { buildTreeDisplayCode } from '../../../../../src/utils/treeFormat';
 
@@ -40,11 +52,21 @@ export default function OwnerEditTreeScreen() {
   const [error, setError] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<TreeFormErrors>({});
   const [farmId, setFarmId] = React.useState<string | null>(null);
+  const [hasActivePlanting, setHasActivePlanting] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [processingPhoto, setProcessingPhoto] = React.useState(false);
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [values, setValues] = React.useState<TreeFormValues>(initialValues);
+  // Menutup siklus tanam: state-nya TERPISAH dari state form di atas.
+  //
+  // cycleError bukan `error` layar, dengan alasan yang sama seperti di layar
+  // detail sebelum aksi ini pindah ke sini: galatnya harus tampil DI DALAM sheet
+  // yang gagal, tepat di atas tombolnya — bukan di balik sheet, di tempat yang
+  // tidak terlihat selama sheet-nya masih terbuka.
+  const [cycleError, setCycleError] = React.useState<string | null>(null);
+  const [cycleLoading, setCycleLoading] = React.useState(false);
+  const [endSheetOpen, setEndSheetOpen] = React.useState(false);
 
   function handleValuesChange(next: TreeFormValues) {
     setValues(next);
@@ -73,6 +95,16 @@ export default function OwnerEditTreeScreen() {
         setLoading(false);
         return;
       }
+
+      // Posisi tanpa siklus tanam aktif TIDAK BOLEH merender form.
+      //
+      // update_tree_with_planting menolaknya dengan pesan "Posisi ini tidak
+      // punya pohon aktif" (056:151-154), sementara form di bawah tetap terisi —
+      // dengan varietas dan tanggal tanam KOSONG, karena keduanya diambil dari
+      // activePlanting yang tidak ada. Hasilnya layar yang tampak bisa diisi dan
+      // disimpan, padahal setiap penyimpanan pasti ditolak. Yang benar adalah
+      // mengatakannya sebelum orang mengetik apa pun.
+      setHasActivePlanting(Boolean(result.data.activePlanting));
 
       setValues({
         // rowPosition kini number (smallint di database, migrasi 054) sementara
@@ -253,11 +285,92 @@ export default function OwnerEditTreeScreen() {
     }
   }
 
+  // Menutup siklus tanam. BENTUKNYA BERBEDA dari runStartPlanting di layar
+  // detail, dan perbedaannya disengaja.
+  //
+  // Sukses TIDAK menutup sheet lalu memuat ulang layar ini. Ia langsung pergi.
+  // Alasannya: begitu siklusnya berakhir, layar ini tidak bisa menyimpan apa pun
+  // lagi — update_tree_with_planting menolak posisi tanpa siklus aktif — jadi
+  // merendernya ulang menghasilkan form yang tampak bisa diisi padahal setiap
+  // penyimpanan pasti ditolak. Persis keadaan yang cabang hasActivePlanting di
+  // atas ada untuk mencegahnya, dan tidak masuk akal membuatnya sendiri.
+  //
+  // router.replace, BUKAN push: layar ini sudah tidak sah dikunjungi lagi, jadi
+  // ia tidak boleh tertinggal di back-stack menunggu ditekan kembali.
+  //
+  // Snackbar-nya dititipkan lewat pendingFeedback karena layar yang seharusnya
+  // menampilkannya sudah tidak ada saat pesannya jatuh tempo. Layar detail
+  // membacanya di useFocusEffect miliknya.
+  //
+  // Isian form yang belum disimpan HILANG di sini, dan itu diterima:
+  // penanda "pohon sudah tidak ada" membuat isian itu tidak bisa disimpan ke
+  // mana pun. Tidak ada useUnsavedChangesGuard yang dipasang untuk memperingatkan
+  // — peringatan yang menawarkan "batalkan" pada perubahan yang sudah pasti
+  // tidak bisa disimpan cuma menunda pemiliknya.
+  //
+  // Sheet yang GAGAL sengaja tetap terbuka: galatnya tampil di dalamnya lewat
+  // cycleError dan pilihan pemiliknya tidak hilang.
+  // Parameternya `sheetValues`, BUKAN `values`: di berkas ini `values` sudah
+  // berarti isian form pohon, dan dua arti untuk satu nama di satu fungsi adalah
+  // jebakan yang menunggu penyunting berikutnya.
+  async function runEndPlanting(sheetValues: EndTreePlantingFormValues) {
+    const normalizedTreeId = treeId?.trim();
+
+    if (!normalizedTreeId) {
+      setCycleError('Data pohon tidak ditemukan.');
+      return;
+    }
+
+    setCycleLoading(true);
+    setCycleError(null);
+
+    const result = await endTreePlanting({
+      endReason: sheetValues.endReason,
+      endedAt: sheetValues.endedAt,
+      treeId: normalizedTreeId,
+    });
+
+    if (result.error) {
+      setCycleError(result.error.message);
+      setCycleLoading(false);
+      return;
+    }
+
+    setCycleLoading(false);
+    setPendingFeedback('planting_ended');
+    router.replace(`/owner/trees/${normalizedTreeId}`);
+  }
+
   if (loading) {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <LoadingState message="Memuat data pohon..." />
+      </>
+    );
+  }
+
+  // KEADAAN B: posisi tanpa pohon aktif. Form tidak dirender sama sekali —
+  // alasannya di komentar pada setHasActivePlanting di atas.
+  //
+  // Satu tombol keluar, bukan dua: menanam pohon baru dilakukan dari layar
+  // detail, dan menawarkannya di sini berarti pintu kedua ke aksi yang sama.
+  if (!hasActivePlanting) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <Screen header={<TopAppBar title="Edit Pohon" onBack={() => router.back()} />}>
+          <ErrorBanner message={error} />
+          <EmptyState
+            title="Posisi ini belum ditanami"
+            subtitle="Data pohon hanya bisa diubah selama ada pohon yang sedang ditanam di posisi ini. Tanam pohon lebih dulu dari layar detail."
+          />
+          <Button
+            title="Kembali ke detail pohon"
+            variant="secondary"
+            onPress={() => router.replace(`/owner/trees/${treeId}`)}
+          />
+        </Screen>
       </>
     );
   }
@@ -285,6 +398,34 @@ export default function OwnerEditTreeScreen() {
           onGalleryPress={handlePickPhotoFromGallery}
           onRemoveSelected={() => setSelectedPhoto(null)}
           onRestoreExisting={() => setDeletePhotoRequested(false)}
+        />
+
+        {/* Aksi merusak duduk DI BAWAH form, di atas footer — bukan di footer
+            bersama "Simpan Perubahan".
+            Footer adalah tempat aksi utama layar ini, dan menaruh dua tombol
+            yang artinya berlawanan berdampingan di sana membuat keduanya
+            sama-sama terlihat seperti "selesai". Di badan layar, ia harus
+            digulung untuk ditemukan — sepadan dengan seberapa jarang ia dipakai:
+            mungkin sekali seumur pohon.
+
+            Nada 'danger' di sini merah LEMBUT (latar status.danger.bg, teks
+            status.danger.text), bukan tombol merah pekat. */}
+        <Button
+          title="Pohon sudah tidak ada"
+          variant="danger"
+          disabled={submitting}
+          onPress={() => {
+            setCycleError(null);
+            setEndSheetOpen(true);
+          }}
+        />
+
+        <EndTreePlantingSheet
+          error={cycleError}
+          loading={cycleLoading}
+          onClose={() => setEndSheetOpen(false)}
+          onSubmit={runEndPlanting}
+          visible={endSheetOpen}
         />
       </Screen>
     </>

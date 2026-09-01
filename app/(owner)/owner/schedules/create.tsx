@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { ScrollView, View, type LayoutChangeEvent } from 'react-native';
+import { ScrollView, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import {
   ManualScheduleForm,
@@ -18,9 +18,10 @@ import {
   consumePendingScheduleTrees,
   peekPendingScheduleTrees,
 } from '../../../../src/lib/pendingScheduleTrees';
-import { createManualSchedule } from '../../../../src/services/careScheduleService';
+import { buildScheduleTitle, createManualSchedule } from '../../../../src/services/careScheduleService';
 import { getActiveWorkers } from '../../../../src/services/memberService';
 import { getTrees } from '../../../../src/services/treeService';
+import { tokens } from '../../../../src/constants/theme';
 import type { CareCategory, Tree, WorkerMembership } from '../../../../src/types/domain';
 import { getTodayIsoDate } from '../../../../src/utils/taskDueDate';
 
@@ -35,7 +36,6 @@ const initialValues: ManualScheduleFormValues = {
   scheduledDate: getTodayIsoDate(),
   targetTreeIds: [],
   targetType: 'farm',
-  title: '',
 };
 
 // Posisi tanpa siklus tanam aktif tidak boleh muncul di pemilih.
@@ -184,6 +184,22 @@ export default function CreateManualScheduleScreen() {
       return;
     }
 
+    // Judul dirakit di sini, bukan diketik. Null berarti bahannya tidak lengkap
+    // — praktis mustahil sesudah validateScheduleForm lolos, tapi kolomnya NOT
+    // NULL dan jalur ini satu-satunya penulisnya, jadi ia ditolak di sini
+    // alih-alih menuliskan judul kosong.
+    const title = buildScheduleTitle({
+      category: values.category,
+      customTargetNote: values.targetType === 'custom' ? values.customTargetNote : null,
+      targetTreeIds: values.targetTreeIds,
+      targetType: values.targetType,
+    });
+
+    if (!title) {
+      setError('Jenis perawatan dan target harus lengkap.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -201,7 +217,7 @@ export default function CreateManualScheduleScreen() {
       scheduledDate: values.scheduledDate,
       targetTreeIds: values.targetType === 'tree' ? values.targetTreeIds : undefined,
       targetType: values.targetType,
-      title: values.title,
+      title,
     });
 
     if (result.error) {
@@ -233,11 +249,52 @@ export default function CreateManualScheduleScreen() {
     return <LoadingState message="Menyiapkan form jadwal..." />;
   }
 
+  // Baris ringkasan menggantikan konfirmasi yang dulu diberikan kolom judul:
+  // sesudah kolom itu hilang, tidak ada satu pun tempat di layar ini yang
+  // menyatakan "inilah yang akan Anda buat" dalam satu tarikan.
+  //
+  // Isinya string yang SAMA PERSIS dengan judul yang akan tersimpan (fungsi
+  // yang sama, bukan salinan aturannya), ditambah pengulangan kalau ada.
+  const summaryTitle = buildScheduleTitle({
+    category: values.category,
+    customTargetNote: values.targetType === 'custom' ? values.customTargetNote : null,
+    targetTreeIds: values.targetTreeIds,
+    targetType: values.targetType,
+  });
+  const repeatDays = values.repeatEnabled ? values.repeatEveryDays.trim() : '';
+  const summaryLine = summaryTitle
+    ? [summaryTitle, repeatDays ? `tiap ${repeatDays} hari` : null].filter(Boolean).join(' · ')
+    : null;
+
   return (
     <Screen
       header={<TopAppBar title="Buat Jadwal" onBack={() => router.back()} />}
       scrollRef={scrollRef}
-      stickyFooter={<Button title="Simpan jadwal" loading={submitting} onPress={handleSubmit} />}
+      stickyFooter={
+        <View style={{ gap: tokens.space.sm }}>
+          {/* Tidak dirender sama sekali selama jenis atau target belum
+              lengkap — baris setengah jadi ("Pemupukan · ") lebih buruk
+              daripada tidak ada baris. */}
+          {summaryLine ? (
+            <Text
+              selectable
+              style={{
+                ...tokens.type.meta,
+                color: tokens.color.text.tertiary,
+                textAlign: 'center',
+              }}
+            >
+              {summaryLine}
+            </Text>
+          ) : null}
+          <Button
+            title="Simpan jadwal"
+            loading={submitting}
+            loadingTitle="Menyimpan…"
+            onPress={handleSubmit}
+          />
+        </View>
+      }
     >
       <ErrorBanner message={error} />
       <View onLayout={(event: LayoutChangeEvent) => (formTop.current = event.nativeEvent.layout.y)}>

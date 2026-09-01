@@ -1,8 +1,8 @@
-import Constants from 'expo-constants';
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
+import { MEMBER_ROLE_LABELS, MEMBER_STATUS_LABELS } from '../constants/membership';
 import { tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
 import { consumePendingFeedback } from '../lib/pendingFeedback';
@@ -10,17 +10,9 @@ import type { CurrentUserFarm } from '../types/domain';
 import { formatPersonDisplayName, sanitizeDisplayValue } from '../utils/displayFormat';
 import { isOwnerActive, isWorkerActive } from '../utils/routeGuard';
 import { ConfirmDialog } from './bottom-sheet';
+import { Avatar } from './member-row';
 import { useSnackbar } from './snackbar';
-import {
-  Card,
-  EmptyState,
-  ErrorBanner,
-  MainTabHeader,
-  MenuRow,
-  MenuRowGroup,
-  Screen,
-  TopAppBar,
-} from './ui';
+import { Button, EmptyState, ErrorBanner, MainTabHeader, Screen, TopAppBar } from './ui';
 
 const PENDING_FEEDBACK_MESSAGES: Record<string, string | undefined> = {
   password_updated: 'Password diperbarui',
@@ -36,7 +28,7 @@ export function ProfileScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      // Konfirmasi setelah simpan dari layar Edit Profil / Ubah Password:
+      // Konfirmasi setelah simpan dari layar Edit profil / Ubah password:
       // baca-sekaligus-hapus penanda, lalu tampilkan snackbar global sekali.
       // Kembali tanpa menyimpan tidak meninggalkan penanda, jadi tidak ada
       // snackbar yang muncul.
@@ -69,20 +61,12 @@ export function ProfileScreen() {
   const passwordRoute = getPasswordRoute(currentFarm);
   const profileEditRoute = getProfileEditRoute(currentFarm);
   const displayName = formatPersonDisplayName(profile?.fullName, 'Pengguna Avology');
-  const farmName = currentFarm?.farm?.name ?? null;
+  const farmName = sanitizeDisplayValue(currentFarm?.farm?.name);
   // Anggota kebun AKTIF membuka layar ini sebagai tujuan bottom nav; selain itu
   // (belum punya kebun, pending, ditolak, dinonaktifkan) layar ini dibuka lewat
   // push dari layar pilih akses atau layar pemberitahuan. Pembedaan itu dipakai
-  // dua kali di bawah: untuk tombol back, dan untuk baris nama kebun.
+  // untuk memilih bentuk header.
   const isFarmMember = isOwnerActive(currentFarm) || isWorkerActive(currentFarm);
-  // Nama kebun hanya bermakna untuk anggota kebun aktif. Di konteks onboarding
-  // ia tidak dirender sama sekali — bukan baris kosong, bukan placeholder,
-  // bukan "-".
-  const showMembershipMeta = isFarmMember && Boolean(farmName);
-  // expoConfig bisa null di runtime tertentu (mis. konteks tanpa manifest). Baris
-  // versi disembunyikan seluruhnya dalam kasus itu — lebih baik tidak ada daripada
-  // memajang penanda kosong yang tidak berarti apa-apa bagi pengguna.
-  const appVersion = Constants.expoConfig?.version ?? null;
 
   return (
     <Screen
@@ -92,20 +76,26 @@ export function ProfileScreen() {
         //
         // Anggota kebun aktif membuka layar ini sebagai tujuan bottom nav, jadi
         // ia memakai MainTabHeader yang sama persis dengan Beranda, Pohon, dan
-        // Perawatan: judul rata kiri, tanpa tombol kembali. Tidak ada tempat
-        // untuk "mundur" dari sebuah tab, dan judul yang rata tengah membuat
-        // satu dari empat destinasi terlihat seperti layar turunan.
+        // Perawatan: judul rata tengah, TANPA tombol kembali. Tidak ada tempat
+        // untuk "mundur" dari sebuah tab.
+        //
+        // Perataan itu dulu rata kiri, dengan alasan bahwa rata tengah membuat
+        // satu destinasi terlihat seperti layar turunan. Alasan itu sudah
+        // dicabut: yang menandai layar turunan adalah CHEVRON-nya, bukan
+        // perataannya, dan kelima destinasi kini rata tengah bersama-sama.
+        // Catatan lengkapnya ada di atas MainTabHeader di ui.tsx.
         //
         // Di konteks onboarding layar ini tetap dibuka lewat push, jadi
-        // bentuknya tetap layar turunan: judul rata tengah dengan chevron.
+        // bentuknya tetap layar turunan — dan yang membedakannya sekarang
+        // sepenuhnya chevron itu, bukan lagi letak judulnya.
         // Tanpa chevron itu, user yang membukanya dari layar pilih akses
         // terkurung sampai menutup aplikasi. Mundur satu langkah sudah cukup;
         // '/' hanya cadangan kalau layar ini jadi entri pertama.
         isFarmMember ? (
-          <MainTabHeader title="Profil Akun" />
+          <MainTabHeader title="Profil" />
         ) : (
           <TopAppBar
-            title="Profil Akun"
+            title="Profil"
             onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
           />
         )
@@ -117,81 +107,105 @@ export function ProfileScreen() {
         <EmptyState title="Profil tidak tersedia" subtitle="Masuk ulang jika data akun belum muncul." />
       ) : (
         <>
-          <View style={{ gap: tokens.space.sm }}>
+          {/* Blok identitas: lingkaran inisial, nama, email. TANPA kartu.
+              Jarak sudah memisahkannya dari baris data di bawah, dan menurut
+              urutan pemisah — jarak, lalu garis, lalu kotak — kotak di sini
+              adalah tingkat ketiga untuk pekerjaan yang sudah selesai di
+              tingkat pertama.
+
+              Email pindah ke sini dari baris "Email login". Ia penanda AKUN,
+              bukan data yang berdiri sejajar dengan nomor HP: ia yang dipakai
+              masuk, dan ia tidak bisa diubah. Tempatnya di bawah nama. */}
+          <View style={{ alignItems: 'center', gap: tokens.space.sm }}>
+            <Avatar name={profile.fullName} size="lg" tone="accent" />
             <Text
               selectable
               style={{
                 color: tokens.color.text.primary,
-                fontSize: tokens.type.title.fontSize,
-                fontWeight: tokens.type.title.fontWeight,
-                lineHeight: tokens.type.title.lineHeight,
+                fontSize: tokens.type.heading.fontSize,
+                fontWeight: tokens.type.heading.fontWeight,
+                lineHeight: tokens.type.heading.lineHeight,
+                textAlign: 'center',
               }}
             >
               {displayName}
             </Text>
-            {showMembershipMeta ? (
-              <View
+            {profile.email ? (
+              <Text
+                selectable
                 style={{
-                  alignItems: 'center',
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
-                  gap: tokens.space.sm,
+                  color: tokens.color.text.secondary,
+                  fontSize: tokens.type.bodySmall.fontSize,
+                  lineHeight: tokens.type.bodySmall.lineHeight,
+                  textAlign: 'center',
                 }}
               >
-                {/* Badge peran dicabut, sejalan dengan pencabutannya di
-                    MainTabHeader: peran tidak berubah sepanjang sesi dan tidak
-                    pernah jadi bahan keputusan di layar ini. Nama kebun tetap —
-                    itu yang membedakan satu akun dari akun lain. */}
-                <Text
-                  selectable
-                  numberOfLines={1}
-                  style={{
-                    color: tokens.color.text.secondary,
-                    flexShrink: 1,
-                    fontSize: tokens.type.bodySmall.fontSize,
-                    lineHeight: tokens.type.bodySmall.lineHeight,
-                  }}
-                >
-                  {farmName}
-                </Text>
-              </View>
+                {profile.email}
+              </Text>
             ) : null}
           </View>
 
-          <Card>
-            <AccountRow label="Nama lengkap" value={profile.fullName} />
+          {/* Baris label-nilai, dipisah garis rambut, tanpa kartu. Label kiri,
+              nilai kanan — bentuk yang terbaca sebagai daftar keterangan, bukan
+              sebagai daftar yang bisa ditekan. Tidak satu pun baris di sini
+              membuka apa pun, dan itu memang disengaja: aksinya semua sudah
+              berkumpul sebagai tombol di bawah. */}
+          <View>
             <AccountRow label="Nomor HP" value={profile.phone} />
-            <AccountRow label="Email login" value={profile.email} />
-          </Card>
 
-          <Card>
-            <MenuRowGroup>
-              <MenuRow
-                icon="user-edit"
-                label="Edit profil"
-                onPress={() => router.push(profileEditRoute)}
-              />
-              <MenuRow icon="lock" label="Ubah password" onPress={() => router.push(passwordRoute)} />
-            </MenuRowGroup>
-          </Card>
+            {/* Baris kebun tidak lagi dikunci pada keanggotaan AKTIF. Dulu
+                syaratnya isFarmMember, sehingga orang yang pengajuannya sedang
+                ditinjau — justru orang yang paling ingin tahu kebun mana yang
+                sedang meninjaunya — tidak melihat namanya sama sekali. Nama
+                kebun tersedia untuk semua status lewat kolom farm_name di
+                get_current_user_access, jadi syaratnya cukup: ada namanya. */}
+            {farmName ? <AccountRow label="Kebun" value={farmName} /> : null}
 
-          <Card>
-            <MenuRow danger icon="logout" label="Keluar akun" onPress={() => setConfirmLogout(true)} />
-          </Card>
+            {/* Peran hanya bermakna saat keanggotaannya aktif. Selama menunggu,
+                ditolak, atau dinonaktifkan, yang perlu dibaca adalah STATUS-nya
+                — menyebut orang "Pekerja" padahal pengajuannya belum disetujui
+                adalah janji yang belum tentu ditepati. */}
+            {currentFarm ? (
+              isFarmMember ? (
+                <AccountRow label="Peran" value={MEMBER_ROLE_LABELS[currentFarm.role]} />
+              ) : (
+                <AccountRow label="Status" value={MEMBER_STATUS_LABELS[currentFarm.status]} />
+              )
+            ) : null}
+          </View>
 
-          {appVersion ? (
-            <Text
-              selectable={false}
-              style={{
-                color: tokens.color.text.tertiary,
-                fontSize: tokens.type.meta.fontSize,
-                lineHeight: tokens.type.meta.lineHeight,
-                textAlign: 'center',
-              }}
-            >
-              Versi {appVersion}
-            </Text>
-          ) : null}
+          {/* Ruang kosong fleksibel: mendorong ketiga tombol ke dasar layar saat
+              isinya pendek, tapi tetap boleh menyusut jadi nol saat font sistem
+              dibesarkan sehingga tombolnya tidak pernah terdorong keluar dari
+              area yang bisa digulung. */}
+          <View style={{ flexGrow: 1 }} />
+
+          {/* Tombol, bukan baris berchevron. Chevron adalah penanda yang harus
+              dipelajari dulu; border dan label lebar penuh tidak. Keduanya
+              berbobot SETARA — tidak ada alasan mendorong pengguna ke salah
+              satu.
+
+              Jarak antar keduanya space.sm (8), lebih rapat daripada jarak ke
+              "Keluar akun" di bawah yang datang dari sectionGap Screen (18).
+              Kerapatan itu yang mengelompokkan keduanya sebagai satu pasangan
+              "ubah data akun", dan yang memisahkan keduanya dari aksi yang
+              mengakhiri sesi. */}
+          <View style={{ gap: tokens.space.sm }}>
+            <Button
+              title="Edit profil"
+              variant="secondary"
+              emphasis="strong"
+              onPress={() => router.push(profileEditRoute)}
+            />
+            <Button
+              title="Ubah password"
+              variant="secondary"
+              emphasis="strong"
+              onPress={() => router.push(passwordRoute)}
+            />
+          </View>
+
+          <Button title="Keluar akun" variant="danger" onPress={() => setConfirmLogout(true)} />
         </>
       )}
 
@@ -214,19 +228,35 @@ export function ProfileScreen() {
   );
 }
 
-// Baris data akun: label kecil di atas nilai. Nilai kosong tampil "Belum diisi"
-// dengan warna muted, bukan "-", supaya terbaca sebagai ajakan mengisi.
+// Baris data akun: label kiri, nilai kanan, dipisah garis rambut di atasnya.
+// Garisnya milik BARIS, bukan container, supaya baris yang tidak dirender tidak
+// meninggalkan garis menggantung — jumlah baris di layar ini berubah menurut
+// keadaan keanggotaan.
+//
+// Nilai kosong tetap tampil "Belum diisi" dengan warna muted, bukan "-",
+// supaya terbaca sebagai ajakan mengisi. Perilaku ini tidak berubah dari bentuk
+// sebelumnya.
 function AccountRow({ label, value }: { label: string; value?: string | null }) {
   const safeValue = sanitizeDisplayValue(value);
 
   return (
-    <View style={{ gap: tokens.space.xs }}>
+    <View
+      style={{
+        alignItems: 'center',
+        borderTopColor: tokens.color.line.hairline,
+        borderTopWidth: 1,
+        flexDirection: 'row',
+        gap: tokens.space.md,
+        justifyContent: 'space-between',
+        paddingVertical: tokens.space.lg,
+      }}
+    >
       <Text
         selectable
         style={{
-          color: tokens.color.text.tertiary,
-          fontSize: tokens.type.meta.fontSize,
-          lineHeight: tokens.type.meta.lineHeight,
+          color: tokens.color.text.secondary,
+          fontSize: tokens.type.body.fontSize,
+          lineHeight: tokens.type.body.lineHeight,
         }}
       >
         {label}
@@ -235,9 +265,11 @@ function AccountRow({ label, value }: { label: string; value?: string | null }) 
         selectable
         style={{
           color: safeValue ? tokens.color.text.primary : tokens.color.text.tertiary,
+          flexShrink: 1,
           fontSize: tokens.type.bodyStrong.fontSize,
           fontWeight: tokens.type.bodyStrong.fontWeight,
           lineHeight: tokens.type.bodyStrong.lineHeight,
+          textAlign: 'right',
         }}
       >
         {safeValue ?? 'Belum diisi'}

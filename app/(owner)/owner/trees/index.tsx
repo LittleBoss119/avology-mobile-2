@@ -3,6 +3,8 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BottomSheet } from '../../../../src/components/bottom-sheet';
+import { Icon } from '../../../../src/components/icons';
+import { FarmMapScreen } from '../../../../src/components/farm-map-screen';
 import { TreeCard } from '../../../../src/components/tree-components';
 import {
   Button,
@@ -14,12 +16,28 @@ import {
   MainTabHeader,
   SearchFilterRow,
   Screen,
+  SegmentedControl,
 } from '../../../../src/components/ui';
 import { colors, spacing, tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
+import {
+  DEFAULT_TREE_FILTER_CRITERIA,
+  matchesTreeCriteria,
+  peekTreeBrowseCriteria,
+  peekTreeBrowseSearch,
+  peekTreeBrowseView,
+  resetTreeBrowseState,
+  setTreeBrowseCriteria,
+  setTreeBrowseSearch,
+  setTreeBrowseView,
+  type TreeAgeRange,
+  type TreeBrowseView,
+  type TreeFilterCriteria,
+  type TreePhaseFilter,
+} from '../../../../src/lib/treeBrowseState';
 import { listTreeMainPhotosForFarm } from '../../../../src/services/photoAttachmentService';
 import { getTrees } from '../../../../src/services/treeService';
-import type { GrowthPhase, Tree, TreeConditionStatus } from '../../../../src/types/domain';
+import type { Tree, TreeConditionStatus } from '../../../../src/types/domain';
 import type { TreeMainPhotoMap } from '../../../../src/types/media';
 import {
   formatGrowthPhase,
@@ -27,41 +45,26 @@ import {
   formatTreeDisplayCode,
 } from '../../../../src/utils/treeFormat';
 
-type TreeAgeRange = 'lt_1' | '1_3' | 'gt_3';
-
-type TreeFilterCriteria = {
-  ageRanges: TreeAgeRange[];
-  conditions: TreeConditionStatus[];
-  phases: GrowthPhase[];
-};
-
-const DEFAULT_CRITERIA: TreeFilterCriteria = {
-  ageRanges: [],
-  conditions: [],
-  phases: [],
-};
-
-// TIDAK TERPAKAI sejak sumbu kondisi seluruhnya pindah ke deret chip. Dibiarkan
-// menunggu keputusan: chip "Bermasalah" yang menyatukan empat kondisi non-mati
-// bisa saja kembali sebagai chip kedelapan.
-const PROBLEM_CONDITIONS: TreeConditionStatus[] = [
-  'needs_attention',
-  'pest_attacked',
-  'disease_indicated',
-  'damaged',
-];
-
-// Label DITURUNKAN dari formatter bersama, tidak ditulis tangan lagi. Menyalin
-// teksnya ke sini persis yang membuat chip di layar ini menyebut nama yang
-// berbeda dari badge di kartu pohon dan dari legenda peta. Urutannya tetap
-// ditulis eksplisit — itu urutan tampil, bukan label.
+// Label DITURUNKAN dari formatter bersama, tidak ditulis tangan. Menyalin
+// teksnya ke sini persis yang dulu membuat chip di layar ini menyebut nama yang
+// berbeda dari yang tertulis di baris daftar dan di legenda peta. Urutannya
+// tetap ditulis eksplisit — itu urutan tampil, bukan label.
 const conditionOptions: Array<{ label: string; value: TreeConditionStatus }> = (
   ['healthy', 'needs_attention', 'pest_attacked', 'disease_indicated', 'damaged', 'dead'] as const
 ).map((value) => ({ label: formatTreeConditionStatus(value), value }));
 
-const phaseOptions: Array<{ label: string; value: GrowthPhase }> = (
-  ['initial_planting', 'vegetative', 'flowering', 'fruiting', 'harvesting'] as const
-).map((value) => ({ label: formatGrowthPhase(value), value }));
+// Lima nilai enum PLUS 'unrecorded'. Yang terakhir bukan tambalan: kolom
+// trees.current_growth_phase nullable tanpa default, jadi "belum dicatat" adalah
+// keadaan yang benar-benar dimiliki data dan sebelum ini tidak punya satu pun
+// cara untuk ditemukan. Labelnya diambil dari formatGrowthPhase(null), bukan
+// diketik ulang, supaya ia tidak bisa berbeda dari teks yang sama di baris
+// daftar.
+const phaseOptions: Array<{ label: string; value: TreePhaseFilter }> = [
+  ...(['initial_planting', 'vegetative', 'flowering', 'fruiting', 'harvesting'] as const).map(
+    (value): { label: string; value: TreePhaseFilter } => ({ label: formatGrowthPhase(value), value })
+  ),
+  { label: formatGrowthPhase(null), value: 'unrecorded' },
+];
 
 const ageRangeOptions: Array<{ label: string; value: TreeAgeRange }> = [
   { label: '<1 tahun', value: 'lt_1' },
@@ -69,33 +72,101 @@ const ageRangeOptions: Array<{ label: string; value: TreeAgeRange }> = [
   { label: '>3 tahun', value: 'gt_3' },
 ];
 
-// SATU sumbu kondisi, dan tempatnya di sini — bukan dibagi dua antara deret chip
-// dan grup "Kondisi" di dalam sheet. Dulu keduanya menulis criteria.conditions
-// yang sama: menekan chip menghapus pilihan sheet tanpa memberi tahu, dan
-// sebaliknya. Yang terlihat berbeda ternyata satu benda.
+// Deret chip kondisi: "Semua" plus keenam nilai enum, MULTI-PILIH.
 //
-// Diturunkan dari conditionOptions supaya label chip dan label yang dulu ada di
-// sheet tidak bisa berbeda. Tiap chip memilih TEPAT SATU kondisi; deretnya
-// melebihi lebar layar dan digulung horizontal oleh FilterChipsRow.
-const triageChips: Array<{ conditions: TreeConditionStatus[]; key: string; label: string }> = [
-  { conditions: [], key: 'all', label: 'Semua' },
-  ...conditionOptions.map((option) => ({
-    conditions: [option.value],
-    key: option.value,
-    label: option.label,
-  })),
-];
+// Dulu tiap chip memilih tepat satu kondisi dan menimpa pilihan sebelumnya, jadi
+// "tunjukkan semua yang bermasalah" — perkara paling sering di layar ini —
+// mustahil ditanyakan. Sekarang chip menyalakan dan memadamkan anggotanya
+// sendiri, dan empat kondisi non-mati bisa dinyalakan bersamaan.
+//
+// "Semua" bukan anggota himpunan melainkan jalan mengosongkannya, jadi ia tidak
+// ikut di-toggle: menekannya selalu berarti conditions = [].
+const CONDITION_CHIP_ALL = 'all';
 
-export default function OwnerTreeListScreen() {
+// Route induk. Ia memiliki SATU hal: tampilan mana yang sedang dipandang.
+//
+// Header dan segmented dirender DI SINI, di luar percabangan, jadi keduanya
+// tidak ikut bertukar — judul tidak berganti, tidak ada tombol back yang
+// muncul, dan kepala layar tidak dirender ulang saat pengguna berpindah
+// Daftar/Denah. Itu seluruh sebab kedua tampilan disatukan jadi satu route.
+//
+// TANPA <Screen> di tingkat ini, dan itu WAJIB: Screen membungkus children-nya
+// dengan ScrollView vertikal, dan denah punya dua penggulungnya sendiri. Anak
+// flex:1 di dalam ScrollView tidak pernah mendapat tinggi terbatas, jadi
+// petaknya akan kolaps. Screen tetap dipakai, tapi HANYA di dalam cabang
+// daftar, tempat ia memang benar.
+//
+// RENDER KONDISIONAL YANG BENAR-BENAR MELEPAS, bukan display:none.
+// useFocusEffect terikat pada fokus ROUTE, bukan pada visibilitas komponen —
+// kalau daftar dan denah ter-mount bersamaan, setiap kali route ini difokus
+// getTrees dipanggil dua kali, ditambah getFarmDetail dan ratusan permintaan
+// foto milik daftar. Harganya: berpindah tampilan memuat ulang datanya, dan
+// posisi gulung petak hilang. Keduanya diterima.
+export default function OwnerTreesScreen() {
+  // Dibaca di FASE RENDER, di dalam penginisialisasi useState. Kalau dibaca di
+  // effect, layar selalu melukis Daftar sekali lebih dulu lalu bertukar ke
+  // Denah satu frame kemudian — kedipan yang terlihat jelas justru pada
+  // pengguna yang memang lebih sering memakai denah.
+  const [view, setView] = React.useState<TreeBrowseView>(peekTreeBrowseView);
+
+  // Disinkronkan ulang saat route kembali difokus. Ini yang membuat pengalih
+  // di /owner/trees/map bekerja: ia menyetel modul lalu router.replace ke sini, dan
+  // kalau layar ini ternyata dipakai ulang alih-alih dipasang ulang,
+  // penginisialisasi useState di atas TIDAK jalan lagi. Effect ini yang
+  // menangkap keadaan itu. Saat nilainya tidak berubah, ia tidak berbuat apa-apa.
+  useFocusEffect(
+    React.useCallback(() => {
+      setView(peekTreeBrowseView());
+    }, [])
+  );
+
+  function changeView(key: string) {
+    const next: TreeBrowseView = key === 'map' ? 'map' : 'list';
+
+    setView(next);
+    setTreeBrowseView(next);
+  }
+
+  return (
+    <View style={styles.root}>
+      <View style={styles.headerWrap}>
+        {/* MainTabHeader, sama dengan keempat destinasi top-level lain. Tanpa
+            slot kanan: "Denah" ada di segmented tepat di bawahnya, dan
+            "Tambah" melekat di atas navigasi bawah. */}
+        <MainTabHeader title="Pohon" />
+        <View style={styles.segmentedWrap}>
+          <SegmentedControl onChange={changeView} options={SEGMENT_OPTIONS} value={view} />
+        </View>
+      </View>
+
+      {view === 'list' ? <TreeListView /> : <FarmMapScreen basePath="/owner/trees" />}
+    </View>
+  );
+}
+
+// Cabang daftar. Ia memiliki SELURUH keadaan daftar — pohon, foto, filter,
+// sheet — dan tidak tahu apa pun tentang segmented di atasnya.
+//
+// <Screen> dipakai DI SINI, tanpa prop `header`: headernya sudah dirender induk
+// di luar percabangan. Screen tetap yang paling benar untuk cabang ini — ia yang
+// membawa penggulung vertikal, padding tepi, dan footer melekat.
+function TreeListView() {
   const { currentFarm } = useAuth();
-  const [criteria, setCriteria] = React.useState<TreeFilterCriteria>(DEFAULT_CRITERIA);
-  const [debouncedSearch, setDebouncedSearch] = React.useState('');
-  const [draft, setDraft] = React.useState<TreeFilterCriteria>(DEFAULT_CRITERIA);
+  // Pencarian dan filter DIPULIHKAN di fase render, bukan di effect. Kalau
+  // dibaca di effect, render pertama melukis seluruh daftar tanpa filter lalu
+  // menggantinya sekejap kemudian — dan layar inilah yang isinya paling banyak,
+  // jadi kedipannya paling terlihat. Polanya sama dengan peekPendingCareTrees di
+  // farm-care-record-screen, termasuk alasannya.
+  const [criteria, setCriteria] = React.useState<TreeFilterCriteria>(peekTreeBrowseCriteria);
+  const [debouncedSearch, setDebouncedSearch] = React.useState(() =>
+    peekTreeBrowseSearch().trim().toLowerCase()
+  );
+  const [draft, setDraft] = React.useState<TreeFilterCriteria>(DEFAULT_TREE_FILTER_CRITERIA);
   const [error, setError] = React.useState<string | null>(null);
   const [filterSheetOpen, setFilterSheetOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [photoMap, setPhotoMap] = React.useState<TreeMainPhotoMap>({});
-  const [search, setSearch] = React.useState('');
+  const [search, setSearch] = React.useState(peekTreeBrowseSearch);
   const [trees, setTrees] = React.useState<Tree[]>([]);
 
   const farmId = currentFarm?.farmId;
@@ -145,6 +216,25 @@ export default function OwnerTreeListScreen() {
     setPhotoMap(photoResult.data);
   }, [farmId]);
 
+  // Ref dimulai dari farmId SEKARANG, jadi effect ini tidak berbuat apa-apa pada
+  // pemasangan pertama. Itu syaratnya: kalau ia jalan saat mount, ia akan
+  // menghapus pencarian dan filter yang baru saja dipulihkan di fase render dua
+  // puluh baris di atas — persis yang seluruh modul treeBrowseState ada untuk
+  // mencegahnya.
+  const farmIdRef = React.useRef(farmId);
+
+  React.useEffect(() => {
+    if (farmIdRef.current === farmId) {
+      return;
+    }
+
+    farmIdRef.current = farmId;
+    resetTreeBrowseState();
+    setCriteria(DEFAULT_TREE_FILTER_CRITERIA);
+    setDebouncedSearch('');
+    setSearch('');
+  }, [farmId]);
+
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
 
@@ -158,28 +248,43 @@ export default function OwnerTreeListScreen() {
   );
 
   const displayedTrees = React.useMemo(
-    () =>
-      sortTreesByCode(
-        filterTrees(trees, {
-          ageRanges: criteria.ageRanges,
-          conditions: criteria.conditions,
-          phases: criteria.phases,
-          search: debouncedSearch,
-        })
-      ),
-    [criteria.ageRanges, criteria.conditions, criteria.phases, debouncedSearch, trees]
+    () => sortTreesByCode(filterTrees(trees, criteria, debouncedSearch)),
+    [criteria, debouncedSearch, trees]
   );
 
-  // Kondisi TIDAK ikut dihitung di sini sejak ia keluar dari sheet: badge angka
-  // di tombol Filter hanya boleh mewakili yang tersembunyi di balik tombol itu,
-  // sedangkan kondisi sudah terpampang sebagai chip yang aktif.
+  // Kondisi TIDAK ikut dihitung. Badge angka di tombol Filter hanya mewakili apa
+  // yang TERSEMBUNYI di balik tombol itu, dan kondisi sudah terpampang sebagai
+  // deret chip yang aktif tepat di bawahnya. Sumbu kondisi sekarang memang juga
+  // hadir di dalam sheet, tapi itu tidak membuatnya tersembunyi — keduanya dua
+  // pandangan atas satu nilai yang sama, dan menghitungnya di sini berarti
+  // menekan chip menaikkan angka yang mengaku mewakili hal lain.
   const activeGroupCount =
-    (criteria.phases.length > 0 ? 1 : 0) + (criteria.ageRanges.length > 0 ? 1 : 0);
+    (criteria.phases.length > 0 ? 1 : 0) +
+    (criteria.ageRanges.length > 0 ? 1 : 0) +
+    (criteria.onlyMissingVariety ? 1 : 0);
 
   // "Kebun ini memang belum punya pohon" — BUKAN sekadar nol hasil. Nol hasil
   // karena filter ditangani cabang empty state yang lain, yang menyuruh
   // melonggarkan filternya alih-alih menawarkan tombol Tambah Pohon.
   const isFarmEmpty = trees.length === 0;
+
+  // SATU pintu untuk setiap perubahan filter: state React dan modul penyimpan
+  // ditulis berbarengan, jadi tidak ada jalur yang mengubah salah satunya saja.
+  // Sengaja menerima nilai jadi, bukan updater — pemanggilnya membaca `criteria`
+  // yang sedang berlaku, dan modulnya butuh nilai akhir untuk disimpan.
+  function applyCriteria(next: TreeFilterCriteria) {
+    setCriteria(next);
+    setTreeBrowseCriteria(next);
+  }
+
+  function applySearch(value: string) {
+    setSearch(value);
+    setTreeBrowseSearch(value);
+  }
+
+  function toggleCondition(value: TreeConditionStatus) {
+    applyCriteria({ ...criteria, conditions: toggleArrayValue(criteria.conditions, value) });
+  }
 
   function openFilterSheet() {
     setDraft(criteria);
@@ -187,7 +292,7 @@ export default function OwnerTreeListScreen() {
   }
 
   function applyDraft() {
-    setCriteria(draft);
+    applyCriteria(draft);
     setFilterSheetOpen(false);
   }
 
@@ -197,24 +302,11 @@ export default function OwnerTreeListScreen() {
 
   return (
     <Screen
-      header={
-        // Aksi "tambah" pindah dari FAB ke sisi kanan judul. FAB melayang di atas
-        // daftar dan menutupi baris terakhir; di sini tempatnya tetap dan tidak
-        // menghalangi apa pun. flexShrink 0 supaya judul "Pohon" yang mengalah
-        // kalau ruangnya sempit, bukan chipnya.
-        <MainTabHeader
-          title="Pohon"
-          right={
-            <View style={{ flexDirection: 'row', flexShrink: 0, gap: spacing.sm }}>
-              <ChipButton active={false} label="Denah" onPress={() => router.push('/owner/trees/map')} />
-              <ChipButton
-                active={false}
-                icon="plus"
-                label="Tambah"
-                onPress={() => router.push('/owner/trees/create')}
-              />
-            </View>
-          }
+      stickyFooter={
+        <Button
+          icon={<Icon name="plus" size={tokens.icon.md} color={tokens.color.brand.on} />}
+          onPress={() => router.push('/owner/trees/create')}
+          title="Tambah pohon"
         />
       }
     >
@@ -229,23 +321,31 @@ export default function OwnerTreeListScreen() {
       {isFarmEmpty ? null : (
         <>
           <SearchFilterRow
+            filterActive={activeGroupCount > 0}
             filterCount={activeGroupCount}
-            onChangeText={setSearch}
+            onChangeText={applySearch}
             onFilterPress={openFilterSheet}
             placeholder="Cari kode atau varietas"
             value={search}
           />
 
-          {/* Tanpa angka. Baris "Menampilkan N pohon" tepat di bawahnya sudah
-              menyatakan berapa yang terlihat, dan angka di chip yang tidak aktif
-              mengabarkan hal yang tidak ditanyakan siapa pun. */}
+          {/* Ikut tergulung bersama isi, TIDAK melekat di header. Deret ini
+              panjang dan sudah punya gulungannya sendiri ke samping; membuatnya
+              melekat pula berarti dua baris kontrol tetap yang memakan tinggi
+              layar sepanjang waktu, di layar yang gunanya membaca daftar. */}
           <FilterChipsRow>
-            {triageChips.map((chip) => (
+            <ChipButton
+              active={criteria.conditions.length === 0}
+              key={CONDITION_CHIP_ALL}
+              label="Semua"
+              onPress={() => applyCriteria({ ...criteria, conditions: [] })}
+            />
+            {conditionOptions.map((option) => (
               <ChipButton
-                key={chip.key}
-                active={sameConditionSet(criteria.conditions, chip.conditions)}
-                label={chip.label}
-                onPress={() => setCriteria((current) => ({ ...current, conditions: chip.conditions }))}
+                key={option.value}
+                active={criteria.conditions.includes(option.value)}
+                label={option.label}
+                onPress={() => toggleCondition(option.value)}
               />
             ))}
           </FilterChipsRow>
@@ -263,16 +363,17 @@ export default function OwnerTreeListScreen() {
       />
 
       {displayedTrees.length === 0 ? (
-        trees.length === 0 ? (
-          <View style={{ gap: spacing.md }}>
-            <EmptyState
-              icon="tree"
-              title="Belum ada pohon"
-              subtitle="Tambahkan pohon pertama untuk mulai memantau kondisi kebun."
-              variant="plain"
-            />
-            <Button title="Tambah Pohon" onPress={() => router.push('/owner/trees/create')} />
-          </View>
+        isFarmEmpty ? (
+          // Tanpa tombol "Tambah Pohon" di badan layar: tombol lebar dengan
+          // label yang sama sudah melekat di atas navigasi bawah, terlihat di
+          // layar yang sama. Dua tombol untuk satu perbuatan membuat pembacanya
+          // berhenti menimbang mana yang benar.
+          <EmptyState
+            icon="tree"
+            title="Belum ada pohon"
+            subtitle="Tambahkan pohon pertama untuk mulai memantau kondisi kebun."
+            variant="plain"
+          />
         ) : (
           <EmptyState
             icon="tree"
@@ -301,14 +402,27 @@ export default function OwnerTreeListScreen() {
   );
 }
 
+const SEGMENT_OPTIONS = [
+  { key: 'list', label: 'Daftar' },
+  { key: 'map', label: 'Denah' },
+];
+
 function ResultCount({ count }: { count: number }) {
   return (
-    <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700', marginTop: -6 }}>
+    <Text selectable style={styles.resultCount}>
       {`Menampilkan ${count} pohon`}
     </Text>
   );
 }
 
+// Seluruh sumbu filter sebagai BADGE yang bisa dinyalakan bersamaan, bukan
+// daftar pilihan yang memanjang ke bawah. Empat kelompok muat dalam satu
+// pandangan tanpa menggulung sheet, dan itu yang membuat "sehat DAN berbuah DAN
+// di atas 3 tahun" bisa dirakit tanpa kehilangan jejak apa yang sudah dipilih.
+//
+// Kelompoknya membungkus ke bawah (flexWrap), bukan menggulung ke samping:
+// gulungan mendatar menyembunyikan pilihan di luar layar, dan di dalam sheet
+// tidak ada alasan untuk itu — ruangnya ada.
 function TreeFilterSheet({
   draft,
   onApply,
@@ -322,102 +436,119 @@ function TreeFilterSheet({
   onDraftChange: (next: TreeFilterCriteria) => void;
   visible: boolean;
 }) {
-  // conditions TIDAK ikut diperiksa: sumbu itu sudah tidak ada di sheet ini, dan
-  // "Atur ulang" di sini hanya boleh mengatur ulang apa yang terlihat di sini.
-  // Chip kondisi di layar punya "Semua" sebagai jalan atur ulangnya sendiri.
-  const isDefault = draft.ageRanges.length === 0 && draft.phases.length === 0;
-
-  function togglePhase(value: GrowthPhase) {
-    onDraftChange({ ...draft, phases: toggleArrayValue(draft.phases, value) });
-  }
-
-  function toggleAgeRange(value: TreeAgeRange) {
-    onDraftChange({ ...draft, ageRanges: toggleArrayValue(draft.ageRanges, value) });
-  }
+  // Kondisi IKUT diperiksa sekarang, tidak seperti sebelumnya. Dulu ia
+  // dikecualikan karena sumbu itu hidup di luar sheet dan "Atur ulang" tidak
+  // boleh diam-diam membatalkan pilihan yang dibuat di tempat lain. Kini kondisi
+  // hadir di sheet ini juga, jadi tombol yang mengaku mengatur ulang isi sheet
+  // harus benar-benar mengatur ulang seluruhnya.
+  const isDefault =
+    draft.ageRanges.length === 0 &&
+    draft.conditions.length === 0 &&
+    draft.phases.length === 0 &&
+    !draft.onlyMissingVariety;
 
   return (
     <BottomSheet onClose={onClose} title="Filter pohon" visible={visible}>
       <View style={styles.filterSheetBody}>
-        <View style={styles.sheetResetRow}>
+        <FilterBadgeGroup title="Kondisi">
+          {conditionOptions.map((option) => (
+            <ChipButton
+              key={option.value}
+              active={draft.conditions.includes(option.value)}
+              label={option.label}
+              onPress={() =>
+                onDraftChange({ ...draft, conditions: toggleArrayValue(draft.conditions, option.value) })
+              }
+            />
+          ))}
+        </FilterBadgeGroup>
+
+        <FilterBadgeGroup title="Fase tumbuh">
+          {phaseOptions.map((option) => (
+            <ChipButton
+              key={option.value}
+              active={draft.phases.includes(option.value)}
+              label={option.label}
+              onPress={() =>
+                onDraftChange({ ...draft, phases: toggleArrayValue(draft.phases, option.value) })
+              }
+            />
+          ))}
+        </FilterBadgeGroup>
+
+        <FilterBadgeGroup title="Umur">
+          {ageRangeOptions.map((option) => (
+            <ChipButton
+              key={option.value}
+              active={draft.ageRanges.includes(option.value)}
+              label={option.label}
+              onPress={() =>
+                onDraftChange({ ...draft, ageRanges: toggleArrayValue(draft.ageRanges, option.value) })
+              }
+            />
+          ))}
+        </FilterBadgeGroup>
+
+        {/* Kelompok berisi SATU badge, dan itu disengaja: ia bukan varian dari
+            kondisi, fase, maupun umur — ketiganya menyaring APA YANG TERCATAT,
+            yang ini menyaring APA YANG BELUM. Menyelipkannya ke salah satu
+            kelompok di atas akan membuatnya terbaca sebagai fase keenam atau
+            kondisi ketujuh. */}
+        <FilterBadgeGroup title="Kelengkapan data">
+          <ChipButton
+            active={draft.onlyMissingVariety}
+            label="Varietas belum diisi"
+            onPress={() => onDraftChange({ ...draft, onlyMissingVariety: !draft.onlyMissingVariety })}
+          />
+        </FilterBadgeGroup>
+
+        {/* Tombol tidak selebar sheet. Selebar penuh ia terbaca sebagai penutup
+            halaman — sesuatu yang harus ditekan untuk keluar — padahal menutup
+            sheet ini juga bisa lewat backdrop dan gestur. Dipersempit, ia kembali
+            jadi satu pilihan di antara pilihan lain, dan "Atur ulang" di bawahnya
+            punya ruang untuk terbaca sebagai pasangannya, bukan sisipan. */}
+        <View style={styles.sheetFooter}>
+          <View style={styles.applyButtonWrap}>
+            <Button title="Terapkan" variant="primary" onPress={onApply} />
+          </View>
           <Pressable
             accessibilityRole="button"
             disabled={isDefault}
             hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
-            // conditions dibawa serta, tidak ikut direset: kondisi dipilih lewat
-            // chip di luar sheet, dan tombol ini tidak boleh diam-diam
-            // membatalkan pilihan yang dibuat di sana.
-            onPress={() => onDraftChange({ ...DEFAULT_CRITERIA, conditions: draft.conditions })}
+            onPress={() => onDraftChange(DEFAULT_TREE_FILTER_CRITERIA)}
           >
             <Text selectable={false} style={[styles.resetText, isDefault ? styles.resetTextDisabled : null]}>
               Atur ulang
             </Text>
           </Pressable>
         </View>
-
-        <View style={styles.filterGroup}>
-          <Text selectable style={styles.filterLabel}>
-            Fase tumbuh
-          </Text>
-          <FilterChipsRow>
-            {phaseOptions.map((option) => (
-              <ChipButton
-                key={option.value}
-                active={draft.phases.includes(option.value)}
-                label={option.label}
-                onPress={() => togglePhase(option.value)}
-              />
-            ))}
-          </FilterChipsRow>
-        </View>
-
-        <View style={styles.filterGroup}>
-          <Text selectable style={styles.filterLabel}>
-            Umur
-          </Text>
-          <FilterChipsRow>
-            {ageRangeOptions.map((option) => (
-              <ChipButton
-                key={option.value}
-                active={draft.ageRanges.includes(option.value)}
-                label={option.label}
-                onPress={() => toggleAgeRange(option.value)}
-              />
-            ))}
-          </FilterChipsRow>
-        </View>
-
-        <Button title="Terapkan" variant="primary" onPress={onApply} />
       </View>
     </BottomSheet>
   );
 }
 
-function filterTrees(
-  trees: Tree[],
-  filters: {
-    ageRanges: TreeAgeRange[];
-    conditions: TreeConditionStatus[];
-    phases: GrowthPhase[];
-    search: string;
-  }
-): Tree[] {
+function FilterBadgeGroup({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <View style={styles.filterGroup}>
+      <Text selectable style={styles.filterLabel}>
+        {title}
+      </Text>
+      <View style={styles.badgeWrap}>{children}</View>
+    </View>
+  );
+}
+
+// Criteria disaring lewat matchesTreeCriteria di src/lib/treeBrowseState.ts —
+// FUNGSI YANG SAMA yang dipakai layar denah, bukan salinan yang kebetulan
+// berbunyi mirip. Yang tinggal di sini hanya pencarian teksnya, karena hanya
+// layar daftar yang punya kolom pencarian.
+function filterTrees(trees: Tree[], criteria: TreeFilterCriteria, search: string): Tree[] {
   return trees.filter((tree) => {
-    if (filters.conditions.length > 0 && !filters.conditions.includes(tree.currentCondition)) {
+    if (!matchesTreeCriteria(tree, criteria)) {
       return false;
     }
 
-    if (
-      filters.phases.length > 0 &&
-      (!tree.currentGrowthPhase || !filters.phases.includes(tree.currentGrowthPhase))
-    ) {
-      return false;
-    }
-
-    if (!matchesAgeRanges(tree, filters.ageRanges)) {
-      return false;
-    }
-
-    if (!filters.search) {
+    if (!search) {
       return true;
     }
 
@@ -429,46 +560,11 @@ function filterTrees(
       tree.columnPosition,
     ]
       .filter(Boolean)
-      .join(' ')
+      .join(" ")
       .toLowerCase();
 
-    return searchableText.includes(filters.search);
+    return searchableText.includes(search);
   });
-}
-
-function matchesAgeRanges(tree: Tree, ageRanges: TreeAgeRange[]): boolean {
-  if (ageRanges.length === 0) {
-    return true;
-  }
-
-  const ageYears = getTreeAgeYears(tree.activePlanting?.plantedAt);
-
-  if (ageYears === null) {
-    return false;
-  }
-
-  return ageRanges.some((range) => matchesSingleAgeRange(ageYears, range));
-}
-
-function matchesSingleAgeRange(ageYears: number, range: TreeAgeRange): boolean {
-  if (range === 'lt_1') {
-    return ageYears < 1;
-  }
-
-  if (range === '1_3') {
-    return ageYears >= 1 && ageYears <= 3;
-  }
-
-  return ageYears > 3;
-}
-
-function sameConditionSet(a: TreeConditionStatus[], b: TreeConditionStatus[]): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-
-  const setB = new Set(b);
-  return a.every((value) => setB.has(value));
 }
 
 function sortTreesByCode(trees: Tree[]): Tree[] {
@@ -496,14 +592,20 @@ function toggleArrayValue<T>(values: T[], value: T): T[] {
 }
 
 const styles = StyleSheet.create({
+  root: { backgroundColor: colors.background, flex: 1 },
+  headerWrap: { paddingHorizontal: spacing.screenHorizontal },
+  segmentedWrap: { paddingBottom: tokens.space.md, paddingTop: tokens.space.xs },
   rowDivider: {
     backgroundColor: tokens.color.line.hairline,
     height: StyleSheet.hairlineWidth,
   },
+  resultCount: { ...tokens.type.meta, color: tokens.color.text.tertiary, fontWeight: '700', marginTop: -6 },
   filterSheetBody: { gap: tokens.space.md },
   filterGroup: { gap: tokens.space.sm },
   filterLabel: { ...tokens.type.label, color: tokens.color.text.primary },
-  sheetResetRow: { alignItems: 'flex-end' },
+  badgeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.sm },
+  sheetFooter: { alignItems: 'center', gap: tokens.space.md, paddingTop: tokens.space.sm },
+  applyButtonWrap: { width: '78%' },
   resetText: { ...tokens.type.label, color: tokens.color.brand.base },
   resetTextDisabled: { color: tokens.color.text.tertiary },
 });

@@ -34,8 +34,6 @@ export default function CreateFarmScreen() {
   const { refresh } = useAuth();
   const showSnackbar = useSnackbar();
   const [name, setName] = React.useState('');
-  const [location, setLocation] = React.useState('');
-  const [areaSize, setAreaSize] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [starting, setStarting] = React.useState(false);
@@ -49,19 +47,12 @@ export default function CreateFarmScreen() {
     setSubmitting(true);
     setError(null);
 
-    const parsedAreaSize = areaSize.trim() ? Number(areaSize) : null;
-
-    if (parsedAreaSize !== null && (!Number.isFinite(parsedAreaSize) || parsedAreaSize <= 0)) {
-      setError('Luas lahan harus berupa angka lebih dari 0.');
-      setSubmitting(false);
-      return;
-    }
-
-    const result = await createFarm({
-      name,
-      location,
-      areaSize: parsedAreaSize,
-    });
+    // Hanya nama yang dikirim. `location` dan `areaSize` DIHILANGKAN dari
+    // panggilan, bukan diisi string kosong: createFarm sendiri yang menerjemahkan
+    // keduanya jadi SQL NULL (farmService.ts:54-55), dan kedua kolomnya memang
+    // nullable di farms (migrasi 002:12-13). Signature createFarm maupun RPC
+    // create_farm_with_owner tidak berubah — ketiga parameternya tetap terkirim.
+    const result = await createFarm({ name });
 
     if (result.error) {
       setError(result.error.message);
@@ -119,29 +110,60 @@ export default function CreateFarmScreen() {
       footer={
         // Hanya satu tombol. Tombol "Batal" dihapus: sudah ada tombol kembali di
         // app bar, dan dua jalan keluar untuk hal yang sama cuma kebisingan.
-        <Button title="Buat kebun" disabled={!canSubmit} loading={submitting} onPress={handleSubmit} />
+        //
+        // Peringatan duduk DI FOOTER, tepat di atas tombolnya — bukan menempel
+        // di bawah kolom nama bersama `helperText`. Keduanya jenis kalimat yang
+        // berbeda: helperText menerangkan cara mengisi kolom, kalimat ini
+        // menerangkan AKIBAT menekan tombol. Di footer ia terbaca tepat sebelum
+        // ketukan, dan tidak ikut tergulung menjauh saat papan ketik terbuka.
+        //
+        // Kalimatnya bukan basa-basi. Kebun memang tidak bisa dihapus: tidak ada
+        // RPC penghapus kebun, `farms` tanpa policy DELETE (migrasi 007:348),
+        // dan pemilik tidak bisa melepaskan diri lewat leave_current_farm yang
+        // menyaring `role = 'worker'` (migrasi 051:266-277). Lihat catatan
+        // lengkapnya di puncak onboarding.tsx.
+        //
+        // Slot footer Screen menumpuk anaknya dengan gap spacing.md, jadi
+        // fragmen ini cukup — tanpa pembungkus baru, tanpa menyentuh ui.tsx.
+        <>
+          <Text
+            selectable
+            style={{
+              color: tokens.color.text.secondary,
+              fontSize: tokens.type.bodySmall.fontSize,
+              lineHeight: tokens.type.bodySmall.lineHeight,
+              textAlign: 'center',
+            }}
+          >
+            Kebun yang sudah dibuat tidak bisa dihapus.
+          </Text>
+          <Button title="Buat kebun" disabled={!canSubmit} loading={submitting} onPress={handleSubmit} />
+        </>
       }
     >
       <ErrorBanner message={error} />
-      <View style={{ gap: tokens.space.xl }}>
-        {/* Tanpa tanda bintang. Yang ditandai justru yang opsional — bintang itu
-            konvensi web yang tidak berarti apa-apa bagi pengguna layar ini.
-            Placeholder berupa contoh nilai yang masuk akal, bukan nama produk. */}
-        <Field label="Nama kebun" value={name} onChangeText={setName} placeholder="Kebun Ngawi" />
-        <Field
-          label="Lokasi · opsional"
-          value={location}
-          onChangeText={setLocation}
-          placeholder="Ngawi, Jawa Timur"
-        />
-        <Field
-          label="Luas lahan · opsional"
-          value={areaSize}
-          onChangeText={setAreaSize}
-          placeholder="6500 m²"
-          keyboardType="decimal-pad"
-        />
-      </View>
+      {/* SATU field saja. Lokasi dan luas lahan dicabut dari layar ini: keduanya
+          opsional, tidak dipakai satu pun keputusan sesudah kebun terbentuk, dan
+          memajangnya di sini membuat langkah pertama seorang pemilik baru terlihat
+          seperti formulir pendaftaran.
+
+          Tanpa tanda bintang. Yang dulu ditandai justru yang opsional — bintang
+          itu konvensi web yang tidak berarti apa-apa bagi pengguna layar ini.
+          Placeholder berupa contoh nilai yang masuk akal, bukan nama produk.
+
+          Keterangan di bawahnya lewat `helperText` milik Field, bukan Text
+          lepas: ukurannya (meta) dan warnanya (text.tertiary) sudah ditentukan
+          komponennya, jadi ia tidak bisa melenceng sendiri. Istilah "Ubah data
+          kebun" DISALIN PERSIS dari label chip jalan masuknya di Beranda pemilik
+          (farm-overview.tsx:47) — kalau label di sana berubah, kalimat ini harus
+          ikut berubah. */}
+      <Field
+        label="Nama kebun"
+        value={name}
+        onChangeText={setName}
+        placeholder="Kebun Ngawi"
+        helperText="Lokasi dan luas lahan bisa diisi nanti di Ubah data kebun."
+      />
 
       <FarmCreatedModal
         farm={created}

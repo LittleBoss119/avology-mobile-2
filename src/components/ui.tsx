@@ -453,14 +453,34 @@ function useKeyboardMetrics(): KeyboardMetrics {
 }
 
 export function PageIntro({
+  align = 'left',
   title,
   subtitle,
 }: {
+  // Default 'left' = perilaku lama PERSIS. Saat 'left', alignItems dan textAlign
+  // dibiarkan undefined, bukan disetel ke nilai kiri yang eksplisit — undefined
+  // membuat Yoga memakai bawaannya ('stretch' dan awal-baris), yaitu keadaan
+  // sebelum prop ini ada. Layar non-auth yang memakai PageIntro tanpa prop ini
+  // (onboarding, tasks, growth-monitoring) karena itu tidak bergeser sedikit pun.
+  //
+  // 'center' butuh KEDUANYA: alignItems memusatkan kotak Text yang menyusut ke
+  // lebar isinya, textAlign memusatkan barisnya saat judul atau subjudul pecah
+  // jadi dua baris. Salah satu saja meninggalkan kasus yang tidak terpusat.
+  align?: 'left' | 'center';
   title: string;
   subtitle?: string;
 }) {
+  const centered = align === 'center';
+  const textAlign = centered ? ('center' as const) : undefined;
+
   return (
-    <View style={{ gap: spacing.sm, paddingTop: spacing.xs }}>
+    <View
+      style={{
+        alignItems: centered ? 'center' : undefined,
+        gap: spacing.sm,
+        paddingTop: spacing.xs,
+      }}
+    >
       <Text
         selectable
         style={{
@@ -469,12 +489,21 @@ export function PageIntro({
           fontWeight: typography.h1.fontWeight,
           letterSpacing: 0,
           lineHeight: typography.h1.lineHeight,
+          textAlign,
         }}
       >
         {title}
       </Text>
       {subtitle ? (
-        <Text selectable style={{ color: colors.muted, fontSize: typography.body.fontSize, lineHeight: 24 }}>
+        <Text
+          selectable
+          style={{
+            color: colors.muted,
+            fontSize: typography.body.fontSize,
+            lineHeight: 24,
+            textAlign,
+          }}
+        >
           {subtitle}
         </Text>
       ) : null}
@@ -507,7 +536,19 @@ export function TopAppBar({
 }) {
   const insets = useSafeAreaInsets();
   const resolvedVariant = variant ?? (onBack ? 'detail' : 'plain');
-  const titleAlign = resolvedVariant === 'main' ? 'left' : 'center';
+  const isMain = resolvedVariant === 'main';
+  // SELURUH varian kini rata tengah, termasuk 'main'. Lihat catatan panjang di
+  // atas MainTabHeader untuk alasannya.
+  const titleAlign = 'center';
+  // Lebar slot kanan, DIUKUR bukan ditebak. Ini yang membedakan varian 'main'
+  // dari dua varian lain: 'detail' dan 'plain' hanya pernah menaruh benda
+  // berukuran tetap 32x32 di kedua sisi, jadi penyeimbangnya boleh ditulis
+  // sebagai angka. Slot kanan 'main' berisi apa pun yang dikirim pemanggil —
+  // hari ini sebuah ChipButton "Tambah" yang lebarnya mengikuti panjang
+  // labelnya — dan penyeimbang bernilai tebakan akan menggeser judul sebanyak
+  // selisihnya. Ongkosnya satu render ulang saat pemasangan, dan hanya pada
+  // layar yang benar-benar mengirim `right`.
+  const [rightSlotWidth, setRightSlotWidth] = React.useState(0);
 
   return (
     <View style={{ gap: subtitle ? spacing.sm : 0, paddingTop: Math.max(insets.top, spacing.sm) }}>
@@ -516,12 +557,17 @@ export function TopAppBar({
           alignItems: 'center',
           flexDirection: 'row',
           gap: spacing.sm,
-          justifyContent: titleAlign === 'left' ? 'flex-start' : 'space-between',
+          justifyContent: 'space-between',
           minHeight: 56,
         }}
       >
         {onBack ? (
+          // Label WAJIB ditulis: isinya hanya ikon chevron tanpa teks, jadi
+          // tanpa ini TalkBack membacakannya sebagai elemen tanpa nama. Mengikuti
+          // ProfileIconButton dan toggle PasswordField yang sudah benar.
           <Pressable
+            accessibilityLabel="Kembali"
+            accessibilityRole="button"
             hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
             onPress={onBack}
             style={{
@@ -538,12 +584,18 @@ export function TopAppBar({
           >
             <Icon name="chevron-left" size={20} color={colors.primary} />
           </Pressable>
-        ) : titleAlign === 'center' ? (
+        ) : isMain ? (
+          // Penyeimbang kiri selebar slot kanan. Saat `right` tidak dikirim
+          // lebarnya 0, dan judul yang flex:1 di antara dua tepi nol tetap duduk
+          // persis di tengah — jadi cabang ini benar untuk kedua keadaan tanpa
+          // syarat tambahan.
+          <View style={{ height: 32, width: rightSlotWidth }} />
+        ) : (
           <View style={{ height: 32, width: 32 }} />
-        ) : null}
+        )}
         <View
           style={{
-            alignItems: titleAlign === 'left' ? 'flex-start' : 'center',
+            alignItems: 'center',
             flex: 1,
             minWidth: 0,
           }}
@@ -557,8 +609,8 @@ export function TopAppBar({
               numberOfLines={1}
               style={{
                 color: colors.text,
-                fontSize: resolvedVariant === 'main' ? typography.screenTitle.fontSize : 20,
-                fontWeight: resolvedVariant === 'main' ? typography.screenTitle.fontWeight : '700',
+                fontSize: isMain ? typography.screenTitle.fontSize : 20,
+                fontWeight: isMain ? typography.screenTitle.fontWeight : '700',
                 lineHeight: typography.screenTitle.lineHeight,
                 textAlign: titleAlign,
               }}
@@ -567,7 +619,14 @@ export function TopAppBar({
             </Text>
           ))}
         </View>
-        {right ?? (titleAlign === 'center' ? <View style={{ height: 32, width: 32 }} /> : null)}
+        {right ? (
+          // Pembungkus HANYA untuk mengukur. Ia tidak menetapkan lebar maupun
+          // flex, jadi isinya tetap selebar dirinya sendiri persis seperti
+          // sebelum pembungkus ini ada.
+          <View onLayout={(event) => setRightSlotWidth(event.nativeEvent.layout.width)}>{right}</View>
+        ) : (
+          <View style={{ height: 32, width: isMain ? 0 : 32 }} />
+        )}
       </View>
       {subtitle ? (
         <Text
@@ -616,18 +675,31 @@ export function ProfileIconButton({
   );
 }
 
-// Header layar utama: judul layar, rata kiri, titik. Tidak ada tombol profil
+// Header layar utama: judul layar, RATA TENGAH, titik. Tidak ada tombol profil
 // (Profil punya itemnya sendiri di bottom nav), tidak ada badge peran (peran
 // tidak berubah sepanjang sesi), dan tidak lagi ada nama kebun.
 //
-// Nama kebun sempat tinggal di sini sebagai jawaban atas "ini kebun yang mana?".
-// Jawabannya sekarang diberikan sekali, besar, di blok identitas paling atas
-// Beranda — bukan dicicil sebagai teks kecil di samping judul SETIAP layar
-// utama. Di empat destinasi lain, tempat itu kembali jadi milik judul layar.
-// `right` diteruskan APA ADANYA ke slot kanan TopAppBar — tanpa pembungkus,
-// tanpa style tambahan. Layar yang mengisinya bertanggung jawab atas ukuran dan
-// flexShrink isinya, karena hanya layar itu yang tahu seberapa penting isinya
-// dibanding judulnya sendiri.
+// RATA TENGAH, BUKAN RATA KIRI — dan ini pembalikan aturan, jadi ditulis di
+// sini sekali untuk kelima destinasi yang memakainya.
+//
+// Aturan lama berbunyi: judul rata tengah membuat sebuah tab terlihat seperti
+// layar turunan, karena rata tengah dipakai varian 'detail' yang selalu
+// berpasangan dengan chevron kembali. Yang membuat sebuah layar terbaca sebagai
+// turunan ternyata CHEVRON-nya, bukan perataannya — dan chevron itu memang tidak
+// pernah ada di sini. Tanpa chevron, judul rata tengah terbaca sebagai judul
+// halaman, sama seperti di hampir setiap aplikasi bertab.
+//
+// Yang menahannya benar-benar di tengah adalah penyeimbang kiri selebar slot
+// kanan, DIUKUR di TopAppBar. Tanpa itu, satu-satunya layar yang mengisi slot
+// kanan (Perawatan sisi pemilik, dengan chip "Tambah") akan punya judul yang
+// meleset ke kiri sebanyak lebar chipnya — dan empat destinasi lain tidak,
+// sehingga judulnya berpindah tempat saat berganti tab.
+//
+// `right` diteruskan APA ADANYA ke slot kanan TopAppBar — tanpa style tambahan.
+// Layar yang mengisinya bertanggung jawab atas ukuran dan flexShrink isinya,
+// karena hanya layar itu yang tahu seberapa penting isinya dibanding judulnya
+// sendiri. Satu-satunya yang ditambahkan TopAppBar adalah pembungkus tanpa gaya
+// untuk mengukur lebarnya.
 //
 // Slot ini menggantikan FAB di layar yang punya satu aksi "tambah": FAB melayang
 // di atas daftar dan menutupi baris terakhir, sementara di sini aksinya duduk
@@ -1123,6 +1195,89 @@ export function FilterChipsRow({
   );
 }
 
+export type SegmentedControlOption = {
+  key: string;
+  label: string;
+};
+
+// Dua sampai tiga tampilan atas SATU isi — bukan navigasi, bukan filter.
+//
+// KEADAAN AKTIF DIBAWA TIGA SALURAN, bukan hanya latar. Aturan proyek melarang
+// warna jadi satu-satunya penanda, dan pada kontrol sesempit ini pelanggarannya
+// paling mudah terjadi:
+//
+//   BENTUK  — segmen aktif punya kotak sendiri (latar kartu + border) di atas
+//             alur yang datar; yang tidak aktif tidak punya kotak sama sekali.
+//   TEBAL   — 700 lawan 500. Saluran non-warna yang terbaca bahkan saat
+//             layarnya kena silau matahari.
+//   WARNA   — brand lawan teks sekunder, sebagai penegas, bukan pembawa pesan.
+//
+// 'transparent' bukan warna literal yang menghindari token — ia ketiadaan warna,
+// pola yang sama dengan role-bottom-navigation dan farm-map-screen.
+export function SegmentedControl({
+  onChange,
+  options,
+  value,
+}: {
+  onChange: (key: string) => void;
+  options: SegmentedControlOption[];
+  value: string;
+}) {
+  return (
+    <View
+      style={{
+        backgroundColor: tokens.color.surface.subtle,
+        borderColor: tokens.color.line.card,
+        borderCurve: 'continuous',
+        borderRadius: tokens.radius.control,
+        borderWidth: 1,
+        flexDirection: 'row',
+        gap: tokens.space.xs,
+        padding: tokens.space.xs,
+      }}
+    >
+      {options.map((option) => {
+        const active = option.key === value;
+
+        return (
+          <Pressable
+            key={option.key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            onPress={() => onChange(option.key)}
+            style={({ pressed }) => ({
+              alignItems: 'center',
+              backgroundColor: active ? tokens.color.surface.card : 'transparent',
+              borderColor: active ? tokens.color.brand.border : 'transparent',
+              borderCurve: 'continuous',
+              borderRadius: tokens.radius.tile,
+              borderWidth: 1,
+              flex: 1,
+              justifyContent: 'center',
+              minHeight: tokens.layout.tapTarget - tokens.space.sm,
+              opacity: pressed ? 0.82 : 1,
+              paddingHorizontal: tokens.space.sm,
+            })}
+          >
+            <Text
+              selectable={false}
+              numberOfLines={1}
+              style={{
+                color: active ? tokens.color.brand.base : tokens.color.text.secondary,
+                fontSize: tokens.type.label.fontSize,
+                fontWeight: active ? '700' : '500',
+                lineHeight: tokens.type.label.lineHeight,
+              }}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export function SectionTitle({ subtitle, title }: { subtitle?: string; title: string }) {
   return (
     <View style={{ gap: 4, paddingTop: 4 }}>
@@ -1355,17 +1510,32 @@ export function Field({
 // Tiap instance memegang state show/hide-nya sendiri — membuka satu field tidak
 // ikut membuka field password lain di layar yang sama.
 export function PasswordField({
+  autoComplete,
   error,
   helperText,
   label,
   onChangeText,
+  placeholder,
   textContentType,
   value,
 }: {
+  // Diteruskan apa adanya ke Field, TANPA default. Dibiarkan undefined,
+  // TextInput berperilaku persis seperti sebelum prop ini ada, jadi pemakaian
+  // PasswordField yang tidak mengisinya tidak bergeser sedikit pun.
+  //
+  // KENAPA IA ADA. textContentType adalah prop iOS. Di Android yang dibaca
+  // kerangka autofill adalah autoComplete, dan tanpa prop ini tidak ada satu
+  // pun jalan bagi pemanggil untuk mengirimkannya — akibatnya password manager
+  // di Android tidak bisa menyimpan maupun mengisi password sama sekali.
+  autoComplete?: TextInputProps['autoComplete'];
   error?: string;
   helperText?: string;
   label: string;
   onChangeText: (value: string) => void;
+  // Diteruskan apa adanya ke Field, tanpa default — dibiarkan undefined,
+  // TextInput tidak merender placeholder sama sekali, persis seperti sebelum
+  // prop ini ada.
+  placeholder?: string;
   textContentType?: TextInputProps['textContentType'];
   value: string;
 }) {
@@ -1373,9 +1543,11 @@ export function PasswordField({
 
   return (
     <Field
+      autoComplete={autoComplete}
       error={error}
       helperText={helperText}
       label={label}
+      placeholder={placeholder}
       secureTextEntry={!visible}
       textContentType={textContentType}
       value={value}
@@ -1388,14 +1560,25 @@ export function PasswordField({
           accessibilityRole="button"
           accessibilityState={{ selected: visible }}
           onPress={() => setVisible((previous) => !previous)}
-          // Meregang mengisi slot 44x44 milik Field, bukan sekadar seukuran ikon
-          // dan bukan hitSlop — hitSlop akan meluber ke TextInput di sebelahnya
+          // Meregang mengisi slot milik Field, bukan sekadar seukuran ikon dan
+          // bukan hitSlop — hitSlop akan meluber ke TextInput di sebelahnya
           // dan mencuri tap yang seharusnya menaruh kursor di teks.
+          //
+          // 48, BUKAN tokens.layout.tapTarget (44). 44 adalah minimum iOS;
+          // pedoman Android 48dp, dan seluruh pengguna app ini Android — memakai
+          // HP di kebun dengan tangan basah atau berdebu. Angkanya ditulis lokal
+          // dan tokennya SENGAJA dibiarkan 44: tapTarget dipakai enam tempat lain
+          // (farm.tsx, access-status-screen, account-password-screen,
+          // tree-planting-sheets, slot trailing Field, OptionChip), dan menaikkan
+          // tokennya akan menggeser keenamnya tanpa verifikasi visual.
+          //
+          // Slot pembungkus di Field memakai minWidth (bukan lebar tetap), jadi
+          // ia ikut melebar ke 48 dan TextInput di sebelahnya menyempit 4dp.
           style={({ pressed }) => ({
             alignItems: 'center',
             justifyContent: 'center',
-            minHeight: tokens.layout.tapTarget,
-            minWidth: tokens.layout.tapTarget,
+            minHeight: 48,
+            minWidth: 48,
             opacity: pressed ? 0.6 : 1,
           })}
         >
@@ -1666,8 +1849,10 @@ export type ButtonVariant = 'danger' | 'ghost' | 'icon' | 'primary' | 'quiet' | 
 export function Button({
   accessibilityLabel,
   disabled,
+  emphasis = 'quiet',
   icon,
   loading,
+  loadingTitle,
   onPress,
   size = 'regular',
   title = '',
@@ -1675,8 +1860,32 @@ export function Button({
 }: {
   accessibilityLabel?: string;
   disabled?: boolean;
+  // Menegaskan BATAS tombol, bukan variannya. Lingkupnya sempit dan disengaja:
+  // ia hanya menimpa warna dan tebal border, tidak menyentuh latar, warna label,
+  // tinggi, radius, maupun perilaku tekan. Default 'quiet' = keadaan sekarang
+  // persis, jadi tidak satu pun dari pemanggil Button yang ada bergeser.
+  //
+  // KENAPA IA ADA. Varian `secondary` berlatar colors.surface (#FFFFFF) di atas
+  // kanvas #F7FAF3 — kontrasnya ~1,03:1, praktis tak terlihat — dan bordernya
+  // colors.border (#DDE8D8) terlalu pucat untuk menggantikan batas itu. Di luar
+  // ruangan dengan layar kena silau, tombolnya hilang. 'strong' meminjam
+  // brand.border yang sudah ada di token, bukan warna baru.
+  //
+  // SENGAJA bukan varian baru dan bukan perubahan pada `secondary` itu sendiri:
+  // secondary dipakai di banyak layar, dan menegaskannya di semua tempat adalah
+  // keputusan desain yang belum diambil.
+  emphasis?: 'quiet' | 'strong';
   icon?: React.ReactNode;
   loading?: boolean;
+  // Label pengganti selama `loading`. Kalau DIISI, tombol menampilkannya sebagai
+  // teks biasa dan ActivityIndicator TIDAK dirender. Kalau kosong (bawaan, dan
+  // itu keadaan setiap pemanggil yang ada sekarang), cabang loading berperilaku
+  // persis seperti sebelum prop ini ada: pemintal menggantikan label.
+  //
+  // SENGAJA opt-in per tombol, bukan perubahan global. Button dipakai di hampir
+  // seluruh app; mengubah cabang loading-nya langsung akan menghapus pemintal
+  // dari setiap tombol simpan di setiap layar catatan, jadwal, dan pohon.
+  loadingTitle?: string;
   onPress: () => void;
   size?: 'regular' | 'small';
   title?: string;
@@ -1687,6 +1896,15 @@ export function Button({
   const isGhost = variant === 'ghost' || variant === 'quiet';
   const isIcon = variant === 'icon';
   const contentColor = isPrimary ? '#FFFFFF' : isDanger ? colors.danger : colors.primary;
+  // Pemintal hanya untuk loading TANPA loadingTitle — itu jalur setiap pemanggil
+  // yang ada sekarang, jadi tidak ada satu pun tombol lama yang berubah.
+  const showSpinner = Boolean(loading) && !loadingTitle;
+  const resolvedTitle = loading && loadingTitle ? loadingTitle : title;
+  // Penegasan hanya berlaku untuk tombol yang MEMANG punya border. Varian ghost
+  // dan quiet digambar tanpa border sama sekali (borderWidth 0 di bawah), jadi
+  // 'strong' di sana tidak boleh diam-diam memunculkan garis yang sebelumnya
+  // tidak ada — bentuk tombolnya akan berubah, bukan sekadar menegas.
+  const isStrong = emphasis === 'strong' && !isGhost;
 
   return (
     <Pressable
@@ -1698,26 +1916,31 @@ export function Button({
         alignItems: 'center',
         alignSelf: size === 'small' || isIcon ? 'flex-start' : 'stretch',
         backgroundColor: getButtonBackground(variant, pressed),
-        borderColor: getButtonBorderColor(variant),
+        borderColor: isStrong ? tokens.color.brand.border : getButtonBorderColor(variant),
         borderCurve: 'continuous',
         borderRadius: isIcon ? radius.round : size === 'small' ? radius.button : radius.button,
-        borderWidth: isGhost ? 0 : 1,
+        borderWidth: isGhost ? 0 : isStrong ? 1.5 : 1,
         flexDirection: 'row',
         gap: spacing.sm,
         height: isIcon ? (size === 'small' ? 40 : 48) : undefined,
         justifyContent: 'center',
         minHeight: isIcon ? undefined : size === 'small' ? 40 : tokens.layout.controlHeight,
         minWidth: isIcon ? (size === 'small' ? 40 : 48) : undefined,
-        opacity: disabled ? 0.6 : 1,
+        // `loading` ikut meredupkan, bukan hanya `disabled`. Tombol memang sudah
+        // terkunci selama memproses (lihat prop `disabled` di atas), tapi sebelum
+        // ini ia terlihat PERSIS sama dengan tombol yang siap ditekan — satu-satunya
+        // tanda hanya pemintal, dan pada pemakaian ber-loadingTitle bahkan itu pun
+        // tidak ada. Berlaku di seluruh app dan itu disengaja.
+        opacity: disabled || loading ? 0.6 : 1,
         paddingHorizontal: isIcon ? 0 : size === 'small' ? spacing.md : spacing.lg,
       })}
     >
-      {loading ? (
+      {showSpinner ? (
         <ActivityIndicator color={contentColor} />
       ) : (
         <>
           {icon}
-          {isIcon && !title ? null : (
+          {isIcon && !resolvedTitle ? null : (
             <Text
               selectable={false}
               numberOfLines={1}
@@ -1727,7 +1950,7 @@ export function Button({
                 fontWeight: '700',
               }}
             >
-              {title}
+              {resolvedTitle}
             </Text>
           )}
         </>

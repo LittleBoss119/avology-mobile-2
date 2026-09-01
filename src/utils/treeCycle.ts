@@ -177,9 +177,38 @@ function resolveCycleIndex(ascending: TreePlanting[], happenedAt: string): numbe
   return index;
 }
 
-// Awal sebuah siklus. planted_at boleh kosong (RPC start_tree_planting
-// menerimanya null), jadi created_at jadi cadangannya — baris siklus itu sendiri
-// tidak mungkin lahir sebelum siklusnya dimulai.
-function cycleStartKey(planting: TreePlanting): string | null {
+// Awal sebuah siklus, sebagai tanggal WIB 'YYYY-MM-DD'. planted_at boleh kosong
+// (RPC start_tree_planting menerimanya null), jadi created_at jadi cadangannya —
+// baris siklus itu sendiri tidak mungkin lahir sebelum siklusnya dimulai.
+//
+// TANPA PEMAKAI DI LUAR BERKAS INI. Ia sempat diekspor untuk layar detail
+// pohon, yang dulu memilih sendiri catatan fase milik siklus berjalan; sejak
+// migrasi 066 tanggal itu datang jadi dari kolom
+// trees.current_growth_phase_since dan layar tidak lagi menghitung apa pun.
+// Ekspornya dibiarkan, bukan dicabut, karena groupTreeHistoryByCycle di bawah
+// masih memakainya dan aturannya tetap kembar dengan yang ada di database.
+export function cycleStartKey(planting: TreePlanting): string | null {
   return toWibIsoDate(planting.plantedAt) ?? toWibIsoDate(planting.createdAt);
+}
+
+// NOL PEMAKAI sejak migrasi 066. Ia ditulis untuk layar detail pohon, yang
+// memakainya persis satu iterasi sebelum kolom trees.current_growth_phase_since
+// menggantikan seluruh perhitungan itu. Dibiarkan berdiri, bukan dicabut,
+// karena penghapusannya bukan bagian dari perubahan yang disetujui — dilaporkan
+// sebagai kode mati.
+//
+// Apakah sebuah kejadian riwayat jatuh pada atau sesudah awal siklus.
+//
+// Perbandingan TANGGAL WIB, bukan timestamp mentah. Itu menyamai arah cast yang
+// dipakai migrasi 064/065 di database — `(recorded_at at time zone
+// 'Asia/Jakarta')::date >= <awal siklus>`. Membandingkan sebagai timestamp akan
+// menilai "tanggal tanam" sebagai tengah malam UTC alias 07.00 WIB, sehingga
+// catatan yang dibuat pagi hari penanaman jatuh sebelum ambangnya dan hilang.
+//
+// String 'YYYY-MM-DD' dibandingkan apa adanya: urutan leksikografisnya sama
+// dengan urutan kronologisnya, jadi tidak perlu diurai jadi Date lebih dulu.
+export function isOnOrAfterCycleStart(happenedAt: string, cycleStart: string): boolean {
+  const happenedKey = toWibIsoDate(happenedAt);
+
+  return happenedKey !== null && happenedKey >= cycleStart;
 }

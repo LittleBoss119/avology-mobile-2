@@ -171,6 +171,20 @@ export type Tree = {
   activePlanting: TreePlanting | null;
   currentCondition: TreeConditionStatus;
   currentGrowthPhase: GrowthPhase | null;
+  // Tanggal WIB 'YYYY-MM-DD' catatan fase yang menetapkan currentGrowthPhase,
+  // kolom turunan dari migrasi 066. NULL persis ketika currentGrowthPhase NULL.
+  //
+  // ADA SUPAYA UMUR FASE TIDAK DIHITUNG DI KLIEN. Sebelum kolom ini, layar
+  // detail pohon menyapu daftar riwayat untuk mencari catatan fase terakhir —
+  // dan penyaringan siklusnya harus ditulis ulang di sana, terpisah dari
+  // penyaringan yang sudah ada di database. Dua tempat, dan yang di klien
+  // sempat menghitung dari catatan pohon siklus SEBELUMNYA. Kolom ini lahir
+  // dari baris yang sama dengan currentGrowthPhase, jadi keduanya tidak bisa
+  // bercerita berbeda.
+  //
+  // NON-PREDIKTIF: ia menyatakan sejak kapan fase berjalan, tidak pernah kapan
+  // buahnya siap dipetik (keputusan v4).
+  currentGrowthPhaseSince: string | null;
   isArchived: boolean;
   createdAt?: string;
   updatedAt?: string | null;
@@ -215,6 +229,10 @@ export type TreeConditionReport = {
   deletedBy?: UUID | null;
   deleteReason?: string | null;
   canEdit?: boolean;
+  // Boleh dihapus: pencatatnya ATAU pemilik aktif kebun, dan catatannya belum
+  // terhapus. SENGAJA lebih luas dari canEdit -- mengubah catatan orang lain
+  // menaruh kata-kata di mulut orang itu, menghapusnya tidak.
+  canDelete?: boolean;
 };
 
 export type GrowthPhaseRecord = {
@@ -232,6 +250,10 @@ export type GrowthPhaseRecord = {
   deletedBy?: UUID | null;
   deleteReason?: string | null;
   canEdit?: boolean;
+  // Boleh dihapus: pencatatnya ATAU pemilik aktif kebun, dan catatannya belum
+  // terhapus. SENGAJA lebih luas dari canEdit -- mengubah catatan orang lain
+  // menaruh kata-kata di mulut orang itu, menghapusnya tidak.
+  canDelete?: boolean;
 };
 
 export type HarvestRecord = {
@@ -260,6 +282,10 @@ export type HarvestRecord = {
   deletedBy?: UUID | null;
   deleteReason?: string | null;
   canEdit?: boolean;
+  // Boleh dihapus: pencatatnya ATAU pemilik aktif kebun, dan catatannya belum
+  // terhapus. SENGAJA lebih luas dari canEdit -- mengubah catatan orang lain
+  // menaruh kata-kata di mulut orang itu, menghapusnya tidak.
+  canDelete?: boolean;
 };
 
 export type TreeHistoryType = 'condition' | 'phase' | 'care' | 'harvest';
@@ -280,6 +306,26 @@ export type TreeHistoryItem = {
   // Produk/merek perawatan (RF-12). Hanya terisi untuk historyType 'care'
   // yang mencatat produk; null untuk sumber lain atau care tanpa produk.
   produk: string | null;
+  // Kategori perawatan sebagai teks enum mentah ('watering', 'spraying', ...),
+  // ditambahkan migrasi 065. Hanya terisi untuk historyType 'care'.
+  //
+  // ADA KARENA `description` TIDAK CUKUP: pada cabang perawatan, view mengisi
+  // description dengan catatan ATAU kategori, tidak keduanya. Sebelum kolom ini
+  // ada, kategori hilang begitu pekerja menulis catatan — dan kategori itulah
+  // yang membedakan penyiraman dari pemupukan di baris riwayat.
+  //
+  // Boleh null bahkan untuk 'care': care_activities.category nullable (025:16),
+  // jadi perawatan terjadwal lama bisa tidak punya kategori sama sekali.
+  kategori: string | null;
+  // Waktu baris catatan ini DITULIS (migrasi 066), timestamptz penuh.
+  //
+  // JANGAN DITAMPILKAN. Ia ada untuk satu hal saja: memecah seri urutan riwayat
+  // di dalam satu hari, karena happened_at berisi tanggal yang di-cast jadi
+  // tengah malam sehingga seluruh catatan sehari bernilai identik. Berbeda dari
+  // happened_at, jamnya di sini NYATA — dan justru karena itu menampilkannya
+  // menyesatkan: pada catatan bertanggal mundur, keduanya bisa jatuh di hari
+  // yang berbeda dan pembacanya tidak punya cara tahu mana yang mana.
+  dibuatPada: string;
 };
 
 export type CareSchedule = {
@@ -393,10 +439,34 @@ export type CareActivityDetail = CareActivity & {
   // Judul tugas induk (asal='terjadwal'). null bila inisiatif ATAU tugas tak dapat
   // dibaca (RLS: worker hanya boleh baca tugas yang di-assign ke dirinya).
   taskTitle: string | null;
+  // Boleh dihapus: pencatatnya ATAU pemilik aktif kebun, catatannya belum
+  // terhapus, DAN asalnya 'inisiatif'.
+  //
+  // Syarat terakhir tidak punya padanan di tiga jenis catatan lain, dan ia
+  // mutlak: perawatan TERJADWAL adalah realisasi sebuah tugas — ia menutup
+  // care_tasks, menggerakkan rantai jadwal berulang, dan mengunci jadwal
+  // induknya. Membatalkannya punya jalurnya sendiri
+  // (rollback_completed_task_activity), dan RPC soft_delete_care_activity
+  // menolaknya di database (migrasi 067). Medan ini hanya mencerminkan
+  // penolakan itu supaya tombolnya tidak pernah muncul.
+  //
+  // canEdit TIDAK ADA di sini, dan itu bukan kelalaian: care_activities
+  // append-only, tidak ada RPC update apa pun untuknya.
+  canDelete?: boolean;
 };
 
 export type GetCareActivityDetailInput = {
   activityId: UUID;
+};
+
+// Masukan bersama keempat fungsi hapus lunak catatan. Bentuknya sengaja seragam
+// walau RPC-nya empat: yang membedakan hanya tabelnya, bukan apa yang perlu
+// diketahui pemanggil. `reason` opsional dan hari ini SELALU null — layar detail
+// catatan menghapus tanpa medan alasan. Kolomnya ada di database (delete_reason)
+// dan RPC-nya menerimanya, jadi jalurnya dibiarkan terbuka untuk nanti.
+export type SoftDeleteRecordInput = {
+  recordId: UUID;
+  reason?: string | null;
 };
 
 export type CareScheduleDetail = CareSchedule & {
@@ -655,9 +725,18 @@ export type GetFloweringAndFruitingTreesInput = {
 
 // Pohon fase berbunga/berbuah diperkaya recorded_at fase 'flowering' TERAKHIR
 // (RF-11a). null bila pohon belum pernah punya catatan fase berbunga.
-export type FloweringMonitoringTree = Tree & {
-  lastFloweringAt: string | null;
-};
+// Pohon pada layar monitoring fase. Isinya PERSIS Tree, tanpa tambahan.
+//
+// Ia sempat membawa `lastFloweringAt`, hasil query kedua yang mencari catatan
+// fase 'flowering' terakhir. Medan itu dicabut bersama query-nya: umur fase kini
+// dibaca dari Tree.currentGrowthPhaseSince, kolom turunan yang sama yang dipakai
+// layar detail pohon, sehingga tidak ada lagi dua angka untuk pohon yang sama.
+//
+// Aliasnya DIPERTAHANKAN walau kini sama dengan Tree — ia menamai apa yang
+// dikembalikan getFloweringAndFruitingTrees, dan tanda tangan itu tetap berarti
+// walau bentuknya sedang berimpit. Kalau layar ini kelak butuh medan turunannya
+// sendiri, tempatnya sudah ada.
+export type FloweringMonitoringTree = Tree;
 
 export type GetTreeHistoryInput = {
   treeId: UUID;

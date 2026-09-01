@@ -85,6 +85,41 @@ export function formatTreeDisplayCode(tree: Pick<Tree, 'columnPosition' | 'rowPo
   return buildTreeDisplayCode(tree) ?? 'Lokasi belum lengkap';
 }
 
+// Baris konteks pohon: '1-A · Baris 1 · Kolom A · Alpukat Mentega'.
+//
+// Pengganti kartu "Konteks Pohon" yang dulu berdiri paling atas di layar detail
+// catatan dan layar edit catatan — masing-masing dengan judul sendiri dan tiga
+// MetaRow berlabel. Isinya tiga fakta pendek yang cuma menjawab "ini catatan
+// pohon yang mana", pertanyaan yang sudah terjawab sebelum pembacanya sampai ke
+// sana karena satu-satunya jalan masuk ke kedua layar itu adalah riwayat di
+// detail pohon itu sendiri. Tujuh baris untuk pengingat itu terlalu mahal.
+//
+// TINGGAL DI SINI, bukan di salah satu layar, justru karena DUA layar memakainya
+// dan keduanya wajib menghasilkan baris yang sama persis. Satu salinan di layar
+// detail dan satu lagi di layar edit adalah cara paling pasti agar keduanya
+// menyimpang diam-diam — pola yang sudah terjadi berkali-kali di basis kode ini
+// (enam salinan formatDateInput, tiga salinan formatDateTime).
+//
+// Bagian yang kosong DILEWATI, bukan diisi 'Belum diisi'. Posisi yang siklus
+// tanamnya sudah ditutup tidak punya activePlanting sama sekali, dan mencetak
+// 'Belum diisi' sebagai segmen ketiga membuatnya terbaca seolah varietas itu
+// sebuah nilai. formatTreeLocation punya cadangannya sendiri untuk lokasi yang
+// tidak lengkap, jadi ia tidak pernah kosong dan tidak perlu ditapis.
+//
+// CATATAN PEMISAH: formatTreeLocation sendiri sudah menyisipkan titik tengah
+// ('Baris 1 · Kolom A'), jadi baris jadinya punya empat segmen bertitik, bukan
+// tiga. Formatter itu dipakai apa adanya dan TIDAK disalin ulang di sini —
+// menyalinnya demi satu pemisah berarti menambah formatter lokasi kedua.
+export function formatTreeContextLine(
+  tree: Pick<Tree, 'activePlanting' | 'columnPosition' | 'rowPosition' | 'treeCode'>
+): string {
+  const variety = tree.activePlanting?.variety?.trim();
+
+  return [formatTreeDisplayCode(tree), formatTreeLocation(tree), variety || null]
+    .filter((part): part is string => Boolean(part))
+    .join(' · ');
+}
+
 export function formatTreeAge(plantedAt?: string | null): string {
   const normalized = normalizeOptionalText(plantedAt);
 

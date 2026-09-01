@@ -89,7 +89,7 @@ export default function OwnerLayout() {
           }}
         >
           <Stack.Screen name="owner/index" options={{ headerShown: false, title: 'Pemilik' }} />
-          <Stack.Screen name="owner/growth-monitoring" options={{ title: 'Monitoring Fase' }} />
+          <Stack.Screen name="owner/growth-monitoring" options={{ headerShown: false, title: 'Monitoring Fase' }} />
           <Stack.Screen name="owner/trees/index" options={{ headerShown: false, title: 'Pohon' }} />
           <Stack.Screen name="owner/trees/create" options={{ headerShown: false, title: 'Tambah Pohon' }} />
           <Stack.Screen name="owner/trees/map" options={{ headerShown: false, title: 'Denah Kebun' }} />

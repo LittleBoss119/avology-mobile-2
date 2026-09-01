@@ -39,7 +39,6 @@ export type ManualScheduleFormValues = {
   // care_schedule_trees.
   targetTreeIds: string[];
   targetType: TargetType;
-  title: string;
 };
 
 // Batas jarak pengulangan yang diterima form. Database hanya mensyaratkan
@@ -110,7 +109,6 @@ export function CareTaskSummaryCard({
 }
 
 export type ScheduleFormErrors = {
-  title?: string;
   category?: string;
   scheduledDate?: string;
   repeatEveryDays?: string;
@@ -121,8 +119,10 @@ export type ScheduleFormErrors = {
 
 // Urutan field untuk "scroll ke error pertama" (RF §3.6). Harus mengikuti urutan
 // visual: blok Pengulangan berada antara Tanggal dan Pekerja.
+// 'title' DILEPAS: pemilik tidak lagi mengetik judul, jadi tidak ada field judul
+// yang bisa jadi sasaran auto-scroll-ke-error-pertama. Judul dirakit program
+// saat simpan (buildScheduleTitle di careScheduleService).
 export const scheduleFormFieldOrder = [
-  'title',
   'category',
   'scheduledDate',
   'repeatEveryDays',
@@ -139,6 +139,7 @@ export function ManualScheduleForm({
   errors,
   onChange,
   onFieldLayout,
+  repeatSummary,
   showRepeat = false,
   trees,
   values,
@@ -147,6 +148,12 @@ export function ManualScheduleForm({
   errors?: ScheduleFormErrors;
   onChange: (values: ManualScheduleFormValues) => void;
   onFieldLayout?: (key: string, y: number) => void;
+  // Keterangan pengulangan READ-ONLY, dipakai layar Edit sebagai ganti field
+  // yang bisa diubah. Ia menempati SLOT YANG SAMA dengan RepeatScheduleField
+  // supaya urutan field kedua layar terbaca sama; yang berbeda hanya bisa/tidak
+  // bisa diubahnya. Diabaikan kalau showRepeat true — satu slot tidak boleh
+  // berisi dua hal.
+  repeatSummary?: string | null;
   // Default false supaya layar Edit tidak berubah: pengulangan hanya bisa
   // ditentukan saat jadwal dibuat.
   showRepeat?: boolean;
@@ -191,20 +198,18 @@ export function ManualScheduleForm({
 
   return (
     <View style={{ gap: spacing['2xl'] }}>
-      <View onLayout={reportLayout('title')}>
-        <FormTextField
-          error={errors?.title}
-          label="Judul *"
-          onChangeText={(value) => updateValue('title', value)}
-          placeholder="Contoh: Pemupukan blok A"
-          value={values.title}
-        />
-      </View>
-
+      {/* TANPA field "Judul". Ia dulu satu-satunya keyboard di alur ini, dan
+          isinya terbukti jadi sampah ("Test", "awas", "Besok ajah") — kata-kata
+          yang hanya berarti bagi orang yang mengetiknya, pada hari ia
+          mengetiknya. Judul tetap diisi, tapi dirakit program dari kategori dan
+          target saat simpan. Lihat buildScheduleTitle di careScheduleService. */}
       <View onLayout={reportLayout('category')}>
         <FormChipGroup
           error={errors?.category}
-          label="Kategori *"
+          // "Jenis perawatan", bukan "Kategori". Kata terakhir itu istilah
+          // basis data; yang ditanyakan ke pemilik adalah jenis pekerjaannya.
+          // Nama variabel, tipe, dan kolomnya tetap `category`.
+          label="Jenis perawatan *"
           options={careCategoryOptions.map((category) => ({ label: formatCareCategory(category), value: category }))}
           selectedValue={values.category}
           onSelect={(value) => updateValue('category', value)}
@@ -224,6 +229,8 @@ export function ManualScheduleForm({
         <View onLayout={reportLayout('repeatEveryDays')}>
           <RepeatScheduleField error={errors?.repeatEveryDays} onChange={onChange} values={values} />
         </View>
+      ) : repeatSummary ? (
+        <RepeatReadOnlyField summary={repeatSummary} />
       ) : null}
 
       <View onLayout={reportLayout('assignedWorkerId')}>
@@ -260,7 +267,7 @@ export function ManualScheduleForm({
           {values.targetType === 'custom' ? (
             <FormTextField
               error={errors?.targetDetail}
-              label="Target khusus *"
+              label="Area yang dikerjakan *"
               multiline
               onChangeText={(value) => updateValue('customTargetNote', value)}
               placeholder="Contoh: Area dekat gudang pupuk"
@@ -299,12 +306,8 @@ export function ManualScheduleForm({
 export function validateScheduleForm(values: ManualScheduleFormValues): ScheduleFormErrors {
   const errors: ScheduleFormErrors = {};
 
-  if (!values.title.trim()) {
-    errors.title = 'Judul wajib diisi.';
-  }
-
   if (!values.category) {
-    errors.category = 'Pilih kategori.';
+    errors.category = 'Pilih jenis perawatan.';
   }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(values.scheduledDate.trim())) {
@@ -328,7 +331,7 @@ export function validateScheduleForm(values: ManualScheduleFormValues): Schedule
   if (values.targetType === 'tree' && values.targetTreeIds.length === 0) {
     errors.targetDetail = 'Pilih minimal satu pohon.';
   } else if (values.targetType === 'custom' && !values.customTargetNote.trim()) {
-    errors.targetDetail = 'Target khusus wajib diisi.';
+    errors.targetDetail = 'Tulis area yang dikerjakan.';
   }
 
   return errors;
@@ -336,8 +339,7 @@ export function validateScheduleForm(values: ManualScheduleFormValues): Schedule
 
 export function hasScheduleFormErrors(errors: ScheduleFormErrors): boolean {
   return Boolean(
-    errors.title ||
-      errors.category ||
+    errors.category ||
       errors.scheduledDate ||
       errors.repeatEveryDays ||
       errors.assignedWorkerId ||
@@ -385,7 +387,6 @@ export function clearResolvedScheduleFormErrors(
   }
 
   return {
-    title: values.title.trim() ? undefined : errors.title,
     category: values.category ? undefined : errors.category,
     scheduledDate: /^\d{4}-\d{2}-\d{2}$/.test(values.scheduledDate.trim()) ? undefined : errors.scheduledDate,
     repeatEveryDays: repeatIntervalError(values) ? errors.repeatEveryDays : undefined,
@@ -487,10 +488,19 @@ function FormTextField({
   );
 }
 
-// Blok "Pengulangan" pada layar Buat jadwal. Pill-nya memakai FormChipGroup yang
-// sama persis dengan field Kategori/Target/Pekerja — bukan salinan gayanya —
-// sehingga tidak mungkin berbeda tampilan. Latar hijau tipis memakai token tema
-// (primarySoft/primaryBorder) untuk memisahkannya dari field lain.
+// Field "Pengulangan" pada layar Buat jadwal. Pill-nya memakai FormChipGroup
+// yang sama persis dengan field Jenis perawatan/Target/Pekerja — bukan salinan
+// gayanya — sehingga tidak mungkin berbeda tampilan.
+//
+// DATAR, tanpa kartu. Sebelumnya ia satu-satunya field yang dibungkus latar
+// hijau tipis berborder sendiri, dan di tengah formulir yang seluruhnya datar,
+// kotak itu terbaca sebagai komponen dari keluarga lain — seolah sebuah panel
+// yang berdiri sendiri, bukan pertanyaan kelima dari delapan. Ia tidak lebih
+// penting daripada Tanggal atau Pekerja, jadi ia tidak boleh terlihat begitu.
+//
+// Dua pil, BUKAN switch. Pada dua opsi, pil memperlihatkan kedua pilihan
+// sekaligus beserta namanya; switch memperlihatkan satu keadaan dan menuntut
+// pembacanya menyimpulkan lawannya.
 function RepeatScheduleField({
   error,
   onChange,
@@ -501,17 +511,7 @@ function RepeatScheduleField({
   values: ManualScheduleFormValues;
 }) {
   return (
-    <View
-      style={{
-        backgroundColor: colors.primarySoft,
-        borderColor: colors.primaryBorder,
-        borderCurve: 'continuous',
-        borderRadius: radius.lg,
-        borderWidth: 1,
-        gap: spacing.md,
-        padding: spacing.lg,
-      }}
-    >
+    <View style={{ gap: spacing.md }}>
       <FormChipGroup
         label="Pengulangan"
         options={[
@@ -552,12 +552,31 @@ function RepeatScheduleField({
               hari
             </Text>
           </View>
+          {/* TANPA kalimat "Jadwal berikutnya dibuat setelah tugas selesai."
+              Ia menjelaskan mekanisme internal rantai berulang, dan tidak ada
+              keputusan pemilik yang berubah karena membacanya — ia sudah
+              memilih "Berulang" dan mengisi jaraknya. */}
           <FormError message={error} />
-          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-            Jadwal berikutnya dibuat setelah tugas selesai.
-          </Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+// Padanan read-only RepeatScheduleField untuk layar Edit, menempati slot yang
+// sama supaya urutan field kedua layar terbaca sama.
+//
+// Bentuknya sengaja label + teks biasa, bukan pil yang tidak bisa ditekan: pil
+// mati mengundang ketukan yang tidak menghasilkan apa-apa. Dulu ia kotak
+// bertint berikon di ATAS formulir; sekarang ia baris datar di posisinya
+// sendiri, sejajar dengan field lain.
+function RepeatReadOnlyField({ summary }: { summary: string }) {
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <FormLabel text="Pengulangan" />
+      <Text selectable style={{ color: colors.text, fontSize: 16, lineHeight: 22 }}>
+        {summary}
+      </Text>
     </View>
   );
 }
@@ -916,7 +935,12 @@ export function formatCareTarget(input: {
   targetType: TargetType;
 }): string {
   if (input.targetType === 'farm') {
-    return 'Seluruh kebun';
+    // "Semua pohon", sama dengan formatTargetType('farm') yang dipakai pilihan
+    // di formulir dan opsi filter di daftar. Dulu di sini berbunyi "Seluruh
+    // kebun" — dua kata untuk satu hal, dan yang lama itu juga berbohong: yang
+    // dikerjakan adalah semua pohon bersiklus tanam aktif, bukan seluruh isi
+    // kebun. Hanya stringnya yang berubah; cabang dan logikanya tidak.
+    return 'Semua pohon';
   }
 
   if (input.targetType === 'tree') {
@@ -936,7 +960,9 @@ export function formatCareTarget(input: {
     return formatTreeTargetFallback(input.targetTreeId);
   }
 
-  return input.customTargetNote ?? 'Target khusus belum diisi';
+  // Hanya TEKS jatuh-baliknya yang mengikuti kosakata baru ("Area lain" /
+  // "Area yang dikerjakan"); cabang dan logikanya tidak disentuh.
+  return input.customTargetNote ?? 'Area belum diisi';
 }
 
 // Daftar kode pohon yang LENGKAP, untuk layar detail.

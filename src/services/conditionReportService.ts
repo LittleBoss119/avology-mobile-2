@@ -9,6 +9,7 @@ import type {
   MemberRole,
   MemberStatus,
   ServiceResult,
+  SoftDeleteRecordInput,
   SuccessData,
   TreeConditionReport,
   TreeConditionStatus,
@@ -42,6 +43,10 @@ type TreeFarmRow = {
 };
 
 type MembershipRow = {
+  // role ikut dibaca sejak fitur hapus catatan: pemilik kebun boleh menghapus
+  // catatan siapa pun di kebunnya. Satu KOLOM tambahan pada query yang memang
+  // sudah dijalankan setiap kali detail dibuka — bukan query baru.
+  role: MemberRole;
   status: MemberStatus;
 };
 
@@ -153,10 +158,19 @@ export async function getConditionReportDetail(
     return fail(currentUserIdResult.error);
   }
 
+  // is_deleted DISARING DI QUERY, bukan diperiksa sesudahnya. Baris yang sudah
+  // dihapus jadi tidak terbedakan dari id yang tidak ada — dan itu memang jawaban
+  // yang benar untuk keduanya, dengan galat yang sama persis yang sudah dipakai
+  // fungsi ini sejak dulu.
+  //
+  // Riwayat pohon memang tidak lagi menautkannya sejak migrasi 067, tapi layar
+  // catatan yang sudah telanjur terbuka dan tombol back masih bisa mendarat di
+  // sini.
   const { data, error } = await supabase
     .from('tree_condition_reports')
     .select(REPORT_SELECT)
     .eq('id', reportId)
+    .eq('is_deleted', false)
     .maybeSingle<TreeConditionReportRow>();
 
   if (error) {
@@ -173,10 +187,36 @@ export async function getConditionReportDetail(
     return fail(accessResult.error);
   }
 
+  const isAuthor = data.reported_by === currentUserIdResult.data;
+
   return ok({
     ...mapTreeConditionReport(data),
-    canEdit: data.reported_by === currentUserIdResult.data && data.is_deleted !== true,
+    canEdit: isAuthor && data.is_deleted !== true,
+    // Pencatatnya ATAU pemilik aktif kebun. Cerminan persis
+    // ensure_can_delete_farm_record (migrasi 067) — database tetap penjaga
+    // sebenarnya; medan ini hanya menentukan tombolnya muncul atau tidak.
+    canDelete: (isAuthor || accessResult.data.role === 'owner') && data.is_deleted !== true,
   });
+}
+
+// Hapus lunak. Izinnya ditegakkan RPC (migrasi 067), bukan di sini: pencatatnya
+// atau pemilik aktif kebun, dan catatan yang sudah terhapus ditolak.
+export async function softDeleteConditionReport(
+  input: SoftDeleteRecordInput | UUID
+): Promise<ServiceResult<SuccessData>> {
+  const reportId = typeof input === 'string' ? input : input.recordId;
+  const reason = typeof input === 'string' ? null : input.reason ?? null;
+
+  const { error } = await supabase.rpc('soft_delete_tree_condition_report', {
+    p_reason: normalizeOptionalText(reason),
+    p_report_id: reportId,
+  });
+
+  if (error) {
+    return fail(error, 'Catatan kondisi gagal dihapus.');
+  }
+
+  return ok({ success: true });
 }
 
 export async function updateOwnConditionReport(
@@ -218,20 +258,24 @@ async function getAccessibleTreeFarmId(treeId: UUID): Promise<ServiceResult<UUID
   return ok(data.farm_id);
 }
 
-async function ensureActiveFarmMember(farmId: UUID): Promise<ServiceResult<SuccessData>> {
+// Mengembalikan KEANGGOTAANNYA, bukan sekadar SuccessData.
+//
+// Pemanggil lama hanya memeriksa `.error` dan tidak berubah sedikit pun.
+// Pemanggil baru (getConditionReportDetail) memakai `role` di dalamnya untuk
+// memutuskan canDelete — tanpa query kedua, karena baris keanggotaan itu memang
+// sudah diambil di sini sebagai pemeriksaan akses.
+async function ensureActiveFarmMember(farmId: UUID): Promise<ServiceResult<MembershipRow>> {
   const membershipResult = await getCurrentUserMembership(farmId);
 
   if (membershipResult.error) {
     return fail(membershipResult.error);
   }
 
-  if (membershipResult.data?.status !== 'active') {
+  if (!membershipResult.data || membershipResult.data.status !== 'active') {
     return fail(new Error('Hanya anggota kebun aktif yang dapat mengakses laporan kondisi pohon.'));
   }
 
-  return ok({
-    success: true,
-  });
+  return ok(membershipResult.data);
 }
 
 async function getCurrentUserMembership(
@@ -245,7 +289,7 @@ async function getCurrentUserMembership(
 
   const { data, error } = await supabase
     .from('farm_members')
-    .select('status')
+    .select('role, status')
     .eq('farm_id', farmId)
     .eq('user_id', userIdResult.data)
     .maybeSingle<MembershipRow>();

@@ -8,6 +8,7 @@ import {
 } from '../../../../src/components/care-schedule-components';
 import { Icon } from '../../../../src/components/icons';
 import { WorkResultList } from '../../../../src/components/work-result-list';
+import { useSnackbar } from '../../../../src/components/snackbar';
 import {
   Badge,
   Button,
@@ -17,7 +18,6 @@ import {
   ErrorBanner,
   LoadingState,
   Screen,
-  SuccessBanner,
   TopAppBar,
 } from '../../../../src/components/ui';
 import { colors, spacing, statusColors, typography } from '../../../../src/constants/theme';
@@ -27,14 +27,14 @@ import { listTaskProofPhotosForActivities } from '../../../../src/services/photo
 import type { CareTaskDetail } from '../../../../src/types/domain';
 import type { TaskProofPhotoMap } from '../../../../src/types/media';
 import { formatCareCategory, formatTaskStatus } from '../../../../src/utils/displayFormat';
-import { dueDatePill, getTodayIsoDate, type DueDatePill } from '../../../../src/utils/taskDueDate';
+import { dueDatePill, formatFullDate, getTodayIsoDate, type DueDatePill } from '../../../../src/utils/taskDueDate';
 
 export default function WorkerTaskDetailScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
+  const showSnackbar = useSnackbar();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
-  const [success, setSuccess] = React.useState<string | null>(null);
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
 
   const loadDetail = React.useCallback(async () => {
@@ -74,14 +74,27 @@ export default function WorkerTaskDetailScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      // Konfirmasi setelah simpan (§1): baca-sekaligus-hapus penanda dari
-      // record.tsx. Karena consume menghapus nilainya, banner hanya muncul sekali;
-      // fokus tanpa penanda membersihkan banner lama (mis. kembali tanpa simpan).
-      const feedback = consumePendingFeedback();
-      setSuccess(feedbackMessage(feedback));
+      // Konfirmasi setelah simpan: baca-sekaligus-hapus penanda dari record.tsx,
+      // lalu tampilkan SNACKBAR, bukan spanduk hijau yang menempel di atas
+      // layar. Spanduk itu ikut tergulung bersama isi dan duduk jauh dari tombol
+      // yang barusan ditekan; snackbar naik dari dasar layar, di dekat ibu jari,
+      // dan padam sendiri.
+      //
+      // Penanda tetap lewat pendingFeedback: pesannya dirakit di layar TUJUAN
+      // (feedbackMessage di bawah), bukan dikirim sebagai teks jadi, jadi
+      // record.tsx tidak perlu tahu kata-kata apa yang muncul di sini.
+      //
+      // consume menghapus nilainya, jadi snackbar hanya muncul sekali; fokus
+      // tanpa penanda tidak memunculkan apa pun.
+      const message = feedbackMessage(consumePendingFeedback());
+
+      if (message) {
+        showSnackbar(message);
+      }
+
       setLoading(true);
       loadDetail().finally(() => setLoading(false));
-    }, [loadDetail])
+    }, [loadDetail, showSnackbar])
   );
 
   if (loading) {
@@ -123,7 +136,6 @@ export default function WorkerTaskDetailScreen() {
       }
     >
       <ErrorBanner message={error} />
-      <SuccessBanner message={success} />
 
       <View style={{ gap: spacing.sm }}>
         <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
@@ -146,6 +158,12 @@ export default function WorkerTaskDetailScreen() {
         </View>
         <Text selectable style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
           {`${activeTask.category ? formatCareCategory(activeTask.category) : 'Tanpa kategori'} · ${formatCareTarget(activeTask)}`}
+        </Text>
+        {/* Tanggal jatuh tempo sebagai baris meta redup. Chip di bawah tetap
+            ada dan tidak mengulanginya: chip menyatakan TUNGGAKAN ("Terlambat 3
+            hari"), baris ini menyatakan tanggalnya. */}
+        <Text selectable style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
+          {formatFullDate(activeTask.dueDate)}
         </Text>
       </View>
 
@@ -175,37 +193,52 @@ export default function WorkerTaskDetailScreen() {
         </Card>
       ) : null}
 
-      <View style={{ gap: spacing.xs }}>
-        <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
-          Instruksi
-        </Text>
-        <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
-          {activeTask.instruction || 'Belum ada instruksi tambahan.'}
-        </Text>
-      </View>
+      {/* Section "Instruksi" tidak dirender kalau kosong — dulu ia tetap muncul
+          dengan isi "Belum ada instruksi tambahan.", dua baris yang cuma
+          menyatakan bahwa tidak ada apa-apa di sana. */}
+      {activeTask.instruction ? (
+        <View style={{ gap: spacing.xs }}>
+          <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
+            Instruksi
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
+            {activeTask.instruction}
+          </Text>
+        </View>
+      ) : null}
 
-      <View style={{ gap: spacing.md }}>
-        <Text
-          selectable
-          style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700', lineHeight: typography.h3.lineHeight }}
-        >
-          {activeTask.activities.length === 0 ? 'Hasil kerja' : 'Riwayat hasil kerja'}
-        </Text>
-        {/* Bentuk barisnya milik WorkResultList, dipakai bersama layar owner.
-            Tugas yang sudah dibatalkan owner tidak lagi menawarkan aksi
-            perbaiki — handler-nya tidak dioper sama sekali. */}
-        <WorkResultList
-          activities={activeTask.activities}
-          emptySubtitle="Pencet tombol di bawah untuk mulai."
-          proofPhotoMap={proofPhotoMap}
-          onFixLatestNote={
-            isCancelledByOwner
-              ? undefined
-              : (activity) =>
-                  router.push(`/worker/tasks/${activeTask.id}/record?mode=edit&activityId=${activity.id}`)
-          }
-        />
-      </View>
+      {/* SELURUH section hilang saat belum ada catatan — judul dan kotak
+          putus-putus "Belum dicatat" sekaligus. Kotak itu berbunyi "Pencet
+          tombol di bawah untuk mulai", sementara tombol "Catat hasil kerja" di
+          stickyFooter sudah mengatakan hal yang sama sambil bisa ditekan.
+          Menghapusnya tanpa pengganti membawa pekerja langsung ke tombolnya.
+
+          WorkResultList sendiri tidak diubah: cabang kosongnya masih dipakai
+          layar detail tugas owner, yang di luar lingkup batch ini. */}
+      {activeTask.activities.length > 0 ? (
+        <View style={{ gap: spacing.md }}>
+          <Text
+            selectable
+            style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700', lineHeight: typography.h3.lineHeight }}
+          >
+            Riwayat hasil kerja
+          </Text>
+          {/* Bentuk barisnya milik WorkResultList, dipakai bersama layar owner.
+              Tugas yang sudah dibatalkan owner tidak lagi menawarkan aksi
+              perbaiki — handler-nya tidak dioper sama sekali. */}
+          <WorkResultList
+            activities={activeTask.activities}
+            emptySubtitle=""
+            proofPhotoMap={proofPhotoMap}
+            onFixLatestNote={
+              isCancelledByOwner
+                ? undefined
+                : (activity) =>
+                    router.push(`/worker/tasks/${activeTask.id}/record?mode=edit&activityId=${activity.id}`)
+            }
+          />
+        </View>
+      ) : null}
     </Screen>
   );
 }

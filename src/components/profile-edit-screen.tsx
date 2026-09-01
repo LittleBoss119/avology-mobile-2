@@ -1,12 +1,14 @@
 import { router } from 'expo-router';
 import React from 'react';
+import { View } from 'react-native';
 
+import { tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { setPendingFeedback } from '../lib/pendingFeedback';
 import { updateCurrentProfile } from '../services/authService';
 import { ConfirmDialog } from './bottom-sheet';
-import { Button, Card, EmptyState, ErrorBanner, Field, Screen, TopAppBar } from './ui';
+import { Button, EmptyState, ErrorBanner, Field, Screen, TopAppBar } from './ui';
 
 type ProfileFieldErrors = {
   fullName?: string;
@@ -103,7 +105,7 @@ export function ProfileEditScreen() {
 
   return (
     <Screen
-      header={<TopAppBar title="Edit Profil" onBack={handleBackPress} />}
+      header={<TopAppBar title="Edit profil" onBack={handleBackPress} />}
       stickyFooter={<Button title="Simpan perubahan" loading={saving} onPress={handleSave} />}
     >
       <ErrorBanner message={formError ?? error?.message} />
@@ -111,7 +113,11 @@ export function ProfileEditScreen() {
       {!profile ? (
         <EmptyState title="Profil tidak tersedia" subtitle="Masuk ulang jika data akun belum muncul." />
       ) : (
-        <Card>
+        // Kartu pembungkus dicabut. Yang perlu ditandai berkotak di layar ini
+        // adalah KOLOM ISIANNYA — kotak itu yang berarti "di sini bisa
+        // diketik" — dan kartu di sekelilingnya menambah satu kotak lagi yang
+        // tidak berarti apa-apa. Jarak antar kolom sudah cukup memisahkan.
+        <View style={{ gap: tokens.space.xl }}>
           <Field
             error={fieldErrors.fullName}
             label="Nama lengkap"
@@ -139,7 +145,7 @@ export function ProfileEditScreen() {
               value={profile.email}
             />
           ) : null}
-        </Card>
+        </View>
       )}
 
       <ConfirmDialog

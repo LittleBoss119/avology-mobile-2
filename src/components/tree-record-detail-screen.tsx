@@ -1,20 +1,24 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
 import { GRADE_PANEN_LABELS } from '../constants/gradePanen';
-import { colors, spacing, typography } from '../constants/theme';
+import { colors, radius, spacing, typography } from '../constants/theme';
 import {
   getCareActivityDetail,
+  softDeleteCareActivity,
 } from '../services/careActivityService';
 import {
   getConditionReportDetail,
+  softDeleteConditionReport,
 } from '../services/conditionReportService';
 import {
   getGrowthPhaseRecordDetail,
+  softDeleteGrowthPhaseRecord,
 } from '../services/growthPhaseService';
 import {
   getHarvestRecordDetail,
+  softDeleteHarvestRecord,
 } from '../services/harvestService';
 import { getFarmActorDisplayProfiles } from '../services/memberService';
 import {
@@ -29,6 +33,7 @@ import type {
   HarvestRecord,
   MemberRole,
   ServiceResult,
+  SuccessData,
   Tree,
   UUID,
 } from '../types/domain';
@@ -37,9 +42,12 @@ import {
   formatCareCategory,
   formatPersonDisplayName,
   formatProdukDenganTakaran,
+  sanitizeDisplayValue,
 } from '../utils/displayFormat';
-import { formatGrowthPhase, formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
-import { PhotoAttachmentPreviewList } from './media';
+import { formatGrowthPhase, formatTreeConditionStatus, formatTreeContextLine } from '../utils/treeFormat';
+import { setPendingFeedback } from '../lib/pendingFeedback';
+import { ConfirmDialog } from './bottom-sheet';
+import { PhotoAttachmentPreviewList, PhotoViewerModal } from './media';
 import {
   Badge,
   Button,
@@ -52,8 +60,10 @@ import {
   TopAppBar,
 } from './ui';
 
-// Catatan perawatan (care) punya layar detail READ-ONLY (US-14 / Iterasi C):
-// bisa dibuka untuk dilihat, tetapi tetap tidak bisa diedit/dihapus (migrasi 027).
+// Catatan perawatan (care) TIDAK BISA DIEDIT siapa pun — care_activities
+// append-only, tidak ada RPC update untuknya (migrasi 027). Sejak migrasi 067
+// ia BISA DIHAPUS, tapi hanya yang berasal dari pencatatan INISIATIF; yang
+// terjadwal dibatalkan lewat layar tugas, bukan dari sini.
 export type TreeRecordRouteType = 'condition' | 'phase' | 'harvest' | 'care';
 
 type TreeRecordDetailScreenProps = {
@@ -69,6 +79,11 @@ type DetailState = {
   authorRole?: MemberRole | null;
   authorVerb: 'harvested' | 'recorded';
   canEdit: boolean;
+  // SENGAJA TERPISAH dari canEdit, dan seringkali berbeda darinya: pemilik kebun
+  // boleh menghapus catatan pekerjanya tapi tidak boleh mengubahnya. Keduanya
+  // dihitung di service, bukan di sini — layar ini tidak tahu siapa pemilik
+  // kebun dan tidak boleh menebaknya.
+  canDelete: boolean;
   createdAt?: string | null;
   eventAt: string;
   eventLabel: string;
@@ -109,6 +124,8 @@ export function TreeRecordDetailScreen({
   treeId,
 }: TreeRecordDetailScreenProps) {
   const { profile } = useAuth();
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
   const [detail, setDetail] = React.useState<DetailState | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -156,14 +173,57 @@ export function TreeRecordDetailScreen({
     loadDetail().finally(() => setLoading(false));
   }, [loadDetail]);
 
+  // Menghapus catatan. Bentuknya sepadan dengan runEndPlanting di layar edit
+  // pohon, dan karena alasan yang sama: SUKSES TIDAK MEMUAT ULANG LAYAR INI.
+  //
+  // Layar ini menampilkan catatan yang barusan dihapus. Memuatnya ulang berarti
+  // memanggil kembali getConditionReportDetail dan kerabatnya — yang sejak
+  // bagian B menyaring is_deleted, jadi jawabannya "tidak ditemukan". Pemakainya
+  // akan melihat galat sebagai hasil dari tindakan yang BERHASIL. router.replace
+  // membawanya ke detail pohon, tempat riwayatnya sudah tanpa catatan itu.
+  //
+  // replace, bukan push: layar ini sudah tidak sah dikunjungi lagi, jadi ia
+  // tidak boleh tertinggal di back-stack menunggu ditekan kembali.
+  //
+  // Snackbar dititipkan lewat pendingFeedback karena layar yang seharusnya
+  // menampilkannya sudah tidak ada saat pesannya jatuh tempo — layar detail
+  // pohon membacanya di useFocusEffect miliknya.
+  //
+  // Dialog ditutup LEBIH DULU, sebelum RPC berjalan. Keadaan "sedang menghapus"
+  // ditunjukkan tombol Hapus di footer (label berganti, terkunci), bukan
+  // pemintal di dalam dialog — jadi kalau gagal, galatnya mendarat di layar yang
+  // sudah terlihat, bukan di balik dialog yang menutupinya.
+  async function runDelete() {
+    if (!detail || !normalizedType || !recordId) {
+      return;
+    }
+
+    setConfirmDeleteOpen(false);
+    setDeleting(true);
+    setError(null);
+
+    const result = await softDeleteRecord(normalizedType, recordId);
+
+    if (result.error) {
+      setError(result.error.message);
+      setDeleting(false);
+      return;
+    }
+
+    setDeleting(false);
+    setPendingFeedback('record_deleted');
+    router.replace(`${basePath}/${treeId}`);
+  }
+
   if (loading) {
-    // Judul statis "Detail catatan", sama dengan cabang tanpa-data di bawah.
-    // Judul sesungguhnya adalah detail.title, yang baru ada SETELAH catatannya
-    // terbaca — jadi ia tidak bisa dipakai di sini tanpa menebak isinya.
-    // Idiomnya sama dengan tree-detail-screen.tsx.
+    // Bar tanpa judul, sama dengan layar yang sudah selesai memuat. Dulu judul
+    // di sini terpaksa statis "Detail catatan" karena detail.title baru ada
+    // SETELAH catatannya terbaca. Persoalan itu hilang bersama judul barnya:
+    // judul catatan kini berdiri di badan layar, tempat ia memang boleh muncul
+    // belakangan. Idiomnya sama dengan tree-detail-screen.tsx.
     return (
       <LoadingState
-        header={<TopAppBar title="Detail catatan" onBack={() => router.back()} />}
+        header={<TopAppBar onBack={() => router.back()} />}
         message="Memuat detail catatan..."
       />
     );
@@ -172,77 +232,279 @@ export function TreeRecordDetailScreen({
   if (!detail || !normalizedType) {
     return (
       <Screen>
-        <TopAppBar title="Detail catatan" onBack={() => router.back()} />
+        <TopAppBar onBack={() => router.back()} />
         <ErrorBanner message={error} />
         <EmptyState title="Catatan tidak ditemukan" subtitle="Catatan mungkin sudah dihapus atau akses tidak aktif." />
       </Screen>
     );
   }
 
+  // Lewat sanitizeDisplayValue, bukan sekadar trim(). Itu penapis yang sama yang
+  // dipakai MetaRow sebelum perubahan ini, jadi catatan yang isinya UUID atau
+  // pesan teknis tetap disembunyikan seperti dulu — yang berubah cuma bahwa
+  // hasil kosongnya sekarang berarti "jangan render", bukan "cetak tanda hubung".
+  const noteText = sanitizeDisplayValue(detail.note);
+
   return (
     <Screen
+      // Footer muncul kalau ADA SALAH SATU aksi, bukan hanya saat bisa diubah.
+      // Kombinasi "tidak bisa ubah, bisa hapus" bukan kasus tepi — itu keadaan
+      // pemilik kebun yang membuka catatan pekerjanya, dan di sana tombol Hapus
+      // berdiri sendirian.
       footer={
-        detail.canEdit ? (
-          <Button title="Edit catatan" onPress={() => router.push(`${basePath}/${treeId}/records/${normalizedType}/${recordId}/edit`)} />
+        detail.canEdit || detail.canDelete ? (
+          <>
+            {detail.canEdit ? (
+              <Button
+                title="Edit catatan"
+                onPress={() => router.push(`${basePath}/${treeId}/records/${normalizedType}/${recordId}/edit`)}
+              />
+            ) : null}
+            {detail.canDelete ? (
+              /* loadingTitle, BUKAN pemintal: label berganti jadi teks biasa
+                 sehingga lebar tombolnya tidak berubah saat diproses. Itu satu-
+                 satunya jalur Button yang tidak memasang ActivityIndicator. */
+              <Button
+                title="Hapus"
+                loading={deleting}
+                loadingTitle="Menghapus…"
+                variant="danger"
+                onPress={() => setConfirmDeleteOpen(true)}
+              />
+            ) : null}
+          </>
         ) : undefined
       }
     >
-      <TopAppBar title={detail.title} onBack={() => router.back()} />
+      <TopAppBar onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
-      {tree ? (
-        <Card variant="highlight">
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
-            Konteks Pohon
+      {/* ConfirmDialog, BUKAN Alert.alert. Alert bawaan platform tidak bisa
+          diberi gaya, judulnya tampil berbeda di Android dan iOS, dan seluruh
+          konfirmasi merusak lain di app ini sudah memakai dialog yang sama. */}
+      <ConfirmDialog
+        confirmLabel="Hapus"
+        cancelLabel="Batal"
+        message="Catatan ini akan dihapus dan tidak muncul lagi di riwayat pohon."
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={runDelete}
+        title="Hapus catatan?"
+        tone="danger"
+        visible={confirmDeleteOpen}
+      />
+
+      {/* HERO. Foto naik ke puncak layar, mendahului judul catatan.
+          Syaratnya tetap detail.photoEntityType — jenis foto yang dimiliki
+          catatan INI, bukan jenis catatannya (lihat catatan pada DetailState) —
+          dan kini ditambah "memang ada fotonya". Tanpa foto, di posisi ini
+          tidak dirender apa pun: kartu berjudul "Foto catatan" yang dulu berdiri
+          di dasar layar dengan tulisan "Tidak ada foto pada catatan ini" sudah
+          dicabut. Kalimat itu memberi tahu pembacanya ketiadaan, yang sudah
+          terlihat dari tidak adanya foto. */}
+      {detail.photoEntityType && photos.length > 0 ? <RecordPhotoHero photos={photos} /> : null}
+
+      {/* Kepala: judul catatan, lalu tag, lalu dua baris keterangan.
+          Satu blok ber-gap rapat, bukan kartu — seluruh layar ini kini satu
+          aliran menurun dan tidak ada lagi kartu bertumpuk di dalamnya. */}
+      <View style={{ gap: spacing.sm }}>
+        <Text
+          selectable
+          style={{
+            color: colors.text,
+            fontSize: typography.h2.fontSize,
+            fontWeight: '700',
+            lineHeight: typography.h2.lineHeight,
+          }}
+        >
+          {detail.title}
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+          <Badge label={detail.recordLabel} tone="info" />
+          {detail.originLabel ? <Badge label={detail.originLabel} tone="muted" /> : null}
+        </View>
+        {/* Waktu dan pencatat jadi SATU baris. Sebagai dua MetaRow berlabel
+            ("Tanggal catatan", "Dicatat oleh") keduanya memakan empat baris
+            untuk dua fakta pendek yang selalu dibaca bersamaan. Label tanggalnya
+            ikut hilang karena judul di atas sudah menyatakan ini catatan apa. */}
+        <Text selectable style={secondaryLineStyle}>
+          {`${formatEventDate(detail.eventAt)} · ${
+            detail.authorVerb === 'harvested' ? 'Dipanen oleh' : 'Dicatat oleh'
+          } ${formatActorDisplayName({
+            actorId: detail.authorId,
+            actorName: detail.authorName,
+            actorRole: detail.authorRole,
+            currentUserId: profile?.id,
+          })}`}
+        </Text>
+        {/* Pengganti kartu "Konteks Pohon". Tiga fakta yang sama, satu baris. */}
+        {tree ? (
+          <Text selectable style={secondaryLineStyle}>
+            {formatTreeContextLine(tree)}
           </Text>
-          <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
-          <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-          <MetaRow label="Varietas" value={tree.activePlanting?.variety ?? 'Belum diisi'} />
-        </Card>
+        ) : null}
+      </View>
+
+      {detail.rows.length > 0 ? (
+        <View style={{ gap: spacing.md }}>
+          {detail.rows.map((row) => (
+            <MetaRow key={row.label} label={row.label} value={row.value} />
+          ))}
+        </View>
       ) : null}
 
-      <Card>
+      {/* Catatan sebagai PARAGRAF, dan hanya kalau ada isinya. Dulu ia MetaRow
+          yang mencetak tanda hubung saat kosong — sebuah baris yang hadir hanya
+          untuk mengumumkan bahwa tidak ada yang perlu dibaca. */}
+      {noteText ? (
+        <View style={{ gap: spacing.xs }}>
+          {/* colors.textMuted, BUKAN colors.muted: alias `muted` hanya hidup di
+              peta warna lokal ui.tsx, bukan di token bersama. Nilainya sama. */}
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
+            Catatan
+          </Text>
+          <Text selectable style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>
+            {noteText}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Jejak audit dan keterangan izin duduk paling bawah: keduanya tentang
+          catatannya, bukan isinya. */}
+      {detail.createdAt || shouldShowUpdatedAt(detail.createdAt, detail.updatedAt) ? (
         <View style={{ gap: spacing.md }}>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-            <Badge label={detail.recordLabel} tone="info" />
-            {detail.originLabel ? <Badge label={detail.originLabel} tone="muted" /> : null}
-          </View>
-          <MetaRow label={detail.eventLabel} value={formatEventDate(detail.eventAt)} />
-          <MetaRow
-            label={detail.authorVerb === 'harvested' ? 'Dipanen oleh' : 'Dicatat oleh'}
-            value={formatActorDisplayName({
-              actorId: detail.authorId,
-              actorName: detail.authorName,
-              actorRole: detail.authorRole,
-              currentUserId: profile?.id,
-            })}
-          />
           {detail.createdAt ? <MetaRow label="Dibuat pada" value={formatDateTime(detail.createdAt)} /> : null}
           {shouldShowUpdatedAt(detail.createdAt, detail.updatedAt) ? (
             <MetaRow label="Terakhir diubah" value={formatDateTime(detail.updatedAt as string)} />
           ) : null}
-          {detail.rows.map((row) => (
-            <MetaRow key={row.label} label={row.label} value={row.value} />
-          ))}
-          <MetaRow label="Catatan" value={detail.note || '-'} />
-          {!detail.canEdit && detail.supportsEdit !== false ? (
-            <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-              Catatan ini hanya bisa diubah oleh pelapor.
-            </Text>
-          ) : null}
         </View>
-      </Card>
+      ) : null}
 
-      {detail.photoEntityType ? (
-        <Card>
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
-            Foto catatan
-          </Text>
-          <PhotoAttachmentPreviewList emptyText="Tidak ada foto pada catatan ini." photos={photos} />
-        </Card>
+      {!detail.canEdit && detail.supportsEdit !== false ? (
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+          Catatan ini hanya bisa diubah oleh pelapor.
+        </Text>
       ) : null}
     </Screen>
   );
+}
+
+// Gaya baris keterangan sekunder di kepala layar. Dipakai dua kali — baris
+// waktu/pencatat dan baris konteks pohon — dan sengaja SATU nilai supaya
+// keduanya tidak bisa menyimpang satu sama lain.
+const secondaryLineStyle = {
+  color: colors.textMuted,
+  fontSize: typography.small.fontSize,
+  lineHeight: typography.small.lineHeight,
+} as const;
+
+// Foto catatan sebagai HERO: gambar besar di puncak layar, sebelum judulnya.
+//
+// Bentuknya sepadan dengan foto pohon di layar detail pohon — tinggi 220, sudut
+// kartu, dan ketukan membuka PhotoViewerModal yang sama. Dua layar yang
+// bersebelahan dalam satu alur tidak boleh memperlakukan foto dengan dua cara.
+//
+// SENGAJA BUKAN PhotoAttachmentPreviewList. Komponen itu adalah DAFTAR yang bisa
+// disunting: tiap foto duduk di dalam kotak berbingkai berpadding dengan tombol
+// hapus opsional, gambarnya setinggi 156. Itu bentuk yang benar untuk layar yang
+// MENGELOLA foto, dan bentuk yang salah untuk satu gambar yang seharusnya jadi
+// hal pertama yang dilihat pembaca.
+//
+// Kegagalan muat ditangani per foto, sama seperti di PhotoAttachmentPreviewList
+// dan dengan alasan yang sama: signed URL foto hanya berumur 10 menit, jadi
+// layar yang dibiarkan terbuka akan menemui gambar yang sudah kedaluwarsa.
+function RecordPhotoHero({ photos }: { photos: PhotoAttachmentPreviewItem[] }) {
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const [failedUrls, setFailedUrls] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    setFailedUrls([]);
+  }, [photos]);
+
+  function markFailed(url: string) {
+    setFailedUrls((current) => (current.includes(url) ? current : [...current, url]));
+  }
+
+  return (
+    <View style={{ gap: spacing.md }}>
+      {photos.map((photo, index) => (
+        <View key={photo.id ?? `${photo.url}-${index}`} style={{ gap: spacing.sm }}>
+          {failedUrls.includes(photo.url) ? (
+            <View
+              style={{
+                alignItems: 'center',
+                backgroundColor: colors.photoPlaceholder,
+                borderColor: colors.border,
+                borderCurve: 'continuous',
+                borderRadius: radius.imageCard,
+                borderWidth: 1,
+                height: 220,
+                justifyContent: 'center',
+                padding: spacing.lg,
+              }}
+            >
+              <Text
+                selectable
+                style={{ color: colors.textMuted, lineHeight: typography.small.lineHeight, textAlign: 'center' }}
+              >
+                Foto belum dapat dimuat.
+              </Text>
+            </View>
+          ) : (
+            <Pressable
+              accessibilityLabel="Lihat foto catatan ukuran penuh"
+              accessibilityRole="imagebutton"
+              onPress={() => setPreviewUrl(photo.url)}
+            >
+              <Image
+                resizeMode="cover"
+                source={{ uri: photo.url }}
+                onError={() => markFailed(photo.url)}
+                style={{ borderRadius: radius.imageCard, height: 220, width: '100%' }}
+              />
+            </Pressable>
+          )}
+          {photo.caption ? (
+            <Text selectable style={secondaryLineStyle}>
+              {photo.caption}
+            </Text>
+          ) : null}
+        </View>
+      ))}
+      <PhotoViewerModal
+        onClose={() => setPreviewUrl(null)}
+        photoUrl={previewUrl}
+        visible={Boolean(previewUrl)}
+      />
+    </View>
+  );
+}
+
+// Pemetaan jenis catatan ke RPC hapusnya. Satu tempat, bukan empat cabang di
+// dalam runDelete — bentuknya sepadan dengan loadRecordDetail di bawah.
+//
+// Penjaga eksahustifnya sama: kalau TreeRecordRouteType bertambah anggota tanpa
+// fungsi ini ikut disesuaikan, compiler yang menemukannya, bukan pemakainya.
+async function softDeleteRecord(
+  recordType: TreeRecordRouteType,
+  recordId: UUID
+): Promise<ServiceResult<SuccessData>> {
+  if (recordType === 'condition') {
+    return softDeleteConditionReport({ recordId, reason: null });
+  }
+
+  if (recordType === 'phase') {
+    return softDeleteGrowthPhaseRecord({ recordId, reason: null });
+  }
+
+  if (recordType === 'harvest') {
+    return softDeleteHarvestRecord({ recordId, reason: null });
+  }
+
+  if (recordType === 'care') {
+    return softDeleteCareActivity({ recordId, reason: null });
+  }
+
+  return unknownRecordType(recordType);
 }
 
 function normalizeRecordType(value?: string): TreeRecordRouteType | null {
@@ -273,6 +535,7 @@ async function loadRecordDetail(
         authorRole: authorDisplay.role,
         authorVerb: 'recorded',
         canEdit: result.data.canEdit === true,
+        canDelete: result.data.canDelete === true,
         createdAt: result.data.createdAt,
         eventAt: result.data.reportedAt,
         eventLabel: 'Tanggal catatan',
@@ -304,6 +567,7 @@ async function loadRecordDetail(
         authorRole: authorDisplay.role,
         authorVerb: 'recorded',
         canEdit: result.data.canEdit === true,
+        canDelete: result.data.canDelete === true,
         createdAt: result.data.createdAt,
         eventAt: result.data.recordedAt,
         eventLabel: 'Tanggal catatan',
@@ -335,6 +599,7 @@ async function loadRecordDetail(
         authorRole: authorDisplay.role,
         authorVerb: 'harvested',
         canEdit: result.data.canEdit === true,
+        canDelete: result.data.canDelete === true,
         createdAt: result.data.createdAt,
         eventAt: result.data.harvestedAt,
         eventLabel: 'Tanggal panen',
@@ -397,6 +662,7 @@ async function loadRecordDetail(
         authorRole: authorDisplay.role,
         authorVerb: 'recorded',
         canEdit: false,
+        canDelete: care.canDelete === true,
         createdAt: null,
         eventAt: care.performedAt,
         eventLabel: 'Tanggal perawatan',

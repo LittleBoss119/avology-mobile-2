@@ -1,17 +1,47 @@
 import { router } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 
-import { Icon, type IconName } from '../../src/components/icons';
-import { BrandMark, ChipButton, ErrorBanner, PageIntro, Screen, TopAppBar } from '../../src/components/ui';
-import { tokens } from '../../src/constants/theme';
+import {
+  BrandMark,
+  Button,
+  ChipButton,
+  ErrorBanner,
+  PageIntro,
+  Screen,
+  TopAppBar,
+} from '../../src/components/ui';
 import { useAuth } from '../../src/context/auth-context';
 
-// Dua pilihan ini adalah PERCABANGAN PERAN, bukan aksi utama versus aksi
-// sekunder. Versi lama memberi "Buat Kebun" tombol hijau solid dan "Gabung
-// Kebun" tombol outline, sehingga pekerja yang tidak membaca menekan yang
-// menonjol, membuat kebun sampah, lalu terjebak sebagai pemilik — dan aplikasi
-// ini tidak punya fitur hapus kebun. Karena itu keduanya sekarang berbobot
-// visual setara: baris polos, tanpa kartu, tanpa tombol berwarna.
+// BOBOT SETARA — DIPULIHKAN. BACA INI SEBELUM MEMBALIKNYA LAGI.
+//
+// Versi paling awal layar ini memberi "Buat Kebun" tombol hijau solid dan
+// "Gabung Kebun" tombol outline. Akibatnya pekerja yang tidak membaca menekan
+// yang paling menonjol, membuat kebun sampah, lalu terjebak sebagai pemilik.
+// Versi sesudahnya menutup jalur itu dengan menyamakan bobot keduanya.
+//
+// Redesain sempat mengembalikan pasangan utama/sekunder itu. Keputusan tersebut
+// DIBATALKAN setelah jalur pemulihannya diaudit, dan hasilnya: pemilik kebun
+// kosong benar-benar tidak punya jalan keluar apa pun lewat aplikasi.
+//   * leave_current_farm menyaring `role = 'worker'` (migrasi 051:266-277),
+//     jadi pemilik yang memanggilnya ditolak dengan "Active worker membership
+//     not found".
+//   * Tidak ada RPC penghapus kebun. Tabel `farms` juga tidak punya policy
+//     DELETE, dan grant-nya hanya select + update (migrasi 007:348).
+//   * Tidak ada alih kepemilikan.
+//   * farm_members_one_active_relation_idx (migrasi 036:150-152) memblokir
+//     baris pending/active yang baru selama baris pemilik itu masih berdiri.
+// Jadi satu ketukan keliru di layar ini mengunci akun itu untuk seterusnya —
+// dan pesan yang diterimanya kemudian, "Keluar dari kebun itu dulu sebelum
+// mengajukan gabung", menyuruh sesuatu yang tidak ada tombolnya.
+//
+// Karena itu kedua tombol memakai varian yang SAMA PERSIS. Tidak ada yang lebih
+// menonjol, sehingga tidak ada yang bisa tertekan hanya karena ia menonjol.
+//
+// Pembeda kedua jalur sekarang ada di LABELNYA, bukan di bentuknya: "Buat kebun
+// baru" versus "Gabung pakai kode". Masing-masing menyebut syarat jalurnya —
+// kata "kode" dikenali orang yang memang dikirimi kode oleh pemiliknya. Baris
+// daftar, ikon kotak, chevron, dan subjudul terpisah TIDAK dikembalikan; label
+// itu sendiri yang memikul pembedaannya.
 
 export default function OnboardingDecisionScreen() {
   const { error, profile } = useAuth();
@@ -43,93 +73,58 @@ export default function OnboardingDecisionScreen() {
           }
         />
       }
-    >
-      <PageIntro title={`Halo, ${firstName}`} subtitle="Kamu belum terhubung ke kebun mana pun." />
+      // Jarak antar kedua tombol TIDAK disetel di sini: slot footer milik Screen
+      // sudah membungkus anaknya dengan gap spacing.md (ui.tsx ~:333). Itu jarak
+      // yang sama dengan pasangan tombol bertumpuk di get-started.tsx dan di
+      // layar status akses, jadi tidak ada angka baru yang dikarang di layar ini.
+      footer={
+        <>
+          {/* Kedua tombol WAJIB identik variannya — alasannya di puncak file,
+              dan itu bukan soal selera.
 
+              emphasis="strong" mengikuti get-started.tsx dengan alasan yang sama
+              persis: latar `secondary` (surface) di atas kanvas berkontras
+              ~1,03:1, jadi batas tombol datang dari bordernya saja — dan border
+              bawaannya terlalu pucat untuk layar yang kena silau di kebun. Di
+              sini ia dipakai DUA KALI, sehingga keduanya sama-sama terbaca
+              sebagai tombol tanpa satu pun yang lebih mengundang. */}
+          <Button
+            title="Buat kebun baru"
+            variant="secondary"
+            emphasis="strong"
+            onPress={() => router.push('/create-farm')}
+          />
+          <Button
+            title="Gabung pakai kode"
+            variant="secondary"
+            emphasis="strong"
+            onPress={() => router.push('/join-farm')}
+          />
+        </>
+      }
+    >
+      {/* Naik ke anak pertama, di atas blok sapaan. Dulu ia duduk di antara
+          sapaan dan daftar pilihan; sekarang blok sapaan memakan seluruh ruang
+          kosong, jadi spanduk galat yang ikut terpusat akan melayang di tengah
+          layar jauh dari apa pun. Di puncak layar ia mengikuti kebiasaan setiap
+          layar lain di app ini. */}
       <ErrorBanner message={error?.message} />
 
-      <View style={{ paddingTop: tokens.space.md }}>
-        <ChoiceRow
-          icon="plus"
-          title="Buat kebun"
-          subtitle="Kamu jadi pemilik"
-          onPress={() => router.push('/create-farm')}
-        />
-        <View style={{ backgroundColor: tokens.color.line.hairline, height: 1 }} />
-        <ChoiceRow
-          icon="user"
-          title="Gabung kebun"
-          subtitle="Pakai kode dari pemilik"
-          onPress={() => router.push('/join-farm')}
-        />
+      {/* Blok sapaan duduk di tengah ruang antara header dan tombol.
+          flexGrow: 1, JANGAN flex: 1 — `flex: 1` berarti flexBasis 0, sehingga
+          pembungkus ini tidak menyumbang tinggi apa pun dan konten tidak pernah
+          bisa melampaui viewport, jadi ScrollView tidak punya apa pun untuk
+          digulung. Alasan lengkapnya di get-started.tsx dan ui.tsx ~:323-331.
+          Relevan di sini karena pengguna sasaran termasuk orang yang membesarkan
+          font sistem.
+
+          TANPA ilustrasi, ikon besar, atau logo: BrandMark sudah berdiri di app
+          bar, dan mengulangnya di badan layar berarti merek dua kali di satu
+          layar. */}
+      <View style={{ flexGrow: 1, justifyContent: 'center' }}>
+        <PageIntro align="center" title={`Halo, ${firstName}`} subtitle="Mulai dari mana?" />
       </View>
     </Screen>
-  );
-}
-
-// Lokal di layar ini sesuai batasan Fase 3: ui.tsx tidak boleh disentuh.
-// Penyatuannya dengan baris sejenis di layar lain adalah urusan Fase 6.
-function ChoiceRow({
-  icon,
-  onPress,
-  subtitle,
-  title,
-}: {
-  icon: IconName;
-  onPress: () => void;
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => ({
-        alignItems: 'center',
-        flexDirection: 'row',
-        gap: tokens.space.lg,
-        opacity: pressed ? 0.6 : 1,
-        paddingVertical: tokens.space.xl,
-      })}
-    >
-      <View
-        style={{
-          alignItems: 'center',
-          backgroundColor: tokens.color.brand.soft,
-          borderCurve: 'continuous',
-          borderRadius: tokens.radius.cardInner,
-          height: 48,
-          justifyContent: 'center',
-          width: 48,
-        }}
-      >
-        <Icon name={icon} size={24} color={tokens.color.brand.base} />
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text
-          selectable={false}
-          style={{
-            color: tokens.color.text.primary,
-            fontSize: tokens.type.heading.fontSize,
-            fontWeight: tokens.type.heading.fontWeight,
-            lineHeight: tokens.type.heading.lineHeight,
-          }}
-        >
-          {title}
-        </Text>
-        <Text
-          selectable={false}
-          style={{
-            color: tokens.color.text.secondary,
-            fontSize: tokens.type.bodySmall.fontSize,
-            lineHeight: tokens.type.bodySmall.lineHeight,
-          }}
-        >
-          {subtitle}
-        </Text>
-      </View>
-      <Icon name="chevron-right" size={20} color={tokens.color.text.tertiary} />
-    </Pressable>
   );
 }
 

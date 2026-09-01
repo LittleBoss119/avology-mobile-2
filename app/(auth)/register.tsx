@@ -77,56 +77,98 @@ export default function RegisterScreen() {
   return (
     <Screen
       autoScrollOnFocus
-      header={<TopAppBar onBack={() => router.back()} />}
-      footer={
-        <InlineAuthLink
-          prefix="Sudah punya akun?"
-          actionLabel="Masuk"
-          onPress={() => router.replace('/login')}
-        />
-      }
+      header={<TopAppBar onBack={goBack} />}
     >
-      <PageIntro title="Buat akun" subtitle="Mulai perjalanan mengelola kebun anda!" />
-      <ErrorBanner message={error} />
-      <View style={{ gap: tokens.space.lg }}>
-        <Field
-          autoCapitalize="words"
-          error={fieldErrors.fullName}
-          label="Nama lengkap"
-          placeholder="Nama lengkap"
-          value={fullName}
-          onChangeText={setFullName}
-        />
-        <Field
-          error={fieldErrors.phone}
-          keyboardType="phone-pad"
-          label="Nomor HP"
-          placeholder="Nomor aktif"
-          value={phone}
-          onChangeText={setPhone}
-        />
-        <Field
-          autoCapitalize="none"
-          autoComplete="email"
-          error={fieldErrors.email}
-          keyboardType="email-address"
-          label="Email"
-          placeholder="Email aktif"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <PasswordField
-          error={fieldErrors.password}
-          helperText={`Minimal ${MIN_PASSWORD_LENGTH} karakter.`}
-          label="Password"
-          textContentType="newPassword"
-          value={password}
-          onChangeText={setPassword}
-        />
+      {/* Struktur zona yang sama persis dengan login.tsx, TANPA pemusatan
+          vertikal: konten layar ini empat field panjang, jadi ia tetap rata atas.
+          xxxl (32) memisahkan zona judul dari zona isian; gap seragam 18 milik
+          Screen tidak lagi berlaku karena seluruh isi kini satu anak tunggal. */}
+      <View style={{ gap: tokens.space.xxxl }}>
+        <PageIntro align="center" title="Buat akun" subtitle="Setelah ini Anda memilih kebun." />
+        <View style={{ gap: tokens.space.xl }}>
+          <ErrorBanner message={error} />
+          <View style={{ gap: tokens.space.lg }}>
+            <Field
+              autoCapitalize="words"
+              autoComplete="name"
+              error={fieldErrors.fullName}
+              label="Nama lengkap"
+              // Contoh, bukan pengulangan label. Sejak placeholder email diganti
+              // jadi "Alamat email", form ini tidak lagi punya satu pun contoh
+              // bentuk isian; contoh nama juga menegaskan yang diminta nama
+              // lengkap, bukan panggilan.
+              placeholder="Contoh: Budi Santoso"
+              value={fullName}
+              onChangeText={setFullName}
+            />
+            <Field
+              autoComplete="tel"
+              error={fieldErrors.phone}
+              keyboardType="phone-pad"
+              label="Nomor HP"
+              placeholder="Nomor HP aktif"
+              value={phone}
+              onChangeText={setPhone}
+            />
+            <Field
+              autoCapitalize="none"
+              autoComplete="email"
+              error={fieldErrors.email}
+              keyboardType="email-address"
+              label="Email"
+              placeholder="Alamat email"
+              value={email}
+              onChangeText={setEmail}
+            />
+            {/* Tanpa helperText. Dulu ia berbunyi "Minimal 6 karakter." sementara
+                pesan errornya "Minimal 6 karakter" — error mengalahkan helper
+                (ui.tsx), jadi yang dilihat pengguna hanya kalimat yang sama
+                berkedip antara dua bentuk tanda baca saat ia melewati batas 6.
+                Aturannya kini disampaikan pesan error saja, tepat saat dibutuhkan. */}
+            <PasswordField
+              autoComplete="new-password"
+              error={fieldErrors.password}
+              label="Password"
+              placeholder="Password baru"
+              textContentType="newPassword"
+              value={password}
+              onChangeText={setPassword}
+            />
+          </View>
+          {/* "Lanjut", bukan "Buat akun": alur belum selesai di layar ini. Setelah
+              registrasi berhasil, router.replace('/') menyerahkan tujuan ke
+              resolveAccessRoute, dan akun baru yang belum punya membership selalu
+              mendarat di /onboarding untuk memilih buat kebun atau gabung kebun.
+              Tombol berbunyi "Buat akun" yang disusul layar pemilihan membuat orang
+              mengira prosesnya sudah selesai. */}
+          <Button
+            title="Lanjut"
+            loading={submitting}
+            loadingTitle="Memproses…"
+            onPress={handleSubmit}
+          />
+          {/* Dipindah dari slot footer Screen, alasannya sama dengan login.tsx. */}
+          <InlineAuthLink
+            prefix="Sudah punya akun?"
+            actionLabel="Masuk"
+            onPress={() => router.replace('/login')}
+          />
+        </View>
       </View>
-      <Button title="Buat akun" loading={submitting} onPress={handleSubmit} />
     </Screen>
   );
+}
+
+// Alasannya sama persis dengan goBack() di login.tsx: layar ini bisa jadi entri
+// PERTAMA di tumpukan lewat cold start atau deep link, dan routeGuard tidak
+// memantulkannya karena '/register' sudah dianggap memenuhi '/get-started'.
+function goBack() {
+  if (router.canGoBack()) {
+    router.back();
+    return;
+  }
+
+  router.replace('/get-started');
 }
 
 function computeFieldErrors(
@@ -137,28 +179,28 @@ function computeFieldErrors(
 ): RegisterFieldErrors {
   const errors: RegisterFieldErrors = {};
   const normalizedPhone = normalizePhone(phone);
-  const trimmedEmail = email.trim();
+  const emailError = validateEmail(email.trim());
 
   if (!fullName.trim()) {
-    errors.fullName = 'Nama lengkap wajib diisi.';
+    errors.fullName = 'Isi nama lengkap';
   }
 
   if (!normalizedPhone) {
-    errors.phone = 'Nomor HP wajib diisi.';
+    errors.phone = 'Isi nomor HP';
   } else if (!isValidPhone(normalizedPhone)) {
-    errors.phone = 'Nomor HP belum valid.';
+    // Contoh nomor, bukan penjelasan aturan. "Nomor HP belum valid" tidak memberi
+    // tahu apa yang harus dibetulkan; satu contoh yang benar menunjukkannya.
+    errors.phone = 'Contoh: 081234567890';
   }
 
-  if (!trimmedEmail) {
-    errors.email = 'Email wajib diisi.';
-  } else if (!isValidEmail(trimmedEmail)) {
-    errors.email = 'Format email belum benar.';
+  if (emailError) {
+    errors.email = emailError;
   }
 
   if (!password) {
-    errors.password = 'Password wajib diisi.';
+    errors.password = 'Isi password';
   } else if (password.length < MIN_PASSWORD_LENGTH) {
-    errors.password = 'Password minimal 6 karakter.';
+    errors.password = `Minimal ${MIN_PASSWORD_LENGTH} karakter`;
   }
 
   return errors;
@@ -174,6 +216,29 @@ function isValidPhone(value: string): boolean {
   return /^08\d{8,11}$/.test(value) || /^\+?628\d{7,10}$/.test(value);
 }
 
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+// Salinan dari login.tsx — lihat catatan lengkap di sana. Aturan penerimaan tidak
+// berubah: EMAIL_PATTERN sama persis dengan isValidEmail lama dan diuji lebih
+// dulu, sub-pemeriksaan di bawahnya hanya memilih kalimat.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validateEmail(value: string): string | undefined {
+  if (!value) {
+    return 'Isi email';
+  }
+
+  if (EMAIL_PATTERN.test(value)) {
+    return undefined;
+  }
+
+  if (!value.includes('@')) {
+    return 'Tambahkan @';
+  }
+
+  // Lihat catatan di login.tsx: bagian sebelum @ kosong dipisah supaya pesannya
+  // menunjuk sisi yang benar.
+  if (!value.slice(0, value.indexOf('@'))) {
+    return 'Lengkapi sebelum @';
+  }
+
+  return 'Lengkapi setelah @';
 }

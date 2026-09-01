@@ -219,12 +219,46 @@ function NavRow({
   );
 }
 
-// Baris polos dengan divider tipis, tanpa Card. Isinya tidak berubah: angka yang
-// dipantau sesekali, bukan ditindaklanjuti.
+// Baris polos dengan divider tipis, tanpa Card. Isinya angka yang dipantau
+// sesekali, bukan ditindaklanjuti.
+//
+// DUA DARI TIGA BARIS BISA DITEKAN, dan yang ketiga sengaja tidak.
+//
+// 'Pohon berbunga' dan 'Pohon berbuah' menuju /owner/growth-monitoring — layar
+// itu isinya PERSIS kedua daftar tersebut, satu bagian untuk masing-masing, jadi
+// tidak ada yang perlu ditebak. Sebelum ini layar tersebut tidak punya satu pun
+// jalan masuk dan hanya bisa dicapai lewat deep link.
+//
+// 'Tugas hari ini' DIBIARKAN sebagai baris biasa. Ia bukan tentang fase pohon,
+// dan tujuannya tidak jelas dari sini — /owner/tasks dan /owner/schedules
+// sama-sama masuk akal, dan keduanya menyaring hal yang berbeda dari "hari ini".
+// Menebak salah satunya berarti memasang jalan masuk yang mungkin membawa
+// pemiliknya ke daftar yang bukan angka yang barusan ia tekan. Keputusan itu
+// belum diambil, jadi barisnya tetap seperti sekarang.
+//
+// Perbedaannya TERLIHAT tanpa harus menyentuh: baris yang bisa ditekan punya
+// chevron, yang tidak, tidak. Warna tidak dipakai untuk membedakan keduanya.
+type MonitorItem = {
+  key: string;
+  label: string;
+  route?: string;
+  value: number;
+};
+
 function MonitorList({ summary }: { summary: OwnerDashboardSummary }) {
-  const items = [
-    { key: 'flowering', label: 'Pohon berbunga', value: summary.floweringTrees },
-    { key: 'fruiting', label: 'Pohon berbuah', value: summary.fruitingTrees },
+  const items: MonitorItem[] = [
+    {
+      key: 'flowering',
+      label: 'Pohon berbunga',
+      route: '/owner/growth-monitoring',
+      value: summary.floweringTrees,
+    },
+    {
+      key: 'fruiting',
+      label: 'Pohon berbuah',
+      route: '/owner/growth-monitoring',
+      value: summary.fruitingTrees,
+    },
     { key: 'today', label: 'Tugas hari ini', value: summary.todayTasks },
   ];
 
@@ -233,17 +267,49 @@ function MonitorList({ summary }: { summary: OwnerDashboardSummary }) {
       {items.map((item, index) => (
         <React.Fragment key={item.key}>
           {index > 0 ? <View style={styles.divider} /> : null}
-          <View style={styles.row}>
-            <Text selectable style={styles.monitorLabel}>
-              {item.label}
-            </Text>
-            <Text selectable style={styles.monitorValue}>
-              {item.value}
-            </Text>
-          </View>
+          <MonitorRow item={item} />
         </React.Fragment>
       ))}
     </View>
+  );
+}
+
+function MonitorRow({ item }: { item: MonitorItem }) {
+  // Disalin ke const lebih dulu supaya penyempitan tipenya ikut masuk ke dalam
+  // closure onPress. Membaca item.route langsung di sana menuntut `as string`,
+  // dan penegasan tipe untuk hal yang sudah dijaga tiga baris di atasnya hanya
+  // memindahkan tanggung jawab dari compiler ke pembaca.
+  const route = item.route;
+  const content = (
+    <>
+      <Text selectable style={styles.monitorLabel}>
+        {item.label}
+      </Text>
+      <Text selectable style={styles.monitorValue}>
+        {item.value}
+      </Text>
+      {route ? (
+        <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+      ) : null}
+    </>
+  );
+
+  if (!route) {
+    return <View style={styles.row}>{content}</View>;
+  }
+
+  // Bentuknya mengikuti NavRow di berkas yang sama: Pressable ber-styles.row
+  // dengan chevron di ujung kanan. Sengaja bukan komponen baru — dua baris
+  // sejenis di satu layar tidak boleh punya dua cara ditekan.
+  return (
+    <Pressable
+      accessibilityHint="Buka monitoring fase"
+      accessibilityRole="button"
+      onPress={() => router.push(route)}
+      style={styles.row}
+    >
+      {content}
+    </Pressable>
   );
 }
 

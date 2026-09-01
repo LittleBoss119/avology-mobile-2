@@ -83,11 +83,13 @@ function compareTreePosition(left: Tree, right: Tree): number {
   return (left.columnPosition ?? '').localeCompare(right.columnPosition ?? '');
 }
 
-// Chip kode posisi yang bisa dibuang. Kembaran dekat ActiveFilterChip di
-// farm-map-screen.tsx, dan sengaja DISALIN alih-alih diangkat ke ui.tsx:
-// mengangkatnya berarti menyentuh berkas bersama terbesar di repo demi satu
-// kebutuhan tahap ini. Keduanya presentasional murni dan tidak menyimpan aturan
-// apa pun, jadi menyimpang satu sama lain tidak bisa merusak perilaku.
+// Chip kode posisi yang bisa dibuang.
+//
+// Dulu ini kembaran ActiveFilterChip di farm-map-screen.tsx, disalin alih-alih
+// diangkat ke ui.tsx. Chip itu sendiri sudah tidak ada — deret filter aktif
+// dicabut dari peta bersama seluruh kontrol filternya — jadi yang tersisa
+// sekarang tinggal satu, di sini, dan pertanyaan "diangkat atau disalin" ikut
+// hilang bersamanya.
 function RemovableCodeChip({ code, onRemove }: { code: string; onRemove: () => void }) {
   return (
     <Pressable

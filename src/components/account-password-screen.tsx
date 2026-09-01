@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Pressable } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { tokens } from '../constants/theme';
 import { setPendingFeedback } from '../lib/pendingFeedback';
@@ -10,7 +10,7 @@ import {
   updatePassword,
 } from '../services/authService';
 import { Icon } from './icons';
-import { Button, Card, ErrorBanner, Field, Screen, TopAppBar } from './ui';
+import { Button, ErrorBanner, Field, Screen, TopAppBar } from './ui';
 
 type PasswordFieldErrors = {
   confirmPassword?: string;
@@ -85,12 +85,26 @@ export function AccountPasswordScreen() {
 
   return (
     <Screen
-      header={<TopAppBar title="Ubah password" onBack={() => router.back()} />}
+      header={
+        // Pola yang sama persis dengan cabang TopAppBar di profile-screen.tsx:
+        // mundur satu langkah sudah cukup, dan '/' hanya cadangan kalau layar ini
+        // jadi entri pertama stack. Tanpa cadangan itu router.back() melempar
+        // "GO_BACK was not handled" dan tombol kembalinya diam saja — layar ini
+        // dipakai tiga rute pembungkus, jadi bentuk stack-nya tidak seragam.
+        <TopAppBar
+          title="Ubah password"
+          onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        />
+      }
       stickyFooter={<Button title="Simpan password" loading={saving} onPress={handleSubmit} />}
     >
       <ErrorBanner message={formError} />
 
-      <Card>
+      {/* Kartu pembungkus dicabut, alasan yang sama dengan layar Edit profil:
+          kotak yang berarti "di sini bisa diketik" adalah kotak kolomnya
+          sendiri, dan kartu di sekelilingnya cuma menambah kotak kedua yang
+          tidak menandai apa pun. Susunan dan jumlah kolomnya tidak berubah. */}
+      <View style={{ gap: tokens.space.xl }}>
         <PasswordField
           error={fieldErrors.currentPassword}
           label="Password saat ini"
@@ -113,7 +127,7 @@ export function AccountPasswordScreen() {
           value={confirmPassword}
           onChangeText={setConfirmPassword}
         />
-      </Card>
+      </View>
     </Screen>
   );
 }

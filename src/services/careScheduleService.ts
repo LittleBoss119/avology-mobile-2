@@ -28,7 +28,75 @@ import type {
 } from '../types/domain';
 import { sweepMissedSchedules } from './missedScheduleSweep';
 import { compareTreePosition, resolveTreeTargetCodes } from './scheduleTreeService';
+import { formatCareCategory, formatTargetType } from '../utils/displayFormat';
 import { fail, ok } from '../utils/serviceResult';
+
+// Judul jadwal, dirakit program. Menggantikan kolom teks bebas yang dulu diketik
+// pemilik: itu satu-satunya keyboard di alur buat jadwal, dan isinya terbukti
+// jadi sampah ("Test", "awas", "Besok ajah") — kata yang hanya berarti bagi
+// orang yang mengetiknya, pada hari ia mengetiknya.
+//
+// Bentuknya "<jenis> · <target>": "Pemupukan · 12 pohon", "Penyiraman · Semua
+// pohon", "Pemupukan · Parit sisi utara".
+//
+// DI SINI, bukan di layar, karena title adalah kolom yang dipersistensi
+// (care_schedules.title NOT NULL) — merakitnya logika domain, bukan presentasi.
+// Satu implementasi dipakai tiga tempat: payload buat, payload edit, dan baris
+// ringkasan di atas tombol simpan. Baris ringkasan itu MENJANJIKAN string yang
+// sama dengan yang akan tersimpan, dan janji itu hanya bisa dijaga kalau
+// sumbernya satu.
+//
+// Ruas targetnya memakai formatTargetType untuk 'farm' — bukan literal "Semua
+// pohon" — supaya judul dan label pilihan di formulir tidak bisa berselisih
+// kata.
+//
+// Mengembalikan null kalau bahannya belum lengkap. Itu keadaan NORMAL saat
+// dipakai baris ringkasan (pemilik belum memilih apa-apa), dan tidak pernah
+// terjadi di jalur simpan karena validateScheduleForm sudah menahannya lebih
+// dulu — pemanggil di sana memperlakukan null sebagai galat, bukan menuliskan
+// judul kosong ke kolom NOT NULL.
+export function buildScheduleTitle(input: {
+  category: CareCategory | '';
+  customTargetNote?: string | null;
+  targetTreeIds?: UUID[] | null;
+  targetType: TargetType;
+}): string | null {
+  if (!input.category) {
+    return null;
+  }
+
+  const target = buildScheduleTitleTarget(input);
+
+  if (!target) {
+    return null;
+  }
+
+  return `${formatCareCategory(input.category)} · ${target}`;
+}
+
+// Sengaja TIDAK memakai formatCareTarget: yang itu meringkas untuk dibaca di
+// baris daftar (ia butuh kode pohon, dan menulis "Pohon 1-A" untuk satu pohon).
+// Judul butuh bentuk yang stabil dan tidak bergantung pada kode pohon yang
+// mungkin belum termuat, jadi cabang 'tree' selalu berupa hitungan.
+function buildScheduleTitleTarget(input: {
+  customTargetNote?: string | null;
+  targetTreeIds?: UUID[] | null;
+  targetType: TargetType;
+}): string | null {
+  if (input.targetType === 'farm') {
+    return formatTargetType('farm');
+  }
+
+  if (input.targetType === 'tree') {
+    const count = input.targetTreeIds?.length ?? 0;
+
+    return count > 0 ? `${count} pohon` : null;
+  }
+
+  // 'custom': isi catatannya sendiri, bukan kata "Area lain". "Pemupukan ·
+  // Parit sisi utara" memberi tahu sesuatu; "Pemupukan · Area lain" tidak.
+  return input.customTargetNote?.trim() || null;
+}
 
 const CARE_SCHEDULE_SELECT =
   'id, farm_id, title, category, scheduled_date, target_type, target_tree_id, custom_target_note, instruction, requires_photo, is_cancelled, cancelled_at, cancelled_by, cancel_reason, repeat_every_days, series_id, parent_schedule_id, missed_at, grace_days, date_basis, created_by, created_at, updated_at';

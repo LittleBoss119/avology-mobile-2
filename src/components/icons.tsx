@@ -2,12 +2,20 @@ import Svg, { Path } from 'react-native-svg';
 
 import { tokens } from '../constants/theme';
 
-// Ikon SVG lokal berbasis react-native-svg. Semua data path diambil VERBATIM dari
-// Tabler Icons (lisensi MIT), varian outline, viewBox 0 0 24 24, digambar bergaya
-// stroke seperti aslinya: fill none, ujung & sambungan membulat, strokeWidth =
-// tokens.icon.stroke (2). ICON_PATHS di bawah adalah satu-satunya sumber kebenaran
-// path; komponen <Icon> merender semuanya secara seragam dan ekspor lama
-// (FlowerIcon dst.) hanyalah pembungkus tipis yang memanggil <Icon>.
+// Ikon SVG lokal berbasis react-native-svg. viewBox 0 0 24 24, digambar bergaya
+// stroke: fill none, ujung & sambungan membulat, strokeWidth = tokens.icon.stroke
+// (2) kecuali pemanggil menyebut lain. ICON_PATHS di bawah adalah satu-satunya
+// sumber kebenaran path; komponen <Icon> merender semuanya secara seragam dan
+// ekspor lama (FlowerIcon dst.) hanyalah pembungkus tipis yang memanggil <Icon>.
+//
+// DUA ASAL PATH, dan bedanya penting supaya atribusinya tetap jujur:
+//
+//   1. Ikon antarmuka biasa — data path diambil VERBATIM dari Tabler Icons
+//      (lisensi MIT), varian outline.
+//   2. Glif sel peta, berawalan `cell-` — DIGAMBAR SENDIRI untuk berkas ini,
+//      bukan dari Tabler. Alasannya di catatan blok kedua di bawah.
+//
+// Jangan menambahkan glif `cell-` ke kelompok pertama atau sebaliknya.
 
 export type IconName =
   | 'home'
@@ -44,7 +52,15 @@ export type IconName =
   | 'eye-off'
   | 'lock'
   | 'logout'
-  | 'user-edit';
+  | 'user-edit'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'cell-insect'
+  | 'cell-leaf-spot'
+  | 'cell-broken-twig'
+  | 'cell-flower'
+  | 'cell-fruit'
+  | 'cell-fruit-seed';
 
 const ICON_PATHS: Record<IconName, string[]> = {
   home: [
@@ -218,16 +234,115 @@ const ICON_PATHS: Record<IconName, string[]> = {
     'M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0',
     'M18.42 15.61a2.1 2.1 0 0 1 2.97 2.97l-3.39 3.42h-3v-3l3.42 -3.39z',
   ],
+  'zoom-in': [
+    'M4 11a7 7 0 1 0 14 0a7 7 0 1 0 -14 0',
+    'M21 21l-6 -6',
+    'M8 11h6',
+    'M11 8v6',
+  ],
+  'zoom-out': [
+    'M4 11a7 7 0 1 0 14 0a7 7 0 1 0 -14 0',
+    'M21 21l-6 -6',
+    'M8 11h6',
+  ],
+
+  // -------------------------------------------------------------------------
+  // GLIF SEL PETA — digambar sendiri, BUKAN dari Tabler.
+  //
+  // KENAPA TIDAK MEMAKAI TABLER SAJA. Ikon Tabler digambar untuk dibaca pada
+  // 20-24px. Glif di bawah dibaca pada 13px, di dalam kotak 48px, di layar
+  // ponsel yang dipegang di kebun. Pada ukuran itu detail bukan hiasan yang
+  // hilang diam-diam — ia berubah jadi gumpalan yang menutup bentuk induknya.
+  // `flower` Tabler misalnya adalah satu path berisi enam kelopak berlekuk;
+  // pada 13px ia rata jadi lingkaran abu-abu dan berhenti bisa dibedakan dari
+  // `cell-fruit`.
+  //
+  // ATURAN YANG DIPAKAI MENGGAMBARNYA, supaya glif berikutnya konsisten:
+  //
+  //   * Maksimal LIMA subpath. Lebih dari itu, jarak antar goresan turun di
+  //     bawah tebal goresannya sendiri pada 13px dan keduanya menyatu.
+  //   * Tidak ada detail yang bergantung pada celah lebih sempit dari 2 satuan
+  //     viewBox (≈1px pada 13px).
+  //   * SILUET dulu, isi belakangan: bentuk terluar harus sudah membedakan glif
+  //     ini dari kelima glif lain sebelum satu pun detail dalam digambar.
+  //
+  // APA YANG DISEDERHANAKAN dari gambaran wajarnya, disebut apa adanya:
+  //
+  //   cell-insect       — tanpa kaki. Enam kaki pada 13px jadi rumbai yang
+  //                       menempel ke badan. Yang tersisa: badan bulat, garis
+  //                       belah, dua antena. Siluet kumbang.
+  //   cell-leaf-spot    — tanpa tulang daun. Ia bersaing dengan bercaknya di
+  //                       ruang yang sama; bercak yang menang, karena itu yang
+  //                       membedakan glif ini dari daun biasa. Bercaknya dua,
+  //                       bukan tiga.
+  //   cell-broken-twig  — tanpa ranting samping. Tinggal dua potongan dengan
+  //                       ujung menyerpih ke arah berlawanan dan celah di
+  //                       antaranya; celah itulah yang menyatakan "patah".
+  //   cell-flower       — empat kelopak, bukan lima atau enam, dan kelopaknya
+  //                       lingkaran polos, bukan bentuk berlekuk.
+  //   cell-fruit-seed   — tanpa daun di tangkai, tidak seperti cell-fruit.
+  //                       Bijinya yang harus terbaca, dan daun di sudut atas
+  //                       menarik mata ke tempat yang salah.
+  //
+  // cell-fruit dan cell-fruit-seed sengaja berbagi siluet yang sama — keduanya
+  // memang buah — dan dibedakan HANYA oleh biji di tengah. Itu cukup karena
+  // keduanya tidak pernah muncul di sel yang sama, dan pembacanya membandingkan
+  // dengan legenda, bukan dengan sel tetangga.
+  // -------------------------------------------------------------------------
+
+  'cell-insect': [
+    'M6 13a6 6 0 1 0 12 0a6 6 0 1 0 -12 0',
+    'M12 7v12',
+    'M9.5 8l-2.5 -4',
+    'M14.5 8l2.5 -4',
+  ],
+  'cell-leaf-spot': [
+    'M4 20c0 -8 5 -14 16 -16c0 10 -6 16 -16 16',
+    'M8.1 14a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0',
+    'M12.6 9.5a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0',
+  ],
+  'cell-broken-twig': [
+    'M5 3l5 7l-3 1',
+    'M19 21l-5 -7l3 -1',
+  ],
+  'cell-flower': [
+    'M9.7 12a2.3 2.3 0 1 0 4.6 0a2.3 2.3 0 1 0 -4.6 0',
+    'M9.1 6.4a2.9 2.9 0 1 0 5.8 0a2.9 2.9 0 1 0 -5.8 0',
+    'M14.7 12a2.9 2.9 0 1 0 5.8 0a2.9 2.9 0 1 0 -5.8 0',
+    'M9.1 17.6a2.9 2.9 0 1 0 5.8 0a2.9 2.9 0 1 0 -5.8 0',
+    'M3.5 12a2.9 2.9 0 1 0 5.8 0a2.9 2.9 0 1 0 -5.8 0',
+  ],
+  'cell-fruit': [
+    'M5.5 14.5a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0 -13 0',
+    'M12 8v-4',
+    'M12 5.5l3.5 -1.5',
+  ],
+  'cell-fruit-seed': [
+    'M5.5 14.5a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0 -13 0',
+    'M12 8v-4',
+    'M9.4 14.5a2.6 2.6 0 1 0 5.2 0a2.6 2.6 0 1 0 -5.2 0',
+  ],
 };
 
 export function Icon({
   name,
   size = tokens.icon.md,
   color = tokens.color.text.secondary,
+  strokeWidth = tokens.icon.stroke,
 }: {
   name: IconName;
   size?: number;
   color?: string;
+  // Tebal goresan dalam satuan viewBox, bukan piksel — ia ikut mengecil bersama
+  // `size`. Default tokens.icon.stroke (2), jadi setiap pemanggil yang sudah ada
+  // tidak bergeser sedikit pun.
+  //
+  // ADA UNTUK SATU KEADAAN: glif sel peta pada 13px. Di sana goresan 2 satuan
+  // menjadi 2 x 13/24 ≈ 1,1 piksel, dan garis setipis itu hilang di layar yang
+  // kena silau matahari — tepat kondisi tempat aplikasi ini dipakai. Menaikkan
+  // default untuk semua ikon bukan jawabannya: pada 20-24px goresan tebal
+  // membuat ikon terlihat gempal dan menutup celah dalamnya.
+  strokeWidth?: number;
 }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -236,7 +351,7 @@ export function Icon({
           key={index}
           d={d}
           stroke={color}
-          strokeWidth={tokens.icon.stroke}
+          strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeLinejoin="round"
         />

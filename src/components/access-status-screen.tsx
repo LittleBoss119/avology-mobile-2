@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 
 import { tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
@@ -10,7 +10,7 @@ import { acknowledgeAccessNotice, cancelJoinRequest } from '../services/memberSe
 import type { CurrentUserFarm } from '../types/domain';
 import { ConfirmDialog } from './bottom-sheet';
 import { Icon, type IconName } from './icons';
-import { BrandMark, Button, Card, ChipButton, ErrorBanner, LoadingState, Screen, TopAppBar } from './ui';
+import { BrandMark, Button, ChipButton, ErrorBanner, LoadingState, Screen, TopAppBar } from './ui';
 
 // Layar ini melayani tiga state sekaligus: pending, rejected, removed.
 //
@@ -93,8 +93,34 @@ export function AccessStatusScreen() {
   // satu: useFocusEffect di app/(onboarding)/_layout.tsx — lihat catatan di
   // laporan Fase 3.
 
+  // Susunannya sama persis dengan layar pilih akses: baris merek di slot judul,
+  // chip "Profil" berlabel di kanan. flexShrink 0 pada chip supaya baris merek
+  // yang mengalah kalau ruangnya sempit.
+  //
+  // Diangkat ke SATU tempat dan dipakai dua kali — oleh LoadingState di bawah
+  // dan oleh Screen di akhir — supaya app bar tidak menghilang lalu muncul lagi
+  // saat pemuatan selesai. Satu sumber, bukan dua salinan yang bisa berselisih.
+  // Isinya tidak bergantung pada relasi yang sedang dimuat, jadi ia sudah utuh
+  // sebelum currentFarm terbaca.
+  const header = (
+    <TopAppBar
+      variant="main"
+      titleContent={<BrandMark inline />}
+      right={
+        <View style={{ flexShrink: 0 }}>
+          <ChipButton
+            active={false}
+            icon="user"
+            label="Profil"
+            onPress={() => router.push('/profile')}
+          />
+        </View>
+      }
+    />
+  );
+
   if (!currentFarm) {
-    return <LoadingState message="Memuat status akses..." />;
+    return <LoadingState header={header} message="Memuat status akses..." />;
   }
 
   async function handleCancelRequest() {
@@ -156,41 +182,48 @@ export function AccessStatusScreen() {
 
   return (
     <Screen
-      header={
-        // Susunannya sama persis dengan layar pilih akses: baris merek di slot
-        // judul, chip "Profil" berlabel di kanan. flexShrink 0 pada chip supaya
-        // baris merek yang mengalah kalau ruangnya sempit.
-        <TopAppBar
-          variant="main"
-          titleContent={<BrandMark inline />}
-          right={
-            <View style={{ flexShrink: 0 }}>
-              <ChipButton
-                active={false}
-                icon="user"
-                label="Profil"
-                onPress={() => router.push('/profile')}
-              />
-            </View>
-          }
-        />
-      }
-      // "Batalkan pengajuan" TIDAK lagi di sini: ia aksi atas pengajuan yang
-      // disebut kartu di atas, jadi tempatnya di dalam kartu itu. Yang tinggal di
-      // footer cuma aksi yang membawa user KELUAR dari layar ini — dan itu hanya
-      // ada saat pengajuannya sudah berakhir. Untuk pending, footer memang tidak
-      // ada: `undefined`, bukan fragmen kosong, supaya Screen tidak menyisakan
-      // pembungkus berpadding di dasar layar.
+      header={header}
+      // SETIAP keadaan punya isi footer sekarang — tidak ada lagi cabang
+      // `undefined`. "Batalkan pengajuan" pindah ke sini dari dalam kartu: ia
+      // mengubah keadaan, dan aksi yang mengubah keadaan tidak boleh duduk di
+      // dalam wadah yang isinya bacaan. Sebelum ini, keadaan menunggu sama
+      // sekali tidak punya aksi di dasar layar dan satu-satunya jalan keluarnya
+      // adalah chip Profil di app bar.
       footer={
-        isPending ? undefined : (
+        isPending ? (
+          // Tombol teks bernada bahaya, bentuk yang sudah dipakai aksi merusak
+          // di layar ini dan di layar lain (owner/farm.tsx, worker/farm.tsx).
+          // SENGAJA bukan tombol berblok: membatalkan pengajuan adalah jalan
+          // mundur, bukan aksi utama layar ini — yang utama justru menunggu.
+          <TextAction
+            title="Batalkan pengajuan"
+            tone="danger"
+            disabled={busy}
+            onPress={() => setConfirmCancel(true)}
+          />
+        ) : (
           <>
+            {/* Bobot SETARA, alasannya sama persis dengan layar pilih akses:
+                tidak ada jalur pemulihan bagi pemilik kebun kosong, jadi jalur
+                "buat kebun" tidak boleh terlihat lebih mengundang daripada
+                jalur "gabung". Dulu tombol pertama berblok hijau penuh dan yang
+                kedua cuma teks — persis ketimpangan yang dilarang itu.
+
+                `disabled={busy}` di KEDUANYA, tanpa pemintal. Keduanya memanggil
+                handleRecovery yang sama dan `busy` tidak tahu tombol mana yang
+                ditekan; menaruh pemintal di salah satunya akan mengabarkan hal
+                yang belum tentu benar. */}
             <Button
               title="Coba kode lain"
-              loading={busy}
+              variant="secondary"
+              emphasis="strong"
+              disabled={busy}
               onPress={() => void handleRecovery('/join-farm')}
             />
-            <TextAction
-              title="Buat kebun sendiri"
+            <Button
+              title="Buat kebun baru"
+              variant="secondary"
+              emphasis="strong"
               disabled={busy}
               onPress={() => void handleRecovery('/create-farm')}
             />
@@ -256,34 +289,30 @@ export function AccessStatusScreen() {
         >
           {view.description}
         </Text>
-      </View>
 
-      {/* Tanggal naik dari baris teks lepas menjadi kartu. Sebagai baris lepas ia
-          terbaca seperti keterangan gambar; sebagai kartu ia menjadi berkas
-          pengajuannya sendiri — dan untuk pengajuan yang masih berjalan, tempat
-          yang benar untuk membatalkannya. */}
-      <Card>
-        <View style={styles.cardRow}>
-          <Text selectable style={styles.cardLabel}>
-            {view.dateLabel}
-          </Text>
-          <Text selectable style={styles.cardValue}>
-            {view.dateValue ?? '—'}
-          </Text>
-        </View>
+        {/* Tanggal turun lagi jadi baris keterangan biasa, di bawah kalimat
+            penjelas. Sebagai kartu berbingkai ia menjanjikan sebuah berkas lalu
+            hanya berisi satu baris — bingkai yang tidak membawa apa-apa, dan
+            bingkai itu ikut menyeret aksinya ke dalam wadah bacaan.
 
-        {isPending ? (
-          <>
-            <View style={styles.cardDivider} />
-            <TextAction
-              title="Batalkan pengajuan"
-              tone="danger"
-              disabled={busy}
-              onPress={() => setConfirmCancel(true)}
-            />
-          </>
+            Tanpa tanggal, barisnya HILANG. Tidak ada tanda hubung dan tidak ada
+            teks pengganti: '—' menuntut pembaca menerjemahkan sebuah simbol
+            hanya untuk sampai pada kesimpulan bahwa tidak ada yang perlu
+            dibaca. */}
+        {view.dateValue ? (
+          <Text
+            selectable
+            style={{
+              color: tokens.color.text.tertiary,
+              fontSize: tokens.type.meta.fontSize,
+              lineHeight: tokens.type.meta.lineHeight,
+              textAlign: 'center',
+            }}
+          >
+            {`${view.dateLabel} ${view.dateValue}`}
+          </Text>
         ) : null}
-      </Card>
+      </View>
 
       <JoinedFarmModal busy={busy} farmName={joinedFarm?.name ?? null} onStart={handleStart} visible={joinedFarm !== null} />
 
@@ -469,22 +498,53 @@ function resolveStatusView(membership: CurrentUserFarm): StatusView {
     dateLabel: 'Tanggal',
     dateValue: endedAt,
     description: resolveEndedDescription(membership),
-    icon: 'x',
+    // BENTUK ikon membedakan keadaan, bukan cuma warnanya. Sebelum ini
+    // 'rejected' dan 'removed' sama-sama memakai 'x' di atas lingkaran merah
+    // yang sama, sehingga satu-satunya pembedanya adalah judul — dan pada layar
+    // yang dibaca sekilas di bawah matahari, itu berarti tidak ada pembeda.
+    //
+    // 'lock' untuk removed: gemboknya menyatakan kebun itu kini TERTUTUP untuk
+    // dia, dan itu benar untuk kedua cabangnya — baik dinonaktifkan pemilik
+    // maupun keluar atas kemauan sendiri. 'logout' sempat jadi kandidat tapi
+    // ditolak: pintu dengan panah keluar berarti "kamu pergi", dan itu menuduh
+    // salah untuk pekerja yang justru dikeluarkan. Siluet gembok juga tidak bisa
+    // tertukar dengan silang maupun jam pada ukuran kecil.
+    icon: membership.status === 'rejected' ? 'x' : 'lock',
     iconBackground: tokens.color.status.danger.bg,
     iconColor: tokens.color.status.danger.text,
     title: resolveEndedTitle(membership),
   };
 }
 
-// Kalimatnya menyebut jalan keluarnya, karena dua tombol di dasar layar itulah
-// yang harus dipahami: user di sini sedang menunggu diberi tahu apa yang bisa dia
-// lakukan sekarang.
+// Kalimatnya TIDAK lagi menyebutkan jalan keluarnya. Dulu ia menutup dengan
+// "Kamu bisa mencoba kode kebun lain, atau membuat kebun sendiri" — dan sejak
+// kedua aksi itu berdiri sebagai tombol berlabel "Coba kode lain" dan "Buat
+// kebun baru" tepat di bawahnya, kalimat itu cuma membacakan ulang tombolnya.
+//
+// Yang menggantikannya adalah hal yang TIDAK terlihat dari layar: bahwa
+// keadaannya tidak mengunci apa-apa. Baris rejected/removed tidak diblokir
+// farm_members_one_active_relation_idx — indeks itu hanya menghitung status
+// 'pending' dan 'active' (migrasi 036:150-152) — jadi pengajuan ke kebun lain
+// memang sudah terbuka sekarang juga, sebelum tombol mana pun ditekan. Itu
+// kabar, bukan deskripsi.
+//
+// Percabangan removed mengikuti percabangan di resolveEndedTitle. Tanpa itu,
+// cabang 'left_by_worker' membaca judul "Kamu sudah keluar dari kebun ini" lalu
+// kalimat "Kamu sudah tidak punya akses ke kebun ini" — hal yang sama dua kali.
 function resolveEndedDescription(membership: CurrentUserFarm): string {
   if (membership.status === 'rejected') {
-    return 'Pemilik kebun tidak menyetujui pengajuanmu. Kamu bisa mencoba kode kebun lain, atau membuat kebun sendiri.';
+    return 'Pemilik kebun tidak menyetujui pengajuanmu. Kamu bebas mengajukan ke kebun lain sekarang.';
   }
 
-  return 'Kamu sudah tidak punya akses ke kebun ini. Kamu bisa bergabung ke kebun lain, atau membuat kebun sendiri.';
+  // Keluar atas kemauan sendiri: kalimat keduanya menyebut SYARAT untuk
+  // kembali, bukan kebebasan pindah. Orang yang keluar sendiri lebih mungkin
+  // ingin masuk lagi ke kebun yang sama, dan untuk itu ia butuh kodenya lagi —
+  // sama persis dengan peringatan di dialog keluar milik layar Kebun pekerja.
+  if (membership.removedReason === 'left_by_worker') {
+    return 'Catatan dan tugas kebun itu sudah tidak bisa kamu buka. Kalau mau kembali, kamu perlu kode kebun itu lagi.';
+  }
+
+  return 'Catatan dan tugas kebun itu sudah tidak bisa kamu buka. Kamu bebas bergabung ke kebun lain sekarang.';
 }
 
 function resolveEndedTitle(membership: CurrentUserFarm): string {
@@ -516,18 +576,3 @@ function formatDate(value?: string | null): string | null {
 
   return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 }
-
-const styles = StyleSheet.create({
-  cardRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: tokens.space.md,
-    justifyContent: 'space-between',
-  },
-  cardLabel: { ...tokens.type.body, color: tokens.color.text.secondary },
-  cardValue: { ...tokens.type.bodyStrong, color: tokens.color.text.primary },
-  cardDivider: {
-    backgroundColor: tokens.color.line.hairline,
-    height: StyleSheet.hairlineWidth,
-  },
-});

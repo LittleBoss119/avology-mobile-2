@@ -6,7 +6,11 @@ import type {
   CreateCareActivityData,
   CreateCareActivityInput,
   GetCareActivityDetailInput,
+  MemberRole,
+  MemberStatus,
   ServiceResult,
+  SoftDeleteRecordInput,
+  SuccessData,
   UUID,
 } from '../types/domain';
 import {
@@ -22,11 +26,16 @@ import { fail, ok } from '../utils/serviceResult';
 // Tanggung jawab penjadwalan (jadwal -> tugas) tetap di careTaskService dan
 // careScheduleService; service ini khusus pencatatan hasilnya.
 //
-// DISENGAJA: tidak ada update/soft-delete untuk catatan inisiatif.
-// care_activities tidak punya is_deleted/updated_at dan grant-nya hanya
-// select+insert (lihat migrasi 027). Penyederhanaan ini menggantikan
-// update_own_manual_care_record / soft_delete_own_manual_care_record dan akan
-// dievaluasi ulang setelah uji pakai user.
+// TIDAK ADA UPDATE, dan itu tetap disengaja: care_activities append-only, tidak
+// punya kolom updated_at, dan grant-nya hanya select+insert (migrasi 027).
+// Catatan perawatan tidak bisa dikoreksi isinya oleh siapa pun.
+//
+// SOFT DELETE ADA sejak migrasi 067, dan tidak melanggar hal di atas: ia UPDATE
+// pada kolom PENANDA (is_deleted dan tiga kolom pendampingnya), bukan perubahan
+// isi dan bukan DELETE. Grant select+insert pun tidak dilonggarkan — jalurnya
+// lewat RPC SECURITY DEFINER, jadi klien tetap tidak bisa menulis ke tabel ini
+// langsung. Hanya perawatan INISIATIF yang bisa dihapus; yang terjadwal
+// dibatalkan lewat rollback_completed_task_activity.
 
 // CARE_ACTIVITY_SELECT, CareActivityRow, dan mapCareActivity kini hidup di
 // ./careActivityShared dan dipakai bersama careTaskService. Jangan
@@ -85,10 +94,15 @@ export async function getCareActivityDetail(
 ): Promise<ServiceResult<CareActivityDetail>> {
   const activityId = typeof input === 'string' ? input : input.activityId;
 
+  // is_deleted disaring di query. Kolomnya baru lahir di migrasi 067, jadi
+  // sebelum ini fungsi ini memang tidak punya cara tahu — dan penyaringnya
+  // ditulis di tempat yang sama dengan tiga service catatan lain, dengan galat
+  // yang sudah dipakai fungsi ini sejak dulu.
   const { data, error } = await supabase
     .from('care_activities')
     .select(CARE_ACTIVITY_SELECT)
     .eq('id', activityId)
+    .eq('is_deleted', false)
     .maybeSingle<CareActivityRow>();
 
   if (error) {
@@ -121,9 +135,76 @@ export async function getCareActivityDetail(
 
   return ok({
     ...activity,
+    canDelete: await resolveCareActivityCanDelete(activity),
     category,
     taskTitle,
   });
+}
+
+// canDelete untuk perawatan. Cerminan persis penjaga di dalam
+// soft_delete_care_activity (migrasi 067): asal harus 'inisiatif', dan
+// pemanggil harus pencatatnya ATAU pemilik aktif kebun.
+//
+// URUTANNYA MENENTUKAN BERAPA QUERY YANG DIJALANKAN, dan itu disengaja:
+//
+//   1. Bukan inisiatif  -> false, TANPA menyentuh jaringan sama sekali. Ini
+//      jalur setiap perawatan terjadwal, dan ia berhenti paling awal.
+//   2. Pemanggil = pencatatnya -> true, cukup satu auth.getUser(). Ini jalur
+//      pekerja yang membuka catatannya sendiri, yang paling sering terjadi.
+//   3. Selain itu -> baru satu query farm_members untuk memeriksa apakah ia
+//      pemilik kebun. Jalur ini hanya ditempuh pemilik yang membuka catatan
+//      orang lain.
+//
+// Tiga service catatan lain tidak perlu cabang seperti ini: keduanya sudah
+// mengambil baris keanggotaan sebagai pemeriksaan akses, jadi `role` sudah ada
+// di tangan tanpa biaya. getCareActivityDetail tidak punya pemeriksaan akses
+// sama sekali (ia bersandar pada RLS), dan menambahkannya di sini akan mengubah
+// perilaku fungsi ini di luar yang diminta.
+async function resolveCareActivityCanDelete(activity: CareActivity): Promise<boolean> {
+  if (activity.asal !== 'inisiatif') {
+    return false;
+  }
+
+  const userResult = await supabase.auth.getUser();
+  const currentUserId = userResult.data.user?.id;
+
+  if (!currentUserId) {
+    return false;
+  }
+
+  if (activity.performedBy === currentUserId) {
+    return true;
+  }
+
+  const { data } = await supabase
+    .from('farm_members')
+    .select('role, status')
+    .eq('farm_id', activity.farmId)
+    .eq('user_id', currentUserId)
+    .maybeSingle<{ role: MemberRole; status: MemberStatus }>();
+
+  return data?.role === 'owner' && data.status === 'active';
+}
+
+// Hapus lunak. Izinnya ditegakkan RPC (migrasi 067), termasuk penolakan untuk
+// perawatan TERJADWAL — yang pembatalannya lewat rollback_completed_task_activity,
+// bukan lewat sini.
+export async function softDeleteCareActivity(
+  input: SoftDeleteRecordInput | UUID
+): Promise<ServiceResult<SuccessData>> {
+  const activityId = typeof input === 'string' ? input : input.recordId;
+  const reason = typeof input === 'string' ? null : input.reason ?? null;
+
+  const { error } = await supabase.rpc('soft_delete_care_activity', {
+    p_activity_id: activityId,
+    p_reason: normalizeOptionalText(reason),
+  });
+
+  if (error) {
+    return fail(error, 'Catatan perawatan gagal dihapus.');
+  }
+
+  return ok({ success: true });
 }
 
 function normalizeTreeIds(treeIds: UUID[] | null | undefined): UUID[] {

@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Animated, Pressable, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { tokens } from '../constants/theme';
@@ -8,41 +8,70 @@ import { useAuth } from '../context/auth-context';
 import { setPendingCareTrees } from '../lib/pendingCareTrees';
 import { setPendingNewTreePositions } from '../lib/pendingNewTreePositions';
 import { setPendingScheduleTrees } from '../lib/pendingScheduleTrees';
+import {
+  hasActiveTreeFilter,
+  matchesTreeCriteria,
+  peekMapZoom,
+  peekTreeBrowseCriteria,
+  setMapZoom,
+  type TreeFilterCriteria,
+} from '../lib/treeBrowseState';
 import { getFarmDetail } from '../services/farmService';
 import { getTrees } from '../services/treeService';
 import type { Farm, GrowthPhase, Tree, TreeConditionStatus } from '../types/domain';
 import { formatGrowthPhase, formatTreeCondition } from '../utils/displayFormat';
 import { formatTreeDisplayCode } from '../utils/treeFormat';
 import { BottomSheet } from './bottom-sheet';
-import { Icon } from './icons';
-import {
-  Button,
-  ChipButton,
-  ErrorBanner,
-  FilterChipsRow,
-  LoadingState,
-  SearchFilterRow,
-  TopAppBar,
-} from './ui';
+import { Icon, type IconName } from './icons';
+import { Button, ErrorBanner, LoadingState } from './ui';
 
 // Peta denah kebun, baca-saja.
 //
-// KENAPA LAYAR INI TIDAK MEMAKAI <Screen>: Screen membungkus children-nya dalam
+// BUKAN LAYAR, melainkan salah satu dari dua TAMPILAN di dalam route pohon.
+// Induknya — app/(owner)/owner/trees/index.tsx dan kembarannya di sisi pekerja —
+// yang memiliki header, segmented, dan keputusan tampilan mana yang dirender.
+// Komponen ini mulai langsung dari baris kontrolnya.
+//
+// KENAPA IA TIDAK BOLEH DIBUNGKUS <Screen>: Screen membungkus children-nya dalam
 // satu ScrollView vertikal. Peta punya ScrollView-nya SENDIRI di kedua sumbu,
 // dan menaruhnya di dalam ScrollView vertikal lain berarti dua penggulung
-// vertikal berebut gestur yang sama. Jadi layar ini menyusun kerangkanya sendiri
-// dari View flex:1 + TopAppBar, dan menerapkan padding tepi layar yang biasanya
-// diberikan Screen.
+// vertikal berebut gestur yang sama — dan lebih buruk lagi, anak flex:1 di dalam
+// ScrollView tidak pernah mendapat tinggi terbatas, jadi petaknya kolaps. Jadi
+// komponen ini menyusun kerangkanya sendiri dari View flex:1 dan menerapkan
+// padding tepi layar yang biasanya diberikan Screen. JANGAN membungkusnya
+// belakangan, dan jangan menaruhnya di cabang yang memakai Screen.
 //
 // Pekerja dan pemilik memakai komponen yang SAMA, dengan TEPAT SATU cabang
-// peran: banner "belum ada varietas" hanya untuk pemilik. Melengkapi varietas
-// bukan pekerjaan pekerja, dan pesan yang tidak bisa ditindaklanjuti oleh
-// pembacanya cuma menyita tinggi layar. Selebihnya — peta, pencarian, filter,
-// keterangan — identik untuk keduanya; layar ini masih nol aksi tulis.
+// peran: tombol "Pilih" hanya untuk pemilik. Selebihnya — peta, filter,
+// keterangan — identik untuk keduanya; komponen ini masih nol aksi tulis.
+//
+// DATANYA TETAP MILIKNYA SENDIRI. Ia memanggil getFarmDetail dan getTrees, bukan
+// menerima keduanya lewat prop. Itu disengaja: daftar dan denah butuh bentuk
+// data yang berbeda — daftar butuh foto utama tiap pohon, denah butuh dimensi
+// petak dan justru SENGAJA tidak mengambil foto — jadi satu sumber bersama akan
+// memaksa salah satunya membayar permintaan yang tidak dipakainya.
 //
 // basePath dipakai untuk dua hal: merakit route detail pohon, dan membedakan
 // peran. Keduanya mengikuti pola tree-care-activity-screen dan enam komponen
 // sekerabatnya, yang juga membaca basePath sebagai penanda peran.
+//
+// ---------------------------------------------------------------------------
+// APA YANG DICABUT DARI LAYAR INI, DAN KE MANA PERGINYA
+//
+// Kolom pencarian, deret chip filter aktif, dan lembar filter denah sudah tidak
+// ada di sini. Ketiganya kembar dari kontrol yang sama di layar daftar pohon,
+// dan dua salinan berarti pemilik yang menyaring di satu layar menemukan layar
+// satunya masih memperlihatkan seluruh kebun. Sekarang filternya SATU, disimpan
+// di src/lib/treeBrowseState.ts, disetel di layar daftar, dan dibaca di sini.
+//
+// Banner kuning "N pohon belum ada varietas" juga dicabut. Bukan karena
+// menghemat tinggi, walau ia memang memakan sekitar 100px: KALIMATNYA SALAH. Ia
+// berbunyi "Lengkapi supaya jadwal perawatan bisa dibuat", padahal penjaga di
+// database adalah filter_trees_with_active_planting (migrasi 057) yang memeriksa
+// SIKLUS TANAM AKTIF dan tidak pernah menyentuh varietas — pohon tanpa varietas
+// selalu bisa dijadwalkan. Penggantinya sudah ada dan tidak menjanjikan apa pun:
+// badge filter "Varietas belum diisi" di layar daftar.
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Ukuran
@@ -62,9 +91,28 @@ const CELL_GAP = tokens.space.xs;
 const ROW_HEADER_WIDTH = 32;
 const COLUMN_HEADER_HEIGHT = 24;
 
-// Sel yang tidak cocok pencarian/filter diredupkan, TIDAK disembunyikan: yang
-// dicari orang bukan cuma "pohonnya mana", tapi "pohonnya di sudut mana kebun",
-// dan itu hilang begitu tetangganya lenyap.
+// Ukuran glif sudut, sebagai pecahan dari sisi sel: 13px pada sel compact (48),
+// 20px pada sel besar (70).
+//
+// NAIK dari 0.22 (11px) sejak tanda sudut berubah dari bangun geometri jadi glif
+// bergaris. Bangun padat seperti segitiga atau kotak masih terbaca pada 11px
+// karena seluruh bidangnya berwarna; glif bergaris tidak — yang terbaca hanya
+// goresannya, dan pada 11px celah antar goresan turun di bawah satu piksel.
+//
+// TIDAK menyentuh tata letak petak. Glifnya position:absolute di dalam sel yang
+// ber-overflow hidden, jadi ia tidak bisa menggeser satu piksel pun jarak antar
+// sel — syarat mutlak, karena kepala baris dan kolom yang beku bersandar pada
+// jarak itu.
+const MARK_SIZE_RATIO = 0.28;
+
+// Tebal goresan glif sel, dalam satuan viewBox 24. Lebih tebal dari
+// tokens.icon.stroke (2) karena glif ini dibaca pada 13px di bawah matahari,
+// bukan pada 20px di dalam ruangan. Lihat catatan prop strokeWidth di icons.tsx.
+const CELL_GLYPH_STROKE = 2.6;
+
+// Sel yang tidak cocok filter diredupkan, TIDAK disembunyikan: yang dicari orang
+// bukan cuma "pohonnya mana", tapi "pohonnya di sudut mana kebun", dan itu
+// hilang begitu tetangganya lenyap.
 //
 // Angka, bukan warna — jadi tidak ada token yang dilanggar dan tidak ada warna
 // baru yang lahir. Sistem token di repo ini memang belum punya skala opasitas;
@@ -99,6 +147,27 @@ function columnNumberOf(columnPosition: string | null | undefined): number {
   return columnNumber >= 1 && columnNumber <= 26 ? columnNumber : 0;
 }
 
+// Urutan tampil kanonis, dipakai keterangan dan strip legenda supaya keduanya
+// tidak pernah menyebut hal yang sama dalam urutan berbeda. Ini daftar NILAI,
+// bukan daftar label — labelnya tetap milik formatTreeCondition dan
+// formatGrowthPhase di utils/displayFormat.ts.
+const CONDITION_ORDER = [
+  'healthy',
+  'needs_attention',
+  'pest_attacked',
+  'disease_indicated',
+  'damaged',
+  'dead',
+] as const satisfies readonly TreeConditionStatus[];
+
+const PHASE_ORDER = [
+  'initial_planting',
+  'vegetative',
+  'flowering',
+  'fruiting',
+  'harvesting',
+] as const satisfies readonly GrowthPhase[];
+
 // ---------------------------------------------------------------------------
 // Rupa sel menurut kondisi
 //
@@ -110,47 +179,52 @@ function columnNumberOf(columnPosition: string | null | undefined): number {
 // di utils/displayFormat.ts; tidak ada satu pun teks kondisi yang ditulis di
 // berkas ini.
 //
-// Tiga kondisi berbagi satu tanda SEGITIGA dengan sengaja: di kotak 48px,
-// membedakan hama dari penyakit dari kerusakan hanya lewat bentuk mustahil
-// dilakukan tanpa membuat ketiganya sama-sama tidak terbaca. Bedanya terlihat
-// setelah pohonnya dibuka.
+// SATU GLIF PER KONDISI — dan itu perubahan dari keadaan sebelumnya, jadi
+// alasannya ditulis penuh.
 //
-// Bentuk tandanya berbeda satu sama lain, bukan hanya warnanya: kotak, segitiga,
-// dan kotak-bersilang. Aplikasi ini dipakai orang yang mungkin sulit membedakan
-// hijau dan merah, jadi warna tidak boleh jadi satu-satunya pembawa pesan.
+// Sebelum ini hama, penyakit, dan rusak berbagi SATU tanda segitiga, dengan
+// alasan bahwa membedakan ketiganya lewat bentuk mustahil di kotak 48px tanpa
+// membuat ketiganya sama-sama tidak terbaca. Alasan itu benar untuk bangun
+// geometri polos — segitiga, kotak, dan kotak-bersilang memang kehabisan
+// perbedaan yang bisa dibaca. Ia TIDAK benar untuk glif bergambar: serangga,
+// daun berbercak, dan ranting patah punya siluet yang berbeda jauh sebelum
+// detailnya terbaca, dan siluet itulah yang dipindai mata pada ukuran kecil.
+//
+// Yang membuat penyatuan itu mahal: di sel petak TIDAK ADA TEKS yang
+// membedakan ketiganya. Di baris daftar pohon ada — label kondisi tertulis di
+// sebelah ikonnya — jadi di sana ikon yang sama masih boleh dipakai bertiga.
+// Di sini ikon adalah satu-satunya pembeda selain warna, dan warna ketiganya
+// memang sengaja sama.
+//
+// Bentuknya berbeda satu sama lain, bukan hanya warnanya. Aplikasi ini dipakai
+// orang yang mungkin sulit membedakan hijau dan merah, jadi warna tidak boleh
+// jadi satu-satunya pembawa pesan. Latar sel TETAP berwarna kondisi seperti
+// sebelumnya — glif adalah saluran KEDUA, bukan pengganti warna.
 // ---------------------------------------------------------------------------
-
-type ConditionMarkShape = 'none' | 'square' | 'triangle' | 'crossed-square';
 
 type ConditionVisual = {
   background: string;
   border: string;
   markColor: string;
-  markShape: ConditionMarkShape;
+  // null berarti sel tidak diberi tanda apa pun. Hanya 'healthy'.
+  markIcon: IconName | null;
   // Garis diagonal melintasi SELURUH sel. Hanya untuk 'dead'.
   struckThrough: boolean;
   text: string;
-};
-
-// Satu objek dipakai bertiga: hama, penyakit, dan rusak memang satu tampilan.
-const PROBLEM_VISUAL: ConditionVisual = {
-  background: tokens.color.status.danger.bg,
-  border: tokens.color.status.danger.border,
-  markColor: tokens.color.status.danger.text,
-  markShape: 'triangle',
-  struckThrough: false,
-  text: tokens.color.text.primary,
 };
 
 const CONDITION_VISUALS: Record<TreeConditionStatus, ConditionVisual> = {
   // Sehat sengaja TIDAK diberi tanda apa pun dan latarnya permukaan biasa. Ini
   // mayoritas pohon; membiarkannya polos adalah inti desain ini, karena yang
   // menyimpanglah yang harus menonjol.
+  //
+  // Ia juga yang menjaga ongkos glif tetap murah: sel tanpa markIcon tidak
+  // merender satu pun <Svg>. Lihat catatan CellGlyph di bawah.
   healthy: {
     background: tokens.color.surface.card,
     border: tokens.color.line.card,
     markColor: tokens.color.text.tertiary,
-    markShape: 'none',
+    markIcon: null,
     struckThrough: false,
     text: tokens.color.text.primary,
   },
@@ -158,18 +232,45 @@ const CONDITION_VISUALS: Record<TreeConditionStatus, ConditionVisual> = {
     background: tokens.color.status.warning.bg,
     border: tokens.color.status.warning.border,
     markColor: tokens.color.status.warning.text,
-    markShape: 'square',
+    markIcon: 'alert-triangle',
     struckThrough: false,
     text: tokens.color.text.primary,
   },
-  pest_attacked: PROBLEM_VISUAL,
-  disease_indicated: PROBLEM_VISUAL,
-  damaged: PROBLEM_VISUAL,
+  // Ketiganya berbagi WARNA danger — itu memang benar, ketiganya sama-sama
+  // masalah yang menuntut kunjungan — tapi tidak lagi berbagi glif.
+  pest_attacked: {
+    background: tokens.color.status.danger.bg,
+    border: tokens.color.status.danger.border,
+    markColor: tokens.color.status.danger.text,
+    markIcon: 'cell-insect',
+    struckThrough: false,
+    text: tokens.color.text.primary,
+  },
+  disease_indicated: {
+    background: tokens.color.status.danger.bg,
+    border: tokens.color.status.danger.border,
+    markColor: tokens.color.status.danger.text,
+    markIcon: 'cell-leaf-spot',
+    struckThrough: false,
+    text: tokens.color.text.primary,
+  },
+  damaged: {
+    background: tokens.color.status.danger.bg,
+    border: tokens.color.status.danger.border,
+    markColor: tokens.color.status.danger.text,
+    markIcon: 'cell-broken-twig',
+    struckThrough: false,
+    text: tokens.color.text.primary,
+  },
+  // Garis coretnya DIPERTAHANKAN di samping glif silang. Keduanya tidak
+  // berlebihan: silang di sudut menyatakan "kondisi: mati", garis melintas
+  // menyatakan "sel ini sudah selesai" dan terbaca dari jarak pandang yang lebih
+  // jauh — pada petak 234 sel, itu yang membuat blok mati terlihat sebagai blok.
   dead: {
     background: tokens.color.status.neutral.bg,
     border: tokens.color.status.neutral.border,
     markColor: tokens.color.status.neutral.text,
-    markShape: 'crossed-square',
+    markIcon: 'x',
     struckThrough: true,
     text: tokens.color.status.neutral.text,
   },
@@ -185,126 +286,62 @@ const CONDITION_VISUALS: Record<TreeConditionStatus, ConditionVisual> = {
 // Tempatnya POJOK KANAN ATAS, terpisah dari kondisi di pojok kiri atas, supaya
 // keduanya tidak pernah berebut ruang di sel yang sama.
 //
-// BENTUK yang menanggung seluruh beban pembeda: bulat, belah ketupat, palang.
-// Warna adalah saluran kedua, dan ia dipakai untuk mengelompokkan, bukan untuk
-// menamai satu per satu.
+// GLIF yang menanggung beban pembeda: bunga, buah, buah berbiji. Warna adalah
+// saluran kedua, dan ia dipakai untuk mengelompokkan, bukan untuk menamai satu
+// per satu — hijau record.phase berarti "masih tumbuh" (berbunga dan berbuah),
+// oranye record.harvest berarti "sudah bisa dipanen" (panen saja). Fase yang
+// paling layak ditindaklanjuti pantas mendapat warna yang tidak dibagi dengan
+// siapa pun.
 //
-// KENAPA BERBUNGA DAN BERBUAH SEWARNA. Sebelumnya berbuah diberi biru
-// status.info semata-mata karena ia warna ketiga yang tersisa. Biru tidak
-// berarti apa-apa di aplikasi ini, jadi tandanya harus dihafal tanpa petunjuk —
-// itu bukan warna yang salah, itu warna yang kosong.
-//
-// Yang menggantikannya: hijau record.phase untuk berbunga DAN berbuah, oranye
-// record.harvest hanya untuk panen. Dengan begitu warnanya menyatakan sesuatu
-// yang benar — hijau berarti "masih tumbuh", oranye berarti "sudah bisa
-// dipanen" — dan oranye tetap menjadi milik satu-satunya fase yang menuntut
-// tindakan. Fase yang paling layak ditindaklanjuti pantas mendapat warna yang
-// tidak dibagi dengan siapa pun.
-//
-// Harganya dibayar sadar: berbunga dan berbuah kini hanya dibedakan bentuknya.
-// Itu masih dua saluran pembeda untuk pasangan itu (bulat vs belah ketupat),
-// dan menukar satu hue yang tak bermakna dengan pengelompokan yang bermakna
-// adalah pertukaran yang menguntungkan.
+// Berbunga dan berbuah kini dibedakan glifnya, bukan lagi bulat lawan belah
+// ketupat. Buah berbiji dan buah polos berbagi siluet dengan sengaja — keduanya
+// memang buah — dan bedanya biji di tengah; lihat catatan di icons.tsx.
 // ---------------------------------------------------------------------------
-
-type PhaseMarkShape = 'none' | 'circle' | 'diamond' | 'bar';
 
 type PhaseVisual = {
   color: string;
-  shape: PhaseMarkShape;
+  // null berarti fase ini tidak ditandai di peta.
+  icon: IconName | null;
 };
 
 const NO_PHASE_MARK: PhaseVisual = {
   color: tokens.color.text.tertiary,
-  shape: 'none',
+  icon: null,
 };
 
 const PHASE_VISUALS: Record<GrowthPhase, PhaseVisual> = {
   initial_planting: NO_PHASE_MARK,
   vegetative: NO_PHASE_MARK,
-  flowering: { color: tokens.color.record.phase.text, shape: 'circle' },
-  fruiting: { color: tokens.color.record.phase.text, shape: 'diamond' },
-  harvesting: { color: tokens.color.record.harvest.text, shape: 'bar' },
+  flowering: { color: tokens.color.record.phase.text, icon: 'cell-flower' },
+  fruiting: { color: tokens.color.record.phase.text, icon: 'cell-fruit' },
+  harvesting: { color: tokens.color.record.harvest.text, icon: 'cell-fruit-seed' },
 };
 
 // ---------------------------------------------------------------------------
-// Tanda-tanda kecil
+// Glif sudut
 //
-// Semuanya View biasa, BUKAN SVG. Alasannya bukan selera: satu <Svg> membawa
-// satu simpul rasterisasi tersendiri, dan peta bisa memuat ratusan sel bertanda
-// sekaligus. Bentuk-bentuk di bawah semuanya bisa dicapai dengan border dan
-// transform, jadi biaya tambahannya tidak dibayar.
+// SATU pintu untuk kedua sudut — kondisi maupun fase — supaya tebal goresan dan
+// ukuran tidak bisa berbeda antara keduanya.
 //
-// 'transparent' pada sisi segitiga bukan warna literal yang menghindari token —
-// ia ketiadaan warna, dan pola yang sama sudah dipakai role-bottom-navigation.
+// ONGKOSNYA, dan kenapa ia diterima. Catatan lama di tempat ini berbunyi: semua
+// tanda adalah View biasa, BUKAN SVG, karena satu <Svg> membawa satu simpul
+// rasterisasi tersendiri dan peta bisa memuat ratusan sel bertanda. Itu masih
+// benar, dan pindah ke <Icon> memang membayarnya. Yang membuatnya sepadan:
+//
+//   * Sel SEHAT dan fase tenang tidak merender apa pun (markIcon/icon null).
+//     Menurut desain layar ini, itu keadaan MAYORITAS — kebun yang sehat
+//     membayar nol.
+//   * Yang dibeli bukan kerapian melainkan informasi yang sebelumnya tidak ada:
+//     hama, penyakit, dan rusak dulu tidak bisa dibedakan di peta sama sekali.
+//
+// Batas atasnya jujur: kebun 234 posisi yang seluruhnya bermasalah SEKALIGUS
+// berbuah merender 468 <Svg>. Itu keadaan yang tidak pernah terjadi di kebun
+// sungguhan, tapi ia bukan nol, dan kalau peta kelak terasa berat di ponsel
+// kelas bawah, DI SINI tempat pertama yang harus dicurigai.
 // ---------------------------------------------------------------------------
 
-function ConditionMark({ color, shape, size }: { color: string; shape: ConditionMarkShape; size: number }) {
-  if (shape === 'none') {
-    return null;
-  }
-
-  if (shape === 'square') {
-    return <View style={{ backgroundColor: color, borderRadius: 2, height: size, width: size }} />;
-  }
-
-  if (shape === 'triangle') {
-    return (
-      <View
-        style={{
-          borderBottomColor: color,
-          borderBottomWidth: size,
-          borderLeftColor: 'transparent',
-          borderLeftWidth: size / 2,
-          borderRightColor: 'transparent',
-          borderRightWidth: size / 2,
-          borderStyle: 'solid',
-          height: 0,
-          width: 0,
-        }}
-      />
-    );
-  }
-
-  // Kotak bersilang: bingkai kotak dengan dua palang menyilang di dalamnya.
-  // Palangnya dibuat sepanjang diagonal kotak supaya ujungnya benar-benar
-  // menyentuh sudut, bukan berhenti di tengah sisi.
-  const barLength = size * 1.42;
-  const barThickness = Math.max(1, Math.round(size / 8));
-
-  return (
-    <View
-      style={{
-        alignItems: 'center',
-        borderColor: color,
-        borderRadius: 2,
-        borderWidth: 1,
-        height: size,
-        justifyContent: 'center',
-        overflow: 'hidden',
-        width: size,
-      }}
-    >
-      <View
-        style={{
-          backgroundColor: color,
-          height: barThickness,
-          position: 'absolute',
-          transform: [{ rotate: '45deg' }],
-          width: barLength,
-        }}
-      />
-      <View
-        style={{
-          backgroundColor: color,
-          height: barThickness,
-          position: 'absolute',
-          transform: [{ rotate: '-45deg' }],
-          width: barLength,
-        }}
-      />
-    </View>
-  );
+function CellGlyph({ color, name, size }: { color: string; name: IconName; size: number }) {
+  return <Icon color={color} name={name} size={size} strokeWidth={CELL_GLYPH_STROKE} />;
 }
 
 // Tanda "terpilih": centang putih di dalam bulatan berwarna merek.
@@ -313,7 +350,8 @@ function ConditionMark({ color, shape, size }: { color: string; shape: Condition
 // bawah yang digambar — yang diputar 45 derajat memang berbentuk centang. Ini
 // penting bukan karena kerapian: pemilik boleh memilih SELURUH kebun, dan pada
 // 196 sel terpilih setiap <Svg> tambahan adalah satu simpul rasterisasi lagi.
-// Alasan yang sama membuat seluruh tanda lain di berkas ini juga View biasa.
+// Tanda ini justru yang paling banyak muncul sekaligus, jadi ia TIDAK ikut
+// pindah ke <Icon> bersama glif sudut.
 //
 // Bulatannya perlu karena latar sel berubah-ubah — putih, kuning, merah muda,
 // abu — dan centang tanpa alas akan hilang di salah satu dari empat itu.
@@ -353,44 +391,6 @@ function SelectedMark({ size }: { size: number }) {
   );
 }
 
-function PhaseMark({ color, shape, size }: { color: string; shape: PhaseMarkShape; size: number }) {
-  if (shape === 'none') {
-    return null;
-  }
-
-  if (shape === 'circle') {
-    return (
-      <View
-        style={{
-          backgroundColor: color,
-          borderRadius: tokens.radius.pill,
-          height: size,
-          width: size,
-        }}
-      />
-    );
-  }
-
-  if (shape === 'diamond') {
-    // Bujur sangkar yang diputar 45 derajat. Sisinya dikecilkan sedikit supaya
-    // diagonalnya — yang jadi lebar terlihatnya — sepadan dengan bentuk lain.
-    const side = Math.round(size * 0.76);
-
-    return <View style={{ backgroundColor: color, height: side, transform: [{ rotate: '45deg' }], width: side }} />;
-  }
-
-  return (
-    <View
-      style={{
-        backgroundColor: color,
-        borderRadius: tokens.radius.pill,
-        height: Math.max(2, Math.round(size / 2.5)),
-        width: size,
-      }}
-    />
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Satu sel
 // ---------------------------------------------------------------------------
@@ -420,7 +420,7 @@ function PhaseMark({ color, shape, size }: { color: string; shape: PhaseMarkShap
 //
 //   BENTUK  — SelectedMark yang sama, di pojok yang sama (kanan bawah).
 //   TEPI    — menebal ke MATCHED_CELL_BORDER_WIDTH dan berwarna merek, jalur
-//             `emphasized` yang sudah ada untuk sel yang cocok pencarian.
+//             `emphasized` yang sudah ada untuk sel yang cocok filter.
 //
 // Latarnya SENGAJA tidak ikut berubah. Mengganti canvas dengan brand.soft akan
 // membuat sel kosong terlihat berisi — persis yang dilarang catatan
@@ -507,8 +507,8 @@ function FilledMapCell({
   tree,
 }: {
   cellSize: number;
-  // Diredupkan karena tidak cocok pencarian/filter. TETAP bisa ditekan —
-  // meredupkan adalah menurunkan penonjolan, bukan menonaktifkan.
+  // Diredupkan karena tidak cocok filter. TETAP bisa ditekan — meredupkan adalah
+  // menurunkan penonjolan, bukan menonaktifkan.
   dimmed?: boolean;
   matched?: boolean;
   onPress: () => void;
@@ -520,7 +520,7 @@ function FilledMapCell({
 }) {
   const visual = CONDITION_VISUALS[tree.currentCondition];
   const phase = tree.currentGrowthPhase ? PHASE_VISUALS[tree.currentGrowthPhase] : NO_PHASE_MARK;
-  const markSize = Math.round(cellSize * 0.22);
+  const markSize = Math.round(cellSize * MARK_SIZE_RATIO);
   const markInset = Math.round(cellSize * 0.09);
   // Panjang diagonal sebuah bujur sangkar adalah sisinya dikali akar dua. Tanpa
   // ini, palang selebar sel yang diputar 45 derajat berhenti jauh sebelum sudut.
@@ -584,15 +584,17 @@ function FilledMapCell({
       {/* Pembungkus posisi hanya dibuat kalau memang ada tanda yang dipasang.
           Bukan penghematan spekulatif: sehat-tanpa-fase-bertanda adalah KEADAAN
           MAYORITAS menurut desain layar ini, dan tanpa penjaga ini setiap sel
-          polos tetap menyeret dua View kosong yang tidak menggambar apa pun. */}
-      {visual.markShape === 'none' ? null : (
+          polos tetap menyeret dua View kosong yang tidak menggambar apa pun.
+          Sejak tandanya jadi <Icon>, penjaga ini juga yang menahan jumlah
+          simpul <Svg> tetap nol untuk kebun yang sehat. */}
+      {visual.markIcon === null ? null : (
         <View pointerEvents="none" style={{ left: markInset, position: 'absolute', top: markInset }}>
-          <ConditionMark color={visual.markColor} shape={visual.markShape} size={markSize} />
+          <CellGlyph color={visual.markColor} name={visual.markIcon} size={markSize} />
         </View>
       )}
-      {phase.shape === 'none' ? null : (
+      {phase.icon === null ? null : (
         <View pointerEvents="none" style={{ position: 'absolute', right: markInset, top: markInset }}>
-          <PhaseMark color={phase.color} shape={phase.shape} size={markSize} />
+          <CellGlyph color={phase.color} name={phase.icon} size={markSize} />
         </View>
       )}
 
@@ -628,114 +630,35 @@ function describeCell(tree: Tree): string {
 }
 
 // ---------------------------------------------------------------------------
-// Pencarian dan filter
+// Filter
 //
-// Keduanya MEREDUPKAN, tidak menyembunyikan. Alasannya sama untuk dua-duanya:
-// peta ini menjawab "di sebelah mana", bukan "yang mana". Sel yang tidak cocok
-// dibuang berarti membuang jawaban atas pertanyaan yang justru dibawa orang ke
-// layar ini.
+// MEREDUPKAN, tidak menyembunyikan. Peta ini menjawab "di sebelah mana", bukan
+// "yang mana". Sel yang tidak cocok dibuang berarti membuang jawaban atas
+// pertanyaan yang justru dibawa orang ke layar ini.
 //
 // Seluruhnya dihitung di memori dari data yang sudah dimuat. Nol permintaan
-// jaringan tambahan — sama seperti daftar pohon, yang juga menyaring di klien.
+// jaringan tambahan.
+//
+// CRITERIA-nya BUKAN MILIK LAYAR INI. Ia dibaca dari treeBrowseState, disetel di
+// layar daftar pohon, dan denah tidak pernah menulisnya. Itu yang membuat kedua
+// tampilan tidak bisa memperlihatkan himpunan yang berbeda untuk pertanyaan yang
+// sama — dan pencocokannya pun fungsi yang SAMA (matchesTreeCriteria), bukan
+// salinan yang kebetulan berbunyi mirip.
+//
+// KEEMPAT SUMBU berlaku di sini, termasuk fase 'awal tanam' dan 'vegetatif' yang
+// TIDAK punya tanda di sel. Catatan lama menolak keduanya dengan alasan "filter
+// yang hasilnya tidak bisa dibaca lebih buruk daripada filter yang tidak ada".
+// Alasan itu berlaku ketika satu-satunya isyarat adalah tanda sudut; sejak sel
+// yang cocok mendapat TEPI PENEGAS dan yang tidak cocok diredupkan, hasilnya
+// terbaca dari sel itu sendiri tanpa perlu tanda. Sama untuk umur dan varietas
+// kosong, yang memang tidak pernah punya tanda.
 // ---------------------------------------------------------------------------
 
-// Hanya tiga fase yang bisa disaring, karena hanya tiga itu yang DITANDAI di
-// peta. Menyaring 'awal tanam' atau 'vegetatif' akan menyisakan sel-sel yang
-// menonjol tanpa satu pun tanda yang menjelaskan kenapa — filter yang hasilnya
-// tidak bisa dibaca lebih buruk daripada filter yang tidak ada.
-const FILTERABLE_PHASES = ['flowering', 'fruiting', 'harvesting'] as const satisfies readonly GrowthPhase[];
-
-type FilterablePhase = (typeof FILTERABLE_PHASES)[number];
-
-// Penjaga waktu-kompilasi: memaksa daftar di bawah memuat SELURUH nilai enum.
-// Kalau tree_condition_status kelak bertambah nilai, berkas ini gagal typecheck
-// alih-alih diam-diam kehilangan satu chip filter.
-function allConditions<T extends readonly TreeConditionStatus[]>(
-  list: T & (TreeConditionStatus extends T[number] ? unknown : never)
-): T {
-  return list;
-}
-
-// KEENAM nilai kondisi bisa disaring terpisah, walau peta menggambar hama,
-// penyakit, dan rusak dengan satu tanda yang sama. Bedanya nyata di data; yang
-// tidak muat hanyalah membedakannya di kotak 48px. Menyatukan ketiganya di
-// filter berarti menghapus perbedaan yang benar-benar ada.
-//
-// Ini daftar NILAI, bukan daftar label. Labelnya tetap diambil dari
-// formatTreeCondition; tidak ada satu pun teks kondisi yang ditulis di berkas
-// ini, dan peta tidak menjadi daftar label keenam di repo ini.
-const FILTERABLE_CONDITIONS = allConditions([
-  'healthy',
-  'needs_attention',
-  'pest_attacked',
-  'disease_indicated',
-  'damaged',
-  'dead',
-] as const);
-
-type MapFilterCriteria = {
-  conditions: readonly TreeConditionStatus[];
-  phases: readonly FilterablePhase[];
-};
-
-const EMPTY_CRITERIA: MapFilterCriteria = { conditions: [], phases: [] };
-
-function countActiveFilters(criteria: MapFilterCriteria): number {
-  return criteria.conditions.length + criteria.phases.length;
-}
-
-function toggleValue<T>(values: readonly T[], value: T): T[] {
-  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
-}
-
-// Pencarian kode posisi. Substring, tanpa membedakan huruf besar-kecil, jadi
-// "12-C", "12", dan "c" semuanya menjangkau 12-C.
-//
-// Kodenya sendiri dirakit dengan format yang sama di kedua sisi — sel berisi
-// memakai tree_code dari database, sel kosong memakai kode yang disusun dari
-// koordinatnya — jadi posisi kosong ikut tercari, bukan hanya pohon.
-function matchesSearch(code: string, normalizedSearch: string): boolean {
-  return normalizedSearch.length === 0 || code.toUpperCase().includes(normalizedSearch);
-}
-
-// Antar kelompok bersifat DAN, di dalam kelompok bersifat ATAU: memilih
-// "Terserang Hama" dan "Berbunga" menyisakan pohon yang kena hama SEKALIGUS
-// sedang berbunga, bukan gabungan keduanya.
-function matchesFilter(tree: Tree, criteria: MapFilterCriteria): boolean {
-  if (criteria.conditions.length > 0 && !criteria.conditions.includes(tree.currentCondition)) {
-    return false;
-  }
-
-  if (criteria.phases.length > 0) {
-    const phase = tree.currentGrowthPhase;
-
-    if (!phase || !criteria.phases.includes(phase as FilterablePhase)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-// Sel kosong tidak punya kondisi maupun fase, jadi ia TIDAK BISA memenuhi
-// filter apa pun — begitu ada satu filter aktif, ia otomatis ikut diredupkan.
-// Pencarian tetap menjangkaunya, karena kodenya ada.
-function isCellMatched(
-  code: string,
-  tree: Tree | undefined,
-  normalizedSearch: string,
-  criteria: MapFilterCriteria,
-  filterActive: boolean
-): boolean {
-  if (!matchesSearch(code, normalizedSearch)) {
-    return false;
-  }
-
-  if (!filterActive) {
-    return true;
-  }
-
-  return tree ? matchesFilter(tree, criteria) : false;
+// Sel kosong tidak punya kondisi, fase, umur, maupun varietas, jadi ia TIDAK
+// BISA memenuhi filter apa pun — begitu ada satu filter aktif, ia ikut
+// diredupkan. Tanpa filter aktif, tidak ada yang diredupkan sama sekali.
+function isCellMatched(tree: Tree | undefined, criteria: TreeFilterCriteria): boolean {
+  return tree ? matchesTreeCriteria(tree, criteria) : false;
 }
 
 // ---------------------------------------------------------------------------
@@ -761,7 +684,20 @@ function AxisLabel({ height, label, width }: { height: number; label: string; wi
 }
 
 // ---------------------------------------------------------------------------
-// Lembar keterangan
+// Keterangan
+//
+// DUA BENTUK, dan keduanya perlu:
+//
+//   LEMBAR    dibuka lewat tombol "Keterangan". Lengkap: setiap tanda yang bisa
+//             muncul, termasuk yang tidak sedang ada di kebun ini. Ia jawaban
+//             atas "apa saja yang mungkin".
+//   STRIP     melekat di dasar layar, tanpa dibuka. Hanya tanda yang BENAR-BENAR
+//             sedang tampil. Ia jawaban atas "yang di layar saya ini apa" — dan
+//             itu pertanyaan yang jauh lebih sering, tapi selama ini menuntut
+//             membuka lembar penuh untuk dijawab.
+//
+// Strip tidak menggantikan lembar: ia tidak muat memuat keterangan, hanya nama.
+// Lembar tidak menggantikan strip: ia menutupi peta yang sedang dibaca.
 // ---------------------------------------------------------------------------
 
 function LegendSwatch({ children }: { children: React.ReactNode }) {
@@ -794,12 +730,28 @@ function LegendRow({ description, label, swatch }: { description: string; label:
   );
 }
 
+function LegendGroupTitle({ title }: { title: string }) {
+  return (
+    <Text
+      selectable
+      style={{
+        color: tokens.color.text.secondary,
+        ...tokens.type.label,
+        paddingBottom: tokens.space.xs,
+        paddingTop: tokens.space.md,
+      }}
+    >
+      {title}
+    </Text>
+  );
+}
+
 // Sel contoh seukuran sel terkecil, dipakai sebagai swatch keterangan supaya
 // yang dilihat di lembar ini sama persis dengan yang dilihat di peta.
 function LegendCell({ condition }: { condition: TreeConditionStatus }) {
   const visual = CONDITION_VISUALS[condition];
   const size = Math.round(CELL_SIZE_COMPACT * 0.72);
-  const markSize = Math.round(size * 0.3);
+  const markSize = Math.round(size * MARK_SIZE_RATIO * 1.3);
   const markInset = Math.round(size * 0.1);
 
   return (
@@ -832,16 +784,35 @@ function LegendCell({ condition }: { condition: TreeConditionStatus }) {
           }}
         />
       ) : null}
-      <View style={{ left: markInset, position: 'absolute', top: markInset }}>
-        <ConditionMark color={visual.markColor} shape={visual.markShape} size={markSize} />
-      </View>
+      {visual.markIcon === null ? null : (
+        <View style={{ left: markInset, position: 'absolute', top: markInset }}>
+          <CellGlyph color={visual.markColor} name={visual.markIcon} size={markSize} />
+        </View>
+      )}
     </View>
   );
 }
 
+const CONDITION_LEGEND_DESCRIPTIONS: Record<TreeConditionStatus, string> = {
+  healthy: 'Tidak diberi tanda apa pun. Latar putih polos.',
+  needs_attention: 'Segitiga seru di pojok kiri atas, latar kuning.',
+  pest_attacked: 'Serangga di pojok kiri atas, latar merah muda.',
+  disease_indicated: 'Daun berbercak di pojok kiri atas, latar merah muda.',
+  damaged: 'Ranting patah di pojok kiri atas, latar merah muda.',
+  dead: 'Silang di pojok kiri atas, dan satu garis melintasi sel.',
+};
+
+const PHASE_LEGEND_DESCRIPTIONS: Record<GrowthPhase, string> = {
+  initial_planting: 'Tidak ditandai di peta.',
+  vegetative: 'Tidak ditandai di peta.',
+  flowering: 'Bunga hijau di pojok kanan atas. Hijau berarti pohon masih tumbuh.',
+  fruiting: 'Buah hijau di pojok kanan atas. Hijau berarti pohon masih tumbuh.',
+  harvesting: 'Buah berbiji, oranye. Hanya fase ini yang oranye — pohonnya sudah bisa dipanen.',
+};
+
 function LegendSheet({ onClose, visible }: { onClose: () => void; visible: boolean }) {
   const size = Math.round(CELL_SIZE_COMPACT * 0.72);
-  const phaseMarkSize = Math.round(size * 0.3);
+  const phaseMarkSize = Math.round(size * MARK_SIZE_RATIO * 1.3);
 
   return (
     <BottomSheet
@@ -851,228 +822,59 @@ function LegendSheet({ onClose, visible }: { onClose: () => void; visible: boole
       visible={visible}
     >
       <View>
-        {/* Label kondisi diambil dari formatTreeCondition, bukan ditulis ulang
-            di sini. Peta tidak boleh menjadi daftar label keenam di repo ini. */}
+        {/* Label kondisi dan fase diambil dari formatTreeCondition dan
+            formatGrowthPhase, bukan ditulis ulang di sini. Peta tidak boleh
+            menjadi daftar label keenam di repo ini. */}
+        <LegendGroupTitle title="Kondisi" />
+        {CONDITION_ORDER.map((condition) => (
+          <LegendRow
+            key={condition}
+            description={CONDITION_LEGEND_DESCRIPTIONS[condition]}
+            label={formatTreeCondition(condition)}
+            swatch={<LegendCell condition={condition} />}
+          />
+        ))}
+
+        <LegendGroupTitle title="Fase pertumbuhan" />
+        {PHASE_ORDER.map((phase) => {
+          const visual = PHASE_VISUALS[phase];
+
+          return (
+            <LegendRow
+              key={phase}
+              description={PHASE_LEGEND_DESCRIPTIONS[phase]}
+              label={formatGrowthPhase(phase)}
+              swatch={
+                visual.icon === null ? null : (
+                  <CellGlyph color={visual.color} name={visual.icon} size={phaseMarkSize} />
+                )
+              }
+            />
+          );
+        })}
+
+        <LegendGroupTitle title="Lainnya" />
         <LegendRow
-          description="Tidak diberi tanda apa pun."
-          label={formatTreeCondition('healthy')}
-          swatch={<LegendCell condition="healthy" />}
-        />
-        <LegendRow
-          description="Tanda kotak."
-          label={formatTreeCondition('needs_attention')}
-          swatch={<LegendCell condition="needs_attention" />}
-        />
-        <LegendRow
-          description="Tanda segitiga. Ketiganya satu tanda di peta; bedanya terlihat setelah pohon dibuka."
-          label={[
-            formatTreeCondition('pest_attacked'),
-            formatTreeCondition('disease_indicated'),
-            formatTreeCondition('damaged'),
-          ].join(' · ')}
-          swatch={<LegendCell condition="pest_attacked" />}
-        />
-        <LegendRow
-          description="Tanda kotak bersilang, dan satu garis melintasi sel."
-          label={formatTreeCondition('dead')}
-          swatch={<LegendCell condition="dead" />}
-        />
-        <LegendRow
-          description="Belum pernah ditanami. Tidak bisa ditekan."
+          description="Belum pernah ditanami. Sudut tajam dan garis putus-putus."
           label="Posisi kosong"
           swatch={<EmptyMapCell cellSize={size} code="—" />}
         />
-
-        <View style={{ backgroundColor: tokens.color.line.hairline, height: 1, marginVertical: tokens.space.sm }} />
-
-        {/* Warnanya ikut dijelaskan, bukan hanya bentuknya: sejak berbuah tidak
-            lagi biru, hijau dan oranye membawa arti sendiri — masih tumbuh
-            lawan sudah bisa dipanen. Arti itu tidak bisa ditebak dari peta. */}
         <LegendRow
-          description="Tanda bulat hijau di pojok kanan atas."
-          label={formatGrowthPhase('flowering')}
-          swatch={<PhaseMark {...PHASE_VISUALS.flowering} size={phaseMarkSize} />}
+          description="Cocok dengan filter yang sedang aktif. Filternya disetel di tab Daftar."
+          label="Tepi tebal hijau"
+          swatch={<LegendCell condition="healthy" />}
         />
         <LegendRow
-          description="Tanda belah ketupat hijau. Hijau berarti pohon masih tumbuh."
-          label={formatGrowthPhase('fruiting')}
-          swatch={<PhaseMark {...PHASE_VISUALS.fruiting} size={phaseMarkSize} />}
-        />
-        <LegendRow
-          description="Tanda palang oranye. Hanya fase ini yang berwarna oranye — pohonnya sudah bisa dipanen."
-          label={formatGrowthPhase('harvesting')}
-          swatch={<PhaseMark {...PHASE_VISUALS.harvesting} size={phaseMarkSize} />}
+          description="Tidak cocok dengan filter yang sedang aktif. Tetap bisa ditekan."
+          label="Sel yang diredupkan"
+          swatch={
+            <View style={{ opacity: DIMMED_OPACITY }}>
+              <LegendCell condition="healthy" />
+            </View>
+          }
         />
       </View>
     </BottomSheet>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Lembar filter
-// ---------------------------------------------------------------------------
-
-function FilterGroup({
-  children,
-  title,
-}: {
-  children: React.ReactNode;
-  title: string;
-}) {
-  return (
-    <View style={{ gap: tokens.space.sm, paddingBottom: tokens.space.lg }}>
-      <Text selectable style={{ color: tokens.color.text.secondary, ...tokens.type.label }}>
-        {title}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.sm }}>{children}</View>
-    </View>
-  );
-}
-
-function MapFilterSheet({
-  draft,
-  onApply,
-  onClose,
-  onDraftChange,
-  visible,
-}: {
-  draft: MapFilterCriteria;
-  onApply: () => void;
-  onClose: () => void;
-  onDraftChange: (next: MapFilterCriteria) => void;
-  visible: boolean;
-}) {
-  const isEmpty = countActiveFilters(draft) === 0;
-
-  return (
-    <BottomSheet onClose={onClose} title="Filter peta" visible={visible}>
-      <View>
-        <View style={{ alignItems: 'flex-end', paddingBottom: tokens.space.sm }}>
-          <Pressable
-            accessibilityRole="button"
-            disabled={isEmpty}
-            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
-            onPress={() => onDraftChange(EMPTY_CRITERIA)}
-          >
-            <Text
-              selectable={false}
-              style={{
-                color: isEmpty ? tokens.color.text.tertiary : tokens.color.brand.base,
-                ...tokens.type.meta,
-                fontWeight: '700',
-              }}
-            >
-              Atur ulang
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Label dari formatTreeCondition dan formatGrowthPhase, bukan dari
-            daftar baru. Yang ditulis di berkas ini hanya NILAI enumnya. */}
-        <FilterGroup title="Kondisi">
-          {FILTERABLE_CONDITIONS.map((condition) => (
-            <ChipButton
-              key={condition}
-              active={draft.conditions.includes(condition)}
-              label={formatTreeCondition(condition)}
-              onPress={() =>
-                onDraftChange({ ...draft, conditions: toggleValue(draft.conditions, condition) })
-              }
-            />
-          ))}
-        </FilterGroup>
-
-        <FilterGroup title="Fase pertumbuhan">
-          {FILTERABLE_PHASES.map((phase) => (
-            <ChipButton
-              key={phase}
-              active={draft.phases.includes(phase)}
-              label={formatGrowthPhase(phase)}
-              onPress={() => onDraftChange({ ...draft, phases: toggleValue(draft.phases, phase) })}
-            />
-          ))}
-        </FilterGroup>
-
-        <Button onPress={onApply} title="Terapkan" variant="primary" />
-      </View>
-    </BottomSheet>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Chip filter aktif
-//
-// Bukan FilterChip dari ui.tsx: chip itu membawa glif chevron-down yang berarti
-// "ketuk untuk membuka pilihan". Yang dibutuhkan di sini kebalikannya — ketuk
-// untuk MEMBUANG — jadi glifnya silang, dan aksesibilitasnya menyebutkan itu.
-// ---------------------------------------------------------------------------
-
-function ActiveFilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <Pressable
-      accessibilityLabel={`Hapus filter ${label}`}
-      accessibilityRole="button"
-      onPress={onRemove}
-      style={({ pressed }) => ({
-        alignItems: 'center',
-        backgroundColor: tokens.color.brand.soft,
-        borderColor: tokens.color.brand.border,
-        borderCurve: 'continuous',
-        borderRadius: tokens.radius.pill,
-        borderWidth: 1,
-        flexDirection: 'row',
-        gap: tokens.space.xs,
-        minHeight: 36,
-        opacity: pressed ? 0.82 : 1,
-        paddingHorizontal: tokens.space.md,
-      })}
-    >
-      <Text
-        selectable={false}
-        numberOfLines={1}
-        style={{ color: tokens.color.brand.dark, ...tokens.type.meta, fontWeight: '700' }}
-      >
-        {label}
-      </Text>
-      <Icon name="x" size={tokens.icon.xs} color={tokens.color.brand.base} />
-    </Pressable>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Banner "belum ada varietas"
-//
-// HANYA untuk pemilik. Melengkapi varietas bukan pekerjaan pekerja, dan pesan
-// yang tidak bisa ditindaklanjuti oleh yang membacanya cuma jadi gangguan yang
-// menyita tinggi layar peta.
-//
-// Kalimatnya menyebut AKIBATNYA, bukan sekadar keadaannya: angka telanjang
-// menyisakan pertanyaan "lalu kenapa", dan pertanyaan itu tidak dijawab siapa
-// pun di layar ini.
-// ---------------------------------------------------------------------------
-
-function MissingVarietyBanner({ count, onPress }: { count: number; onPress: () => void }) {
-  if (count === 0) {
-    return null;
-  }
-
-  return (
-    <View
-      style={{
-        backgroundColor: tokens.color.status.warning.bg,
-        borderColor: tokens.color.status.warning.border,
-        borderCurve: 'continuous',
-        borderRadius: tokens.radius.cardInner,
-        borderWidth: 1,
-        gap: tokens.space.sm,
-        padding: tokens.space.md,
-      }}
-    >
-      <Text selectable style={{ color: tokens.color.status.warning.text, ...tokens.type.bodySmall }}>
-        {`${count} pohon belum ada varietas. Lengkapi supaya jadwal perawatan bisa dibuat.`}
-      </Text>
-      <Button onPress={onPress} size="small" title="Buka daftar pohon" variant="quiet" />
-    </View>
   );
 }
 
@@ -1080,12 +882,16 @@ function MissingVarietyBanner({ count, onPress }: { count: number; onPress: () =
 // Pemberitahuan "tidak ada yang cocok"
 //
 // Peta TETAP digambar di bawahnya. Menggantinya dengan layar kosong akan
-// membuang satu-satunya hal yang masih berguna saat pencarian meleset: gambaran
-// kebun itu sendiri, dan bukti bahwa posisi yang dicari memang tidak ada di
-// sana.
+// membuang satu-satunya hal yang masih berguna saat filter meleset: gambaran
+// kebun itu sendiri.
+//
+// TANPA TOMBOL, tidak seperti sebelumnya. Layar ini tidak lagi memiliki
+// filternya — ia hanya membacanya — jadi tombol "hapus filter" di sini akan
+// mengubah keadaan yang dimiliki layar lain. Yang menggantikannya kalimat yang
+// menyebutkan di mana filternya bisa diubah.
 // ---------------------------------------------------------------------------
 
-function NoMatchNotice({ onClear }: { onClear: () => void }) {
+function NoMatchNotice() {
   return (
     <View
       style={{
@@ -1094,15 +900,71 @@ function NoMatchNotice({ onClear }: { onClear: () => void }) {
         borderCurve: 'continuous',
         borderRadius: tokens.radius.cardInner,
         borderWidth: 1,
-        gap: tokens.space.sm,
         padding: tokens.space.md,
       }}
     >
       <Text selectable style={{ color: tokens.color.text.secondary, ...tokens.type.bodySmall }}>
-        Tidak ada posisi yang cocok dengan pencarian dan filter ini.
+        Tidak ada posisi yang cocok dengan filter yang sedang aktif. Ubah filternya di tab Daftar.
       </Text>
-      <Button onPress={onClear} size="small" title="Hapus pencarian dan filter" variant="quiet" />
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tombol perbesaran melayang
+//
+// IKON SAJA, dan itu PENGECUALIAN SADAR atas aturan "tidak ada tombol ikon-saja"
+// yang berlaku di seluruh repo ini. Dua hal yang membuatnya bisa dipertanggung-
+// jawabkan, dan keduanya harus tetap benar kalau tombol ini diubah:
+//
+//   1. SALAH TEKAN TIDAK MERUSAK APA PUN. Ia mengubah ukuran gambar, sekali
+//      ketuk lagi kembali. Bandingkan dengan "Catat perawatan", yang menulis
+//      baris care_activity_trees tanpa jalur hapus.
+//   2. IKONNYA KONVENSIONAL. Kaca pembesar berplus/berminus adalah salah satu
+//      dari sedikit glif yang artinya tidak perlu dipelajari.
+//
+// JANGAN JADIKAN PRESEDEN. Tombol lain di aplikasi ini tetap wajib berteks.
+//
+// Yang menggantikan teksnya adalah accessibilityLabel yang BERGANTI mengikuti
+// keadaan — pembaca layar tetap mendengar kalimat penuh, dan kalimatnya
+// menyebut apa yang AKAN terjadi, bukan sedang di tingkat mana.
+//
+// Latar solid plus bayangan, bukan transparan: tombol ini melayang di atas sel
+// yang latarnya berubah-ubah (putih, kuning, merah muda, abu), dan tanpa alas
+// sendiri ia hilang di salah satu dari empat itu.
+// ---------------------------------------------------------------------------
+
+const ZOOM_BUTTON_SIZE = tokens.layout.rowMinHeight;
+
+function MapZoomButton({ onPress, zoomedIn }: { onPress: () => void; zoomedIn: boolean }) {
+  return (
+    <Pressable
+      accessibilityLabel={zoomedIn ? 'Perkecil denah' : 'Perbesar denah'}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: 'center',
+        backgroundColor: tokens.color.surface.card,
+        borderColor: tokens.color.line.card,
+        borderCurve: 'continuous',
+        borderRadius: tokens.radius.cardInner,
+        borderWidth: 1,
+        bottom: tokens.space.md,
+        height: ZOOM_BUTTON_SIZE,
+        justifyContent: 'center',
+        left: tokens.space.md,
+        opacity: pressed ? 0.82 : 1,
+        position: 'absolute',
+        width: ZOOM_BUTTON_SIZE,
+        ...tokens.elevation.overlay,
+      })}
+    >
+      <Icon
+        color={tokens.color.brand.base}
+        name={zoomedIn ? 'zoom-out' : 'zoom-in'}
+        size={tokens.icon.lg}
+      />
+    </Pressable>
   );
 }
 
@@ -1308,22 +1170,30 @@ function SelectionActionPanel({
 
 export function FarmMapScreen({ basePath }: { basePath: '/owner/trees' | '/worker/trees' }) {
   const { currentFarm } = useAuth();
-  const [compact, setCompact] = React.useState(true);
-  const [criteria, setCriteria] = React.useState<MapFilterCriteria>(EMPTY_CRITERIA);
-  const [debouncedSearch, setDebouncedSearch] = React.useState('');
-  const [draft, setDraft] = React.useState<MapFilterCriteria>(EMPTY_CRITERIA);
+  // Perbesaran DIPULIHKAN dari modul di fase render, bukan dimulai dari nilai
+  // tetap. Peta ini dilepas setiap kali pengguna bertukar ke Daftar, jadi tanpa
+  // pemulihan ini setiap kepulangan mengembalikannya ke sel padat.
+  const [zoomedIn, setZoomedIn] = React.useState(peekMapZoom);
+  // Filter DIBACA di fase render, di dalam penginisialisasi useState — bukan di
+  // effect. Kalau dibaca di effect, petak dilukis sekali tanpa peredupan lalu
+  // dilukis ulang dengan peredupan satu frame kemudian, dan pada 234 sel
+  // kedipannya terlihat jelas.
+  //
+  // SEKALI, bukan berlangganan. Layar ini tidak pernah menulis criteria, dan
+  // satu-satunya jalan mengubahnya adalah pergi ke tab Daftar — yang berarti
+  // meninggalkan layar ini. useFocusEffect di bawah membacanya lagi saat
+  // kembali, jadi perubahan dari sana selalu terbawa.
+  const [criteria, setCriteria] = React.useState<TreeFilterCriteria>(peekTreeBrowseCriteria);
   const [error, setError] = React.useState<string | null>(null);
   const [farm, setFarm] = React.useState<Farm | null>(null);
-  const [filterSheetOpen, setFilterSheetOpen] = React.useState(false);
   const [legendOpen, setLegendOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
-  const [search, setSearch] = React.useState('');
   const [selectMode, setSelectMode] = React.useState(false);
   const [selection, setSelection] = React.useState<MapSelection>(NO_SELECTION);
   const [trees, setTrees] = React.useState<Tree[]>([]);
 
   const farmId = currentFarm?.farmId;
-  const cellSize = compact ? CELL_SIZE_COMPACT : CELL_SIZE_LARGE;
+  const cellSize = zoomedIn ? CELL_SIZE_LARGE : CELL_SIZE_COMPACT;
   const isOwner = basePath === '/owner/trees';
 
   const load = React.useCallback(async () => {
@@ -1384,18 +1254,15 @@ export function FarmMapScreen({ basePath }: { basePath: '/owner/trees' | '/worke
       setSelectMode(false);
       setSelection(NO_SELECTION);
 
+      // Filter ikut dibaca ulang di sini, dan ini SATU-SATUNYA jalan perubahan
+      // dari tab Daftar sampai ke peta. Cukup karena mengubah filter menuntut
+      // meninggalkan layar ini, jadi tidak ada perubahan yang bisa terjadi
+      // selagi peta dipandang.
+      setCriteria(peekTreeBrowseCriteria());
+
       load().finally(() => setLoading(false));
     }, [load])
   );
-
-  // Jeda 250ms, angka yang sama dengan daftar pohon. Bukan kerapian: setiap
-  // ketikan yang lolos memicu render ulang SELURUH petak — 234 sel di kebun ini
-  // — dan tanpa jeda, mengetik "12-C" berarti lima kali render penuh beruntun.
-  React.useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search.trim().toUpperCase()), 250);
-
-    return () => clearTimeout(timer);
-  }, [search]);
 
   // Pohon menurut posisinya. Kuncinya dirakit dari row_position dan
   // column_position, BUKAN dari tree_code, supaya sisi kiri dan sisi kanan
@@ -1441,20 +1308,19 @@ export function FarmMapScreen({ basePath }: { basePath: '/owner/trees' | '/worke
     [columnCount]
   );
 
-  const filterActive = countActiveFilters(criteria) > 0;
-  const highlighting = filterActive || debouncedSearch.length > 0;
+  const filterActive = hasActiveTreeFilter(criteria);
 
   // Kode posisi yang COCOK, dihitung satu kali untuk seluruh petak.
   //
-  // null berarti tidak ada pencarian maupun filter yang aktif — dan itu keadaan
-  // yang berbeda dari "himpunan kosong". null: jangan redupkan apa pun. Kosong:
-  // redupkan semuanya, karena memang tidak ada yang cocok.
+  // null berarti tidak ada filter aktif — dan itu keadaan yang berbeda dari
+  // "himpunan kosong". null: jangan redupkan apa pun, jangan tegaskan apa pun.
+  // Kosong: redupkan semuanya, karena memang tidak ada yang cocok.
   //
   // Satu lintasan menghasilkan DUA jawaban sekaligus: apakah tiap sel cocok
   // (lewat .has di bawah) dan berapa yang cocok (lewat .size). Menghitungnya
   // dua kali akan berarti dua kali menyusuri petak untuk pertanyaan yang sama.
   const matchedCodes = React.useMemo(() => {
-    if (!highlighting) {
+    if (!filterActive) {
       return null;
     }
 
@@ -1464,64 +1330,23 @@ export function FarmMapScreen({ basePath }: { basePath: '/owner/trees' | '/worke
       for (const columnNumber of columnNumbers) {
         const code = `${rowNumber}-${columnLetter(columnNumber)}`;
 
-        if (isCellMatched(code, treeByPosition.get(code), debouncedSearch, criteria, filterActive)) {
+        if (isCellMatched(treeByPosition.get(code), criteria)) {
           codes.add(code);
         }
       }
     }
 
     return codes;
-  }, [columnNumbers, criteria, debouncedSearch, filterActive, highlighting, rowNumbers, treeByPosition]);
+  }, [columnNumbers, criteria, filterActive, rowNumbers, treeByPosition]);
 
-  // Posisi yang SEDANG ditanami tapi varietasnya kosong. Dihitung dari data
-  // getTrees yang sudah dimuat — nol permintaan jaringan tambahan.
-  //
-  // Syaratnya activePlanting bukan null: posisi yang siklusnya sudah ditutup
-  // memang tidak punya varietas untuk dilengkapi, dan menghitungnya akan
-  // membesarkan angka dengan pekerjaan yang tidak ada.
-  const missingVarietyCount = React.useMemo(
-    () =>
-      trees.filter((tree) => tree.activePlanting !== null && !tree.activePlanting.variety?.trim()).length,
-    [trees]
-  );
+  // SATU pintu untuk perbesaran: state React dan modul penyimpan ditulis
+  // berbarengan, jadi tidak ada jalur yang mengubah salah satunya saja. Polanya
+  // sama dengan applyCriteria di layar daftar.
+  function toggleZoom() {
+    const next = !zoomedIn;
 
-  const activeFilterChips = React.useMemo(
-    () => [
-      ...criteria.conditions.map((condition) => ({
-        key: `condition:${condition}`,
-        label: formatTreeCondition(condition),
-        onRemove: () =>
-          setCriteria((current) => ({
-            ...current,
-            conditions: current.conditions.filter((value) => value !== condition),
-          })),
-      })),
-      ...criteria.phases.map((phase) => ({
-        key: `phase:${phase}`,
-        label: formatGrowthPhase(phase),
-        onRemove: () =>
-          setCriteria((current) => ({
-            ...current,
-            phases: current.phases.filter((value) => value !== phase),
-          })),
-      })),
-    ],
-    [criteria.conditions, criteria.phases]
-  );
-
-  function clearSearchAndFilters() {
-    setCriteria(EMPTY_CRITERIA);
-    setDraft(EMPTY_CRITERIA);
-    setSearch('');
-    // Dikosongkan langsung, tidak menunggu jeda 250ms: tombol "hapus" yang
-    // hasilnya baru terlihat seperempat detik kemudian terasa seperti tidak
-    // tertekan. Effect jeda tetap jalan dan menulis nilai yang sama.
-    setDebouncedSearch('');
-  }
-
-  function openFilterSheet() {
-    setDraft(criteria);
-    setFilterSheetOpen(true);
+    setZoomedIn(next);
+    setMapZoom(next);
   }
 
   // Keluar dari mode pilih SELALU mengosongkan tanda. Pilihan yang bertahan
@@ -1617,59 +1442,33 @@ export function FarmMapScreen({ basePath }: { basePath: '/owner/trees' | '/worke
 
   return (
     <View style={{ backgroundColor: tokens.color.surface.canvas, flex: 1 }}>
-      <View style={{ paddingHorizontal: tokens.layout.screenX }}>
-        <TopAppBar onBack={() => router.back()} title="Denah Kebun" />
-      </View>
+      {/* TANPA TopAppBar dan tanpa segmented. Keduanya kini milik route induk
+          (app/(owner)/owner/trees/index.tsx dan kembarannya di sisi pekerja),
+          yang merender header sekali di luar percabangan tampilan — jadi
+          bertukar Daftar/Denah tidak lagi mengganti judul, memunculkan tombol
+          back, atau merender ulang kepala layar.
 
+          Komponen ini karena itu mulai LANGSUNG dari baris kontrolnya. Ia tetap
+          memuat datanya sendiri (getFarmDetail + getTrees); yang pindah hanya
+          chrome-nya, bukan tanggung jawabnya atas data. */}
       <View style={{ gap: tokens.space.sm, paddingBottom: tokens.space.md }}>
-        <View style={{ paddingHorizontal: tokens.layout.screenX }}>
-          <SearchFilterRow
-            filterActive={filterActive}
-            filterCount={countActiveFilters(criteria)}
-            onChangeText={setSearch}
-            onFilterPress={openFilterSheet}
-            placeholder="Cari kode posisi, misal 12-C"
-            value={search}
-          />
-        </View>
+        {/* DUA tombol, bukan tiga. Zoom keluar dari baris ini dan jadi tombol
+            melayang di pojok kiri bawah petak — tempat yang bisa dijangkau ibu
+            jari tanpa memindahkan pandangan dari sel yang sedang dibaca, dan
+            yang tidak membayar tinggi baris kontrol sepanjang waktu.
 
-        {/* Deret chip hanya hadir kalau memang ada yang bisa dibuang. Baris
-            kosong yang selalu ada cuma memakan tinggi yang dibutuhkan petak.
-            paddingLeft, bukan paddingHorizontal: FilterChipsRow menggulung
-            mendatar dan sudah menaruh padding kanannya sendiri. */}
-        {activeFilterChips.length > 0 ? (
-          <FilterChipsRow
-            clearLabel="Hapus semua"
-            hasActiveFilters
-            onClear={() => setCriteria(EMPTY_CRITERIA)}
-            style={{ paddingLeft: tokens.layout.screenX }}
-          >
-            {activeFilterChips.map((chip) => (
-              <ActiveFilterChip key={chip.key} label={chip.label} onRemove={chip.onRemove} />
-            ))}
-          </FilterChipsRow>
-        ) : null}
-
+            Pekerja tidak punya tombol "Pilih", jadi barisnya menyusut jadi satu
+            anak. space-between dengan satu anak menaruhnya di kiri — persis
+            tempat "Keterangan" memang seharusnya berada — jadi tidak ada
+            pengganti kosong yang perlu dirender. */}
         <View
           style={{
+            alignItems: 'center',
             flexDirection: 'row',
-            // Membungkus, karena barisnya kini bertiga untuk pemilik. Tanpa ini
-            // ketiganya saling menekan di layar sempit dan judul tombol yang
-            // numberOfLines={1} terpotong jadi "Keterang..." — tombol yang
-            // labelnya terpotong berhenti menjelaskan apa yang akan terjadi.
-            flexWrap: 'wrap',
-            gap: tokens.space.sm,
+            justifyContent: 'space-between',
             paddingHorizontal: tokens.layout.screenX,
           }}
         >
-          {/* Label TINDAKAN, bukan keadaan: tombolnya memberi tahu apa yang akan
-              terjadi kalau ditekan, bukan sedang di tingkat mana. */}
-          <Button
-            onPress={() => setCompact((current) => !current)}
-            size="small"
-            title={compact ? 'Perbesar' : 'Perkecil'}
-            variant="secondary"
-          />
           <Button onPress={() => setLegendOpen(true)} size="small" title="Keterangan" variant="secondary" />
 
           {/* HANYA pemilik. Peta pekerja tetap baca-saja — itu keputusan yang
@@ -1678,209 +1477,213 @@ export function FarmMapScreen({ basePath }: { basePath: '/owner/trees' | '/worke
 
               Tombol adalah SATU-SATUNYA jalan masuk. Sengaja tanpa tekan-lama:
               peta digulung dua arah dengan jari mendarat di atas sel, jadi
-              tekan-lama akan salah picu setiap kali orang menggulung pelan. */}
+              tekan-lama akan salah picu setiap kali orang menggulung pelan.
+
+              Keadaan aktifnya dibawa DUA saluran: labelnya berganti jadi
+              "Selesai", dan variannya jadi primary — terisi penuh, bukan
+              sekadar berganti warna teks. */}
           {isOwner ? (
             <Button
               onPress={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
               size="small"
               title={selectMode ? 'Selesai' : 'Pilih'}
-              variant="secondary"
+              variant={selectMode ? 'primary' : 'secondary'}
             />
           ) : null}
         </View>
 
-        <View style={{ gap: tokens.space.sm, paddingHorizontal: tokens.layout.screenX }}>
-          <ErrorBanner message={error} />
-
-          {isOwner ? (
-            <MissingVarietyBanner
-              count={missingVarietyCount}
-              // Daftar pohon adalah layar tempat peta ini dibuka, jadi kembali
-              // ke sana memang jalan yang benar. Idiomnya sama dengan
-              // profile-screen: back kalau ada riwayat, kalau tidak baru pindah.
-              // Pembuatan pohon massal belum ada, dan tahap ini tidak membuatnya.
-              onPress={() => (router.canGoBack() ? router.back() : router.replace(basePath))}
-            />
-          ) : null}
-
-          {matchedCodes !== null && matchedCodes.size === 0 ? (
-            <NoMatchNotice onClear={clearSearchAndFilters} />
-          ) : null}
-        </View>
+        {(error || (matchedCodes !== null && matchedCodes.size === 0)) ? (
+          <View style={{ gap: tokens.space.sm, paddingHorizontal: tokens.layout.screenX }}>
+            <ErrorBanner message={error} />
+            {matchedCodes !== null && matchedCodes.size === 0 ? <NoMatchNotice /> : null}
+          </View>
+        ) : null}
       </View>
 
-      <View style={{ flex: 1, paddingLeft: tokens.layout.screenX }}>
-        {/* ------------------------------------------------------------------
-            KEPALA BARIS DAN KOLOM YANG DIBEKUKAN
+      {/* Pembungkus TAMBAHAN, dan ia punya satu tugas: jadi kerangka acuan
+          tombol perbesaran yang melayang. Tanpa dia, tombol itu harus duduk di
+          dalam petak yang ber-paddingLeft 16, dan `left: 12` di sana berarti 28
+          dari tepi layar — bukan 12 seperti yang dimaksud.
 
-            Huruf kolom di atas dan nomor baris di kiri BUKAN bagian dari isi
-            yang digulung. Keduanya lapisan tersendiri yang duduk di dalam wadah
-            ber-overflow hidden, dan digeser lewat transform sebesar posisi
-            gulung petaknya — negatif, karena mereka bergerak berlawanan arah.
+          Ia TIDAK menyentuh apa pun di dalamnya: tetap flex:1, tetap satu anak
+          yang mengisi penuh, jadi tinggi yang diterima kedua penggulung sama
+          persis seperti sebelum pembungkus ini ada. */}
+      <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, paddingLeft: tokens.layout.screenX }}>
+          {/* ------------------------------------------------------------------
+              KEPALA BARIS DAN KOLOM YANG DIBEKUKAN
 
-            KENAPA transform BERPENGGERAK NATIF, BUKAN onScroll lalu scrollTo:
+              Huruf kolom di atas dan nomor baris di kiri BUKAN bagian dari isi
+              yang digulung. Keduanya lapisan tersendiri yang duduk di dalam wadah
+              ber-overflow hidden, dan digeser lewat transform sebesar posisi
+              gulung petaknya — negatif, karena mereka bergerak berlawanan arah.
 
-            scrollTo pada setiap kejadian gulung berarti setiap frame menempuh
-            jalan pulang-pergi ke thread JS — kejadian naik, JS menghitung, lalu
-            perintah gulung turun lagi. Di ponsel kelas bawah, thread JS itulah
-            yang paling sering sibuk, dan akibatnya bukan sekadar kurang halus:
-            kepala TERTINGGAL di belakang petaknya, kadang beberapa sel penuh.
-            Untuk layar yang seluruh gunanya adalah membaca "12-C" dengan benar,
-            kepala yang meleset satu baris lebih buruk daripada tidak ada kepala
-            sama sekali.
+              KENAPA transform BERPENGGERAK NATIF, BUKAN onScroll lalu scrollTo:
 
-            Animated.event dengan useNativeDriver memasang jalurnya SEKALI di
-            sisi natif. Setelah itu posisi gulung menggerakkan transform langsung
-            di thread UI; tidak ada satu pun frame yang menunggu JS. Kepala dan
-            petak bergerak sebagai satu benda karena memang digerakkan oleh satu
-            nilai yang sama.
-            ------------------------------------------------------------------ */}
+              scrollTo pada setiap kejadian gulung berarti setiap frame menempuh
+              jalan pulang-pergi ke thread JS — kejadian naik, JS menghitung, lalu
+              perintah gulung turun lagi. Di ponsel kelas bawah, thread JS itulah
+              yang paling sering sibuk, dan akibatnya bukan sekadar kurang halus:
+              kepala TERTINGGAL di belakang petaknya, kadang beberapa sel penuh.
+              Untuk layar yang seluruh gunanya adalah membaca "12-C" dengan benar,
+              kepala yang meleset satu baris lebih buruk daripada tidak ada kepala
+              sama sekali.
 
-        <View style={{ flexDirection: 'row' }}>
-          {/* Sudut kosong tempat kedua kepala bertemu. */}
-          <View style={{ height: COLUMN_HEADER_HEIGHT, width: ROW_HEADER_WIDTH }} />
-          <View style={{ flex: 1, height: COLUMN_HEADER_HEIGHT, overflow: 'hidden' }}>
-            <Animated.View
-              style={{
-                flexDirection: 'row',
-                gap: CELL_GAP,
-                transform: [{ translateX: Animated.multiply(scroll.x, -1) }],
-              }}
-            >
-              {columnNumbers.map((columnNumber) => (
-                <AxisLabel
-                  key={columnNumber}
-                  height={COLUMN_HEADER_HEIGHT}
-                  label={columnLetter(columnNumber)}
-                  width={cellSize}
-                />
-              ))}
-            </Animated.View>
-          </View>
-        </View>
+              Animated.event dengan useNativeDriver memasang jalurnya SEKALI di
+              sisi natif. Setelah itu posisi gulung menggerakkan transform langsung
+              di thread UI; tidak ada satu pun frame yang menunggu JS. Kepala dan
+              petak bergerak sebagai satu benda karena memang digerakkan oleh satu
+              nilai yang sama.
+              ------------------------------------------------------------------ */}
 
-        <View style={{ flex: 1, flexDirection: 'row' }}>
-          <View style={{ overflow: 'hidden', width: ROW_HEADER_WIDTH }}>
-            <Animated.View
-              style={{
-                gap: CELL_GAP,
-                transform: [{ translateY: Animated.multiply(scroll.y, -1) }],
-              }}
-            >
-              {rowNumbers.map((rowNumber) => (
-                <AxisLabel key={rowNumber} height={cellSize} label={String(rowNumber)} width={ROW_HEADER_WIDTH} />
-              ))}
-            </Animated.View>
+          <View style={{ flexDirection: 'row' }}>
+            {/* Sudut kosong tempat kedua kepala bertemu. */}
+            <View style={{ height: COLUMN_HEADER_HEIGHT, width: ROW_HEADER_WIDTH }} />
+            <View style={{ flex: 1, height: COLUMN_HEADER_HEIGHT, overflow: 'hidden' }}>
+              <Animated.View
+                style={{
+                  flexDirection: 'row',
+                  gap: CELL_GAP,
+                  transform: [{ translateX: Animated.multiply(scroll.x, -1) }],
+                }}
+              >
+                {columnNumbers.map((columnNumber) => (
+                  <AxisLabel
+                    key={columnNumber}
+                    height={COLUMN_HEADER_HEIGHT}
+                    label={columnLetter(columnNumber)}
+                    width={cellSize}
+                  />
+                ))}
+              </Animated.View>
+            </View>
           </View>
 
-          {/* Dua penggulung bersarang dengan arah berbeda: yang luar menangani
-              atas-bawah, yang dalam kiri-kanan. Pada perbesaran terkecil pun
-              sembilan kolom lebih lebar dari layar, jadi kedua arah memang
-              dibutuhkan.
-
-              key={cellSize} memasang ulang keduanya saat perbesaran berganti,
-              sehingga posisi gulungnya kembali nol bersamaan dengan nilai
-              Animated yang baru. Tanpa itu, posisi lama dalam piksel akan
-              menunjuk sel yang berbeda pada petak berukuran baru.
-
-              paddingRight dan paddingBottom hanya MEMANJANGKAN isi, tidak
-              menggeser titik nolnya — jadi keduanya aman bagi pencocokan
-              kepala. paddingTop dan paddingLeft akan menggesernya, dan karena
-              itu tidak dipakai. */}
-          <Animated.ScrollView
-            key={cellSize}
-            contentContainerStyle={{ paddingBottom: tokens.space.xxxl }}
-            onScroll={scroll.onScrollY}
-            scrollEventThrottle={16}
-            showsVerticalScrollIndicator={false}
-            style={{ flex: 1 }}
-          >
-            <Animated.ScrollView
-              contentContainerStyle={{ paddingRight: tokens.layout.screenX }}
-              horizontal
-              onScroll={scroll.onScrollX}
-              scrollEventThrottle={16}
-              showsHorizontalScrollIndicator={false}
-            >
-              <View style={{ gap: CELL_GAP }}>
+          <View style={{ flex: 1, flexDirection: 'row' }}>
+            <View style={{ overflow: 'hidden', width: ROW_HEADER_WIDTH }}>
+              <Animated.View
+                style={{
+                  gap: CELL_GAP,
+                  transform: [{ translateY: Animated.multiply(scroll.y, -1) }],
+                }}
+              >
                 {rowNumbers.map((rowNumber) => (
-                  <View key={rowNumber} style={{ flexDirection: 'row', gap: CELL_GAP }}>
-                    {columnNumbers.map((columnNumber) => {
-                      const letter = columnLetter(columnNumber);
-                      const code = `${rowNumber}-${letter}`;
-                      const tree = treeByPosition.get(code);
-                      // matchedCodes null = tidak ada pencarian/filter aktif, jadi
-                      // tidak ada yang ditegaskan DAN tidak ada yang diredupkan.
-                      // `matched` sudah false dengan sendirinya saat null.
-                      const matched = matchedCodes?.has(code) ?? false;
-                      const dimmed = matchedCodes !== null && !matched;
+                  <AxisLabel key={rowNumber} height={cellSize} label={String(rowNumber)} width={ROW_HEADER_WIDTH} />
+                ))}
+              </Animated.View>
+            </View>
 
-                      if (!tree) {
-                        // Posisi kosong hanya bisa ditekan SELAMA mode pilih,
-                        // dan hanya kalau himpunan yang sedang berjalan bukan
-                        // himpunan pohon. Di luar mode pilih ia tetap inert
-                        // seperti sebelumnya: tidak ada pohon untuk dibuka.
+            {/* Dua penggulung bersarang dengan arah berbeda: yang luar menangani
+                atas-bawah, yang dalam kiri-kanan. Pada perbesaran terkecil pun
+                sembilan kolom lebih lebar dari layar, jadi kedua arah memang
+                dibutuhkan.
+
+                key={cellSize} memasang ulang keduanya saat perbesaran berganti,
+                sehingga posisi gulungnya kembali nol bersamaan dengan nilai
+                Animated yang baru. Tanpa itu, posisi lama dalam piksel akan
+                menunjuk sel yang berbeda pada petak berukuran baru.
+
+                paddingRight dan paddingBottom hanya MEMANJANGKAN isi, tidak
+                menggeser titik nolnya — jadi keduanya aman bagi pencocokan
+                kepala. paddingTop dan paddingLeft akan menggesernya, dan karena
+                itu tidak dipakai. */}
+            <Animated.ScrollView
+              key={cellSize}
+              contentContainerStyle={{ paddingBottom: tokens.space.xxxl }}
+              onScroll={scroll.onScrollY}
+              scrollEventThrottle={16}
+              showsVerticalScrollIndicator={false}
+              style={{ flex: 1 }}
+            >
+              <Animated.ScrollView
+                contentContainerStyle={{ paddingRight: tokens.layout.screenX }}
+                horizontal
+                onScroll={scroll.onScrollX}
+                scrollEventThrottle={16}
+                showsHorizontalScrollIndicator={false}
+              >
+                <View style={{ gap: CELL_GAP }}>
+                  {rowNumbers.map((rowNumber) => (
+                    <View key={rowNumber} style={{ flexDirection: 'row', gap: CELL_GAP }}>
+                      {columnNumbers.map((columnNumber) => {
+                        const letter = columnLetter(columnNumber);
+                        const code = `${rowNumber}-${letter}`;
+                        const tree = treeByPosition.get(code);
+                        // matchedCodes null = tidak ada filter aktif, jadi tidak
+                        // ada yang ditegaskan DAN tidak ada yang diredupkan.
+                        // `matched` sudah false dengan sendirinya saat null.
+                        const matched = matchedCodes?.has(code) ?? false;
+                        const dimmed = matchedCodes !== null && !matched;
+
+                        if (!tree) {
+                          // Posisi kosong hanya bisa ditekan SELAMA mode pilih,
+                          // dan hanya kalau himpunan yang sedang berjalan bukan
+                          // himpunan pohon. Di luar mode pilih ia tetap inert
+                          // seperti sebelumnya: tidak ada pohon untuk dibuka.
+                          return (
+                            <EmptyMapCell
+                              key={code}
+                              cellSize={cellSize}
+                              code={code}
+                              dimmed={dimmed}
+                              matched={matched}
+                              onPress={() => toggleSelectedPosition(code)}
+                              selectable={selectMode && selectionAllows(selection, 'position')}
+                              selected={
+                                selectMode &&
+                                selection.kind === 'position' &&
+                                selection.positionCodes.has(code)
+                              }
+                            />
+                          );
+                        }
+
+                        // Hanya posisi yang SEDANG ditanami yang boleh masuk
+                        // himpunan. Peredupan filter tidak ikut menentukan:
+                        // meredupkan adalah penunjuk perhatian, bukan larangan,
+                        // jadi sel redup bersiklus aktif tetap bisa dipilih.
+                        //
+                        // Syarat kedua: himpunan yang sedang berjalan harus
+                        // mengizinkan jenis 'tree'. Posisi bersiklus TERTUTUP
+                        // tetap tidak bisa dipilih dalam keadaan apa pun —
+                        // penanaman ulang massal bukan lingkup migrasi 062, dan
+                        // jalur satu-per-satunya sudah ada di
+                        // StartTreePlantingSheet.
+                        const selectableNow =
+                          tree.activePlanting !== null && selectionAllows(selection, 'tree');
+
                         return (
-                          <EmptyMapCell
+                          <FilledMapCell
                             key={code}
                             cellSize={cellSize}
-                            code={code}
                             dimmed={dimmed}
                             matched={matched}
-                            onPress={() => toggleSelectedPosition(code)}
-                            selectable={selectMode && selectionAllows(selection, 'position')}
-                            selected={
-                              selectMode &&
-                              selection.kind === 'position' &&
-                              selection.positionCodes.has(code)
+                            // Perilaku tekan berganti TOTAL selama mode pilih.
+                            // Di luar mode itu, sel berisi tetap membuka detail
+                            // pohon persis seperti sebelumnya.
+                            onPress={
+                              selectMode
+                                ? () => toggleSelectedTree(tree.id)
+                                : () => router.push(`${basePath}/${tree.id}`)
                             }
+                            selectable={selectMode ? selectableNow : true}
+                            selected={
+                              selectMode && selection.kind === 'tree' && selection.treeIds.has(tree.id)
+                            }
+                            tree={tree}
                           />
                         );
-                      }
-
-                      // Hanya posisi yang SEDANG ditanami yang boleh masuk
-                      // himpunan. Peredupan pencarian/filter tidak ikut
-                      // menentukan: meredupkan adalah penunjuk perhatian, bukan
-                      // larangan, jadi sel redup bersiklus aktif tetap bisa
-                      // dipilih.
-                      //
-                      // Syarat kedua sejak tahap ini: himpunan yang sedang
-                      // berjalan harus mengizinkan jenis 'tree'. Posisi
-                      // bersiklus TERTUTUP tetap tidak bisa dipilih dalam
-                      // keadaan apa pun — penanaman ulang massal bukan lingkup
-                      // migrasi 062, dan jalur satu-per-satunya sudah ada di
-                      // StartTreePlantingSheet.
-                      const selectableNow =
-                        tree.activePlanting !== null && selectionAllows(selection, 'tree');
-
-                      return (
-                        <FilledMapCell
-                          key={code}
-                          cellSize={cellSize}
-                          dimmed={dimmed}
-                          matched={matched}
-                          // Perilaku tekan berganti TOTAL selama mode pilih.
-                          // Di luar mode itu, sel berisi tetap membuka detail
-                          // pohon persis seperti sebelumnya.
-                          onPress={
-                            selectMode
-                              ? () => toggleSelectedTree(tree.id)
-                              : () => router.push(`${basePath}/${tree.id}`)
-                          }
-                          selectable={selectMode ? selectableNow : true}
-                          selected={
-                            selectMode && selection.kind === 'tree' && selection.treeIds.has(tree.id)
-                          }
-                          tree={tree}
-                        />
-                      );
-                    })}
-                  </View>
-                ))}
-              </View>
+                      })}
+                    </View>
+                  ))}
+                </View>
+              </Animated.ScrollView>
             </Animated.ScrollView>
-          </Animated.ScrollView>
+          </View>
         </View>
+        {/* Dipadamkan selama mode pilih: panel tindakan naik dari dasar layar
+            dan tombol ini akan melayang tepat di atasnya. */}
+        {selectMode ? null : <MapZoomButton onPress={toggleZoom} zoomedIn={zoomedIn} />}
       </View>
 
       {selectMode ? (
@@ -1908,17 +1711,6 @@ export function FarmMapScreen({ basePath }: { basePath: '/owner/trees' | '/worke
           selection={selection}
         />
       ) : null}
-
-      <MapFilterSheet
-        draft={draft}
-        onApply={() => {
-          setCriteria(draft);
-          setFilterSheetOpen(false);
-        }}
-        onClose={() => setFilterSheetOpen(false)}
-        onDraftChange={setDraft}
-        visible={filterSheetOpen}
-      />
 
       <LegendSheet onClose={() => setLegendOpen(false)} visible={legendOpen} />
     </View>

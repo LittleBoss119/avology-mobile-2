@@ -57,6 +57,8 @@ type TreeRow = {
   tree_plantings: TreePlantingRow[] | null;
   current_condition: TreeConditionStatus;
   current_growth_phase: GrowthPhase | null;
+  // date di database (migrasi 066); PostgREST mengirimnya 'YYYY-MM-DD'.
+  current_growth_phase_since: string | null;
   is_archived: boolean;
   created_at?: string;
   updated_at?: string | null;
@@ -539,6 +541,7 @@ function mapTree(row: TreeRow): Tree {
     activePlanting: readActivePlanting(row.tree_plantings),
     currentCondition: row.current_condition,
     currentGrowthPhase: row.current_growth_phase,
+    currentGrowthPhaseSince: row.current_growth_phase_since,
     isArchived: row.is_archived,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

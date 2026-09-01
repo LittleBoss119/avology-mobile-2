@@ -16,8 +16,9 @@ import {
   MainTabHeader,
   Screen,
   SearchFilterRow,
+  SegmentedControl,
 } from '../../../../src/components/ui';
-import { statusColors, tokens } from '../../../../src/constants/theme';
+import { tokens } from '../../../../src/constants/theme';
 import { useAuth } from '../../../../src/context/auth-context';
 import { getCareSchedulesWithTasks } from '../../../../src/services/careScheduleService';
 import { getFarmMemberBasicProfiles } from '../../../../src/services/memberService';
@@ -26,14 +27,16 @@ import { formatCareCategory, formatTargetType } from '../../../../src/utils/disp
 import {
   addDaysToIsoDate,
   dayDifference,
-  formatAgendaSectionTitle,
+  formatFullDate,
   getTodayIsoDate,
   scheduleTimeBucket,
   type TimeBucket,
 } from '../../../../src/utils/taskDueDate';
 
-// Sumbu waktu sekarang dinyatakan oleh struktur section (Terlambat + per
-// tanggal), bukan chip. Yang tersisa di baris chip hanya pemisah agenda-vs-arsip.
+// Sumbu waktu dinyatakan oleh struktur section (Terlambat / Hari ini /
+// Mendatang), bukan chip. Pemisah agenda-vs-arsip pindah ke segmented control:
+// ia MENGGANTI TAMPILAN, bukan menyaring, jadi bentuknya harus beda dari chip
+// filter — sama seperti "Daftar | Denah" di layar Pohon.
 type CompletionFilter = 'unfinished' | 'completed';
 type ScheduleTargetFilter = 'all' | TargetType;
 
@@ -58,10 +61,24 @@ const DEFAULT_CRITERIA: SheetCriteria = {
 // membuat "Belum selesai" berisi baris yang tidak bisa dikerjakan siapa pun.
 // Baris yang dibatalkan tetap memakai badge "Dibatalkan" supaya tidak tertukar
 // dengan yang benar-benar selesai. Lihat catatan di laporan Tahap E.
-const completionFilters: Array<{ label: string; value: CompletionFilter }> = [
-  { label: 'Belum selesai', value: 'unfinished' },
-  { label: 'Selesai', value: 'completed' },
+const COMPLETION_SEGMENTS = [
+  { key: 'unfinished', label: 'Belum selesai' },
+  { key: 'completed', label: 'Selesai' },
 ];
+
+// Batas riwayat segmen "Selesai": 30 hari terakhir.
+//
+// Disaring di KLIEN, bukan lewat scheduledFrom di permintaan, supaya jendela
+// tampilan dan jendela pengambilan tetap dua hal terpisah — permintaannya sudah
+// punya aturannya sendiri (UNFINISHED_LOOKBACK_DAYS + includeOlderOpenWork) dan
+// mencampur keduanya membuat sebab hilangnya sebuah baris tidak bisa dibaca
+// dari satu tempat.
+//
+// Bandingannya scheduledDate, tanggal yang SAMA dengan yang dipakai mengurutkan
+// dan mengelompokkan baris. Memakai tanggal lain (mis. tanggal realisasi) akan
+// membuat baris yang lolos saringan jatuh di section yang tidak sesuai dengan
+// alasan ia lolos.
+const COMPLETED_LOOKBACK_DAYS = 30;
 
 // Jendela pengambilan untuk agenda "Belum selesai": 180 hari ke belakang.
 //
@@ -209,10 +226,18 @@ export default function CareScheduleListScreen() {
     buckets[schedule.id] = scheduleTimeBucket(schedule, schedule.tasks, todayIso);
   }
 
+  const completedFromIso = addDaysToIsoDate(todayIso, -COMPLETED_LOOKBACK_DAYS);
+
   function matchesSchedule(schedule: CareScheduleDetail, sheet: SheetCriteria): boolean {
-    // loadedFilter, BUKAN completionFilter: chip menyala seketika, tapi baris
-    // yang dipegang masih milik chip sebelumnya sampai data baru tiba.
+    // loadedFilter, BUKAN completionFilter: segmen menyala seketika, tapi baris
+    // yang dipegang masih milik segmen sebelumnya sampai data baru tiba.
     if (isScheduleSettled(schedule) !== (loadedFilter === 'completed')) {
+      return false;
+    }
+
+    // Jendela riwayat. Hanya berlaku di segmen "Selesai": agenda tidak boleh
+    // kehilangan tunggakan hanya karena tanggalnya tua.
+    if (loadedFilter === 'completed' && schedule.scheduledDate < completedFromIso) {
       return false;
     }
 
@@ -235,7 +260,18 @@ export default function CareScheduleListScreen() {
       // `?? []` menutup jadwal yang kode pohonnya belum termuat: pencarian
       // tetap jalan atas judul, sasaran ringkas, dan nama pekerja.
       const treeCodes = (schedule.targetTreeCodes ?? []).join(' ');
-      const searchable = [schedule.title, formatCareTarget(schedule), treeCodes, workers]
+      // Nama kategori ikut dicari. Sejak judul dirakit program, mengetik
+      // "Pemupukan" memang menemukan jadwal BARU lewat ruas judul — tapi
+      // hanya kebetulan, dan tetap gagal untuk jadwal lama yang judulnya
+      // masih "Test" atau "awas". Dengan kategorinya ikut, placeholder
+      // "Cari jenis, target, atau pekerja" benar untuk keduanya.
+      const searchable = [
+        formatCareCategory(schedule.category),
+        schedule.title,
+        formatCareTarget(schedule),
+        treeCodes,
+        workers,
+      ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
@@ -248,18 +284,49 @@ export default function CareScheduleListScreen() {
     return true;
   }
 
-  // Urutan menaik dipakai DUA kali: di dalam section "Terlambat" (paling lama
-  // telat di atas) dan sebagai urutan section per tanggal.
+  // Segmen "Selesai" adalah ARSIP, bukan agenda: ia dirender sebagai satu daftar
+  // rata tanpa section dan tanpa header, dan tidak melewati
+  // buildScheduleSections sama sekali. Tiga nama section yang ada — Terlambat,
+  // Hari ini, Mendatang — semuanya menyatakan hubungan dengan pekerjaan yang
+  // MASIH menunggu, dan tak satu pun benar untuk yang sudah tidak menunggu.
+  const isArchive = loadedFilter === 'completed';
+
+  // Dua arah urutan, sesuai pertanyaan yang dijawab masing-masing segmen.
+  //
+  // Agenda MENAIK: pertanyaannya "apa yang paling lama tertunggak", jadi yang
+  // paling tua duduk paling atas — di "Terlambat" paling lama telat, di
+  // "Mendatang" yang paling dekat.
+  //
+  // Arsip MENURUN: pertanyaannya "yang barusan itu tercatat, kan", dan
+  // jawabannya selalu ada di ujung terbaru. Dengan jendela 30 hari, mengurutkan
+  // menaik berarti yang dicari selalu berada di dasar daftar.
   const displayedSchedules = schedules
     .filter((schedule) => matchesSchedule(schedule, criteria))
-    .sort((a, b) => (a.scheduledDate < b.scheduledDate ? -1 : a.scheduledDate > b.scheduledDate ? 1 : 0));
+    .sort((a, b) => {
+      const ascending = a.scheduledDate < b.scheduledDate ? -1 : a.scheduledDate > b.scheduledDate ? 1 : 0;
 
-  const sections = buildScheduleSections(displayedSchedules, buckets, todayIso);
+      return isArchive ? -ascending : ascending;
+    });
+
+  const sections = isArchive ? [] : buildScheduleSections(displayedSchedules, buckets);
 
   // Dua sumbu, sesuai isi sheet setelah "Status" dan "Sumber" dihapus.
   const activeGroupCount =
     (criteria.target !== 'all' ? 1 : 0) +
     (criteria.worker !== 'all' ? 1 : 0);
+
+  // Pencarian dan filter sheet disatukan: bagi pemilik keduanya adalah "saya
+  // sedang mempersempit daftar", dan jawaban yang benar untuk nol hasil sama
+  // untuk keduanya — longgarkan yang barusan dipersempit.
+  const isNarrowed = debouncedSearch.length > 0 || activeGroupCount > 0;
+
+  // Baris meta di bawah segmented. Saat menyegarkan, jendela arsip sengaja
+  // tidak disebut: data yang dipegang bisa jadi masih milik segmen sebelumnya.
+  const metaLine = refreshing
+    ? 'Memuat jadwal...'
+    : loadedFilter === 'completed'
+      ? `${COMPLETED_LOOKBACK_DAYS} hari terakhir`
+      : null;
 
   // "Pekerja" hanya menawarkan pekerja yang BENAR-BENAR ditugaskan pada jadwal
   // kebun ini (dari details yang sudah di-fetch), bukan seluruh anggota kebun —
@@ -293,33 +360,32 @@ export default function CareScheduleListScreen() {
   return (
     <Screen
       header={
-        // Dulu FAB, dan sebelum itu FAB yang membuka sheet berisi dua pilihan
-        // (manual / dari SOP). Jalur SOP hilang di migrasi 046, jadi tinggal satu
-        // tujuan — dan satu tujuan tidak butuh tombol melayang yang menutupi
-        // baris terakhir daftar. Sekarang ia duduk sebaris dengan judul.
-        // flexShrink 0 supaya judul yang mengalah kalau ruangnya sempit.
-        <MainTabHeader
-          title="Perawatan"
-          right={
-            <View style={{ flexShrink: 0 }}>
-              <ChipButton
-                active={false}
-                icon="plus"
-                label="Tambah"
-                onPress={() => router.push('/owner/schedules/create')}
-              />
-            </View>
-          }
+        // Slot kanan KOSONG. "Tambah" dulu duduk di sini sebagai ChipButton;
+        // sekarang ia tombol lebar berlabel di stickyFooter, di atas navigasi
+        // bawah — target sentuh yang jauh lebih besar dan selalu berada di
+        // tempat yang sama, tidak ikut menyempit mengikuti panjang judul.
+        // Tanpa slot kanan, judul duduk persis di tengah seperti keempat
+        // destinasi top-level lain.
+        <MainTabHeader title="Perawatan" />
+      }
+      // Screen sendiri yang menyediakan ruang bawah sebesar tinggi footer ini
+      // (stickyFooterReserve di ui.tsx), jadi baris terakhir daftar tidak
+      // pernah tertutup dan tidak ada angka padding yang perlu ditebak di sini.
+      stickyFooter={
+        <Button
+          icon={<Icon name="plus" size={tokens.icon.md} color={tokens.color.brand.on} />}
+          onPress={() => router.push('/owner/schedules/create')}
+          title="Tambah jadwal"
         />
       }
     >
       <ErrorBanner message={error} />
 
-      {/* Tidak ada lagi cabang "kebun kosong" yang menyembunyikan pencarian dan
-          chip. Layar ini tidak bisa membedakan kebun yang benar-benar belum punya
-          jadwal dari kebun yang jadwalnya semua di luar jendela 180 hari — dan
-          menyembunyikan chip justru membuat saran "buka Selesai" mustahil
-          diikuti. Jadi kontrolnya selalu ada, dan teks kosongnya dibuat benar
+      {/* Tidak ada cabang "kebun kosong" yang menyembunyikan pencarian dan
+          segmented. Layar ini tidak bisa membedakan kebun yang benar-benar belum
+          punya jadwal dari kebun yang jadwalnya semua di luar jendela 180 hari —
+          dan menyembunyikan segmented justru membuat segmen "Selesai" mustahil
+          dicapai. Jadi kontrolnya selalu ada, dan teks kosongnya dibuat benar
           untuk kedua keadaan. */}
       {error ? null : (
         <>
@@ -328,72 +394,86 @@ export default function CareScheduleListScreen() {
             filterCount={activeGroupCount}
             onChangeText={setSearch}
             onFilterPress={openFilterSheet}
-            placeholder="Cari judul, target, atau pekerja"
+            // Judul yang diketik pemilik tidak lagi DITAMPILKAN di baris daftar,
+            // tapi tetap ikut DICARI (lihat matchesSchedule) — menghapusnya dari
+            // pencarian akan membuat kata yang pernah diketik sendiri oleh
+            // pemilik tidak menemukan apa pun. Placeholder menyebut "jenis"
+            // karena itulah yang kini terbaca di baris pertama.
+            placeholder="Cari jenis, target, atau pekerja"
             value={search}
           />
 
-          <FilterChipsRow>
-            {completionFilters.map((filter) => (
-              <ChipButton
-                key={filter.value}
-                active={completionFilter === filter.value}
-                label={filter.label}
-                onPress={() => setCompletionFilter(filter.value)}
-              />
-            ))}
-          </FilterChipsRow>
+          <SegmentedControl
+            onChange={(key) => setCompletionFilter(key === 'completed' ? 'completed' : 'unfinished')}
+            options={COMPLETION_SEGMENTS}
+            value={completionFilter}
+          />
 
-          {/* Satu baris yang berganti isi, bukan dua slot. Saat menyegarkan
-              angkanya sengaja tidak ditampilkan: data yang sedang dipegang bisa
-              jadi masih milik chip sebelumnya, dan angka basi lebih buruk
-              daripada tanpa angka. Tingginya tetap supaya daftar tidak bergeser
-              naik-turun tiap kali menyegarkan. */}
-          <View style={styles.metaSlot}>
-            <Text selectable style={styles.metaLine}>
-              {refreshing ? 'Memuat jadwal...' : `Menampilkan ${displayedSchedules.length} jadwal`}
-            </Text>
-          </View>
+          {/* Hanya ada isi di dua keadaan: sedang menyegarkan, atau sedang di
+              segmen arsip yang jendelanya perlu dinyatakan. Di agenda tidak ada
+              baris apa pun — hitungan "Menampilkan N jadwal" dihapus, karena
+              jumlah baris sudah terbaca dari daftarnya sendiri dan angka itu
+              hanya menambah satu hal untuk dibaca sebelum sampai ke pekerjaan. */}
+          {metaLine ? (
+            <View style={styles.metaSlot}>
+              <Text selectable style={styles.metaLine}>
+                {metaLine}
+              </Text>
+            </View>
+          ) : null}
 
           {/* Saat menyegarkan, baris lama dipertahankan dan EmptyState ditahan —
-              kalau tidak, berpindah chip akan memunculkan "tidak ada yang cocok"
-              sekejap sebelum data baru datang. */}
-          {/* Pencarian dan filter diperiksa LEBIH DULU: owner yang mengetik
-              pencarian tanpa hasil harus diberi tahu pencariannya yang nihil,
-              bukan disuruh melihat riwayat. */}
+              kalau tidak, berpindah segmen akan memunculkan "tidak ada yang
+              cocok" sekejap sebelum data baru datang. */}
+          {/* Pencarian dan filter diperiksa LEBIH DULU: owner yang mempersempit
+              daftar tanpa hasil harus diberi tahu penyempitannya yang nihil,
+              bukan disuruh membuat jadwal baru. */}
           {displayedSchedules.length === 0 && refreshing ? null : displayedSchedules.length === 0 ? (
-            debouncedSearch.length > 0 ? (
+            isNarrowed ? (
               <EmptyState
                 icon="search"
-                subtitle={`Tidak ada jadwal yang cocok dengan "${search.trim()}".`}
-                title="Tidak ada hasil"
-                variant="plain"
-              />
-            ) : activeGroupCount > 0 ? (
-              <EmptyState
-                icon="filter"
-                subtitle="Tidak ada jadwal dengan filter yang aktif."
+                subtitle="Coba ubah kata pencarian atau longgarkan filternya."
                 title="Tidak ada yang cocok"
                 variant="plain"
               />
             ) : loadedFilter === 'completed' ? (
               <EmptyState
-                icon="calendar"
-                subtitle="Jadwal yang sudah selesai atau dibatalkan muncul di sini."
-                title="Belum ada riwayat"
+                icon="clipboard"
+                subtitle={`Jadwal yang beres dalam ${COMPLETED_LOOKBACK_DAYS} hari terakhir muncul di sini.`}
+                title="Belum ada yang selesai"
                 variant="plain"
               />
             ) : (
               // Benar untuk kebun yang belum punya jadwal MAUPUN kebun yang
               // jadwalnya sudah beres semua — layar tidak bisa membedakan
               // keduanya tanpa request tambahan, jadi kalimatnya tidak
-              // mengklaim salah satunya.
+              // mengklaim salah satunya. Arahannya ke tombol yang memang ada di
+              // layar ini, bukan ke tempat lain.
               <EmptyState
                 icon="calendar-plus"
-                subtitle={'Buat jadwal baru, atau buka "Selesai" untuk melihat riwayat.'}
-                title="Tidak ada pekerjaan yang menunggu"
+                subtitle={'Tekan "Tambah jadwal" di bawah untuk membuat yang pertama.'}
+                title="Belum ada jadwal"
                 variant="plain"
               />
             )
+          ) : isArchive ? (
+            // Arsip: satu kotak, tanpa section dan tanpa header. overdueSinceIso
+            // selalu null di sini — sebuah jadwal yang sudah selesai atau
+            // dibatalkan tidak bisa "telat" lagi.
+            <View style={styles.sectionRows}>
+              {displayedSchedules.map((schedule, index) => (
+                <ScheduleRow
+                  key={schedule.id}
+                  isLast={index === displayedSchedules.length - 1}
+                  onPress={() => router.push(`/owner/schedules/${schedule.id}`)}
+                  overdueSinceIso={null}
+                  schedule={schedule}
+                  showDate
+                  todayIso={todayIso}
+                  workerNames={workerNames}
+                />
+              ))}
+            </View>
           ) : (
             <View style={styles.sections}>
               {sections.map((section) => (
@@ -407,6 +487,11 @@ export default function CareScheduleListScreen() {
                         onPress={() => router.push(`/owner/schedules/${schedule.id}`)}
                         overdueSinceIso={section.tone === 'danger' ? scheduleOverdueSinceIso(schedule) : null}
                         schedule={schedule}
+                        // Section "Hari ini" SUDAH menyatakan tanggalnya di
+                        // headernya sendiri; mengulanginya di setiap baris di
+                        // bawahnya hanya menambah kata yang harus dilewati
+                        // sebelum sampai ke target dan pekerja.
+                        showDate={section.key !== 'today'}
                         todayIso={todayIso}
                         workerNames={workerNames}
                       />
@@ -448,15 +533,29 @@ function ScheduleSectionHeader({ section }: { section: ScheduleSection }) {
   );
 }
 
-// Baris agenda: judul + SATU baris meta. Tanggal tidak lagi ikut di sini —
-// section header yang menyatakannya, dan badge status juga hilang karena sudah
-// tersirat dari section. Yang tersisa hanya yang TIDAK tersirat: lama
-// keterlambatan, penanda pengulangan, dan penanda pembatalan.
+// Baris agenda: DUA baris teks + satu penanda di kanan.
+//
+// Baris pertama adalah KATEGORI, bukan judul yang diketik pemilik. Judul bebas
+// di lapangan berbunyi "Test", "Gawe baru", "awas" — kata-kata yang hanya berarti
+// bagi orang yang mengetiknya, pada hari ia mengetiknya. Kategori selalu berarti
+// sama bagi siapa pun yang membacanya. Judulnya TIDAK dihapus dari data dan tetap
+// ikut dicari; ia hanya berhenti menempati baris paling menonjol.
+//
+// Baris kedua: target · pekerja · tanggal. Disusun sebagai SATU string yang
+// digabung dengan ' · ', bukan beberapa <Text> bersebelahan — versi lama
+// menaruh pemisahnya di ujung sebuah <Text> ("... · ") dan RN memangkas spasi
+// ujung itu, sehingga tampil "Seluruh kebun ·Adit".
+//
+// Ruas tanggal bisa DILEPAS lewat showDate. Yang melepasnya hanya section
+// "Hari ini", yang headernya sudah menyatakan tanggal itu untuk seluruh baris
+// di bawahnya. Karena ruasnya dilepas SEBELUM join, tidak ada pemisah menggantung
+// yang tertinggal di ujung.
 function ScheduleRow({
   isLast,
   onPress,
   overdueSinceIso,
   schedule,
+  showDate,
   todayIso,
   workerNames,
 }: {
@@ -465,75 +564,121 @@ function ScheduleRow({
   // Non-null hanya di section "Terlambat".
   overdueSinceIso: string | null;
   schedule: CareScheduleDetail;
+  showDate: boolean;
   todayIso: string;
   workerNames: Record<string, string>;
 }) {
   const workers = getScheduleWorkerNames(schedule, workerNames);
   const taskCount = schedule.tasks.length;
-  const title = schedule.title || formatCareCategory(schedule.category);
   const overdueDays = overdueSinceIso ? Math.max(1, dayDifference(overdueSinceIso, todayIso)) : 0;
+  const workerText = taskCount === 0 ? 'Belum ada pekerja' : formatWorkerSummary(workers);
+  const metaLine = [
+    formatCareTarget(schedule),
+    workerText,
+    showDate ? formatFullDate(schedule.scheduledDate) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <Pressable onPress={onPress} style={[styles.row, isLast ? null : styles.rowDivider]}>
       <View style={styles.rowHeader}>
         <Text selectable numberOfLines={1} style={styles.rowTitle}>
-          {title}
+          {formatCareCategory(schedule.category)}
         </Text>
         <View style={styles.rowTrailing}>
-          {overdueSinceIso ? (
-            <Text selectable={false} style={styles.overdueText}>
-              {`${overdueDays} hari`}
-            </Text>
-          ) : null}
-          {schedule.repeatEveryDays !== null ? (
-            <View style={styles.repeatPill}>
-              <Icon name="repeat" size={tokens.icon.xs} color={tokens.color.brand.base} />
-              <Text selectable={false} style={styles.repeatPillText}>
-                {`${schedule.repeatEveryDays}h`}
-              </Text>
-            </View>
-          ) : null}
-          {schedule.isCancelled ? <Badge label="Dibatalkan" maxWidth={100} tone="danger" /> : null}
+          <ScheduleRowMarker overdueDays={overdueDays} overdueSinceIso={overdueSinceIso} schedule={schedule} />
         </View>
       </View>
 
-      <View style={styles.rowMeta}>
-        <Text selectable numberOfLines={1} style={styles.rowMetaText}>
-          {`${formatCareCategory(schedule.category)} · ${formatCareTarget(schedule)} · `}
-        </Text>
-        {taskCount === 0 ? (
-          <View style={styles.noWorkerPill}>
-            <Icon name="alert-triangle" size={tokens.icon.xs} color={statusColors.warning.text} />
-            <Text selectable={false} style={styles.noWorkerPillText}>
-              Belum ada pekerja
-            </Text>
-          </View>
-        ) : (
-          <Text selectable numberOfLines={1} style={styles.rowMetaText}>
-            {formatWorkerSummary(workers)}
-          </Text>
-        )}
-      </View>
+      <Text selectable numberOfLines={2} style={styles.rowMetaText}>
+        {metaLine}
+      </Text>
 
-      {taskCount > 1 || schedule.requiresPhoto ? (
+      {/* TANPA pil "Butuh bukti" — pil itu kini hanya ada di daftar tugas
+          pekerja, dan itu disengaja. Kewajiban foto adalah instruksi bagi orang
+          yang akan MENGERJAKANNYA; bagi pemilik yang sedang memindai daftar, ia
+          syarat yang ia sendiri tetapkan saat membuat jadwalnya dan tidak
+          mengubah satu pun tindakan yang bisa ia ambil dari layar ini. Nilainya
+          tetap terbaca di layar detail jadwal.
+
+          Yang tersisa: progres, dan hanya kalau jadwalnya punya lebih dari satu
+          tugas — di jadwal satu tugas "0/1 selesai" hanya mengulang apa yang
+          sudah dinyatakan segmen dan penanda kanan. */}
+      {taskCount > 1 ? (
         <View style={styles.rowAttributes}>
-          {taskCount > 1 ? (
-            <Text selectable numberOfLines={1} style={styles.rowProgress}>
-              {getScheduleProgress(schedule)}
-            </Text>
-          ) : null}
-          {schedule.requiresPhoto ? (
-            <View style={styles.proofPill}>
-              <Icon name="camera" size={tokens.icon.xs} color={statusColors.warning.text} />
-              <Text selectable={false} style={styles.proofPillText}>
-                Butuh bukti
-              </Text>
-            </View>
-          ) : null}
+          <Text selectable numberOfLines={1} style={styles.rowProgress}>
+            {getScheduleProgress(schedule)}
+          </Text>
         </View>
       ) : null}
     </Pressable>
   );
+}
+
+// PALING BANYAK SATU penanda di kolom kanan, berprioritas — bukan tumpukan.
+// Sebelum ini "N hari" dan pil pengulangan bisa muncul berbarengan, dan pada
+// baris sesempit ini dua pil kecil bersebelahan terbaca sebagai satu blok kabur
+// alih-alih dua fakta.
+//
+// Urutannya menurun dari yang paling menuntut tindakan:
+//   0. Dibatalkan  -- jadwal ini tidak akan dikerjakan siapa pun lagi, jadi
+//      tidak ada gunanya memberi tahu ia berulang tiap 7 hari. Ia mendahului
+//      sisanya, dan ia satu-satunya yang bukan bagian dari daftar prioritas
+//      aslinya: badge ini wajib dipertahankan (baris arsip yang dibatalkan
+//      harus bisa dibedakan dari yang benar-benar selesai).
+//   1. Terlambat   -- tunggakan.
+//   2. Ditunda     -- pekerjaannya diakui belum dilakukan, tapi bukan tunggakan.
+//   3. Berulang    -- sifat jadwal, bukan keadaannya. Kalah dari ketiganya.
+//
+// Setiap penanda membawa TEKS, bukan hanya warna dan bukan hanya ikon.
+function ScheduleRowMarker({
+  overdueDays,
+  overdueSinceIso,
+  schedule,
+}: {
+  overdueDays: number;
+  overdueSinceIso: string | null;
+  schedule: CareScheduleDetail;
+}) {
+  if (schedule.isCancelled) {
+    return <Badge label="Dibatalkan" maxWidth={100} tone="danger" />;
+  }
+
+  if (overdueSinceIso) {
+    return (
+      <Text selectable={false} style={styles.overdueText}>
+        {`Telat ${overdueDays} hari`}
+      </Text>
+    );
+  }
+
+  // Tingkat JADWAL: sebuah jadwal bisa punya banyak tugas, dan cukup satu yang
+  // ditunda untuk membuat jadwalnya belum tuntas karena penundaan. Tidak ada
+  // kolom "ditunda" di care_schedules — status penundaan hidup di care_tasks
+  // .status, jadi inilah satu-satunya sumber yang tersedia di baris daftar.
+  if (schedule.tasks.some((task) => task.status === 'postponed')) {
+    return (
+      <View style={styles.neutralPill}>
+        <Text selectable={false} style={styles.neutralPillText}>
+          Ditunda
+        </Text>
+      </View>
+    );
+  }
+
+  if (schedule.repeatEveryDays !== null) {
+    return (
+      <View style={styles.repeatPill}>
+        <Icon name="repeat" size={tokens.icon.xs} color={tokens.color.brand.base} />
+        <Text selectable={false} style={styles.repeatPillText}>
+          {`Tiap ${schedule.repeatEveryDays} hari`}
+        </Text>
+      </View>
+    );
+  }
+
+  return null;
 }
 
 function ScheduleFilterSheet({
@@ -615,48 +760,62 @@ type ScheduleSection = {
   schedules: CareScheduleDetail[];
 };
 
-// Partisi TOTAL: setiap jadwal masuk ke tepat satu section — cabang if/else di
-// bawah tidak punya jalur yang membuang baris, tidak ada filter dan tidak ada
-// continue. Jumlah baris yang dirender selalu sama dengan panjang input.
+// Dipakai HANYA untuk segmen "Belum selesai". Arsip dirender sebagai daftar rata
+// di layar, tidak lewat sini — lihat `isArchive`.
 //
-// `schedules` sudah terurut scheduledDate MENAIK, jadi: (1) isi section
-// "Terlambat" ikut menaik (paling lama telat di atas), dan (2) kunci Map
-// bertambah menaik sehingga urutan section per tanggal juga menaik — Map
-// mempertahankan urutan penyisipan.
+// Partisi TOTAL: setiap jadwal masuk ke tepat satu section — tidak ada jalur
+// yang membuang baris, tidak ada filter dan tidak ada continue yang menjatuhkan
+// apa pun. Jumlah baris yang dirender selalu sama dengan panjang input.
+//
+// Cabang `else` di bawah yang menampung ember 'inactive' ke "Mendatang" adalah
+// PENJAGA, bukan jalur yang diharapkan: di segmen agenda sebuah jadwal
+// ber-bucket 'inactive' berarti ia dibatalkan atau seluruh tugasnya selesai,
+// dan keduanya sudah dibuang lebih dulu oleh isScheduleSettled(). Kalau suatu
+// hari salah satu dari dua definisi itu bergeser, barisnya tetap TERLIHAT di
+// tempat yang paling tidak berbahaya, bukan lenyap tanpa jejak.
+//
+// TIGA section, urut tetap: Terlambat, Hari ini, Mendatang. Header per tanggal
+// ("Sabtu, 19 Sep 2026") dihapus: pada kebun dengan jadwal berulang, satu
+// tanggal sering hanya berisi satu baris, sehingga daftar berubah jadi deret
+// header dengan satu baris di bawah masing-masing — lebih banyak header
+// daripada pekerjaan. Tanggalnya sekarang ada di baris meta tiap baris (kecuali
+// di "Hari ini", yang headernya sudah menyatakannya).
+//
+// Section yang kosong TIDAK dimasukkan sama sekali, jadi headernya juga tidak
+// pernah dirender.
+//
+// `schedules` sudah terurut scheduledDate MENAIK, jadi isi tiap section ikut
+// menaik: di "Terlambat" paling lama telat di atas, di "Mendatang" yang paling
+// dekat di atas.
 function buildScheduleSections(
   schedules: CareScheduleDetail[],
-  buckets: Record<string, TimeBucket>,
-  todayIso: string
+  buckets: Record<string, TimeBucket>
 ): ScheduleSection[] {
   const overdue: CareScheduleDetail[] = [];
-  const byDate = new Map<string, CareScheduleDetail[]>();
+  const today: CareScheduleDetail[] = [];
+  const upcoming: CareScheduleDetail[] = [];
 
   for (const schedule of schedules) {
-    // 'missed' (migrasi 048) sementara diperlakukan sama seperti 'overdue'
-    // supaya tampilan tidak berubah sebelum tahap polish UI: jadwal terlewat
-    // tetap berada di section "Terlambat", bukan berpindah diam-diam ke
-    // section tanggal lampau. Datanya sudah terpisah di taskDueDate.ts dan
-    // tinggal dipakai saat statusnya benar-benar ditampilkan.
+    // 'missed' (migrasi 048) diperlakukan sama seperti 'overdue': jadwal
+    // terlewat tetap berada di section "Terlambat", bukan berpindah diam-diam
+    // ke tempat lain. Datanya sudah terpisah di taskDueDate.ts dan tinggal
+    // dipakai saat statusnya benar-benar ditampilkan.
     const bucket = buckets[schedule.id];
 
     if (bucket === 'overdue' || bucket === 'missed') {
       overdue.push(schedule);
-      continue;
-    }
-
-    const existing = byDate.get(schedule.scheduledDate);
-
-    if (existing) {
-      existing.push(schedule);
+    } else if (bucket === 'today') {
+      today.push(schedule);
     } else {
-      byDate.set(schedule.scheduledDate, [schedule]);
+      upcoming.push(schedule);
     }
   }
 
   const sections: ScheduleSection[] = [];
 
-  // Digabung jadi SATU section berapa pun tanggalnya: yang penting bagi owner
-  // adalah "ini menumpuk", bukan tersebar di banyak header tanggal lampau.
+  // Angka di kanan HANYA di "Terlambat", dipertahankan apa adanya: itu satu-
+  // satunya section yang jumlahnya berarti tindakan ("sebanyak ini menumpuk").
+  // "Hari ini" dan "Mendatang" sengaja tanpa angka.
   if (overdue.length > 0) {
     sections.push({
       key: 'overdue',
@@ -667,13 +826,12 @@ function buildScheduleSections(
     });
   }
 
-  for (const [iso, list] of byDate) {
-    sections.push({
-      key: iso,
-      title: formatAgendaSectionTitle(iso, todayIso),
-      tone: 'default',
-      schedules: list,
-    });
+  if (today.length > 0) {
+    sections.push({ key: 'today', title: 'Hari ini', tone: 'default', schedules: today });
+  }
+
+  if (upcoming.length > 0) {
+    sections.push({ key: 'upcoming', title: 'Mendatang', tone: 'default', schedules: upcoming });
   }
 
   return sections;
@@ -800,22 +958,18 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   repeatPillText: { ...tokens.type.caption, color: tokens.color.brand.base },
-  rowMeta: {
+  // Pil netral untuk "Ditunda". Bentuk sama persis dengan repeatPill, hanya
+  // warnanya yang berbeda — keduanya penanda sifat baris, bukan peringatan.
+  neutralPill: {
     alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  rowMetaText: { ...tokens.type.meta, color: tokens.color.text.tertiary, flexShrink: 1 },
-  noWorkerPill: {
-    alignItems: 'center',
-    backgroundColor: statusColors.warning.background,
+    backgroundColor: tokens.color.status.neutral.bg,
     borderRadius: tokens.radius.pill,
     flexDirection: 'row',
-    gap: tokens.space.xs,
     paddingHorizontal: tokens.space.sm,
-    paddingVertical: 1,
+    paddingVertical: 2,
   },
-  noWorkerPillText: { ...tokens.type.caption, color: statusColors.warning.text },
+  neutralPillText: { ...tokens.type.caption, color: tokens.color.status.neutral.text },
+  rowMetaText: { ...tokens.type.meta, color: tokens.color.text.tertiary },
   rowAttributes: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -823,17 +977,6 @@ const styles = StyleSheet.create({
     gap: tokens.space.sm,
   },
   rowProgress: { ...tokens.type.meta, color: tokens.color.text.secondary },
-  proofPill: {
-    alignItems: 'center',
-    backgroundColor: statusColors.warning.background,
-    borderRadius: tokens.radius.pill,
-    flexDirection: 'row',
-    gap: tokens.space.xs,
-    paddingHorizontal: tokens.space.sm,
-    paddingVertical: 2,
-  },
-  proofPillText: { ...tokens.type.caption, color: statusColors.warning.text },
-
   filterSheetBody: { gap: tokens.space.md },
   filterGroup: { gap: tokens.space.sm },
   filterLabel: { ...tokens.type.label, color: tokens.color.text.primary },

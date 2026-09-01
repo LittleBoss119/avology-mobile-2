@@ -29,7 +29,7 @@ import type {
   UUID,
 } from '../types/domain';
 import { MAX_ANGKA_DESIMAL, parseDecimalInput, sanitizeDecimalInput } from '../utils/decimalInput';
-import { formatGrowthPhase, formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
+import { formatGrowthPhase, formatTreeConditionStatus, formatTreeContextLine } from '../utils/treeFormat';
 import type { TreeRecordRouteType } from './tree-record-detail-screen';
 import {
   Button,
@@ -321,15 +321,21 @@ export function TreeRecordEditScreen({
       <TopAppBar title={getEditTitle(normalizedType)} onBack={() => router.back()} />
       <ErrorBanner message={error} />
 
+      {/* Baris yang sama persis dengan layar detail catatan — literal sama,
+          formatter sama. Keduanya bersebelahan dalam satu alur (detail lalu
+          Edit catatan), jadi konteks pohonnya tidak boleh berganti bentuk di
+          tengah jalan. */}
       {tree ? (
-        <Card variant="highlight">
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
-            Konteks Pohon
-          </Text>
-          <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
-          <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-          <MetaRow label="Varietas" value={tree.activePlanting?.variety ?? 'Belum diisi'} />
-        </Card>
+        <Text
+          selectable
+          style={{
+            color: colors.textMuted,
+            fontSize: typography.small.fontSize,
+            lineHeight: typography.small.lineHeight,
+          }}
+        >
+          {formatTreeContextLine(tree)}
+        </Text>
       ) : null}
 
       {normalizedType === 'condition' ? (

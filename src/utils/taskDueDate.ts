@@ -212,7 +212,13 @@ function parseIsoDateParts(iso: string): { day: number; month: number; year: num
 }
 
 // "06 Jun"
-function formatShortDate(iso: string): string {
+//
+// Diekspor untuk baris riwayat pohon, yang menampilkan tanggal tanpa tahun
+// selama tahunnya sama dengan tahun berjalan. Sengaja DIEKSPOR, bukan disalin:
+// ia berbagi MONTHS_ID_SHORT dan parseIsoDateParts dengan formatFullDate, dan
+// dua baris tanggal yang bersebelahan di layar yang sama tidak boleh punya dua
+// daftar nama bulan.
+export function formatShortDate(iso: string): string {
   const parts = parseIsoDateParts(iso);
 
   if (!parts) {

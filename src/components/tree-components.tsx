@@ -20,6 +20,12 @@ import type {
 import { colors, radius, spacing, tokens, typography } from '../constants/theme';
 import { PHOTO_PROCESSING_MESSAGE } from '../lib/media';
 import { formatCareCategory, formatPersonDisplayName } from '../utils/displayFormat';
+import {
+  formatFullDate,
+  formatShortDate,
+  getTodayIsoDate,
+  toWibIsoDate,
+} from '../utils/taskDueDate';
 import { formatCycleDividerLabel, groupTreeHistoryByCycle } from '../utils/treeCycle';
 import {
   buildTreeDisplayCode,
@@ -29,8 +35,26 @@ import {
   formatTreeDisplayCode,
 } from '../utils/treeFormat';
 import { PhotoViewerModal } from './media';
-import { Badge, Button, Card, DateField, EmptyState, Field, MetaRow, PhotoPickerCard } from './ui';
-import { AlertTriangleIcon, BasketIcon, ChevronRightIcon, FlowerIcon, Icon, SprayIcon } from './icons';
+import {
+  Badge,
+  badgeColors,
+  Button,
+  Card,
+  DateField,
+  EmptyState,
+  Field,
+  MetaRow,
+  PhotoPickerCard,
+} from './ui';
+import {
+  AlertTriangleIcon,
+  BasketIcon,
+  ChevronRightIcon,
+  FlowerIcon,
+  Icon,
+  SprayIcon,
+  type IconName,
+} from './icons';
 
 export type TreeFormValues = {
   rowPosition: string;
@@ -82,6 +106,17 @@ export type ConditionStatusBadgeProps = {
 };
 
 export type GrowthPhaseBadgeProps = {
+  // Umur fase dalam hari, digabung ke label jadi 'Berbunga · 96 hari'.
+  //
+  // OPSIONAL, dan tanpa nilai chip-nya persis seperti sebelumnya — dua pemakai
+  // lain (monitoring fase, layar catat fase) tidak mengirimnya dan tidak
+  // bergeser sedikit pun.
+  //
+  // NON-PREDIKTIF, dan itu bukan kelalaian melainkan keputusan v4 yang dikunci
+  // (docs/updated/landasan_avology_v4.md:29): angka ini menyatakan SUDAH BERAPA
+  // LAMA fasenya berjalan, dan tidak pernah menyatakan kapan buahnya siap
+  // dipetik. Jangan menambahkan perkiraan tanggal panen ke sini.
+  ageDays?: number | null;
   phase: GrowthPhase;
 };
 
@@ -127,20 +162,63 @@ export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest' | 'ca
 // — yang dicari kode, kondisi, dan fase. Sebagai baris, satu layar memuat tiga
 // kali lebih banyak pohon dan ketiga hal itu terbaca sejajar ke bawah.
 //
-// TIGA baris teks dengan hierarki menurun — kode, varietas, lalu fase dan umur —
-// dan badge kondisi sendirian di tepi kanan. Kode dan badge tidak lagi berbagi
-// satu baris: keduanya isyarat terkuat di baris ini, dan berdampingan keduanya
-// saling menahan lebar. Terpisah, masing-masing punya tepi bacanya sendiri —
-// kode di tepi kiri, kondisi di tepi kanan — dan dipindai sebagai dua kolom.
+// DUA baris teks, bukan tiga: kode di atas, lalu SATU baris meta yang memuat
+// varietas · fase · umur. Sebelumnya varietas berdiri sebagai baris sendiri di
+// antara keduanya, dan itu memberinya berat yang tidak dimilikinya — varietas
+// hampir selalu sama untuk seluruh kebun, jadi ia justru bagian meta yang paling
+// jarang membedakan satu baris dari baris lain. Dengan dua baris, thumbnail 72px
+// yang menentukan tinggi baris, dan kepadatannya naik tanpa ada yang hilang.
+//
+// Kondisi di tepi kanan sebagai IKON + TEKS, bukan badge berkotak. Badge memberi
+// setiap baris sebuah kotak kedua di sebelah kotak thumbnail, dan di daftar
+// sepanjang 234 posisi kotak-kotak itu menumpuk jadi kolom yang berisik.
+// ConditionStatusBadge sendiri TIDAK diubah — ia masih dipakai layar detail
+// pohon dan layar catat kondisi, tempat ia berdiri sendirian dan memang pantas
+// jadi kotak.
+//
+// IKONNYA SENGAJA TIDAK UNIK per kondisi: hama, penyakit, dan rusak berbagi satu
+// segitiga seru di sini. Pembedanya bukan ikon melainkan TEKS di sebelahnya,
+// yang selalu berbeda dan selalu hadir; ikon adalah saluran ketiga setelah teks
+// dan warna.
+//
+// PETA DENAH MELAKUKAN SEBALIKNYA — di sana ketiganya punya glif sendiri
+// (serangga, daun berbercak, ranting patah). Itu bukan ketidakkonsistenan yang
+// terlewat: di sel petak TIDAK ADA teks yang membedakan ketiganya, jadi glif
+// adalah satu-satunya pembeda selain warna, dan warna ketiganya memang sengaja
+// sama. Di baris ini teksnya ada, jadi glif yang lebih rumit hanya menambah
+// detail tanpa menambah informasi.
 //
 // Tanpa chevron. Seluruh barisnya memang bisa ditekan, tapi itu sudah tersirat
 // dari daftar yang isinya seragam; sebuah panah di setiap baris membayar ruang
 // tetap untuk mengulang hal yang sama sebanyak jumlah pohon.
 //
-// Umur ikut di baris ketiga dalam bentuk pendek ("3 th"): di daftar ia hanya
-// perlu dikenali sekilas, sedangkan bentuk panjangnya tetap ada di layar detail.
+// Umur ikut di baris meta dalam bentuk pendek ("3 th"): di daftar ia hanya perlu
+// dikenali sekilas, sedangkan bentuk panjangnya tetap ada di layar detail.
 const TREE_ROW_THUMBNAIL = 72;
 const TREE_ROW_MIN_HEIGHT = 96;
+
+// Record atas SELURUH nilai enum, bukan objek biasa — kalau tree_condition_status
+// bertambah nilai, berkas ini gagal typecheck alih-alih diam-diam merender baris
+// tanpa ikon.
+const CONDITION_ICONS: Record<TreeConditionStatus, IconName> = {
+  healthy: 'check',
+  needs_attention: 'alert-triangle',
+  pest_attacked: 'alert-triangle',
+  disease_indicated: 'alert-triangle',
+  damaged: 'alert-triangle',
+  dead: 'x',
+};
+
+// Teks yang berdiri saat varietasnya memang belum diisi. Kalimat, bukan tanda
+// hubung: "—" menyuruh pembaca menebak apakah datanya kosong, gagal dimuat, atau
+// tidak berlaku. Bunyinya sengaja sama persis dengan label badge filter yang
+// menyaring keadaan ini di kedua layar daftar, supaya yang dibaca di baris dan
+// yang ditekan di sheet terasa satu benda.
+//
+// Pasangannya untuk fase TIDAK ditulis di sini: formatGrowthPhase(null) sudah
+// mengembalikan 'Belum dicatat', dan menyalinnya jadi konstanta kedua berarti
+// dua tempat yang bisa berbeda bunyi.
+const NO_VARIETY_TEXT = 'Varietas belum diisi';
 
 // Cukup redup untuk terbaca sebagai lapisan kedua, masih cukup pekat untuk
 // dibaca — kejadian siklus lama tetap harus bisa dibuka dan dibaca isinya.
@@ -149,12 +227,17 @@ const PAST_CYCLE_OPACITY = 0.55;
 export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
   const isInactive = tree.currentCondition === 'dead';
-  const phaseText = tree.currentGrowthPhase ? formatGrowthPhase(tree.currentGrowthPhase) : 'Fase -';
+  // formatGrowthPhase(null) sudah mengembalikan 'Belum dicatat' — dipanggil
+  // langsung tanpa cabang sendiri supaya teksnya tidak bisa menyimpang dari yang
+  // dipakai layar lain.
+  const phaseText = formatGrowthPhase(tree.currentGrowthPhase);
+  const varietyText = tree.activePlanting?.variety?.trim() || NO_VARIETY_TEXT;
   // filter(Boolean) sebelum join: pohon tanpa tanggal tanam kehilangan bagian
   // umurnya BESERTA pemisahnya, bukan menyisakan "· " yang menggantung.
-  const metaText = [phaseText, shortTreeAge(tree.activePlanting?.plantedAt)]
+  const metaText = [varietyText, phaseText, shortTreeAge(tree.activePlanting?.plantedAt)]
     .filter(Boolean)
     .join(' · ');
+  const conditionColor = badgeColors[getConditionTone(tree.currentCondition)].text;
 
   const content = (
     <View
@@ -163,9 +246,12 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
         flexDirection: 'row',
         gap: spacing.lg,
         // 72 + 12 + 12 = 96, dan alignItems 'center' menjaga thumbnail duduk di
-        // tengah baris. Tiga baris teks berjumlah sekitar 65, jadi thumbnail-lah
+        // tengah baris. Dua baris teks berjumlah sekitar 45, jadi thumbnail-lah
         // yang menentukan tinggi — padding dipilih supaya ia punya ruang napas
-        // yang sama di atas dan di bawah, bukan menempel ke divider.
+        // yang sama di atas dan di bawah, bukan menempel ke divider. Sejak baris
+        // varietas dilebur ke baris meta, jarak itu justru bertambah lega;
+        // TREE_ROW_MIN_HEIGHT sengaja TIDAK ikut diturunkan, karena yang menahan
+        // tinggi tetap thumbnail-nya.
         minHeight: TREE_ROW_MIN_HEIGHT,
         opacity: isInactive ? 0.62 : 1,
         paddingVertical: spacing.md,
@@ -186,7 +272,7 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
       </View>
 
       {/* minWidth 0 WAJIB di kolom yang melar: tanpa itu teks panjang mendorong
-          badge keluar layar alih-alih terpotong sendiri. */}
+          kondisi keluar layar alih-alih terpotong sendiri. */}
       <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
         <Text
           selectable
@@ -198,24 +284,34 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
         <Text
           selectable
           numberOfLines={1}
-          style={{ ...tokens.type.bodySmall, color: tokens.color.text.secondary }}
-        >
-          {tree.activePlanting?.variety ?? '—'}
-        </Text>
-        <Text
-          selectable
-          numberOfLines={1}
-          style={{ ...tokens.type.meta, color: tokens.color.text.tertiary }}
+          style={{ ...tokens.type.meta, color: tokens.color.text.secondary }}
         >
           {metaText}
         </Text>
         {children}
       </View>
 
-      {/* flexShrink 0: badge kondisi adalah alasan utama baris ini dipindai,
-          jadi teks di kolom tengah yang terpotong duluan saat ruang sempit. */}
-      <View style={{ flexShrink: 0 }}>
-        <ConditionStatusBadge size="md" status={tree.currentCondition} />
+      {/* flexShrink 0: kondisi adalah alasan utama baris ini dipindai, jadi teks
+          di kolom tengah yang terpotong duluan saat ruang sempit. maxWidth
+          menahannya tetap satu kolom sempit — label terpanjang ('Perhatian')
+          muat, dan tidak ada kondisi yang bisa melebar melewatinya. */}
+      <View
+        style={{
+          alignItems: 'center',
+          flexDirection: 'row',
+          flexShrink: 0,
+          gap: tokens.space.xs,
+          maxWidth: 110,
+        }}
+      >
+        <Icon name={CONDITION_ICONS[tree.currentCondition]} size={tokens.icon.sm} color={conditionColor} />
+        <Text
+          selectable={false}
+          numberOfLines={1}
+          style={{ ...tokens.type.caption, color: conditionColor }}
+        >
+          {formatTreeConditionStatus(tree.currentCondition)}
+        </Text>
       </View>
     </View>
   );
@@ -552,10 +648,17 @@ export function ConditionStatusBadge({ size, status }: ConditionStatusBadgeProps
   return <Badge label={formatTreeConditionStatus(status)} maxWidth={180} size={size} tone={tone} />;
 }
 
-export function GrowthPhaseBadge({ phase }: GrowthPhaseBadgeProps) {
+export function GrowthPhaseBadge({ ageDays, phase }: GrowthPhaseBadgeProps) {
   const tone = getGrowthPhaseTone(phase);
+  // Umur digabung HANYA kalau angkanya benar-benar ada. null berarti tanggal
+  // fasenya tidak ditemukan di siklus yang sedang berjalan, dan chip-nya jatuh
+  // ke nama fase saja — bukan '0 hari', yang akan terbaca sebagai "baru hari
+  // ini" padahal artinya "tidak tahu".
+  const label =
+    typeof ageDays === 'number' ? `${formatGrowthPhase(phase)} · ${ageDays} hari` : formatGrowthPhase(phase);
 
-  return <Badge label={formatGrowthPhase(phase)} maxWidth={180} tone={tone} />;
+  // maxWidth naik dari 180: label terpanjang sekarang 'Vegetatif · 365 hari'.
+  return <Badge label={label} maxWidth={220} tone={tone} />;
 }
 
 export function ConditionReportList({
@@ -606,50 +709,105 @@ export function TreeHistoryTimeline({
   // apa pun, karena satu pembatas tunggal di dasar riwayat tidak memberi tahu
   // pembacanya hal baru dan cuma menambah baris yang harus dilewati.
   const cycleGroups = (plantings?.length ?? 0) > 1 ? groupTreeHistoryByCycle(history, plantings ?? []) : [];
+  const entries = buildTimelineEntries(history, cycleGroups);
 
-  if (cycleGroups.length === 0) {
-    return (
-      <View style={{ gap: spacing.md }}>
-        {history.map((item, index) => (
+  // SATU kartu, bukan satu kartu per kejadian.
+  //
+  // Sebelumnya tiap kejadian duduk dalam kartunya sendiri: bingkai, sudut
+  // membulat, dan jarak di antaranya. Pada pohon dengan riwayat panjang itu
+  // menghasilkan tumpukan kotak yang tiap kotaknya membayar ~2px bingkai dan
+  // 12px jarak untuk memisahkan hal-hal yang memang sudah berurutan. Sebagai
+  // baris di dalam satu kartu, pemisahnya cukup garis rambut selebar kartu dan
+  // satu layar memuat jauh lebih banyak kejadian.
+  //
+  // padding 0 + gap 0 lewat prop dan style: Card bawaannya memberi padding 16
+  // dan gap 12 kepada anak-anaknya, dan keduanya harus pergi supaya baris bisa
+  // menempel satu sama lain serta garis rambutnya mencapai tepi kartu. Padding
+  // horizontalnya dipindah ke tiap baris (lihat TIMELINE_ROW_PADDING_X).
+  return (
+    <Card padding={0} style={{ gap: 0, overflow: 'hidden' }}>
+      {entries.map((entry, index) => {
+        // Garis rambut HANYA di antara dua baris kejadian. Pembatas siklus sudah
+        // berupa garis, jadi menaruh garis rambut menempel padanya menghasilkan
+        // dua garis sejajar yang memisahkan hal yang sama.
+        const previous = entries[index - 1];
+        const showHairline = Boolean(previous) && previous.kind === 'item' && entry.kind === 'item';
+
+        if (entry.kind === 'divider') {
+          return (
+            <View key={entry.key} style={{ paddingHorizontal: TIMELINE_ROW_PADDING_X }}>
+              <TreeCycleDivider label={entry.label} />
+            </View>
+          );
+        }
+
+        return (
           <TreeHistoryTimelineItem
-            key={buildHistoryItemKey(item, index)}
+            key={entry.key}
             currentUserId={currentUserId}
-            item={item}
+            dimmed={entry.dimmed}
+            item={entry.item}
             onRecordPress={onRecordPress}
+            showHairline={showHairline}
             viewerMode={viewerMode}
           />
-        ))}
-      </View>
-    );
+        );
+      })}
+    </Card>
+  );
+}
+
+// Baris kejadian dan pembatas siklus diratakan jadi SATU daftar berurutan.
+//
+// Alasannya bentuk kartunya: seluruh riwayat kini tinggal di dalam satu kartu,
+// jadi tidak ada lagi tempat untuk sarang <View> per siklus — dan garis rambut
+// antar-baris hanya bisa diputuskan kalau tiap unsur tahu apa yang mendahuluinya.
+// Daftar datar membuat pertanyaan itu sekadar melihat entries[index - 1].
+//
+// Kedua bentuk masukan bermuara ke sini: tanpa pengelompokan siklus (satu-satunya
+// keadaan untuk hampir semua pohon) hasilnya daftar kejadian polos tanpa satu pun
+// pembatas, persis seperti cabang terpisah yang dulu ada.
+type TimelineEntry =
+  | { dimmed: boolean; item: TreeHistoryItem; key: string; kind: 'item' }
+  | { key: string; kind: 'divider'; label: string };
+
+function buildTimelineEntries(
+  history: TreeHistoryItem[],
+  cycleGroups: ReturnType<typeof groupTreeHistoryByCycle>
+): TimelineEntry[] {
+  if (cycleGroups.length === 0) {
+    return history.map((item, index) => ({
+      dimmed: false,
+      item,
+      key: buildHistoryItemKey(item, index),
+      kind: 'item',
+    }));
   }
 
-  return (
-    <View style={{ gap: spacing.md }}>
-      {cycleGroups.map((group) => (
-        <View key={group.planting.id} style={{ gap: spacing.md }}>
-          {group.items.map((item, index) => (
-            <View
-              key={buildHistoryItemKey(item, index)}
-              // Kejadian milik siklus lama diredupkan supaya terlihat mana yang
-              // milik pohon yang sekarang. Lewat opacity, bukan warna teks
-              // pengganti: satu nilai meredupkan seluruh isi kartu sekaligus —
-              // badge, ikon, dan foto ikut — tanpa memaksa setiap teks di
-              // dalamnya punya varian warna kedua.
-              style={group.isLatestCycle ? undefined : { opacity: PAST_CYCLE_OPACITY }}
-            >
-              <TreeHistoryTimelineItem
-                currentUserId={currentUserId}
-                item={item}
-                onRecordPress={onRecordPress}
-                viewerMode={viewerMode}
-              />
-            </View>
-          ))}
-          <TreeCycleDivider label={formatCycleDividerLabel(group.planting)} />
-        </View>
-      ))}
-    </View>
-  );
+  const entries: TimelineEntry[] = [];
+
+  for (const group of cycleGroups) {
+    group.items.forEach((item, index) => {
+      entries.push({
+        // Kejadian milik siklus lama diredupkan supaya terlihat mana yang milik
+        // pohon yang sekarang. Lewat opacity, bukan warna teks pengganti: satu
+        // nilai meredupkan seluruh isi baris sekaligus — ikon, judul, dan meta
+        // ikut — tanpa memaksa setiap teks di dalamnya punya varian warna kedua.
+        dimmed: !group.isLatestCycle,
+        item,
+        key: `${group.planting.id}-${buildHistoryItemKey(item, index)}`,
+        kind: 'item',
+      });
+    });
+
+    entries.push({
+      key: `divider-${group.planting.id}`,
+      kind: 'divider',
+      label: formatCycleDividerLabel(group.planting),
+    });
+  }
+
+  return entries;
 }
 
 // Pembatas awal sebuah siklus: '-- Ditanam ulang * 12 Mar 2023 * Aligator --'.
@@ -710,22 +868,56 @@ export function ConditionReportItem({
   );
 }
 
+// Padding kiri-kanan tiap baris riwayat. Dipegang baris, BUKAN kartunya:
+// kartunya berpadding 0 supaya garis rambut antar-baris mencapai kedua tepi
+// alih-alih berhenti 16px di dalamnya dan terlihat seperti garis menggantung.
+const TIMELINE_ROW_PADDING_X = spacing.cardPadding;
+
 function TreeHistoryTimelineItem({
   currentUserId,
+  dimmed = false,
   item,
   onRecordPress,
+  showHairline = false,
   viewerMode,
 }: {
   currentUserId?: string | null;
+  dimmed?: boolean;
   item: TreeHistoryItem;
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
+  showHairline?: boolean;
   viewerMode: TreeHistoryViewerMode;
 }) {
-  const careOriginLabel = item.historyType === 'care' ? formatCareOrigin(item.asal) : null;
   const routeRecordType = getRouteRecordType(item);
   const canOpenRecord = Boolean(item.sourceId && routeRecordType && onRecordPress);
+  const actorName = formatActorDisplayName({
+    actorId: item.actorId,
+    actorName: item.actorName,
+    actorRole: item.actorRole,
+    currentUserId,
+    viewerMode,
+  });
+  // 'Inisiatif · Adit', 'Kondisi · Anda'. Jenis lalu pencatat, satu baris abu.
+  //
+  // Menggantikan DUA chip yang dulu berdiri di puncak kartu — satu untuk jenis
+  // catatan, satu lagi untuk asal perawatan. Keduanya membayar kotak berbingkai
+  // untuk kata yang sudah dibawa saluran lain: jenisnya ada pada ikon di kiri,
+  // dan sekarang juga tertulis di baris ini. Prefiks 'Dicatat oleh'/'Dipanen
+  // oleh' ikut pergi bersama chip-nya; pada baris sesempit ini ia tiga kata yang
+  // sama di setiap baris.
+  const metaLine = `${formatHistoryKindLabel(item)} · ${actorName}`;
+  const rowStyle = {
+    alignItems: 'center' as const,
+    borderTopColor: tokens.color.line.hairline,
+    borderTopWidth: showHairline ? 1 : 0,
+    flexDirection: 'row' as const,
+    gap: spacing.md,
+    paddingHorizontal: TIMELINE_ROW_PADDING_X,
+    paddingVertical: spacing.md,
+  };
+
   const content = (
-    <View style={{ flexDirection: 'row', gap: spacing.md }}>
+    <>
       <View
         style={{
           alignItems: 'center',
@@ -733,70 +925,199 @@ function TreeHistoryTimelineItem({
           borderRadius: 999,
           height: 34,
           justifyContent: 'center',
-          marginTop: spacing.xs,
           width: 34,
         }}
       >
         {getTimelineIcon(item.historyType, getTimelineTextColor(item.historyType))}
       </View>
-      <View style={{ flex: 1 }}>
-        <View
+      <View style={{ flex: 1, gap: 2 }}>
+        <View style={{ alignItems: 'baseline', flexDirection: 'row', gap: spacing.sm }}>
+          {/* Judulnya isi catatannya sendiri, bukan nama kategorinya — kategori
+              sudah dibawa ikon di kiri dan baris meta di bawah. numberOfLines 2
+              supaya nama jadwal yang panjang tidak mendorong tanggalnya keluar
+              layar, tanpa memotongnya sedini satu baris. */}
+          <Text
+            numberOfLines={2}
+            selectable
+            style={{
+              color: colors.text,
+              flex: 1,
+              fontSize: typography.bodyStrong.fontSize,
+              fontWeight: '700',
+              lineHeight: typography.bodyStrong.lineHeight,
+            }}
+          >
+            {formatHistoryRowTitle(item)}
+          </Text>
+          <Text selectable style={{ color: colors.textMuted, fontSize: typography.meta.fontSize }}>
+            {formatHistoryRowDate(item.happenedAt)}
+          </Text>
+        </View>
+        <Text
+          selectable
           style={{
-            alignItems: 'center',
-            backgroundColor: colors.surface,
-            borderColor: canOpenRecord ? colors.primaryBorder : colors.border,
-            borderCurve: 'continuous',
-            borderRadius: radius.xl,
-            borderWidth: 1,
-            flexDirection: 'row',
-            gap: spacing.sm,
-            padding: spacing.md,
+            color: colors.textMuted,
+            fontSize: typography.meta.fontSize,
+            lineHeight: typography.meta.lineHeight,
           }}
         >
-          <View style={{ flex: 1, gap: spacing.sm }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-              <View style={{ flexDirection: 'row', flexShrink: 1, gap: spacing.sm }}>
-                <Badge label={formatHistoryType(item.historyType)} tone={getHistoryTone(item.historyType)} />
-                {careOriginLabel ? <Badge label={careOriginLabel} tone="muted" /> : null}
-              </View>
-              <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
-                {formatEventDate(item.happenedAt)}
-              </Text>
-            </View>
-            <Text selectable style={{ color: colors.text, fontSize: typography.bodyStrong.fontSize, fontWeight: '700', lineHeight: typography.bodyStrong.lineHeight }}>
-              {formatHistoryTitle(item)}
-            </Text>
-            {formatHistoryDescription(item) ? (
-              <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-                {formatHistoryDescription(item)}
-              </Text>
-            ) : null}
-            <Text selectable style={{ color: colors.textMuted, fontSize: 13 }}>
-              {getHistoryActorPrefix(item.historyType)}{' '}
-              {formatActorDisplayName({
-                actorId: item.actorId,
-                actorName: item.actorName,
-                actorRole: item.actorRole,
-                currentUserId,
-                viewerMode,
-              })}
-            </Text>
-          </View>
-          {canOpenRecord ? <ChevronRightIcon color={colors.textSoft} size={20} /> : null}
-        </View>
+          {metaLine}
+        </Text>
       </View>
-    </View>
+      {/* Chevron WAJIB ADA di baris yang bisa dibuka.
+          Dulu ada dua isyarat "bisa ditekan": bingkai kartu yang berubah jadi
+          hijau, dan chevron ini. Bingkainya hilang bersama kartunya, jadi
+          chevron kini satu-satunya isyarat yang tersisa — dan pembacanya pekerja
+          lanjut usia dengan literasi teknologi rendah. Umpan balik tekan di
+          bawah adalah saluran ketiga, tapi ia baru muncul SETELAH disentuh;
+          chevron yang memberi tahu sebelum disentuh. */}
+      {canOpenRecord ? <ChevronRightIcon color={colors.textSoft} size={20} /> : null}
+    </>
   );
 
   if (canOpenRecord && routeRecordType) {
     return (
-      <Pressable accessibilityRole="button" onPress={() => onRecordPress?.(item, routeRecordType)}>
+      <Pressable
+        accessibilityHint="Buka detail catatan"
+        accessibilityRole="button"
+        onPress={() => onRecordPress?.(item, routeRecordType)}
+        style={({ pressed }) => ({
+          ...rowStyle,
+          backgroundColor: pressed ? tokens.color.surface.subtle : 'transparent',
+          opacity: dimmed ? PAST_CYCLE_OPACITY : 1,
+        })}
+      >
         {content}
       </Pressable>
     );
   }
 
-  return content;
+  return (
+    <View style={{ ...rowStyle, opacity: dimmed ? PAST_CYCLE_OPACITY : 1 }}>{content}</View>
+  );
+}
+
+// Judul baris riwayat: ISI catatannya, bukan nama jenisnya.
+//
+// Jenisnya sudah dibawa dua saluran lain — ikon berwarna di kiri dan kata
+// pertama baris meta — jadi mengulanginya sebagai judul membuat baris terbaca
+// "Kondisi / Kondisi · Anda" dan menyisakan nol tempat untuk hal yang benar-benar
+// membedakan satu kejadian dari kejadian lain.
+function formatHistoryRowTitle(item: TreeHistoryItem): string {
+  if (item.historyType === 'condition' && isTreeConditionStatus(item.title)) {
+    return formatTreeConditionStatus(item.title);
+  }
+
+  if (item.historyType === 'phase' && isGrowthPhase(item.title)) {
+    return formatGrowthPhase(item.title);
+  }
+
+  if (item.historyType === 'harvest') {
+    return formatHarvestAmountSummary(item.description) ?? item.title;
+  }
+
+  if (item.historyType === 'care') {
+    // TERJADWAL: view menaruh judul tugas induknya di `title`
+    // (coalesce(ct.title, 'Perawatan inisiatif'), migrasi 045:272), jadi nama
+    // jadwalnya sudah ada di sana tanpa perlu diolah.
+    if (item.asal === 'terjadwal') {
+      return item.title;
+    }
+
+    // INISIATIF: kategorinya kini datang dari kolomnya SENDIRI.
+    //
+    // Sebelum migrasi 065 kategori hanya sampai ke sini lewat `description`, dan
+    // hanya kalau catatannya kosong — view memilih salah satu dari keduanya
+    // (coalesce(nullif(trim(ca.note),''), ca.category::text), 045:273). Begitu
+    // pekerja menulis catatan, kategorinya hilang sama sekali. Kolom `kategori`
+    // (065) membawanya terpisah, jadi keduanya bisa hadir bersama.
+    if (isCareCategory(item.kategori)) {
+      const kategori = formatCareCategory(item.kategori);
+      const produk = item.produk?.trim();
+
+      // 'Penyemprotan · Decis 25 EC'. Produk digabung ke JUDUL, bukan
+      // dibiarkan di deskripsi seperti dulu: baris riwayat tidak punya baris
+      // deskripsi lagi, dan bahan yang dipakai adalah hal kedua yang paling
+      // sering dicari pemilik setelah jenis perawatannya.
+      return produk ? `${kategori} · ${produk}` : kategori;
+    }
+
+    // Kategori kosong. Bisa terjadi pada baris lama: care_activities.category
+    // nullable (025:16). Jatuh ke perilaku sebelumnya apa adanya — termasuk
+    // cabang description-berisi-kategori, yang masih benar untuk baris yang
+    // dicatat tanpa catatan sebelum 065.
+    if (isCareCategory(item.description)) {
+      return formatCareCategory(item.description);
+    }
+
+    return item.description?.trim() || item.title;
+  }
+
+  return item.title;
+}
+
+// Ruas ANGKA dari description panen, mis. 'Jumlah buah: 12, Berat: 5 kg'.
+//
+// Angka panen TIDAK punya kolomnya sendiri di tree_history_view — view merakit
+// keempat bagiannya jadi satu kalimat (migrasi 045:282-318):
+//   concat_ws('. ', <angka>, 'Kondisi: ...', 'Catatan: ...')
+// dengan <angka> = concat_ws(', ', 'Jumlah buah: N', 'Berat: X kg').
+// Jadi ruas sebelum '. ' yang pertama selalu ruas angkanya, dan constraint
+// harvest_records_amount_present_check (045:86, tervalidasi penuh) menjamin
+// setidaknya satu dari jumlah/berat terisi — ruas itu tidak pernah kosong.
+//
+// Beratnya sudah dirapikan di SQL ('12.00' jadi '12'), jadi titik desimal yang
+// tersisa tidak pernah diikuti spasi dan tidak bisa tertukar dengan pemisah ruas.
+//
+// PENJAGA di bawah bukan basa-basi: ia yang membuat fungsi ini gagal dengan
+// tenang — mengembalikan null supaya pemanggilnya jatuh ke item.title — kalau
+// bentuk kalimatnya ternyata lain, alih-alih menampilkan 'Catatan: ...' sebagai
+// judul yang seolah-olah angka.
+function formatHarvestAmountSummary(description: string | null): string | null {
+  const amount = description?.split('. ')[0]?.trim();
+
+  if (!amount) {
+    return null;
+  }
+
+  if (!amount.startsWith('Jumlah buah:') && !amount.startsWith('Berat:')) {
+    return null;
+  }
+
+  return amount;
+}
+
+// Kata pertama baris meta. Untuk perawatan yang dipakai ASALNYA
+// ('Terjadwal'/'Inisiatif'), bukan kata 'Perawatan': asal adalah satu-satunya
+// hal yang membedakan dua baris perawatan dari sisi pembacanya, sedangkan
+// 'Perawatan' sudah dibawa ikon semprotnya. Perawatan tanpa asal — nilai lama
+// dari sebelum kolom asal ada — jatuh ke label jenis biasa.
+function formatHistoryKindLabel(item: TreeHistoryItem): string {
+  if (item.historyType === 'care') {
+    return formatCareOrigin(item.asal) ?? formatHistoryType(item.historyType);
+  }
+
+  return formatHistoryType(item.historyType);
+}
+
+// '28 Agu' untuk tahun berjalan, '28 Agu 2025' untuk tahun lain.
+//
+// TANPA JAM, dan itu disengaja. happened_at memang bertipe timestamptz, tapi
+// seluruh jalur tulis kecuali complete_task mengirim tanggal saja yang di-cast
+// jadi tengah malam — jamnya karena itu konstan dan bukan waktu pencatatan.
+// Mencetaknya berarti memberi angka presisi kepada data yang tidak punya.
+//
+// happened_at dinormalkan ke tanggal WIB lebih dulu: formatShortDate dan
+// formatFullDate bekerja pada 'YYYY-MM-DD' murni dan akan mengembalikan string
+// mentahnya kalau diberi timestamptz.
+function formatHistoryRowDate(value: string, todayIso: string = getTodayIsoDate()): string {
+  const iso = toWibIsoDate(value);
+
+  if (!iso) {
+    return '';
+  }
+
+  return iso.slice(0, 4) === todayIso.slice(0, 4) ? formatShortDate(iso) : formatFullDate(iso);
 }
 
 function PhotoThumbnailRow({ photoUrls }: { photoUrls: string[] }) {
@@ -890,36 +1211,54 @@ function PhotoThumbnail({ photoUrl }: { photoUrl: string }) {
   );
 }
 
+// Warna lingkaran ikon per jenis catatan. SELURUHNYA token, tidak ada hex.
+//
+// Keempat jenis kini memakai keluarga tokens.color.record yang senama:
+// condition, phase, harvest, care. Dua nilai terakhir yang masih hex sudah
+// diselesaikan — masing-masing dengan alasan berbeda, dan yang kedua adalah
+// pergantian warna yang disengaja:
+//
+//   * Latar fase dulu '#E7F6EC', beda satu langkah kanal hijau dari
+//     record.phase.bg '#E7F5EC'. Itu salah ketik, bukan keputusan desain, dan
+//     selisihnya tidak terlihat mata.
+//   * Ikon panen dulu status.warning.bg + '#8A5B00', yaitu kuning pucat yang
+//     nyaris kembar dengan dot KONDISI di sebelahnya. Dua jenis catatan yang
+//     berbeda tidak boleh berbagi satu warna. Keduanya kini pindah ke keluarga
+//     record.harvest (oranye), sehingga keempat jenis punya rona sendiri.
+//
+// Warna BUKAN satu-satunya pembeda, dan tidak pernah jadi satu-satunya: tiap
+// jenis punya glif sendiri (segitiga, bunga, keranjang, semprot) dan namanya
+// tertulis di baris meta tiap baris riwayat.
 function getTimelineDotColor(type: TreeHistoryType): string {
   if (type === 'condition') {
-    return '#FCEFC7';
+    return tokens.color.record.condition.bg;
   }
 
   if (type === 'phase') {
-    return '#E7F6EC';
+    return tokens.color.record.phase.bg;
   }
 
   if (type === 'harvest') {
-    return '#FFF4D6';
+    return tokens.color.record.harvest.bg;
   }
 
-  return '#E7EEF8';
+  return tokens.color.record.care.bg;
 }
 
 function getTimelineTextColor(type: TreeHistoryType): string {
   if (type === 'condition') {
-    return '#7A5600';
+    return tokens.color.record.condition.text;
   }
 
   if (type === 'phase') {
-    return '#065F2E';
+    return tokens.color.record.phase.text;
   }
 
   if (type === 'harvest') {
-    return '#8A5B00';
+    return tokens.color.record.harvest.text;
   }
 
-  return '#184E91';
+  return tokens.color.record.care.text;
 }
 
 function getTimelineIcon(type: TreeHistoryType, color: string) {

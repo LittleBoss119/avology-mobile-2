@@ -23,8 +23,13 @@ export const TREE_PLANTING_COLUMNS =
 // query yang memakainya. PostgREST menyaring baris embedded, bukan induknya,
 // sehingga pohon yang posisinya sedang kosong tetap terbawa dengan array kosong
 // — dan itu memang yang diinginkan: posisi kosong tetap harus tampil.
+// current_growth_phase_since (migrasi 066) ikut di sini, BUKAN di select
+// terpisah: ia kolom turunan yang database jamin selalu sejalan dengan
+// current_growth_phase — keduanya ditulis recalculate_tree_current_growth_phase
+// dari BARIS catatan yang sama. Mengambilnya terpisah dari pasangannya akan
+// membuka celah untuk membacanya pada waktu yang berbeda.
 export const TREE_SELECT_WITH_ACTIVE_PLANTING =
-  `id, farm_id, tree_code, row_position, column_position, current_condition, current_growth_phase, is_archived, created_at, updated_at, tree_plantings(${TREE_PLANTING_COLUMNS})`;
+  `id, farm_id, tree_code, row_position, column_position, current_condition, current_growth_phase, current_growth_phase_since, is_archived, created_at, updated_at, tree_plantings(${TREE_PLANTING_COLUMNS})`;
 
 export type TreePlantingRow = {
   id: string;

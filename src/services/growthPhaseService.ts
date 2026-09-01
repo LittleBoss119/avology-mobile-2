@@ -11,6 +11,7 @@ import type {
   MemberRole,
   MemberStatus,
   ServiceResult,
+  SoftDeleteRecordInput,
   SuccessData,
   Tree,
   TreeConditionStatus,
@@ -68,6 +69,13 @@ type TreeRow = {
   tree_plantings: TreePlantingRow[] | null;
   current_condition: TreeConditionStatus;
   current_growth_phase: GrowthPhase | null;
+  // date di database (migrasi 066); PostgREST mengirimnya 'YYYY-MM-DD'.
+  //
+  // Ikut di sini karena TREE_SELECT_WITH_ACTIVE_PLANTING dipakai bersama dengan
+  // treeService. Layar monitoring fase kini MEMAKAINYA sebagai satu-satunya
+  // sumber umur fase — sama dengan layar detail pohon — menggantikan query
+  // kedua getLastFloweringByTree yang dicabut bersama perubahan itu.
+  current_growth_phase_since: string | null;
   is_archived: boolean;
   created_at?: string;
   updated_at?: string | null;
@@ -174,10 +182,14 @@ export async function getGrowthPhaseRecordDetail(
     return fail(currentUserIdResult.error);
   }
 
+  // is_deleted disaring di query; alasannya sama dengan
+  // getConditionReportDetail — catatan terhapus dan id yang tidak ada memberi
+  // jawaban yang sama, dengan galat yang sudah dipakai fungsi ini sejak dulu.
   const { data, error } = await supabase
     .from('growth_phase_records')
     .select(GROWTH_PHASE_RECORD_SELECT)
     .eq('id', recordId)
+    .eq('is_deleted', false)
     .maybeSingle<GrowthPhaseRecordRow>();
 
   if (error) {
@@ -194,10 +206,35 @@ export async function getGrowthPhaseRecordDetail(
     return fail(accessResult.error);
   }
 
+  const isAuthor = data.recorded_by === currentUserIdResult.data;
+
   return ok({
     ...mapGrowthPhaseRecord(data),
-    canEdit: data.recorded_by === currentUserIdResult.data && data.is_deleted !== true,
+    canEdit: isAuthor && data.is_deleted !== true,
+    canDelete: (isAuthor || accessResult.data.role === 'owner') && data.is_deleted !== true,
   });
+}
+
+// Hapus lunak. Izinnya ditegakkan RPC (migrasi 067). Setelah sukses, RPC juga
+// memanggil recalculate_tree_current_growth_phase, sehingga trees.
+// current_growth_phase dan current_growth_phase_since mundur ke catatan
+// sebelumnya di siklus yang sama.
+export async function softDeleteGrowthPhaseRecord(
+  input: SoftDeleteRecordInput | UUID
+): Promise<ServiceResult<SuccessData>> {
+  const recordId = typeof input === 'string' ? input : input.recordId;
+  const reason = typeof input === 'string' ? null : input.reason ?? null;
+
+  const { error } = await supabase.rpc('soft_delete_growth_phase_record', {
+    p_reason: normalizeOptionalText(reason),
+    p_record_id: recordId,
+  });
+
+  if (error) {
+    return fail(error, 'Catatan fase gagal dihapus.');
+  }
+
+  return ok({ success: true });
 }
 
 export async function updateOwnGrowthPhaseRecord(
@@ -245,57 +282,29 @@ export async function getFloweringAndFruitingTrees(
     return fail(error, 'Gagal memuat monitoring fase berbunga dan berbuah.');
   }
 
-  const treeRows = data ?? [];
-
-  // RF-11a: perkaya tiap pohon dengan recorded_at fase 'flowering' terakhir.
-  const lastFloweringResult = await getLastFloweringByTree(treeRows.map((row) => row.id));
-
-  if (lastFloweringResult.error) {
-    return fail(lastFloweringResult.error);
-  }
-
-  const lastFloweringByTree = lastFloweringResult.data;
-
-  return ok(
-    treeRows.map((row) => ({
-      ...mapTree(row),
-      lastFloweringAt: lastFloweringByTree.get(row.id) ?? null,
-    }))
-  );
-}
-
-// Query kedua (pola secondary-query yang sudah dipakai di repo): ambil semua
-// record fase 'flowering' untuk pohon-pohon tsb, terurut recorded_at desc,
-// lalu ambil kemunculan pertama per pohon = tanggal berbunga TERAKHIR.
-async function getLastFloweringByTree(
-  treeIds: string[]
-): Promise<ServiceResult<Map<string, string>>> {
-  if (treeIds.length === 0) {
-    return ok(new Map());
-  }
-
-  const { data, error } = await supabase
-    .from('growth_phase_records')
-    .select('tree_id, recorded_at')
-    .in('tree_id', treeIds)
-    .eq('phase', 'flowering')
-    .eq('is_deleted', false)
-    .order('recorded_at', { ascending: false })
-    .returns<{ tree_id: string; recorded_at: string }[]>();
-
-  if (error) {
-    return fail(error, 'Gagal memuat tanggal berbunga terakhir.');
-  }
-
-  const lastFloweringByTree = new Map<string, string>();
-
-  for (const row of data ?? []) {
-    if (!lastFloweringByTree.has(row.tree_id)) {
-      lastFloweringByTree.set(row.tree_id, row.recorded_at);
-    }
-  }
-
-  return ok(lastFloweringByTree);
+  // QUERY KEDUA DICABUT. Umur fase kini datang dari kolom
+  // current_growth_phase_since yang sudah ikut TREE_SELECT di atas.
+  //
+  // Sebelumnya di sini ada getLastFloweringByTree: satu query tambahan yang
+  // mengambil seluruh catatan fase 'flowering' milik pohon-pohon ini, lalu
+  // memakai yang terbaru per pohon. Ia salah dalam dua hal sekaligus.
+  //
+  // (1) TIDAK MENYARING SIKLUS TANAM. Posisi yang ditanami ulang membuatnya
+  //     menghitung dari tanggal berbunga pohon yang SUDAH MATI — angka yang
+  //     salah yang terlihat persis seperti angka yang benar. Migrasi 064 dan
+  //     066 menutup lubang itu di sisi database untuk current_growth_phase;
+  //     query ini berdiri di luar perbaikan itu.
+  //
+  // (2) MENGUKUR HAL LAIN dari yang ditampilkan layar detail pohon. Ia selalu
+  //     mencari fase 'flowering', sedangkan chip di layar detail menghitung umur
+  //     fase yang SEDANG BERLAKU. Untuk pohon berbuah keduanya menjawab
+  //     pertanyaan berbeda, dan dua layar menampilkan dua angka untuk pohon yang
+  //     sama tanpa apa pun yang menjelaskan kenapa.
+  //
+  // current_growth_phase_since lahir dari baris catatan yang sama yang
+  // menetapkan current_growth_phase (migrasi 066), jadi keduanya tidak bisa
+  // bercerita berbeda — dan kini kedua layar membaca kolom yang sama.
+  return ok((data ?? []).map(mapTree));
 }
 
 async function ensureActiveOwner(farmId: UUID): Promise<ServiceResult<SuccessData>> {
@@ -332,7 +341,11 @@ async function getAccessibleTreeFarmId(treeId: UUID): Promise<ServiceResult<UUID
   return ok(data.farm_id);
 }
 
-async function ensureActiveOwnerOrWorker(farmId: UUID): Promise<ServiceResult<SuccessData>> {
+// Mengembalikan KEANGGOTAANNYA, bukan sekadar SuccessData. Pemanggil lama hanya
+// memeriksa `.error` dan tidak berubah; getGrowthPhaseRecordDetail memakai
+// `role` di dalamnya untuk memutuskan canDelete tanpa query kedua — barisnya
+// memang sudah diambil di sini sebagai pemeriksaan akses.
+async function ensureActiveOwnerOrWorker(farmId: UUID): Promise<ServiceResult<MembershipRow>> {
   const membershipResult = await getCurrentUserMembership(farmId);
 
   if (membershipResult.error) {
@@ -349,9 +362,7 @@ async function ensureActiveOwnerOrWorker(farmId: UUID): Promise<ServiceResult<Su
     return fail(new Error('Hanya pemilik atau pekerja aktif yang dapat mengakses fase pertumbuhan.'));
   }
 
-  return ok({
-    success: true,
-  });
+  return ok(membership);
 }
 
 async function getCurrentUserMembership(
@@ -425,6 +436,7 @@ function mapTree(row: TreeRow): Tree {
     activePlanting: readActivePlanting(row.tree_plantings),
     currentCondition: row.current_condition,
     currentGrowthPhase: row.current_growth_phase,
+    currentGrowthPhaseSince: row.current_growth_phase_since,
     isArchived: row.is_archived,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

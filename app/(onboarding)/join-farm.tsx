@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Platform, Text, TextInput, View } from 'react-native';
 
 import { Button, Card, ErrorBanner, Screen, TopAppBar } from '../../src/components/ui';
 import { tokens } from '../../src/constants/theme';
@@ -9,6 +9,15 @@ import { previewFarmByJoinCode, requestJoinFarm } from '../../src/services/membe
 import type { FarmPreview } from '../../src/types/domain';
 
 const JOIN_CODE_LENGTH = 8;
+
+// Angka yang SAMA dengan setiap pencarian bertunda lain di repo ini —
+// owner/trees/index.tsx:168, worker/trees/index.tsx:166,
+// owner/schedules/index.tsx:170. Tidak ada angka baru yang dikarang di layar
+// ini.
+//
+// farm-map-screen.tsx dulu jadi rujukan keempat; kolom pencariannya sudah
+// dicabut bersama seluruh kontrol filter denah, jadi ia tidak punya jeda lagi.
+const PREVIEW_DEBOUNCE_MS = 250;
 
 // Layar ini bisa dicapai lewat DUA jalan dengan bentuk stack yang berbeda:
 // didorong dari layar pilih akses (ada entri untuk dimundurkan), atau
@@ -25,15 +34,23 @@ function goBackToAccessChoice() {
   router.replace('/onboarding');
 }
 
-// Alur gabung jadi DUA LANGKAH. Sebelumnya user menekan satu tombol dan
-// pengajuannya langsung terkirim tanpa dia pernah tahu kebun apa yang dituju —
-// satu huruf salah ketik berarti pengajuan nyasar ke kebun asing.
+// SATU layar, SATU keadaan yang tumbuh. Kolom kode tidak pernah hilang; kartu
+// kebun muncul di bawahnya begitu kodenya cocok.
 //
-// Langkah 2 menggantikan langkah 1 di layar yang SAMA, bukan rute baru. Dengan
-// begitu tombol kembali di app bar selalu berarti "keluar dari alur gabung",
-// bukan "mundur satu langkah" — dua arti untuk satu tombol adalah hal yang
-// paling cepat membingungkan pengguna yang tidak akrab teknologi. Perpindahan
-// antar langkah diurus tombol "Ganti" yang eksplisit.
+// Alasan aslinya tidak berubah, dan justru makin dipenuhi bentuk ini: tombol
+// kembali di app bar harus SELALU berarti "keluar dari alur gabung", tidak
+// pernah "mundur satu langkah". Dua arti untuk satu tombol adalah hal yang
+// paling cepat membingungkan pengguna yang tidak akrab teknologi.
+//
+// Dulu niat itu dijaga dengan cara menahan kedua langkah di satu rute, lalu
+// menyediakan tombol "Ganti" untuk berpindah antar langkah. Sekarang tidak ada
+// lagi langkah untuk dipindahi: kolom kodenya selalu ada di tempatnya, jadi
+// mengganti kode cukup dengan mengetik ulang. Tombol "Ganti" ikut hilang
+// bersama langkah yang dulu dijaganya.
+//
+// Konsekuensinya pencarian kebun berjalan sendiri saat kode genap 8 karakter —
+// tanpa tombol "Lanjut". Satu-satunya tombol di layar ini adalah tombol yang
+// benar-benar mengirim sesuatu.
 
 export default function JoinFarmScreen() {
   const { refresh } = useAuth();
@@ -44,33 +61,64 @@ export default function JoinFarmScreen() {
   const [checking, setChecking] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
 
-  const isConfirmStep = preview !== null;
+  // Pencarian kebun, dipicu oleh KODENYA sendiri dan bukan oleh tombol.
+  //
+  // Efek ini bergantung pada `joinCode`, jadi setiap ketukan huruf membatalkan
+  // jalannya yang sebelumnya lewat fungsi pembersih di bawah. Itu sekaligus
+  // jawaban untuk balasan basi: `cancelled` ditutup sebelum efek berikutnya
+  // mulai, sehingga balasan pencarian yang kodenya sudah tidak berlaku lagi
+  // dibuang di tempat dan tidak pernah menyentuh state. Pola `let cancelled`
+  // ini sama dengan polling di access-status-screen.tsx.
+  //
+  // Tiga setState di puncak memenuhi aturan "kode diubah setelah kartu muncul":
+  // kartu, galat kode, dan galat pengiriman semuanya milik kode SEBELUMNYA,
+  // jadi ketiganya dibersihkan begitu kodenya bergerak — sebelum apa pun yang
+  // baru dimulai. Efek ini hanya berjalan saat `joinCode` berubah, jadi kartu
+  // yang sudah muncul tidak akan dihapus oleh render biasa.
+  React.useEffect(() => {
+    const code = joinCode.trim();
 
-  async function handleCheckCode() {
-    setChecking(true);
+    setPreview(null);
     setCodeError(null);
+    setSubmitError(null);
 
-    const result = await previewFarmByJoinCode({ joinCode });
-
-    if (result.error) {
-      setCodeError(result.error.message);
+    if (code.length !== JOIN_CODE_LENGTH) {
       setChecking(false);
       return;
     }
 
-    setPreview(result.data);
-    setChecking(false);
-  }
+    let cancelled = false;
 
-  // joinCode SENGAJA dipertahankan. Dulu ia dikosongkan, sehingga orang yang
-  // salah satu karakter — sebab paling lazim tombol ini ditekan — harus mengetik
-  // ulang kedelapan karakternya dari nol. Yang dibersihkan hanya pratinjau dan
-  // pesan galat, karena keduanya milik kode yang barusan diperiksa.
-  function handleChangeCode() {
-    setPreview(null);
-    setCodeError(null);
-    setSubmitError(null);
-  }
+    // Dinyalakan SEBELUM jeda tunda, bukan sesudahnya. Begitu huruf kedelapan
+    // masuk, pengguna langsung melihat bahwa aplikasinya sedang mengerjakan
+    // sesuatu; menunda penanda sampai panggilan benar-benar berangkat
+    // menyisakan 250 ms layar yang terlihat mati.
+    setChecking(true);
+
+    const timer = setTimeout(() => {
+      void (async () => {
+        const result = await previewFarmByJoinCode({ joinCode: code });
+
+        if (cancelled) {
+          return;
+        }
+
+        setChecking(false);
+
+        if (result.error) {
+          setCodeError(result.error.message);
+          return;
+        }
+
+        setPreview(result.data);
+      })();
+    }, PREVIEW_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [joinCode]);
 
   async function handleSubmit() {
     setSubmitting(true);
@@ -91,194 +139,134 @@ export default function JoinFarmScreen() {
     router.replace('/');
   }
 
+  // Lokasi dan nama pemilik disatukan jadi SATU baris sekunder, dengan pemisah
+  // ' · ' — konvensi yang sama dengan buildFarmMetaLine (farmFormat.ts:26).
+  // Bagian yang kosong HILANG alih-alih jadi placeholder, jadi tidak ada
+  // pemisah yang menggantung; kalau keduanya kosong, barisnya tidak dirender
+  // sama sekali. Nama pemilik bisa null secara tipe karena RPC-nya memakai left
+  // join (lihat migrasi 037), meski secara data tiap kebun punya tepat satu
+  // pemilik aktif.
+  //
+  // Kata "Pemilik" menempel di depan namanya, BUKAN jadi baris berlabel
+  // sendiri. Tanpa penanda itu barisnya berbunyi "Ngawi, Jawa Timur · Budi
+  // Santoso", dan nama orang yang berdiri di samping nama tempat bisa terbaca
+  // sebagai nama dusun kedua. Penandanya ikut ke mana pun namanya pergi: kalau
+  // lokasinya kosong, barisnya jadi "Pemilik Budi Santoso" — tetap bermakna,
+  // tetap tanpa pemisah menggantung.
+  const previewLocation = preview?.location?.trim();
+  const previewOwnerName = preview?.ownerName?.trim();
+  const previewMetaLine = [
+    previewLocation,
+    previewOwnerName ? `Pemilik ${previewOwnerName}` : undefined,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(' · ');
+
   return (
     <Screen
       autoScrollOnFocus
       header={<TopAppBar title="Gabung kebun" onBack={goBackToAccessChoice} />}
-      // Kedua langkah menaruh tombolnya di tempat yang SAMA. Dulu "Lanjut"
-      // menempel di bawah kolom kode sementara "Ajukan gabung" ada di footer,
-      // sehingga tombol utama berpindah tempat justru saat layar berganti
-      // langkah.
+      // Satu tombol sepanjang waktu, di tempat yang tidak pernah bergeser.
+      // Nonaktif sampai ada kebun yang benar-benar ditemukan — menekan "Ajukan
+      // gabung" tanpa tahu kebun tujuannya adalah persis kesalahan yang alur ini
+      // dibuat untuk mencegah.
       //
-      // Papan ketik bukan lagi alasan untuk membedakannya: `footer` bukan tombol
-      // melayang — ia ikut menggulung bersama konten, dan Screen menambah
-      // paddingBottom setinggi papan ketik, jadi ia tetap terjangkau saat papan
-      // ketik terbuka.
+      // `loading` mengunci tombolnya selama pengiriman: Button menyetel
+      // disabled={disabled || loading} pada Pressable-nya (ui.tsx), jadi ketukan
+      // kedua tidak bisa membuat pengajuan kembar. Mekanismenya sudah ada; tidak
+      // ada penguncian tambahan yang dibuat di sini.
       footer={
-        isConfirmStep ? (
-          <Button title="Ajukan gabung" loading={submitting} onPress={handleSubmit} />
-        ) : (
-          <Button
-            title="Lanjut"
-            disabled={joinCode.length < JOIN_CODE_LENGTH}
-            loading={checking}
-            onPress={handleCheckCode}
-          />
-        )
+        <Button
+          title="Ajukan gabung"
+          disabled={preview === null}
+          loading={submitting}
+          onPress={handleSubmit}
+        />
       }
     >
-      {isConfirmStep ? (
-        <>
-          <ErrorBanner message={submitError} />
-          <ConfirmStep code={joinCode} disabled={submitting} preview={preview} onChangeCode={handleChangeCode} />
-        </>
-      ) : (
-        <JoinCodeField error={codeError} value={joinCode} onChangeText={setJoinCode} />
-      )}
-    </Screen>
-  );
-}
+      {/* Galat PENGIRIMAN pengajuan — tetap di puncak layar sebagai spanduk,
+          tidak berubah. Galat PENCARIAN kode punya jalurnya sendiri, sebaris di
+          bawah kolom kode, karena ia milik kolom itu. */}
+      <ErrorBanner message={submitError} />
 
-// Kebun tujuan disatukan jadi SATU kartu, bukan tiga blok lepas yang dipisah
-// jarak. Yang ditanyakan layar ini cuma satu — "kebun ini betul?" — dan jawabnya
-// harus bisa dibaca sebagai satu benda: nama, lokasi, pemiliknya, dan kode yang
-// membawanya ke sini.
-//
-// Kode pindah dari puncak layar ke dalam kartu, di baris paling bawah, bersama
-// tombol "Ganti"-nya. Di puncak ia jadi hal pertama yang dibaca padahal ia justru
-// yang paling tidak berarti bagi user; sekarang ia keterangan di bawah, tepat di
-// sebelah tombol yang mengubahnya.
-function ConfirmStep({
-  code,
-  disabled,
-  onChangeCode,
-  preview,
-}: {
-  code: string;
-  disabled: boolean;
-  onChangeCode: () => void;
-  preview: FarmPreview;
-}) {
-  return (
-    <View style={{ gap: tokens.space.lg }}>
-      <Text
-        selectable
-        style={{
-          color: tokens.color.text.secondary,
-          fontSize: tokens.type.body.fontSize,
-          lineHeight: tokens.type.body.lineHeight,
-        }}
-      >
-        Kamu akan mengajukan diri ke kebun ini.
-      </Text>
+      <JoinCodeField
+        error={codeError}
+        status={checking ? 'Mencari kebun...' : null}
+        value={joinCode}
+        onChangeText={setJoinCode}
+      />
 
-      <Card>
-        <View style={{ gap: tokens.space.xs }}>
+      {/* Kartu tumbuh DI BAWAH kolom kode, tidak menggantikannya. Tanpa baris
+          "Kode" dan tanpa tombol "Ganti": kodenya sudah terbaca di kolom tepat
+          di atas kartu ini, dan mengubahnya dilakukan dengan mengetik ulang di
+          kolom itu. Kalimat "Kamu akan mengajukan diri ke kebun ini" juga
+          dicabut — tombol di dasar layar sudah mengatakannya. */}
+      {preview ? (
+        <View style={{ gap: tokens.space.lg }}>
+          <Card>
+            <View style={{ gap: tokens.space.xs }}>
+              <Text
+                selectable
+                style={{
+                  color: tokens.color.brand.base,
+                  fontSize: tokens.type.title.fontSize,
+                  fontWeight: tokens.type.title.fontWeight,
+                  lineHeight: tokens.type.title.lineHeight,
+                }}
+              >
+                {preview.farmName}
+              </Text>
+              {previewMetaLine ? (
+                <Text
+                  selectable
+                  style={{
+                    color: tokens.color.text.secondary,
+                    fontSize: tokens.type.bodySmall.fontSize,
+                    lineHeight: tokens.type.bodySmall.lineHeight,
+                  }}
+                >
+                  {previewMetaLine}
+                </Text>
+              ) : null}
+            </View>
+          </Card>
+
+          {/* DIPERTAHANKAN apa adanya. Ini satu-satunya kalimat di layar ini
+              yang menerangkan apa yang terjadi SESUDAH tombol ditekan — kenapa
+              layar berikutnya cuma menunggu dan tidak melakukan apa-apa. */}
           <Text
             selectable
             style={{
-              color: tokens.color.brand.base,
-              fontSize: tokens.type.title.fontSize,
-              fontWeight: tokens.type.title.fontWeight,
-              lineHeight: tokens.type.title.lineHeight,
+              color: tokens.color.text.tertiary,
+              fontSize: tokens.type.meta.fontSize,
+              lineHeight: tokens.type.meta.lineHeight,
             }}
           >
-            {preview.farmName}
+            Pemilik kebun akan meninjau pengajuanmu dulu sebelum kamu bisa mulai bekerja.
           </Text>
-          {preview.location ? (
-            <Text
-              selectable
-              style={{
-                color: tokens.color.text.secondary,
-                fontSize: tokens.type.bodySmall.fontSize,
-                lineHeight: tokens.type.bodySmall.lineHeight,
-              }}
-            >
-              {preview.location}
-            </Text>
-          ) : null}
         </View>
-
-        <View style={{ backgroundColor: tokens.color.line.hairline, height: 1 }} />
-
-        {/* Baris pemilik hilang seluruhnya kalau namanya null — bukan baris
-            kosong, bukan teks karangan. Secara data ini mustahil (tiap kebun
-            punya tepat satu pemilik aktif), tapi RPC-nya memakai left join
-            sehingga null tetap mungkin secara tipe. */}
-        {preview.ownerName ? (
-          <View style={rowStyle}>
-            <Text selectable style={labelStyle}>
-              Pemilik
-            </Text>
-            <Text selectable style={valueStyle}>
-              {preview.ownerName}
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={rowStyle}>
-          <Text selectable style={labelStyle}>
-            Kode
-          </Text>
-          <View style={{ alignItems: 'center', flexDirection: 'row', gap: tokens.space.md }}>
-            <Text selectable style={[codeTextStyle, { fontSize: 16, letterSpacing: 2 }]}>
-              {code}
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
-              onPress={onChangeCode}
-              disabled={disabled}
-              style={({ pressed }) => ({ opacity: pressed || disabled ? 0.5 : 1 })}
-            >
-              <Text
-                selectable={false}
-                style={{
-                  color: tokens.color.brand.base,
-                  fontSize: tokens.type.bodyStrong.fontSize,
-                  fontWeight: '700',
-                }}
-              >
-                Ganti
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </Card>
-
-      <Text
-        selectable
-        style={{
-          color: tokens.color.text.tertiary,
-          fontSize: tokens.type.meta.fontSize,
-          lineHeight: tokens.type.meta.lineHeight,
-        }}
-      >
-        Pemilik kebun akan meninjau pengajuanmu dulu sebelum kamu bisa mulai bekerja.
-      </Text>
-    </View>
+      ) : null}
+    </Screen>
   );
 }
-
-const rowStyle = {
-  alignItems: 'center',
-  flexDirection: 'row',
-  gap: tokens.space.md,
-  justifyContent: 'space-between',
-} as const;
-
-const labelStyle = {
-  color: tokens.color.text.secondary,
-  fontSize: tokens.type.body.fontSize,
-  lineHeight: tokens.type.body.lineHeight,
-} as const;
-
-const valueStyle = {
-  color: tokens.color.text.primary,
-  fontSize: tokens.type.bodyStrong.fontSize,
-  fontWeight: tokens.type.bodyStrong.fontWeight,
-  lineHeight: tokens.type.bodyStrong.lineHeight,
-} as const;
 
 // Lokal di layar ini: <Field> dari ui.tsx tidak menerima maxLength, textAlign,
 // maupun gaya monospace, dan ui.tsx tidak boleh disentuh di fase ini.
 function JoinCodeField({
   error,
   onChangeText,
+  status,
   value,
 }: {
   error: string | null;
   onChangeText: (next: string) => void;
+  // Penanda pencarian, satu baris teks di bawah kolom. SENGAJA bukan pemintal
+  // di dalam tombol: tombol satu-satunya di layar ini milik "Ajukan gabung",
+  // dan memutar pemintal di sana selama pencarian akan mengabarkan bahwa
+  // pengajuan sedang dikirim padahal belum. Repo ini belum punya penanda
+  // sebaris semacam ini di mana pun — yang ada cuma LoadingState yang mengganti
+  // seluruh layar, dan itu akan menelan kolom yang sedang diketik.
+  status: string | null;
   value: string;
 }) {
   return (
@@ -314,7 +302,11 @@ function JoinCodeField({
           },
         ]}
       />
-      {/* Galat tampil sebaris di bawah kolom, bukan snackbar yang keburu hilang. */}
+      {/* Galat tampil sebaris di bawah kolom, bukan snackbar yang keburu hilang.
+          Galat mengalahkan penanda pencarian, mengikuti aturan yang sama yang
+          dipakai Field di ui.tsx untuk error versus helperText — keduanya tidak
+          pernah tampil bersamaan. Ukuran keduanya disamakan supaya pergantian
+          antar keduanya tidak menggeser apa pun di bawahnya. */}
       {error ? (
         <Text
           selectable
@@ -325,6 +317,17 @@ function JoinCodeField({
           }}
         >
           {error}
+        </Text>
+      ) : status ? (
+        <Text
+          selectable
+          style={{
+            color: tokens.color.text.tertiary,
+            fontSize: tokens.type.bodySmall.fontSize,
+            lineHeight: tokens.type.bodySmall.lineHeight,
+          }}
+        >
+          {status}
         </Text>
       ) : null}
     </View>
