@@ -15,6 +15,7 @@ import {
   formatTaskStatus,
   formatTreeTargetFallback,
 } from '../utils/displayFormat';
+import { compareTreePosition } from '../services/scheduleTreeService';
 import { formatTreeDisplayCode } from '../utils/treeFormat';
 import { colors, radius, spacing } from '../constants/theme';
 import { Badge, Card, CompactMetaItem } from './ui';
@@ -623,22 +624,33 @@ export function FormChipGroup({
   );
 }
 
-// Pemilih pohon pilih-banyak.
+// Pemilih pohon pilih-banyak, DIKELOMPOKKAN PER BARIS PETAK.
 //
 // KOMPONEN TERPISAH, bukan FormChipGroup yang dilonggarkan. FormChipGroup
 // dipakai enam field lain di form ini (kategori, pekerja, target, bukti foto,
 // pengulangan) dan satu layar lain; mengubah kontraknya jadi pilih-banyak
 // berarti menyentuh semuanya demi satu field.
 //
-// Bentuknya daftar menurun, bukan pil menyamping. Jumlah pohon tumbuh sampai
-// puluhan dan pil yang membungkus beberapa baris membuat "yang mana yang
-// tercentang" sulit dipindai; satu kode per baris dengan centang di tepi kanan
-// terbaca lurus ke bawah.
+// BENTUKNYA BERUBAH: dulu satu kode per baris tampilan, kini petak menyamping
+// yang dikelompokkan per baris kebun. Alasan lama untuk daftar menurun —
+// "pil yang membungkus beberapa baris membuat yang-mana-yang-tercentang sulit
+// dipindai" — benar untuk satu tumpukan panjang tanpa batas. Ia tidak lagi
+// berlaku begitu kelompoknya dibatasi satu baris petak: satu baris kebun paling
+// banyak berisi 26 posisi (column_position CHECK '^[A-Z]$', migrasi 054), dan
+// 26 kode di bawah satu judul justru terpindai sebagai satu kesatuan.
 //
-// KEADAAN TERPILIH TIDAK HANYA WARNA: ada ikon centang di kanan, teksnya
-// menebal, dan garis tepinya menebal. Tidak ada ikon kotak-centang di proyek
-// ini, jadi baris yang belum terpilih memang tidak menampilkan ikon apa pun --
-// yang membedakan tetap tiga hal sekaligus, bukan warna sendirian.
+// Yang ditukar: kebun 196 pohon dulu menghasilkan 196 baris setinggi 48 —
+// hampir 9.500 piksel gulir di dalam formulir. Dengan petak menyamping,
+// tingginya turun ke belasan kelompok pendek yang punya judul.
+//
+// KEADAAN TERPILIH TIDAK HANYA WARNA: teksnya menebal DAN ada ikon centang.
+// Tidak ada ikon kotak-centang di proyek ini, jadi petak yang belum terpilih
+// memang tidak menampilkan ikon apa pun — yang membedakan tetap dua saluran
+// non-warna, bukan warna sendirian.
+//
+// Lebar garis tepi sengaja TETAP 1 di kedua keadaan, hanya warnanya yang
+// berganti. Menebalkannya saat terpilih akan menumbuhkan petaknya 2px dan
+// menata ulang seluruh baris pembungkus tepat saat jari menyentuhnya.
 function FormTreeMultiSelect({
   error,
   onToggle,
@@ -651,6 +663,7 @@ function FormTreeMultiSelect({
   trees: Tree[];
 }) {
   const selectedCount = selectedTreeIds.length;
+  const groups = groupTreesByGridRow(trees);
 
   return (
     <View style={{ gap: spacing.sm }}>
@@ -665,56 +678,147 @@ function FormTreeMultiSelect({
           Belum ada posisi yang sedang ditanami. Tanam pohon dulu sebelum membuat jadwal.
         </Text>
       ) : (
+        // Kotak pembungkus dipertahankan: bordernya yang memerah adalah satu-
+        // satunya penanda galat di tingkat field ini selain teks di bawah.
         <View
           style={{
             borderColor: error ? colors.danger : colors.border,
             borderCurve: 'continuous',
             borderRadius: radius.md,
             borderWidth: 1,
-            overflow: 'hidden',
+            gap: spacing.md,
+            padding: spacing.md,
           }}
         >
-          {trees.map((tree, index) => {
-            const selected = selectedTreeIds.includes(tree.id);
+          {groups.map((group) => (
+            <View key={group.key} style={{ gap: spacing.sm }}>
+              {/* Judul kecil, TIDAK lengket. Melengketkannya menuntut daftar
+                  bergulir sendiri di dalam formulir yang juga bergulir — dua
+                  wilayah gulir bersarang, persis hal yang paling sulit dipakai
+                  di layar sempit. */}
+              <Text selectable style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700', lineHeight: 18 }}>
+                {group.label}
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                {group.trees.map((tree) => {
+                  const selected = selectedTreeIds.includes(tree.id);
 
-            return (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                key={tree.id}
-                onPress={() => onToggle(tree.id)}
-                style={{
-                  alignItems: 'center',
-                  backgroundColor: selected ? colors.primarySoft : colors.surface,
-                  borderTopColor: colors.divider,
-                  borderTopWidth: index === 0 ? 0 : 1,
-                  flexDirection: 'row',
-                  gap: spacing.md,
-                  minHeight: 48,
-                  paddingHorizontal: spacing.lg,
-                  paddingVertical: spacing.md,
-                }}
-              >
-                <Text
-                  selectable={false}
-                  style={{
-                    color: selected ? colors.primaryDark : colors.text,
-                    flex: 1,
-                    fontSize: 16,
-                    fontWeight: selected ? '700' : '400',
-                  }}
-                >
-                  {formatTreeDisplayCode(tree)}
-                </Text>
-                {selected ? <Icon name="check" size={20} color={colors.primary} /> : null}
-              </Pressable>
-            );
-          })}
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      key={tree.id}
+                      onPress={() => onToggle(tree.id)}
+                      style={{
+                        alignItems: 'center',
+                        backgroundColor: selected ? colors.primarySoft : colors.surface,
+                        borderColor: selected ? colors.primary : colors.border,
+                        borderCurve: 'continuous',
+                        borderRadius: radius.md,
+                        borderWidth: 1,
+                        flexDirection: 'row',
+                        gap: spacing.xs,
+                        justifyContent: 'center',
+                        // Dipertahankan dari bentuk lama. Petaknya melebar
+                        // mengikuti panjang kodenya sendiri, jadi kode sepanjang
+                        // apa pun tidak terpotong — yang terjadi hanya ia
+                        // membungkus ke baris berikutnya.
+                        minHeight: 48,
+                        paddingHorizontal: spacing.md,
+                      }}
+                    >
+                      <Text
+                        selectable={false}
+                        style={{
+                          color: selected ? colors.primaryDark : colors.text,
+                          fontSize: 16,
+                          fontWeight: selected ? '700' : '400',
+                        }}
+                      >
+                        {formatTreeDisplayCode(tree)}
+                      </Text>
+                      {selected ? <Icon name="check" size={18} color={colors.primary} /> : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
         </View>
       )}
       <FormError message={error} />
     </View>
   );
+}
+
+type TreeGridRowGroup = {
+  key: string;
+  label: string;
+  trees: Tree[];
+};
+
+// Urutan dan pengelompokan pemilih pohon.
+//
+// URUTANNYA DIPERBAIKI DI SINI, BUKAN DI KUERI. getTrees memesan lewat
+// `.order('tree_code')`, dan tree_code adalah kolom text — jadi Postgres
+// mengurutkannya leksikografis dan menaruh '10-A' sebelum '2-A'. Untuk kebun
+// 196 pohon itu membuat pemilihnya tidak terpakai. Kueri itu TIDAK diubah:
+// getTrees melayani tujuh pemanggil lain, dan urutannya bukan milik layar ini.
+//
+// Pembandingnya compareTreePosition dari scheduleTreeService — pembanding yang
+// SUDAH ADA dan sudah dipakai sisi tulis untuk memilih kolom bayangan. Dipakai
+// apa adanya, tanpa satu pun perubahan perilaku: yang ditambahkan di sini cuma
+// jembatan penamaan, karena ia menerima bentuk baris mentah (snake_case)
+// sementara di layar kita memegang Tree (camelCase). Memakai pembanding yang
+// sama membuat urutan yang DILIHAT pemilik identik dengan urutan yang dipakai
+// saat jadwalnya disimpan.
+//
+// Kelompok dibentuk dari deretan yang sudah terurut, jadi kelompok kosong tidak
+// mungkin lahir: sebuah kelompok hanya ada karena ada pohon yang membuatnya.
+//
+// Cabang rowPosition null adalah PENJAGA, bukan jalur yang diharapkan —
+// trees.row_position NOT NULL sejak migrasi 054 (dan tree_code, kolom GENERATED
+// darinya, ikut tidak mungkin kosong). `| null` di tipe Tree hanya toleransi
+// pemetaan. Kalau suatu hari ia benar-benar muncul, pohonnya tetap TERLIHAT di
+// kelompok terakhir alih-alih lenyap dari pemilih tanpa jejak.
+function groupTreesByGridRow(trees: Tree[]): TreeGridRowGroup[] {
+  const sorted = [...trees].sort((left, right) =>
+    compareTreePosition(toTreePositionRow(left), toTreePositionRow(right))
+  );
+
+  const groups: TreeGridRowGroup[] = [];
+  let current: TreeGridRowGroup | null = null;
+
+  for (const tree of sorted) {
+    const key = tree.rowPosition === null ? 'tanpa-baris' : `${tree.rowPosition}`;
+
+    if (!current || current.key !== key) {
+      current = {
+        key,
+        // "Baris 1", bukan "1" telanjang. Angka sendirian di atas sederet kode
+        // yang juga diawali angka terbaca sebagai kode pohon lain.
+        label: tree.rowPosition === null ? 'Tanpa baris' : `Baris ${tree.rowPosition}`,
+        trees: [],
+      };
+      groups.push(current);
+    }
+
+    current.trees.push(tree);
+  }
+
+  return groups;
+}
+
+function toTreePositionRow(tree: Tree): {
+  id: string;
+  row_position: number | null;
+  column_position: string | null;
+} {
+  return {
+    id: tree.id,
+    row_position: tree.rowPosition,
+    column_position: tree.columnPosition,
+  };
 }
 
 function FormChip({
