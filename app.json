@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Avology V2",
-    "slug": "avology-mobile-v2",
+    "name": "Avology",
+    "slug": "avology-mobile",
     "scheme": "avology",
     "version": "1.0.0",
     "runtimeVersion": {
