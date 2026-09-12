@@ -575,13 +575,13 @@ export function TreeMainPhotoFormSection({
   return (
     <View style={{ gap: spacing.md }}>
       <PhotoPickerCard
-        choosePhotoLabel="Pilih Galeri"
+        choosePhotoLabel="Pilih galeri"
         description={processing ? PHOTO_PROCESSING_MESSAGE : undefined}
         emptyLabel="Tambah foto pohon"
         imageUri={previewUri}
         loading={disabled || processing}
-        removeLabel="Hapus Foto"
-        takePhotoLabel="Ambil Foto"
+        removeLabel="Hapus foto"
+        takePhotoLabel="Ambil foto"
         title="Foto pohon"
         onChoosePhoto={onGalleryPress}
         onRemovePhoto={canRemove ? handleRemovePress : undefined}
@@ -595,7 +595,7 @@ export function TreeMainPhotoFormSection({
       ) : null}
 
       {deleteRequested && !photo && onRestoreExisting ? (
-        <Button disabled={disabled} title="Batalkan Hapus Foto" variant="secondary" onPress={onRestoreExisting} />
+        <Button disabled={disabled} title="Batalkan hapus foto" variant="secondary" onPress={onRestoreExisting} />
       ) : null}
     </View>
   );

@@ -1504,7 +1504,7 @@ export function Field({
 // otomatis ikut Field dan tidak bisa melenceng sendiri.
 //
 // Diangkat dari definisi lokal di account-password-screen.tsx; definisi lokal di
-// sana SENGAJA dibiarkan utuh untuk sementara agar layar "Ubah password" tidak
+// sana SENGAJA dibiarkan utuh untuk sementara agar layar "Edit password" tidak
 // ikut bergerak di batch ini.
 //
 // Tiap instance memegang state show/hide-nya sendiri — membuka satu field tidak
@@ -2420,7 +2420,7 @@ export function SearchFilterRow({
 }
 
 export function PhotoPickerCard({
-  choosePhotoLabel = 'Pilih Galeri',
+  choosePhotoLabel = 'Pilih galeri',
   description,
   emptyLabel = 'Tambah foto',
   error,
@@ -2429,9 +2429,9 @@ export function PhotoPickerCard({
   onChoosePhoto,
   onRemovePhoto,
   onTakePhoto,
-  removeLabel = 'Hapus Foto',
+  removeLabel = 'Hapus foto',
   required = false,
-  takePhotoLabel = 'Ambil Foto',
+  takePhotoLabel = 'Ambil foto',
   title = 'Foto',
 }: {
   choosePhotoLabel?: string;

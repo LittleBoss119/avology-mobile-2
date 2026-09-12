@@ -260,9 +260,18 @@ type RecentCareActivityRow = {
   care_task_id: string | null;
   performed_at: string;
   performed_by: string;
-  // Embedded, satu baris per pohon yang tercakup aktivitas ini. Hanya
-  // JUMLAHNYA yang dipakai; tree_id-nya sendiri tidak pernah dibaca.
-  care_activity_trees: { tree_id: string }[] | null;
+  // AGREGAT bersarang, bukan daftar barisnya. Dulu ini `{ tree_id }[]` dan
+  // satu-satunya pemakaiannya adalah `.length` — jadi seluruh tautan pohon
+  // ditarik hanya untuk dihitung. Pada jadwal bertarget seluruh kebun satu
+  // aktivitas menaut SEMUA pohon bersiklus aktif (057:854-894), sehingga
+  // limit(3) di bawah bisa menarik 3 x jumlah-pohon baris demi tiga angka.
+  //
+  // BENTUKNYA DIVERIFIKASI terhadap database hosted sebagai owner ber-RLS,
+  // bukan disimpulkan dari dokumentasi: PostgREST mengembalikan ARRAY berisi
+  // TEPAT SATU objek, [{ count: N }] — termasuk saat tidak ada satu pun tautan,
+  // yang berbunyi [{ count: 0 }] dan BUKAN []. Baris induknya tetap ikut
+  // (left join), jadi jendela tiga baris di bawah tidak bergeser.
+  care_activity_trees: { count: number }[] | null;
 };
 
 type RecentCareTaskRow = {
@@ -281,7 +290,11 @@ export async function getRecentFarmCareActivities(
   // yang sama punya performed_at IDENTIK dan urutannya tidak dijanjikan apa pun.
   const { data, error } = await supabase
     .from('care_activities')
-    .select('id, asal, category, care_task_id, performed_at, performed_by, care_activity_trees(tree_id)')
+    // `care_activity_trees(count)`, bukan `(tree_id)`. Lihat alasannya pada
+    // RecentCareActivityRow. Agregat bersarang PostgREST memang aktif di
+    // proyek ini — sudah diuji, bukan diandaikan; kalau ia mati, galatnya
+    // PGRST123 dan jatuh ke cabang `error` di bawah, bukan ke angka yang salah.
+    .select('id, asal, category, care_task_id, performed_at, performed_by, care_activity_trees(count)')
     .eq('farm_id', input.farmId)
     .eq('is_deleted', false)
     .order('performed_at', { ascending: false })
@@ -321,10 +334,31 @@ export async function getRecentFarmCareActivities(
         // kolom category kosong. Judul ini DIKETIK PEMILIK dan panjangnya tidak
         // terkendali, jadi pemakainya wajib memotongnya.
         taskTitle: normalizeOptionalText(task?.title),
-        treeCount: (row.care_activity_trees ?? []).length,
+        treeCount: readEmbeddedCount(row.care_activity_trees),
       };
     })
   );
+}
+
+// Membaca agregat `care_activity_trees(count)`.
+//
+// treeCount bertipe `number` yang TIDAK nullable (domain.ts:487) dan dicetak
+// langsung ke layar ('... · N pohon', owner/index.tsx:273). Jadi fungsi ini
+// tidak boleh mengembalikan undefined maupun NaN — dua-duanya akan tercetak
+// apa adanya sebagai teks. Setiap bentuk di luar yang diverifikasi jatuh ke 0.
+//
+// Pemeriksaan `typeof === 'number'` ikut menangkap null: `null ?? 0` memang
+// sudah 0, tapi angka yang datang sebagai string ("5") akan lolos begitu saja
+// dan merusak aritmetika di pemakai berikutnya. Number.isFinite membuang NaN
+// dan Infinity sekaligus.
+function readEmbeddedCount(embedded: { count: number }[] | null | undefined): number {
+  if (!Array.isArray(embedded)) {
+    return 0;
+  }
+
+  const value = embedded[0]?.count;
+
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 // Satu query untuk seluruh tugas yang dirujuk ketiga baris, bukan satu query

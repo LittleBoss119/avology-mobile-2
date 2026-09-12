@@ -342,12 +342,12 @@ function CarePhotoPicker({
 }) {
   return (
     <PhotoPickerCard
-      choosePhotoLabel="Pilih Galeri"
+      choosePhotoLabel="Pilih galeri"
       description={processing ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan perawatan yang dilakukan.'}
       imageUri={photo?.uri}
       loading={disabled || processing}
-      removeLabel="Hapus Foto"
-      takePhotoLabel="Ambil Foto"
+      removeLabel="Hapus foto"
+      takePhotoLabel="Ambil foto"
       title="Foto perawatan"
       onChoosePhoto={onGalleryPress}
       onRemovePhoto={photo ? onRemove : undefined}

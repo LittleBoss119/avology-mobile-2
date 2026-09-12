@@ -153,16 +153,23 @@ export default function CreateFarmScreen() {
 
           Keterangan di bawahnya lewat `helperText` milik Field, bukan Text
           lepas: ukurannya (meta) dan warnanya (text.tertiary) sudah ditentukan
-          komponennya, jadi ia tidak bisa melenceng sendiri. Istilah "Ubah data
-          kebun" DISALIN PERSIS dari label chip jalan masuknya di Beranda pemilik
-          (farm-overview.tsx:47) — kalau label di sana berubah, kalimat ini harus
-          ikut berubah. */}
+          komponennya, jadi ia tidak bisa melenceng sendiri.
+
+          Istilah "Data kebun" DISALIN PERSIS dari label baris jalan masuknya di
+          Beranda pemilik (app/(owner)/owner/index.tsx:156) — kalau label di sana
+          berubah, kalimat ini harus ikut berubah.
+
+          Sebelumnya kalimat ini menyebut "Ubah data kebun", nama chip yang dulu
+          duduk di bawah nama kebun di Beranda. Chip itu sudah tidak punya satu
+          pun pemanggil (propnya masih berdiri di farm-overview.tsx:60 dengan
+          komentarnya sendiri), jadi kalimat lama mengantar pemilik baru ke
+          tempat yang tidak akan pernah ia temukan. */}
       <Field
         label="Nama kebun"
         value={name}
         onChangeText={setName}
         placeholder="Kebun Ngawi"
-        helperText="Lokasi dan luas lahan bisa diisi nanti di Ubah data kebun."
+        helperText="Lokasi dan luas lahan bisa diisi nanti lewat baris Data kebun di Beranda."
       />
 
       <FarmCreatedModal

@@ -46,6 +46,20 @@ import { addDaysToIsoDate, getTodayIsoDate } from '../../../../../src/utils/task
 
 type RecordMode = 'create' | 'edit';
 
+// SATU kalimat, dipakai DUA kali: dicetak di bawah deret pilihan, dan jadi
+// accessibilityHint kartu Tunda yang terkunci. Kalau ia disalin jadi dua
+// literal, yang terlihat dan yang dibacakan pembaca layar akan berbeda pelan-
+// pelan — dan yang paling jarang diperiksa justru yang kedua.
+//
+// SENGAJA TIDAK MENAMAI KEADAANNYA. Keadaan ini belum punya istilah di layar
+// pekerja, dan satu-satunya kata yang tersedia — "Terlambat" — sudah dipakai
+// untuk keadaan yang MASIH boleh ditunda (daftar tugas melipat 'missed' ke
+// section itu, dan dueDatePill berbunyi "Terlambat N hari" untuk keduanya).
+// Memakainya akan mengajari pekerja aturan yang salah tentang tugasnya yang
+// lain. Jadi kalimat ini menyebut AKIBATNYA dan jalan keluarnya, bukan namanya.
+const TUNDA_TERTUTUP_NOTICE =
+  'Tugas ini sudah tidak bisa ditunda. Catat sebagai selesai kalau sudah dikerjakan.';
+
 export default function WorkerTaskRecordScreen() {
   const params = useLocalSearchParams<{ taskId: string; mode?: string; activityId?: string }>();
   const taskId = params.taskId;
@@ -200,6 +214,16 @@ export default function WorkerTaskRecordScreen() {
   }
 
   function selectStatus(next: ActivityStatus) {
+    // PAGAR TUNGGAL untuk "tugas yang sudah dilewati masa toleransinya tidak
+    // bisa ditunda". Kartu Tunda sudah tidak bisa ditekan saat itu terjadi,
+    // jadi baris ini tidak pernah berbunyi di jalur normal — ia berdiri supaya
+    // penyetel status berikutnya tidak bisa melewatinya tanpa sadar. setStatus
+    // tidak dipanggil dari tempat lain mana pun di berkas ini, dan nilai awalnya
+    // 'completed', sehingga satu pemeriksaan di sini menutup seluruh jalurnya.
+    if (next === 'postponed' && task?.missedAt) {
+      return;
+    }
+
     setStatus(next);
     setBahanError(null);
     setPhotoError(null);
@@ -442,6 +466,24 @@ export default function WorkerTaskRecordScreen() {
 
   const submitLabel = mode === 'edit' ? 'Simpan perubahan' : 'Simpan hasil kerja';
 
+  // Cermin aturan RPC postpone_task (migrasi 049:203-206), yang menolak
+  // penundaan begitu tugasnya dilewati masa toleransi jadwal induknya. Sebelum
+  // pagar ini ada, pekerja bisa memilih Tunda, mengisi tanggal DAN alasan
+  // lengkap, menekan simpan, lalu baru ditolak — pekerjaannya terbuang di
+  // ujung jalan.
+  //
+  // HANYA jalur TUNDA yang ditutup. 'Selesai' tetap utuh, dan itu memang inti
+  // aturannya: tugas terlewat masih boleh dikerjakan — statusnya sengaja tidak
+  // diubah saat disapu (taskDueDate.ts:153-154). Yang hilang cuma kemampuan
+  // MENJADWALKANNYA ULANG, karena penyapu sudah memajukan rantai jadwalnya dan
+  // penerusnya sudah ada.
+  //
+  // Mode EDIT tidak ikut terpengaruh, dan itu benar: di sana status dibaca dari
+  // barisnya lalu dirender LockedResultRow, dan update_task_realization memang
+  // TIDAK memeriksa missed_at — membetulkan catatan penundaan yang sudah ada
+  // tetap boleh. Karena itu pemeriksaan ini duduk di cabang mode catat saja.
+  const isMissed = Boolean(task.missedAt);
+
   return (
     <Screen
       header={<TopAppBar title={headerTitle} onBack={() => router.back()} />}
@@ -462,22 +504,41 @@ export default function WorkerTaskRecordScreen() {
           // RPC update_task_realization tidak menerima status sama sekali.
           <LockedResultRow status={effectiveStatus} />
         ) : (
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <ResultOption
-              active={status === 'completed'}
-              description="Sudah dikerjakan"
-              icon="check"
-              label="Selesai"
-              onPress={() => selectStatus('completed')}
-            />
-            <ResultOption
-              active={status === 'postponed'}
-              description="Belum bisa hari ini"
-              icon="clock"
-              label="Tunda"
-              onPress={() => selectStatus('postponed')}
-            />
-          </View>
+          <>
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <ResultOption
+                active={status === 'completed'}
+                description="Sudah dikerjakan"
+                icon="check"
+                label="Selesai"
+                onPress={() => selectStatus('completed')}
+              />
+              <ResultOption
+                active={status === 'postponed'}
+                description="Belum bisa hari ini"
+                disabled={isMissed}
+                disabledHint={TUNDA_TERTUTUP_NOTICE}
+                icon="clock"
+                label="Tunda"
+                onPress={() => selectStatus('postponed')}
+              />
+            </View>
+            {/* Keterangannya DICETAK, bukan disimpan untuk saat kartunya
+                ditekan. Keadaan "tidak bisa ditunda" tidak punya satu pun
+                penanda lain di layar pekerja — daftar tugas melipatnya ke
+                section "Terlambat" dan pill di detail tugas berbunyi "Terlambat
+                N hari", sama seperti tugas terlambat biasa yang justru MASIH
+                boleh ditunda. Jadi kalau sebabnya tidak berdiri di sini,
+                pekerja tidak punya cara menemukannya. */}
+            {isMissed ? (
+              <Text
+                selectable
+                style={{ ...tokens.type.meta, color: tokens.color.text.secondary }}
+              >
+                {TUNDA_TERTUTUP_NOTICE}
+              </Text>
+            ) : null}
+          </>
         )}
       </View>
 
@@ -803,7 +864,7 @@ function ProofPhotoField({
         <View style={{ borderCurve: 'continuous', borderRadius: tokens.radius.tile, overflow: 'hidden' }}>
           <Image resizeMode="cover" source={{ uri: imageUri ?? undefined }} style={{ height: 200, width: '100%' }} />
           <Pressable
-            accessibilityLabel="Ubah foto"
+            accessibilityLabel="Edit foto"
             accessibilityRole="button"
             disabled={disabled}
             onPress={openSheet}
@@ -920,27 +981,70 @@ function NoteInput({
 function ResultOption({
   active,
   description,
+  disabled = false,
+  disabledHint,
   icon,
   label,
   onPress,
 }: {
   active: boolean;
   description: string;
+  // Bukan sekadar "tidak menanggapi ketukan": kartunya PINDAH ke bahasa visual
+  // TERKUNCI yang sudah dipakai LockedResultRow di berkas ini — permukaan
+  // redup, garis rambut, gembok. Bedanya dinyatakan di sana dan berlaku di
+  // sini juga: "terkunci" terbaca sebagai memang tidak boleh, sementara kartu
+  // yang cuma diredupkan tanpa gembok terbaca sebagai tombol rusak.
+  //
+  // Kartunya TETAP DIRENDER, tidak disembunyikan. Menyembunyikannya hanya benar
+  // kalau ada hal lain di layar yang sudah menjelaskan ketidakhadirannya —
+  // syarat yang dipakai layar detail jadwal pemilik saat memilih menyembunyikan
+  // aksi, dan yang di sini TIDAK terpenuhi. Deret ini juga dua kolom flex: 1,
+  // jadi membuang satu kartu mengubah bentuk layarnya tanpa sebab yang terbaca.
+  disabled?: boolean;
+  // Sebab terkuncinya, untuk pembaca layar. Teks yang SAMA dicetak di bawah
+  // deretnya oleh pemanggil — lihat TUNDA_TERTUTUP_NOTICE.
+  disabledHint?: string;
   icon: IconName;
   label: string;
   onPress: () => void;
 }) {
+  // disabled MENANG atas active. Keduanya tidak bisa berbarengan di layar ini
+  // (kartu terkunci tidak pernah terpilih, dan selectStatus menolaknya), tapi
+  // urutan ini ditulis eksplisit supaya keadaan terkunci tidak bisa tampil
+  // separuh-hijau kalau kelak ada pemanggil yang mengombinasikan keduanya.
+  const surfaceColor = disabled
+    ? tokens.color.surface.subtle
+    : active
+      ? tokens.color.brand.soft
+      : tokens.color.surface.card;
+  const borderColor = disabled
+    ? tokens.color.line.hairline
+    : active
+      ? tokens.color.brand.base
+      : tokens.color.line.card;
+  // Gelembung ikon memakai surface.card saat terkunci: latar kartunya sendiri
+  // sudah surface.subtle, jadi gelembung ber-subtle akan lenyap ke dalamnya.
+  const bubbleColor = active || disabled ? tokens.color.surface.card : tokens.color.surface.subtle;
+  const iconColor = active && !disabled ? tokens.color.brand.base : tokens.color.text.tertiary;
+  const labelColor = disabled
+    ? tokens.color.text.secondary
+    : active
+      ? tokens.color.brand.dark
+      : tokens.color.text.primary;
+
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
+      accessibilityState={{ disabled, selected: active }}
+      accessibilityHint={disabled ? disabledHint : undefined}
+      disabled={disabled}
       onPress={onPress}
       style={{
-        backgroundColor: active ? tokens.color.brand.soft : tokens.color.surface.card,
-        borderColor: active ? tokens.color.brand.base : tokens.color.line.card,
+        backgroundColor: surfaceColor,
+        borderColor,
         borderCurve: 'continuous',
         borderRadius: tokens.radius.card,
-        borderWidth: active ? 1.5 : 1,
+        borderWidth: active && !disabled ? 1.5 : 1,
         flex: 1,
         gap: spacing.sm,
         minHeight: 132,
@@ -950,28 +1054,27 @@ function ResultOption({
       <View
         style={{
           alignItems: 'center',
-          backgroundColor: active ? tokens.color.surface.card : tokens.color.surface.subtle,
+          backgroundColor: bubbleColor,
           borderRadius: tokens.radius.pill,
           height: 44,
           justifyContent: 'center',
           width: 44,
         }}
       >
-        <Icon
-          name={icon}
-          size={tokens.icon.lg}
-          color={active ? tokens.color.brand.base : tokens.color.text.tertiary}
-        />
+        <Icon name={icon} size={tokens.icon.lg} color={iconColor} />
       </View>
-      <Text
-        selectable
-        style={{
-          ...tokens.type.heading,
-          color: active ? tokens.color.brand.dark : tokens.color.text.primary,
-        }}
-      >
-        {label}
-      </Text>
+      {/* Gembok berdampingan dengan judulnya, urutan yang sama dengan
+          LockedResultRow (label dulu, gembok menyusul). Ikonnya sendiri tetap
+          'clock' supaya kartunya masih terbaca sebagai "Tunda" dan bukan
+          sebagai kontrol lain yang muncul entah dari mana. */}
+      <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.xs }}>
+        <Text selectable style={{ ...tokens.type.heading, color: labelColor }}>
+          {label}
+        </Text>
+        {disabled ? (
+          <Icon name="lock" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
+        ) : null}
+      </View>
       <Text selectable style={{ ...tokens.type.meta, color: tokens.color.text.tertiary }}>
         {description}
       </Text>

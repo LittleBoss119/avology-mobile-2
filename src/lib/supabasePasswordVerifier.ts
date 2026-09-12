@@ -19,7 +19,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Client Supabase KEDUA, satu-satunya tugasnya: membuktikan bahwa orang yang
-// menekan "Ubah password" tahu password yang sekarang. Dibuat sekali di level
+// menekan "Edit password" tahu password yang sekarang. Dibuat sekali di level
 // modul dan dipakai ulang, bukan per panggilan.
 //
 // Tiga setelan di bawah wajib dan bukan gaya-gayaan:

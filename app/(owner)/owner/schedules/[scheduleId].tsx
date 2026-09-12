@@ -166,7 +166,7 @@ export default function CareScheduleDetailScreen() {
 
   if (!schedule) {
     return (
-      <Screen header={<TopAppBar title="Detail Jadwal" onBack={() => router.back()} />}>
+      <Screen header={<TopAppBar title="Detail jadwal" onBack={() => router.back()} />}>
         <ErrorBanner message={error} />
         <EmptyState title="Jadwal tidak ditemukan" subtitle="Jadwal mungkin tidak tersedia atau akses ditolak." />
       </Screen>
@@ -257,7 +257,7 @@ export default function CareScheduleDetailScreen() {
         // proyek ini — dan tiga titik tidak berarti apa-apa bagi pengguna lanjut
         // usia yang belum pernah memakai aplikasi lain yang memakainya. Aksinya
         // sekarang tombol lebar berlabel di bawah layar.
-        <TopAppBar title="Detail Jadwal" onBack={() => router.back()} />
+        <TopAppBar title="Detail jadwal" onBack={() => router.back()} />
       }
       // Hanya aksi yang BERLAKU yang dirender; tidak ada satu pun tombol dalam
       // keadaan mati. Tombol mati yang tidak menanggapi ketukan lebih

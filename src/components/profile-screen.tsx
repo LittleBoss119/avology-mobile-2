@@ -201,7 +201,7 @@ export function ProfileScreen() {
               onPress={() => router.push(profileEditRoute)}
             />
             <Button
-              title="Ubah password"
+              title="Edit password"
               variant="secondary"
               emphasis="strong"
               onPress={() => router.push(passwordRoute)}

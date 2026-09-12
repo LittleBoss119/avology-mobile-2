@@ -240,7 +240,7 @@ export function TreeGrowthPhaseRecordScreen({
   if (loading) {
     return (
       <LoadingState
-        header={<TopAppBar title="Catat Fase" onBack={() => router.back()} />}
+        header={<TopAppBar title="Catat fase" onBack={() => router.back()} />}
         message="Memuat pohon..."
       />
     );
@@ -248,7 +248,7 @@ export function TreeGrowthPhaseRecordScreen({
 
   return (
     <Screen
-      header={<TopAppBar title="Catat Fase" onBack={() => router.back()} />}
+      header={<TopAppBar title="Catat fase" onBack={() => router.back()} />}
       stickyFooter={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
@@ -303,12 +303,12 @@ export function TreeGrowthPhaseRecordScreen({
           sedang diperkecil. Bagi pengguna keduanya kejadian yang berbeda, dan
           hanya yang kedua yang perlu menerangkan dirinya lewat teks. */}
       <PhotoPickerCard
-        choosePhotoLabel="Pilih Galeri"
+        choosePhotoLabel="Pilih galeri"
         description={processingPhoto ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan fase pertumbuhan pohon.'}
         imageUri={selectedPhoto?.uri}
         loading={submitting || processingPhoto}
-        removeLabel="Hapus Foto"
-        takePhotoLabel="Ambil Foto"
+        removeLabel="Hapus foto"
+        takePhotoLabel="Ambil foto"
         title="Foto fase"
         onChoosePhoto={handlePickPhotoFromGallery}
         onRemovePhoto={selectedPhoto ? () => setSelectedPhoto(null) : undefined}

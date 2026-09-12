@@ -92,7 +92,7 @@ export function AccountPasswordScreen() {
         // "GO_BACK was not handled" dan tombol kembalinya diam saja — layar ini
         // dipakai tiga rute pembungkus, jadi bentuk stack-nya tidak seragam.
         <TopAppBar
-          title="Ubah password"
+          title="Edit password"
           onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         />
       }

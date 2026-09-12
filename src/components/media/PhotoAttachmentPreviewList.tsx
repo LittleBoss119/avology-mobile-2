@@ -113,7 +113,7 @@ export function PhotoAttachmentPreviewList({
               )}
               {onDeletePhoto ? (
                 <Pressable
-                  accessibilityLabel="Hapus Foto"
+                  accessibilityLabel="Hapus foto"
                   accessibilityRole="button"
                   disabled={disabled}
                   onPress={() => onDeletePhoto(photo)}

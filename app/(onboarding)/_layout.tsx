@@ -116,7 +116,7 @@ export default function OnboardingLayout() {
         name="profile-edit"
         options={{ gestureEnabled: false, headerShown: false, title: 'Edit Profil' }}
       />
-      <Stack.Screen name="password" options={{ headerShown: false, title: 'Ubah Password' }} />
+      <Stack.Screen name="password" options={{ headerShown: false, title: 'Edit Password' }} />
       <Stack.Screen name="pending-approval" options={{ headerShown: false, title: 'Menunggu Persetujuan' }} />
       <Stack.Screen name="rejected" options={{ headerShown: false, title: 'Akses Ditolak' }} />
       <Stack.Screen name="removed-access" options={{ headerShown: false, title: 'Akses Dinonaktifkan' }} />

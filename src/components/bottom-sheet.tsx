@@ -67,7 +67,7 @@ export function BottomSheet({
 }
 
 // Satu baris aksi di dalam sheet: mengikuti RecordActivityRow (acuan) +
-// prop `description` opsional untuk sheet "Tambah jadwal".
+// prop `description` opsional untuk sheet "Buat jadwal".
 export function SheetActionRow({
   description,
   icon,
@@ -105,9 +105,9 @@ export function SheetActionRow({
 // ada foto. Label & judul bisa dioverride agar cocok di beberapa konteks (foto
 // pohon di detail, bukti tugas, foto kondisi); default menjaga tampilan lama.
 export function PhotoSourceSheet({
-  cameraLabel = 'Ambil Foto',
-  deleteLabel = 'Hapus Foto',
-  galleryLabel = 'Pilih Galeri',
+  cameraLabel = 'Ambil foto',
+  deleteLabel = 'Hapus foto',
+  galleryLabel = 'Pilih galeri',
   hasPhoto,
   onCameraPress,
   onClose,

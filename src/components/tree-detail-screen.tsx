@@ -501,20 +501,20 @@ export function TreeDetailScreen({
 
       {activePlanting ? (
         /* DUA tombol, bukan tiga.
-           "Tandai pohon sudah tidak ada" pindah ke layar Ubah, dan pemindahannya
-           bukan sekadar perapian: aksi itu MEMBATALKAN kemampuan layar Ubah
+           "Tandai pohon sudah tidak ada" pindah ke layar Edit, dan pemindahannya
+           bukan sekadar perapian: aksi itu MEMBATALKAN kemampuan layar Edit
            menyimpan apa pun (update_tree_with_planting menolak posisi tanpa
            siklus aktif), jadi tempatnya memang di layar yang ia matikan, bukan
            di layar yang cuma menampilkan.
            Labelnya juga dipendekkan jadi satu kata. Keduanya berdiri
            berdampingan tanpa kata lain di sekitarnya, dan "Catat aktivitas"
-           lawan "Ubah data pohon" mengulang kata yang sudah jelas dari
+           lawan "Edit data pohon" mengulang kata yang sudah jelas dari
            layarnya. */
         <View style={{ gap: spacing.md }}>
           <Button title="Catat" onPress={() => setRecordSheetOpen(true)} />
           {mode === 'owner' ? (
             <Button
-              title="Ubah"
+              title="Edit"
               variant="secondary"
               onPress={() => router.push(`${basePath}/${tree.id}/edit`)}
             />
@@ -542,7 +542,7 @@ export function TreeDetailScreen({
         treeId={tree.id}
         visible={recordSheetOpen}
       />
-      {/* EndTreePlantingSheet TIDAK LAGI DI SINI — ia pindah ke layar Ubah
+      {/* EndTreePlantingSheet TIDAK LAGI DI SINI — ia pindah ke layar Edit
           bersama tombolnya. cycleError dan cycleLoading TETAP TINGGAL: keduanya
           juga melayani StartTreePlantingSheet di bawah, yang tidak ikut pindah. */}
       <StartTreePlantingSheet
@@ -805,7 +805,7 @@ function TreePhotoArea({
         </Pressable>
         {mode === 'owner' ? (
           <Pressable
-            accessibilityLabel="Ubah foto pohon"
+            accessibilityLabel="Edit foto pohon"
             accessibilityRole="button"
             onPress={onPhotoPress}
             style={{
@@ -973,7 +973,7 @@ function RecordActivitySheet({
 // OwnerTreeMenu ("Kelola data pohon") DICABUT bersama fitur arsip.
 //
 // Ia sempat berisi dua baris; "Edit Pohon" lebih dulu pindah keluar menjadi
-// tombol lebar "Ubah data pohon" di badan layar, menyisakan arsip sendirian.
+// tombol lebar "Edit data pohon" di badan layar, menyisakan arsip sendirian.
 // Begitu arsip pergi, menunya kosong — jadi menu, tombol titik-tiga yang
 // membukanya, dan state menuOpen ikut dicabut sekaligus. Semua aksi yang
 // tersisa di layar ini sudah punya tempatnya sendiri di badan layar.

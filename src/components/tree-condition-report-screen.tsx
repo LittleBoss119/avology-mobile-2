@@ -255,7 +255,7 @@ export function TreeConditionReportScreen({
   if (loading) {
     return (
       <LoadingState
-        header={<TopAppBar title="Catat Kondisi" onBack={() => router.back()} />}
+        header={<TopAppBar title="Catat kondisi" onBack={() => router.back()} />}
         message="Memuat pohon..."
       />
     );
@@ -263,7 +263,7 @@ export function TreeConditionReportScreen({
 
   return (
     <Screen
-      header={<TopAppBar title="Catat Kondisi" onBack={() => router.back()} />}
+      header={<TopAppBar title="Catat kondisi" onBack={() => router.back()} />}
       stickyFooter={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
@@ -340,12 +340,12 @@ function ConditionPhotoPicker({
 }) {
   return (
     <PhotoPickerCard
-      choosePhotoLabel="Pilih Galeri"
+      choosePhotoLabel="Pilih galeri"
       description={processing ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan kondisi pohon.'}
       imageUri={photo?.uri}
       loading={disabled || processing}
-      removeLabel="Hapus Foto"
-      takePhotoLabel="Ambil Foto"
+      removeLabel="Hapus foto"
+      takePhotoLabel="Ambil foto"
       title="Foto kondisi"
       onChoosePhoto={onGalleryPress}
       onRemovePhoto={photo ? onRemove : undefined}

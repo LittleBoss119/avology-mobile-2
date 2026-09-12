@@ -109,7 +109,7 @@ export default function OwnerTaskDetailScreen() {
   if (loading) {
     return (
       <LoadingState
-        header={<TopAppBar title="Detail Tugas" onBack={() => router.back()} />}
+        header={<TopAppBar title="Detail tugas" onBack={() => router.back()} />}
         message="Memuat detail tugas..."
       />
     );
@@ -117,7 +117,7 @@ export default function OwnerTaskDetailScreen() {
 
   if (!task) {
     return (
-      <Screen header={<TopAppBar title="Detail Tugas" onBack={() => router.back()} />}>
+      <Screen header={<TopAppBar title="Detail tugas" onBack={() => router.back()} />}>
         <ErrorBanner message={error} />
         <EmptyState title="Tugas tidak ditemukan" subtitle="Tugas mungkin tidak tersedia atau akses ditolak." />
       </Screen>
@@ -125,7 +125,7 @@ export default function OwnerTaskDetailScreen() {
   }
 
   return (
-    <Screen header={<TopAppBar title="Detail Tugas" onBack={() => router.back()} />}>
+    <Screen header={<TopAppBar title="Detail tugas" onBack={() => router.back()} />}>
       <ErrorBanner message={error} />
 
       <Card variant="highlight">

@@ -56,7 +56,12 @@ const friendlyMessages: Array<[string, string]> = [
   ['Care schedule not found', 'Jadwal perawatan tidak ditemukan atau tidak dapat diakses.'],
   ['Only active owners can assign schedule tasks', 'Hanya pemilik aktif yang dapat menugaskan pekerja ke jadwal.'],
   ['Cancelled schedule cannot be assigned', 'Jadwal yang sudah dibatalkan tidak bisa diberi pekerja.'],
-  ['Schedule already has a task', 'Jadwal ini sudah punya tugas. Ubah lewat Edit jadwal.'],
+  // Kalimatnya disusun ulang saat "Ubah" diseragamkan jadi "Edit": bunyi lama
+  // "Ubah lewat Edit jadwal" menaruh dua kata untuk satu aksi dalam satu
+  // kalimat. "Edit jadwal" di sini adalah NAMA LAYARNYA — sama persis dengan
+  // judul barnya dan dengan label tombol yang mengantar ke sana — jadi ia tetap
+  // ditulis apa adanya, dan kata kerjanya yang diganti.
+  ['Schedule already has a task', 'Jadwal ini sudah punya tugas. Buka Edit jadwal untuk mengubahnya.'],
   ['Only active owners can stop schedule repetition', 'Hanya pemilik aktif yang dapat menghentikan pengulangan jadwal.'],
   ['Care schedule is not recurring', 'Jadwal ini bukan jadwal berulang.'],
   // Guard cancel_care_schedule (migration 020). Dulu dipetakan oleh

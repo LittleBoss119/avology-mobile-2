@@ -371,7 +371,7 @@ export default function CareScheduleListScreen() {
         <Button
           icon={<Icon name="plus" size={tokens.icon.md} color={tokens.color.brand.on} />}
           onPress={() => router.push('/owner/schedules/create')}
-          title="Tambah jadwal"
+          title="Buat jadwal"
         />
       }
     >
@@ -447,7 +447,7 @@ export default function CareScheduleListScreen() {
               // layar ini, bukan ke tempat lain.
               <EmptyState
                 icon="calendar-plus"
-                subtitle={'Tekan "Tambah jadwal" di bawah untuk membuat yang pertama.'}
+                subtitle={'Tekan "Buat jadwal" di bawah untuk membuat yang pertama.'}
                 title="Belum ada jadwal"
                 variant="plain"
               />

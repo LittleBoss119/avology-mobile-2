@@ -965,7 +965,7 @@ export function ProofRequirementToggle({
           padding: spacing.xs,
         }}
       >
-        <ProofOptionButton active={!enabled} label="Tidak Wajib" onPress={enabled ? onToggle : undefined} />
+        <ProofOptionButton active={!enabled} label="Tidak wajib" onPress={enabled ? onToggle : undefined} />
         <ProofOptionButton active={enabled} label="Wajib" onPress={!enabled ? onToggle : undefined} />
       </View>
     </ScheduleFormSection>

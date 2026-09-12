@@ -359,7 +359,7 @@ export default function OwnerEditTreeScreen() {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
-        <Screen header={<TopAppBar title="Edit Pohon" onBack={() => router.back()} />}>
+        <Screen header={<TopAppBar title="Edit pohon" onBack={() => router.back()} />}>
           <ErrorBanner message={error} />
           <EmptyState
             title="Posisi ini belum ditanami"
@@ -379,8 +379,8 @@ export default function OwnerEditTreeScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <Screen
-        footer={<Button title="Simpan Perubahan" loading={submitting} onPress={handleSubmit} />}
-        header={<TopAppBar title="Edit Pohon" onBack={() => router.back()} />}
+        footer={<Button title="Simpan perubahan" loading={submitting} onPress={handleSubmit} />}
+        header={<TopAppBar title="Edit pohon" onBack={() => router.back()} />}
       >
         <ErrorBanner message={error} />
         <TreeForm errors={errors} values={values} onChange={handleValuesChange} />
@@ -401,7 +401,7 @@ export default function OwnerEditTreeScreen() {
         />
 
         {/* Aksi merusak duduk DI BAWAH form, di atas footer — bukan di footer
-            bersama "Simpan Perubahan".
+            bersama "Simpan perubahan".
             Footer adalah tempat aksi utama layar ini, dan menaruh dua tombol
             yang artinya berlawanan berdampingan di sana membuat keduanya
             sama-sama terlihat seperti "selesai". Di badan layar, ia harus

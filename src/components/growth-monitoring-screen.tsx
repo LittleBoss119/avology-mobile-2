@@ -346,7 +346,7 @@ function MonitoringTreeCard({ tree }: { tree: FloweringMonitoringTree }) {
           <GrowthPhaseBadge ageDays={phaseAgeDays} phase={tree.currentGrowthPhase} />
         </View>
       ) : null}
-      <Button title="Buka Detail" variant="secondary" onPress={() => router.push(`/owner/trees/${tree.id}`)} />
+      <Button title="Buka detail" variant="secondary" onPress={() => router.push(`/owner/trees/${tree.id}`)} />
     </Card>
   );
 }

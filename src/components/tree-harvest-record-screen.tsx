@@ -365,12 +365,12 @@ export function TreeHarvestRecordScreen({
           sedang diperkecil. Bagi pengguna keduanya kejadian yang berbeda, dan
           hanya yang kedua yang perlu menerangkan dirinya lewat teks. */}
       <PhotoPickerCard
-        choosePhotoLabel="Pilih Galeri"
+        choosePhotoLabel="Pilih galeri"
         description={processingPhoto ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan hasil panen.'}
         imageUri={selectedPhoto?.uri}
         loading={submitting || processingPhoto}
-        removeLabel="Hapus Foto"
-        takePhotoLabel="Ambil Foto"
+        removeLabel="Hapus foto"
+        takePhotoLabel="Ambil foto"
         title="Foto panen"
         onChoosePhoto={handlePickPhotoFromGallery}
         onRemovePhoto={selectedPhoto ? () => setSelectedPhoto(null) : undefined}

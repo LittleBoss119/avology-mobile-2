@@ -100,7 +100,7 @@ export default function WorkerTaskDetailScreen() {
   if (loading) {
     return (
       <LoadingState
-        header={<TopAppBar title="Detail Tugas" onBack={() => router.back()} />}
+        header={<TopAppBar title="Detail tugas" onBack={() => router.back()} />}
         message="Memuat detail tugas..."
       />
     );
@@ -108,7 +108,7 @@ export default function WorkerTaskDetailScreen() {
 
   if (!task) {
     return (
-      <Screen header={<TopAppBar title="Detail Tugas" onBack={() => router.back()} />}>
+      <Screen header={<TopAppBar title="Detail tugas" onBack={() => router.back()} />}>
         <ErrorBanner message={error} />
         <EmptyState title="Tugas tidak ditemukan" subtitle="Tugas mungkin tidak tersedia atau bukan milik Anda." />
       </Screen>
@@ -125,7 +125,7 @@ export default function WorkerTaskDetailScreen() {
 
   return (
     <Screen
-      header={<TopAppBar title="Detail Tugas" onBack={() => router.back()} />}
+      header={<TopAppBar title="Detail tugas" onBack={() => router.back()} />}
       stickyFooter={
         showFooter ? (
           <Button

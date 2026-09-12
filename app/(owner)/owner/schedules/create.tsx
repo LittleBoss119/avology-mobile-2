@@ -268,7 +268,7 @@ export default function CreateManualScheduleScreen() {
 
   return (
     <Screen
-      header={<TopAppBar title="Buat Jadwal" onBack={() => router.back()} />}
+      header={<TopAppBar title="Buat jadwal" onBack={() => router.back()} />}
       scrollRef={scrollRef}
       stickyFooter={
         <View style={{ gap: tokens.space.sm }}>
