@@ -29,3 +29,6 @@ Thumbs.db
 
 # tests / coverage
 coverage/
+
+# db test runtime state (regenerated each run)
+scripts/db-tests/*.local.json
