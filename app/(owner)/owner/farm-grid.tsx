@@ -13,6 +13,7 @@ import {
   TopAppBar,
 } from '../../../src/components/ui';
 import { colors, radius, spacing, tokens } from '../../../src/constants/theme';
+import { colors as palette } from '../../../src/theme/tokens';
 import { useAuth } from '../../../src/context/auth-context';
 import { getFarmDetail, setFarmGrid } from '../../../src/services/farmService';
 import type { Farm } from '../../../src/types/domain';
@@ -452,7 +453,7 @@ const styles = {
     textAlign: 'center',
   },
   inputError: {
-    borderColor: tokens.color.status.danger.text,
+    borderColor: palette.statusBuruk,
   },
   multiplySign: {
     alignSelf: 'center',

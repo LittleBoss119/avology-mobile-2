@@ -113,7 +113,7 @@ function RemovableCodeChip({ code, onRemove }: { code: string; onRemove: () => v
       <Text
         selectable={false}
         numberOfLines={1}
-        style={{ color: tokens.color.brand.dark, ...tokens.type.meta, fontWeight: '700' }}
+        style={{ color: tokens.color.brand.base, ...tokens.type.meta, fontWeight: '700' }}
       >
         {code}
       </Text>

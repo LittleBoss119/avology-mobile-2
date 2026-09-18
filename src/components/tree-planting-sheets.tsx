@@ -12,6 +12,7 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { tokens } from '../constants/theme';
+import { colors as palette } from '../theme/tokens';
 import type { TreePlantingEndReason } from '../types/domain';
 import { getTodayIsoDate } from '../utils/taskDueDate';
 import { BottomSheet } from './bottom-sheet';
@@ -245,7 +246,7 @@ function SheetChoiceRow({
       style={{
         alignItems: 'center',
         backgroundColor: selected ? tokens.color.brand.soft : tokens.color.surface.card,
-        borderColor: selected ? tokens.color.brand.base : tokens.color.line.card,
+        borderColor: selected ? palette.accent : tokens.color.line.card,
         borderCurve: 'continuous',
         borderRadius: tokens.radius.cardInner,
         borderWidth: 1,

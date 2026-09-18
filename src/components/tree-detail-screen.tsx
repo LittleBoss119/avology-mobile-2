@@ -3,6 +3,7 @@ import React from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
 
 import { colors, spacing, tokens, typography } from '../constants/theme';
+import { colors as palette } from '../theme/tokens';
 import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import {
@@ -810,7 +811,7 @@ function TreePhotoArea({
             onPress={onPhotoPress}
             style={{
               alignItems: 'center',
-              backgroundColor: tokens.color.brand.base,
+              backgroundColor: palette.accent,
               borderRadius: tokens.radius.pill,
               bottom: tokens.space.md,
               height: 40,

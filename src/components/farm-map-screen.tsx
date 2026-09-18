@@ -4,6 +4,7 @@ import { Animated, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { tokens } from '../constants/theme';
+import { colors as palette } from '../theme/tokens';
 import { useAuth } from '../context/auth-context';
 import { setPendingCareTrees } from '../lib/pendingCareTrees';
 import { setPendingNewTreePositions } from '../lib/pendingNewTreePositions';
@@ -365,7 +366,7 @@ function SelectedMark({ size }: { size: number }) {
     <View
       style={{
         alignItems: 'center',
-        backgroundColor: tokens.color.brand.base,
+        backgroundColor: palette.accent,
         borderRadius: tokens.radius.pill,
         height: size,
         justifyContent: 'center',
@@ -457,7 +458,7 @@ function EmptyMapCell({
       style={{
         alignItems: 'center',
         backgroundColor: tokens.color.surface.canvas,
-        borderColor: emphasized ? tokens.color.brand.base : tokens.color.line.card,
+        borderColor: emphasized ? palette.accent : tokens.color.line.card,
         borderRadius: 0,
         // Tetap putus-putus walau sedang cocok atau terpilih: penegasan tidak
         // boleh mengubah sel kosong jadi terlihat berisi.
@@ -544,7 +545,7 @@ function FilledMapCell({
       style={{
         alignItems: 'center',
         backgroundColor: visual.background,
-        borderColor: emphasized ? tokens.color.brand.base : visual.border,
+        borderColor: emphasized ? palette.accent : visual.border,
         borderCurve: 'continuous',
         borderRadius: tokens.radius.tile,
         borderWidth: emphasized ? MATCHED_CELL_BORDER_WIDTH : CELL_BORDER_WIDTH,

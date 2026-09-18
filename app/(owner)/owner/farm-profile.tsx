@@ -15,6 +15,7 @@ import {
 } from '../../../src/components/ui';
 import { useSnackbar } from '../../../src/components/snackbar';
 import { colors, radius, spacing, tokens } from '../../../src/constants/theme';
+import { colors as palette } from '../../../src/theme/tokens';
 import { useAuth } from '../../../src/context/auth-context';
 import { getFarmDetail, updateFarmProfile } from '../../../src/services/farmService';
 import type { Farm } from '../../../src/types/domain';
@@ -260,7 +261,7 @@ function FarmTextField({
         placeholderTextColor={colors.textSoft}
         style={{
           backgroundColor: colors.surface,
-          borderColor: error ? tokens.color.status.danger.text : colors.border,
+          borderColor: error ? palette.statusBuruk : colors.border,
           borderRadius: radius.lg,
           borderWidth: 1,
           color: colors.text,

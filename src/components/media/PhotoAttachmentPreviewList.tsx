@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '../../constants/theme';
+import { colors as palette } from '../../theme/tokens';
 import type { PhotoAttachmentPreviewItem } from '../../types/media';
 import { Icon } from '../icons';
 import { PhotoViewerModal } from './PhotoViewerModal';
@@ -119,7 +120,7 @@ export function PhotoAttachmentPreviewList({
                   onPress={() => onDeletePhoto(photo)}
                   style={({ pressed }) => ({
                     alignItems: 'center',
-                    backgroundColor: colors.danger,
+                    backgroundColor: palette.statusBuruk,
                     borderColor: colors.surface,
                     borderRadius: radius.round,
                     borderWidth: 1,
@@ -132,7 +133,7 @@ export function PhotoAttachmentPreviewList({
                     width: 32,
                   })}
                 >
-                  <Icon name="x" size={16} color={colors.surface} />
+                  <Icon name="x" size={16} color={colors.white} />
                 </Pressable>
               ) : null}
             </View>

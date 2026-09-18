@@ -19,6 +19,7 @@ import { getFarmMemberBasicProfiles } from '../../../../src/services/memberServi
 import { getFarmTasks } from '../../../../src/services/careTaskService';
 import type { CareTask, FarmMemberBasicProfile, TaskStatus } from '../../../../src/types/domain';
 import { getTodayIsoDate } from '../../../../src/utils/taskDueDate';
+import { colors as palette } from '../../../../src/theme/tokens';
 
 type TaskStatusFilter = 'all' | 'today' | TaskStatus;
 
@@ -140,7 +141,7 @@ function StatusFilter({
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text selectable style={{ color: '#1E2A24', fontSize: 14, fontWeight: '600' }}>
+      <Text selectable style={{ color: palette.textPrimary, fontSize: 14, fontWeight: '600' }}>
         Status
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -172,7 +173,7 @@ function SummaryPill({ label, value }: { label: string; value: number }) {
   return (
     <View
       style={{
-        backgroundColor: '#FFFFFF',
+        backgroundColor: palette.surfaceRaised,
         borderColor: appTheme.border,
         borderRadius: 14,
         borderWidth: 1,

@@ -1,47 +1,70 @@
 import type { TextStyle, ViewStyle } from 'react-native';
 
+import { colors as palette } from '../theme/tokens';
+
+// LAPISAN ALIH. Berkas ini tidak lagi memuat nilai warna sendiri — semuanya
+// merujuk ke src/theme/tokens.ts. Nama ekspor, bentuk objek, spacing, radius,
+// typography, dan shadows sengaja TIDAK diubah supaya 53 berkas pemakai tidak
+// perlu disentuh dan tata letak tidak bergeser sedikit pun.
+//
+// Token lama yang dulu melayani dua peran (latar dan teks) di sini dipetakan ke
+// peran DOMINAN-nya. Titik pakai minoritas sudah dialihkan langsung ke token
+// yang benar di berkas masing-masing — lihat catatan batch 0.
+//
+// Hijau tidak dipakai di antarmuka sama sekali. palette.brandGreen hanya untuk
+// logo dan splash.
+
 export const colors = {
-  primaryGreen: '#065F2E',
-  primaryGreenDark: '#044722',
-  primaryGreenSoft: '#E7F5EC',
-  background: '#F7FAF3',
-  surfaceSoft: '#F1F6EA',
-  textPrimary: '#17231B',
-  textSecondary: '#5B6B60',
-  textMuted: '#8A978D',
-  bg: '#F7FAF3',
-  surface: '#FFFFFF',
-  surfaceMuted: '#F1F6EA',
-  surfaceGreen: '#E7F5EC',
-  primary: '#065F2E',
-  primaryDark: '#044722',
-  primarySoft: '#E7F5EC',
-  primaryBorder: '#B7DFC0',
-  text: '#17231B',
-  textSoft: '#8A978D',
-  border: '#DDE8D8',
-  divider: '#E7EEE3',
-  textMutedLegacy: '#647067',
-  warning: '#B7791F',
-  warningBg: '#FFF4D6',
-  warningBorder: '#F3D78A',
-  danger: '#C2410C',
-  dangerBg: '#FDE7E7',
-  dangerBorder: '#F2B8B5',
-  success: '#16803C',
-  successBg: '#E2F6E8',
-  successBorder: '#B8E3C3',
-  info: '#2563EB',
-  infoBg: '#E8F1FF',
-  infoBorder: '#BDD6FF',
-  neutral: '#4B5563',
-  neutralBg: '#F3F4F6',
-  neutralBorder: '#E5E7EB',
-  pending: '#6B5B00',
-  pendingBg: '#FFF8D8',
-  pendingBorder: '#EEE3A0',
-  photoPlaceholder: '#EAF0E6',
-  white: '#FFFFFF',
+  primaryGreen: palette.accentText,
+  primaryGreenDark: palette.accentPressed,
+  primaryGreenSoft: palette.surfaceSunken,
+  background: palette.surface,
+  surfaceSoft: palette.surfaceSunken,
+  textPrimary: palette.textPrimary,
+  textSecondary: palette.textMuted,
+  textMuted: palette.textMuted,
+  bg: palette.surface,
+  surface: palette.surfaceRaised,
+  surfaceMuted: palette.surfaceSunken,
+  surfaceGreen: palette.surfaceSunken,
+  primary: palette.accentText,
+  primaryDark: palette.accentPressed,
+  primarySoft: palette.surfaceSunken,
+  primaryBorder: palette.border,
+  text: palette.textPrimary,
+  textSoft: palette.textMuted,
+  border: palette.border,
+  divider: palette.border,
+  textMutedLegacy: palette.textMuted,
+  warning: palette.statusPerhatianInk,
+  warningBg: palette.statusPerhatianBg,
+  warningBorder: palette.statusPerhatian,
+  danger: palette.statusBurukInk,
+  dangerBg: palette.statusBurukBg,
+  dangerBorder: palette.statusBuruk,
+  // success dan info sengaja netral, bukan hijau dan bukan biru. Aturan warna
+  // yang mengikat: warna hanya muncul bila ada masalah. Keduanya bukan masalah,
+  // jadi pembedanya bentuk dan teks, bukan rona. Badge bergaris untuk sukses
+  // dibangun di batch 1.
+  success: palette.textPrimary,
+  successBg: palette.surfaceSunken,
+  successBorder: palette.border,
+  info: palette.textPrimary,
+  infoBg: palette.surfaceSunken,
+  infoBorder: palette.border,
+  neutral: palette.textMuted,
+  neutralBg: palette.surfaceSunken,
+  neutralBorder: palette.border,
+  // pending TETAP berwarna: ia keadaan yang menunggu tindakan.
+  pending: palette.statusPerhatianInk,
+  pendingBg: palette.statusPerhatianBg,
+  pendingBorder: palette.statusPerhatian,
+  photoPlaceholder: palette.photoPlaceholderA,
+  white: palette.textOnAccent,
+  // Satu-satunya warna literal yang tersisa di berkas ini. Ia hanya dipakai
+  // sebagai shadowColor. Spek melarang shadow sepenuhnya, tapi mencabut shadow
+  // mengubah tampilan, dan itu bukan pekerjaan batch 0.
+  // TODO(batch berikutnya): cabut shadows/elevation, lalu hapus token ini.
   black: '#000000',
 } as const;
 
@@ -157,33 +180,42 @@ export type StatusTone = keyof typeof statusColors;
 
 export const tokens = {
   color: {
-    brand:   { base: '#065F2E', dark: '#044722', soft: '#E7F5EC', border: '#B7DFC0', on: '#FFFFFF' },
-    text:    { primary: '#17231B', secondary: '#5B6B60', tertiary: '#8A978D', onBrand: '#FFFFFF', onBrandMuted: '#DDEFE2' },
-    surface: { canvas: '#F7FAF3', card: '#FFFFFF', subtle: '#F1F6EA' },
-    line:    { card: '#DDE8D8', hairline: '#E7EEE3' },
+    brand:   { base: palette.accentText, dark: palette.accentPressed, soft: palette.surfaceSunken, border: palette.border, on: palette.textOnAccent },
+    text:    { primary: palette.textPrimary, secondary: palette.textMuted, tertiary: palette.textMuted, onBrand: palette.textOnAccent, onBrandMuted: palette.textOnAccent },
+    surface: { canvas: palette.surface, card: palette.surfaceRaised, subtle: palette.surfaceSunken },
+    line:    { card: palette.border, hairline: palette.border },
     status: {
-      success: { text: '#16803C', bg: '#E2F6E8', border: '#B8E3C3' },
-      warning: { text: '#B7791F', bg: '#FFF4D6', border: '#F3D78A' },
-      danger:  { text: '#C2410C', bg: '#FDE7E7', border: '#F2B8B5' },
-      info:    { text: '#2563EB', bg: '#E8F1FF', border: '#BDD6FF' },
-      neutral: { text: '#4B5563', bg: '#F3F4F6', border: '#E5E7EB' },
+      success: { text: palette.textPrimary, bg: palette.surfaceSunken, border: palette.border },
+      warning: { text: palette.statusPerhatianInk, bg: palette.statusPerhatianBg, border: palette.statusPerhatian },
+      danger:  { text: palette.statusBurukInk, bg: palette.statusBurukBg, border: palette.statusBuruk },
+      info:    { text: palette.textPrimary, bg: palette.surfaceSunken, border: palette.border },
+      neutral: { text: palette.textMuted, bg: palette.surfaceSunken, border: palette.border },
     },
+    // Ketiga badge record selain `condition` kini identik netral. Itu disengaja:
+    // jenis catatan bukan masalah, jadi tidak diberi warna. Pembedanya label
+    // jenis, dan mulai batch 1 ditambah penanda bentuk (belah ketupat, kotak,
+    // lingkaran) sesuai bagian Timeline riwayat pohon. Nilai penanda itu aman
+    // sebagai bentuk, bukan sebagai warna teks — sebagai teks 13px di atas
+    // surfaceSunken kontrasnya ~4,1 dan gagal ambang AA.
     record: {
-      condition: { text: '#7A5600', bg: '#FCEFC7', border: '#EBD9A0' },
-      phase:     { text: '#065F2E', bg: '#E7F5EC', border: '#B7DFC0' },
-      harvest:   { text: '#9A4C0A', bg: '#FDEBD9', border: '#F2C69B' },
-      care:      { text: '#184E91', bg: '#E7EEF8', border: '#C2D4EC' },
+      condition: { text: palette.statusPerhatianInk, bg: palette.statusPerhatianBg, border: palette.statusPerhatian },
+      phase:     { text: palette.textPrimary, bg: palette.surfaceSunken, border: palette.border },
+      harvest:   { text: palette.textPrimary, bg: palette.surfaceSunken, border: palette.border },
+      care:      { text: palette.textPrimary, bg: palette.surfaceSunken, border: palette.border },
     },
     // `viewer` SENGAJA bukan `scrim`, dan keduanya tidak boleh disatukan.
     // scrim menggelapkan layar di balik lembar/sheet yang isinya masih perlu
     // terbaca sebagian; viewer menggelapkan latar di balik SATU foto yang sedang
     // diperiksa, jadi ia lebih gelap dan lebih pekat supaya mata tidak terganggu
-    // apa pun di sekitarnya. Nilai viewer diambil apa adanya dari viewer foto
-    // yang sudah dipakai sejak sebelum token ini ada, bukan diturunkan dari scrim.
+    // apa pun di sekitarnya. Opasitas ketiganya dipertahankan apa adanya dari
+    // palet lama; yang berubah hanya rona.
     overlay: {
-      scrim: 'rgba(23,35,27,0.45)',
-      scrimLight: 'rgba(23,35,27,0.12)',
-      viewer: 'rgba(18,28,22,0.78)',
+      scrim: palette.overlayScrim,
+      scrimLight: palette.overlayScrimLight,
+      viewer: palette.overlayViewer,
+      // Entri keempat: selubung unggah foto. Perannya sendiri, bukan turunan
+      // scrim — opasitasnya 0,28 dan tidak boleh disamakan dengan yang lain.
+      upload: palette.overlayUpload,
     },
   },
   space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32, xxxxl: 40 },
@@ -212,6 +244,7 @@ export const tokens = {
   icon: { xs: 14, sm: 16, md: 20, lg: 24, stroke: 2 },
   elevation: {
     overlay: {
+      // TODO(batch berikutnya): ikut tercabut bersama shadows di atas.
       shadowColor: '#17231B', shadowOpacity: 0.1, shadowRadius: 16,
       shadowOffset: { width: 0, height: 4 }, elevation: 6,
     },

@@ -142,7 +142,7 @@ export default function WorkerTaskDetailScreen() {
           <Text
             selectable
             style={{
-              color: colors.primaryDark,
+              color: colors.primary,
               flex: 1,
               fontSize: typography.h2.fontSize,
               fontWeight: '600',

@@ -129,7 +129,7 @@ export default function OwnerTaskDetailScreen() {
       <ErrorBanner message={error} />
 
       <Card variant="highlight">
-        <Text selectable style={{ color: '#1E2A24', fontSize: 22, fontWeight: '700', lineHeight: 28 }}>
+        <Text selectable style={{ color: tokens.color.text.primary, fontSize: 22, fontWeight: '700', lineHeight: 28 }}>
           {task.title}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
@@ -156,10 +156,10 @@ export default function OwnerTaskDetailScreen() {
       ) : null}
 
       <Card>
-        <Text selectable style={{ color: '#1E2A24', fontSize: 17, fontWeight: '700' }}>
+        <Text selectable style={{ color: tokens.color.text.primary, fontSize: 17, fontWeight: '700' }}>
           Instruksi
         </Text>
-        <Text selectable style={{ color: '#68746D', lineHeight: 21 }}>
+        <Text selectable style={{ color: tokens.color.text.secondary, lineHeight: 21 }}>
           {task.instruction || '-'}
         </Text>
       </Card>

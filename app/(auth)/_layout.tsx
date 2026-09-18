@@ -8,6 +8,7 @@ import {
   resolveAccessRoute,
   shouldRedirectAccess,
 } from '../../src/utils/routeGuard';
+import { colors as palette } from '../../src/theme/tokens';
 
 export default function AuthLayout() {
   const { currentFarm, initializing, profile } = useAuth();
@@ -46,11 +47,11 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerBackTitle: 'Kembali',
-        headerStyle: { backgroundColor: '#F7FAF3' },
+        headerStyle: { backgroundColor: palette.surface },
         headerShadowVisible: false,
-        headerTintColor: '#065F2E',
-        headerTitleStyle: { color: '#1E2A24', fontWeight: '700' },
-        contentStyle: { backgroundColor: '#F7FAF3' },
+        headerTintColor: palette.accentText,
+        headerTitleStyle: { color: palette.textPrimary, fontWeight: '700' },
+        contentStyle: { backgroundColor: palette.surface },
       }}
     >
       <Stack.Screen name="get-started" options={{ headerShown: false, title: 'Avology' }} />

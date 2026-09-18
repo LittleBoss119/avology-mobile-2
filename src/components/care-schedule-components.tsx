@@ -18,6 +18,7 @@ import {
 import { compareTreePosition } from '../services/scheduleTreeService';
 import { formatTreeDisplayCode } from '../utils/treeFormat';
 import { colors, radius, spacing } from '../constants/theme';
+import { colors as palette } from '../theme/tokens';
 import { Badge, Card, CompactMetaItem } from './ui';
 import { Icon } from './icons';
 import { careCategoryOptions } from '../constants/careCategory';
@@ -73,7 +74,7 @@ export function CareTaskSummaryCard({
             selectable
             ellipsizeMode="tail"
             numberOfLines={1}
-            style={{ color: '#065F2E', flex: 1, fontSize: 17, fontWeight: '700', lineHeight: 23 }}
+            style={{ color: colors.primary, flex: 1, fontSize: 17, fontWeight: '700', lineHeight: 23 }}
           >
             {task.title}
           </Text>
@@ -85,7 +86,7 @@ export function CareTaskSummaryCard({
           {task.requiresPhoto ? <Badge label="Butuh bukti" tone="warning" /> : null}
         </View>
         {task.instruction ? (
-          <Text selectable ellipsizeMode="tail" numberOfLines={2} style={{ color: '#68746D', fontSize: 13, lineHeight: 18 }}>
+          <Text selectable ellipsizeMode="tail" numberOfLines={2} style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
             {task.instruction}
           </Text>
         ) : null}
@@ -446,7 +447,7 @@ function FormError({ message }: { message?: string }) {
 function formInputStyle(hasError: boolean, multiline = false) {
   return {
     backgroundColor: colors.surface,
-    borderColor: hasError ? colors.danger : colors.border,
+    borderColor: hasError ? palette.statusBuruk : colors.border,
     borderCurve: 'continuous' as const,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -682,7 +683,7 @@ function FormTreeMultiSelect({
         // satunya penanda galat di tingkat field ini selain teks di bawah.
         <View
           style={{
-            borderColor: error ? colors.danger : colors.border,
+            borderColor: error ? palette.statusBuruk : colors.border,
             borderCurve: 'continuous',
             borderRadius: radius.md,
             borderWidth: 1,
@@ -712,7 +713,7 @@ function FormTreeMultiSelect({
                       style={{
                         alignItems: 'center',
                         backgroundColor: selected ? colors.primarySoft : colors.surface,
-                        borderColor: selected ? colors.primary : colors.border,
+                        borderColor: selected ? palette.accent : colors.border,
                         borderCurve: 'continuous',
                         borderRadius: radius.md,
                         borderWidth: 1,
@@ -730,7 +731,7 @@ function FormTreeMultiSelect({
                       <Text
                         selectable={false}
                         style={{
-                          color: selected ? colors.primaryDark : colors.text,
+                          color: selected ? colors.primary : colors.text,
                           fontSize: 16,
                           fontWeight: selected ? '700' : '400',
                         }}
@@ -839,7 +840,7 @@ function FormChip({
       accessibilityRole="button"
       onPress={onPress}
       style={{
-        backgroundColor: active ? colors.primary : colors.surface,
+        backgroundColor: active ? palette.accent : colors.surface,
         borderColor,
         borderCurve: 'continuous',
         borderRadius: radius.round,
@@ -848,7 +849,7 @@ function FormChip({
         paddingVertical: spacing.sm + 1,
       }}
     >
-      <Text selectable={false} style={{ color: active ? '#FFFFFF' : colors.text, fontSize: 14, fontWeight: '700' }}>
+      <Text selectable={false} style={{ color: active ? colors.white : colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
     </Pressable>
@@ -886,7 +887,7 @@ export function FormDateField({
         style={{
           alignItems: 'center',
           backgroundColor: colors.surface,
-          borderColor: error ? colors.danger : colors.border,
+          borderColor: error ? palette.statusBuruk : colors.border,
           borderCurve: 'continuous',
           borderRadius: radius.md,
           borderWidth: 1,
@@ -1005,8 +1006,8 @@ function ProofOptionButton({
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: active ? colors.primary : colors.surface,
-        borderColor: active ? colors.primary : colors.border,
+        backgroundColor: active ? palette.accent : colors.surface,
+        borderColor: active ? palette.accent : colors.border,
         borderRadius: radius.md,
         borderWidth: 1,
         flex: 1,
@@ -1015,7 +1016,7 @@ function ProofOptionButton({
         paddingHorizontal: spacing.md,
       }}
     >
-      <Text selectable style={{ color: active ? colors.surface : colors.text, fontSize: 14, fontWeight: '700' }}>
+      <Text selectable style={{ color: active ? colors.white : colors.text, fontSize: 14, fontWeight: '700' }}>
         {label}
       </Text>
     </Pressable>
@@ -1108,7 +1109,7 @@ export function TargetTreeCodeList({
                 paddingVertical: spacing.sm,
               }}
             >
-              <Text selectable style={{ color: colors.primaryDark, fontSize: 16, fontWeight: '700' }}>
+              <Text selectable style={{ color: colors.primary, fontSize: 16, fontWeight: '700' }}>
                 {code}
               </Text>
             </View>

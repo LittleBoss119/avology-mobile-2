@@ -22,6 +22,7 @@ import {
   type SatuanBahan,
 } from '../../../../../src/constants/satuanBahan';
 import { spacing, tokens } from '../../../../../src/constants/theme';
+import { colors as palette } from '../../../../../src/theme/tokens';
 import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../../../../../src/lib/media';
 import { setPendingFeedback } from '../../../../../src/lib/pendingFeedback';
 import {
@@ -870,7 +871,7 @@ function ProofPhotoField({
             onPress={openSheet}
             style={{
               alignItems: 'center',
-              backgroundColor: tokens.color.brand.base,
+              backgroundColor: palette.accent,
               borderRadius: tokens.radius.pill,
               bottom: spacing.md,
               height: 38,
@@ -964,7 +965,7 @@ function NoteInput({
         placeholderTextColor={tokens.color.text.tertiary}
         style={{
           ...inputStyle,
-          borderColor: error ? tokens.color.status.danger.text : tokens.color.line.card,
+          borderColor: error ? palette.statusBuruk : tokens.color.line.card,
           minHeight: 96,
           paddingTop: spacing.md,
           textAlignVertical: 'top',

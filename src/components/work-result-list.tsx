@@ -177,8 +177,8 @@ function WorkResultRow({
           onPress={onFixNote}
           style={{ alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: tokens.space.sm }}
         >
-          <Icon name="pencil" size={tokens.icon.sm} color={tokens.color.brand.dark} />
-          <Text selectable={false} style={{ ...tokens.type.bodySmall, color: tokens.color.brand.dark, fontWeight: '700' }}>
+          <Icon name="pencil" size={tokens.icon.sm} color={tokens.color.brand.base} />
+          <Text selectable={false} style={{ ...tokens.type.bodySmall, color: tokens.color.brand.base, fontWeight: '700' }}>
             Perbaiki catatan
           </Text>
         </Pressable>

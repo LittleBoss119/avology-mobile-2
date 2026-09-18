@@ -9,6 +9,7 @@ import {
   type GradePanen,
 } from '../constants/gradePanen';
 import { colors, radius, spacing, typography } from '../constants/theme';
+import { colors as palette } from '../theme/tokens';
 import {
   getConditionReportDetail,
   updateOwnConditionReport,
@@ -483,8 +484,8 @@ function OptionChip({
     <Pressable
       onPress={onPress}
       style={{
-        backgroundColor: active ? colors.primary : colors.surface,
-        borderColor: active ? colors.primary : colors.border,
+        backgroundColor: active ? palette.accent : colors.surface,
+        borderColor: active ? palette.accent : colors.border,
         borderCurve: 'continuous',
         borderRadius: radius.md,
         borderWidth: 1,

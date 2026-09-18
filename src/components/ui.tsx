@@ -32,6 +32,7 @@ import {
   typography,
   type StatusTone,
 } from '../constants/theme';
+import { colors as palette, fonts } from '../theme/tokens';
 import { sanitizeDisplayValue, sanitizeUserFacingMessage } from '../utils/displayFormat';
 import { Icon, type IconName } from './icons';
 import { PhotoSourceSheet } from './bottom-sheet';
@@ -485,6 +486,7 @@ export function PageIntro({
         selectable
         style={{
           color: colors.text,
+          fontFamily: fonts.sansSemiBold,
           fontSize: typography.h1.fontSize,
           fontWeight: typography.h1.fontWeight,
           letterSpacing: 0,
@@ -499,6 +501,7 @@ export function PageIntro({
           selectable
           style={{
             color: colors.muted,
+            fontFamily: fonts.sans,
             fontSize: typography.body.fontSize,
             lineHeight: 24,
             textAlign,
@@ -745,7 +748,7 @@ export function BrandMark({
       <View
         style={{
           alignItems: 'center',
-          backgroundColor: colors.primary,
+          backgroundColor: palette.accent,
           borderColor: colors.primaryBorder,
           borderCurve: 'continuous',
           borderRadius: compact ? radius.lg : radius['2xl'],
@@ -791,7 +794,7 @@ function InlineBrandMark() {
       <View
         style={{
           alignItems: 'center',
-          backgroundColor: colors.primary,
+          backgroundColor: palette.accent,
           borderColor: colors.primaryBorder,
           borderCurve: 'continuous',
           borderRadius: radius.sm,
@@ -838,6 +841,7 @@ export function SectionHeader({
           style={{
             color: colors.text,
             flex: 1,
+            fontFamily: fonts.sansSemiBold,
             fontSize: typography.h3.fontSize,
             fontWeight: '700',
             lineHeight: typography.h3.lineHeight,
@@ -1048,7 +1052,7 @@ export function ChipButton({
   label: string;
   onPress: () => void;
 }) {
-  const contentColor = active ? '#FFFFFF' : colors.text;
+  const contentColor = active ? colors.white : colors.text;
   // Terpilih ditandai CENTANG, bukan cuma latar hijau. Aturan proyek: warna
   // tidak boleh jadi satu-satunya penanda keadaan — dan chip inilah hal pertama
   // yang disentuh orang di daftar pohon, di layar ponsel yang mungkin terbaca
@@ -1064,8 +1068,8 @@ export function ChipButton({
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: active ? colors.primary : colors.surface,
-        borderColor: active ? colors.primary : colors.border,
+        backgroundColor: active ? palette.accent : colors.surface,
+        borderColor: active ? palette.accent : colors.border,
         borderRadius: radius.round,
         borderWidth: 1,
         flexDirection: 'row',
@@ -1108,7 +1112,7 @@ export function FilterChip({
       style={({ pressed }) => ({
         alignItems: 'center',
         backgroundColor: active ? colors.primarySoft : colors.surface,
-        borderColor: active ? colors.primary : colors.border,
+        borderColor: active ? palette.accent : colors.border,
         borderCurve: 'continuous',
         borderRadius: radius.chip,
         borderWidth: 1,
@@ -1450,7 +1454,7 @@ export function Field({
           secureTextEntry={secureTextEntry}
           style={{
             backgroundColor: colors.surface,
-            borderColor: error ? tokens.color.status.danger.text : colors.border,
+            borderColor: error ? palette.statusBuruk : colors.border,
             borderCurve: 'continuous',
             borderRadius: 14,
             borderWidth: 1,
@@ -1780,7 +1784,7 @@ export function DateField({
         style={{
           alignItems: 'center',
           backgroundColor: colors.surface,
-          borderColor: error ? tokens.color.status.danger.text : colors.border,
+          borderColor: error ? palette.statusBuruk : colors.border,
           borderCurve: 'continuous',
           borderRadius: 14,
           borderWidth: 1,
@@ -1895,7 +1899,7 @@ export function Button({
   const isDanger = variant === 'danger';
   const isGhost = variant === 'ghost' || variant === 'quiet';
   const isIcon = variant === 'icon';
-  const contentColor = isPrimary ? '#FFFFFF' : isDanger ? colors.danger : colors.primary;
+  const contentColor = isPrimary ? colors.white : isDanger ? colors.danger : colors.primary;
   // Pemintal hanya untuk loading TANPA loadingTitle — itu jalur setiap pemanggil
   // yang ada sekarang, jadi tidak ada satu pun tombol lama yang berubah.
   const showSpinner = Boolean(loading) && !loadingTitle;
@@ -1945,7 +1949,7 @@ export function Button({
               selectable={false}
               numberOfLines={1}
               style={{
-                color: isPrimary ? '#FFFFFF' : isDanger ? colors.danger : isGhost ? colors.primary : colors.text,
+                color: isPrimary ? colors.white : isDanger ? colors.danger : isGhost ? colors.primary : colors.text,
                 fontSize: size === 'small' ? 14 : 16,
                 fontWeight: '700',
               }}
@@ -1975,14 +1979,14 @@ export function FloatingActionButton({
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: tokens.color.brand.base,
+        backgroundColor: palette.accent,
         borderRadius: tokens.radius.cardInner,
         height: tokens.layout.controlHeight,
         justifyContent: 'center',
         width: tokens.layout.controlHeight,
       }}
     >
-      <Icon name={icon} size={24} color="#FFFFFF" />
+      <Icon name={icon} size={24} color={colors.white} />
     </Pressable>
   );
 }
@@ -2160,11 +2164,11 @@ export function EmptyState({
   return (
     <Card>
       {icon ? <EmptyStateGlyph background={tokens.color.surface.subtle} name={icon} /> : null}
-      <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
+      <Text selectable style={{ color: colors.text, fontFamily: fonts.sansSemiBold, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
         {title}
       </Text>
       {subtitle ? (
-        <Text selectable style={{ color: colors.muted, lineHeight: 21 }}>
+        <Text selectable style={{ color: colors.muted, fontFamily: fonts.sans, lineHeight: 21 }}>
           {subtitle}
         </Text>
       ) : null}
@@ -2366,8 +2370,8 @@ export function SearchFilterRow({
           onPress={onFilterPress}
           style={{
             alignItems: 'center',
-            backgroundColor: filterActive ? colors.primary : colors.surface,
-            borderColor: filterActive ? colors.primary : colors.primaryBorder,
+            backgroundColor: filterActive ? palette.accent : colors.surface,
+            borderColor: filterActive ? palette.accent : colors.primaryBorder,
             borderCurve: 'continuous',
             borderRadius: radius.lg,
             borderWidth: 1,
@@ -2381,12 +2385,12 @@ export function SearchFilterRow({
           <Icon
             name="adjustments-horizontal"
             size={tokens.icon.md}
-            color={filterActive ? colors.surface : colors.primary}
+            color={filterActive ? colors.white : colors.primary}
           />
           <Text
             selectable={false}
             style={{
-              color: filterActive ? colors.surface : colors.primary,
+              color: filterActive ? colors.white : colors.primary,
               fontSize: typography.small.fontSize,
               fontWeight: '700',
             }}
@@ -2397,7 +2401,7 @@ export function SearchFilterRow({
             <View
               style={{
                 alignItems: 'center',
-                backgroundColor: tokens.color.brand.base,
+                backgroundColor: palette.accent,
                 borderRadius: tokens.radius.pill,
                 height: 20,
                 justifyContent: 'center',
@@ -2408,7 +2412,7 @@ export function SearchFilterRow({
                 top: -6,
               }}
             >
-              <Text selectable={false} style={{ ...tokens.type.caption, color: '#FFFFFF', textAlign: 'center' }}>
+              <Text selectable={false} style={{ ...tokens.type.caption, color: colors.white, textAlign: 'center' }}>
                 {filterCount}
               </Text>
             </View>
@@ -2551,7 +2555,7 @@ export function PhotoPickerCard({
             onPress={onRemovePhoto}
             style={({ pressed }) => ({
               alignItems: 'center',
-              backgroundColor: colors.danger,
+              backgroundColor: palette.statusBuruk,
               borderColor: colors.surface,
               borderRadius: radius.round,
               borderWidth: 1,
@@ -2564,14 +2568,14 @@ export function PhotoPickerCard({
               width: 34,
             })}
           >
-            <Icon name="x" size={16} color={colors.surface} />
+            <Icon name="x" size={16} color={colors.white} />
           </Pressable>
         ) : null}
         {loading ? (
           <View
             style={{
               alignItems: 'center',
-              backgroundColor: 'rgba(16,32,22,0.28)',
+              backgroundColor: tokens.color.overlay.upload,
               bottom: 0,
               justifyContent: 'center',
               left: 0,
@@ -2580,7 +2584,7 @@ export function PhotoPickerCard({
               top: 0,
             }}
           >
-            <ActivityIndicator color={colors.surface} />
+            <ActivityIndicator color={colors.white} />
           </View>
         ) : null}
       </Pressable>
@@ -2701,8 +2705,8 @@ function getCardVariantStyle(
 
   if (variant === 'heroGreen') {
     return {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
+      backgroundColor: palette.accent,
+      borderColor: palette.accent,
     };
   }
 

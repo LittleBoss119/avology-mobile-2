@@ -216,7 +216,7 @@ function ConditionBar({ healthyTrees, problemTrees }: { healthyTrees: number; pr
             <View style={{ backgroundColor: tokens.color.status.success.text, flex: healthyTrees }} />
           ) : null}
           {problemTrees > 0 ? (
-            <View style={{ backgroundColor: tokens.color.status.warning.text, flex: problemTrees }} />
+            <View style={{ backgroundColor: tokens.color.status.warning.border, flex: problemTrees }} />
           ) : null}
         </>
       ) : null}

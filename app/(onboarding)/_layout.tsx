@@ -12,6 +12,7 @@ import {
   resolveAccessRoute,
   shouldRedirectAccess,
 } from '../../src/utils/routeGuard';
+import { colors as palette } from '../../src/theme/tokens';
 
 export default function OnboardingLayout() {
   const { currentFarm, initializing, profile, refresh } = useAuth();
@@ -98,11 +99,11 @@ export default function OnboardingLayout() {
     <Stack
       screenOptions={{
         headerBackTitle: 'Kembali',
-        headerStyle: { backgroundColor: '#F7FAF3' },
+        headerStyle: { backgroundColor: palette.surface },
         headerShadowVisible: false,
-        headerTintColor: '#065F2E',
-        headerTitleStyle: { color: '#1E2A24', fontWeight: '700' },
-        contentStyle: { backgroundColor: '#F7FAF3' },
+        headerTintColor: palette.accentText,
+        headerTitleStyle: { color: palette.textPrimary, fontWeight: '700' },
+        contentStyle: { backgroundColor: palette.surface },
       }}
     >
       <Stack.Screen name="onboarding" options={{ headerShown: false, title: 'Pilih Akses' }} />

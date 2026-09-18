@@ -4,6 +4,7 @@ import { Platform, Text, TextInput, View } from 'react-native';
 
 import { Button, Card, ErrorBanner, Screen, TopAppBar } from '../../src/components/ui';
 import { tokens } from '../../src/constants/theme';
+import { colors as palette } from '../../src/theme/tokens';
 import { useAuth } from '../../src/context/auth-context';
 import { previewFarmByJoinCode, requestJoinFarm } from '../../src/services/memberService';
 import type { FarmPreview } from '../../src/types/domain';
@@ -292,7 +293,7 @@ function JoinCodeField({
           codeTextStyle,
           {
             backgroundColor: tokens.color.surface.card,
-            borderColor: error ? tokens.color.status.danger.text : tokens.color.line.card,
+            borderColor: error ? palette.statusBuruk : tokens.color.line.card,
             borderCurve: 'continuous',
             borderRadius: tokens.radius.control,
             borderWidth: 1,
