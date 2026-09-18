@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { tokens } from '../constants/theme';
 import type { Farm } from '../types/domain';
 import { buildFarmMetaLine } from '../utils/farmFormat';
+import { colors as palette } from '../theme/tokens';
 import { ChipButton } from './ui';
 
 // Dua blok yang dipakai BERSAMA oleh Beranda pemilik dan Beranda pekerja.
@@ -205,6 +206,15 @@ export function TreeConditionSummary({
 // Kebun tanpa pohon menyisakan alur kosong berwarna hairline, BUKAN bar yang
 // hilang: bentuknya tetap terbaca sebagai takaran yang belum terisi, dan tinggi
 // bloknya tidak melompat begitu pohon pertama ditambahkan.
+//
+// TODO(batch 3, bersama Beranda Pemilik): sisipkan celah 2px berlatar surface di
+// antara kedua segmen. neutralCell (#8F8676) dan statusPerhatian (#B07A16)
+// berluminansi hampir sama — rasio antarsegmen 1,04 — sehingga bersebelahan
+// langsung keduanya terbaca sebagai satu bilah utuh, dan bagi pengguna buta
+// warna menyatu sepenuhnya. Perbaikannya JARAK, bukan warna: dengan celah, batas
+// segmen tidak lagi bergantung pada luminansi sama sekali. Menaikkan kontras
+// antarsegmen bukan jalan keluarnya — itu akan memaksa salah satu keluar dari
+// peran warnanya.
 function ConditionBar({ healthyTrees, problemTrees }: { healthyTrees: number; problemTrees: number }) {
   const measured = healthyTrees + problemTrees;
 
@@ -213,7 +223,7 @@ function ConditionBar({ healthyTrees, problemTrees }: { healthyTrees: number; pr
       {measured > 0 ? (
         <>
           {healthyTrees > 0 ? (
-            <View style={{ backgroundColor: tokens.color.status.success.text, flex: healthyTrees }} />
+            <View style={{ backgroundColor: palette.neutralCell, flex: healthyTrees }} />
           ) : null}
           {problemTrees > 0 ? (
             <View style={{ backgroundColor: tokens.color.status.warning.border, flex: problemTrees }} />

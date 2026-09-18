@@ -45,6 +45,11 @@ export const colors = {
 
   statusMati: '#4A4238',
 
+  // Isian netral untuk keadaan SEHAT — bukan token khusus denah. Dipakai di sel
+  // denah kebun dan di segmen sehat pada bilah proporsi: dua bentuk untuk hal
+  // yang sama. Sehat bukan masalah, jadi ia tidak diberi warna status; nilainya
+  // dinaikkan dari #C6BEB2 ke 3,55 terhadap surface justru supaya bidang netral
+  // ini tetap terlihat sebagai bidang.
   neutralCell: '#8F8676',
   emptyCellBorder: '#8F8676',
   tabInactive: '#6B6155',
