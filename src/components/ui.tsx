@@ -209,16 +209,22 @@ export function Screen({
   // Hanya bar aksi yang perlu DIANGKAT (position:absolute).
   const keyboardLift = hasActionBar ? keyboardOverlap : 0;
   // Overlap sudah dihitung sampai dasar display, jadi insets.bottom TIDAK dikurangi
-  // lagi di sini — nav bar tertutup keyboard, ruang untuknya tidak relevan. Saat
-  // keyboard tertutup padding kembali ke ruang aman perangkat, minimal 18.
+  // lagi di sini — nav bar tertutup keyboard, ruang untuknya tidak relevan.
   //
   // 18 bawah vs 14 atas (ACTION_BAR_PADDING_TOP): asimetris dan disengaja. Sisi
-  // bawah bar berbatasan dengan tepi layar atau nav bar, sisi atasnya dengan
-  // garis pemisah — tepi butuh ruang lebih banyak daripada garis supaya tombol
-  // tidak terbaca menempel ke dasar perangkat.
+  // bawah bar berbatasan dengan tepi layar atau bilah gestur, sisi atasnya
+  // dengan garis pemisah — tepi butuh ruang lebih banyak daripada garis supaya
+  // tombol tidak terbaca menempel ke dasar perangkat.
+  //
+  // DIJUMLAHKAN dengan inset, bukan Math.max terhadapnya. Math.max salah dan
+  // terbukti salah di perangkat: pada HP berbilah gestur (inset ~24-48) ia
+  // memilih inset dan MEMBUANG padding 18-nya, sehingga tombol terakhir duduk
+  // persis di tepi area aman — menempel ke bilah gestur, dan pada sebagian
+  // perangkat tertimpa olehnya. Inset adalah ruang yang tidak boleh ditempati,
+  // bukan pengganti ruang napas; keduanya dibutuhkan sekaligus.
   const actionBarPaddingBottom = screenYBasisActive
     ? ACTION_BAR_PADDING_BOTTOM
-    : Math.max(insets.bottom, ACTION_BAR_PADDING_BOTTOM);
+    : ACTION_BAR_PADDING_BOTTOM + insets.bottom;
   // Ruang bawah yang harus dikosongkan konten scroll supaya isi TERAKHIR tidak
   // tertutup bar aksi yang menempel di atasnya.
   //
@@ -365,9 +371,9 @@ export function Screen({
         // panjang isinya.
         //
         // Pita gradasi yang dulu ada di sini DICABUT. Ia memudarkan konten ke
-        // warna latar supaya batas bar terbaca tanpa garis; sekarang bar punya
-        // latar buram sendiri dan garis atas 1px, jadi batasnya sudah tegas dan
-        // gradasinya tinggal menghabiskan 56px ruang tanpa menambah apa pun.
+        // warna latar supaya batas bar terbaca tanpa garis; sekarang garis atas
+        // 1px yang memikulnya, dan gradasinya tinggal menghabiskan 56px ruang
+        // tanpa menambah apa pun.
         //
         // `bottom: keyboardLift` dipertahankan apa adanya. Jangan diutak-atik:
         // rumusnya memakai `screenY`, bukan `height`, dan itu sudah dibetulkan
@@ -375,12 +381,36 @@ export function Screen({
         <View
           onLayout={(event) => setActionBarHeight(event.nativeEvent.layout.height)}
           style={{
-            backgroundColor: palette.surfaceRaised,
+            // LATAR HALAMAN, bukan surfaceRaised — koreksi spek setelah
+            // verifikasi perangkat.
+            //
+            // surfaceRaised (#FFFDFA) di atas surface (#F7F4EF) membaca sebagai
+            // panel terang yang DITEMPEL di dasar layar: satu lapisan lagi,
+            // persis yang ditolak arah "tanpa kartu bertumpuk". Garis atas 1px
+            // sudah memisahkan bar dari isi yang lewat di belakangnya; bidang
+            // kedua tidak menambah kejelasan apa pun, ia cuma menambah lapisan.
+            //
+            // Bar HARUS tetap buram (bukan 'transparent'): ia menutupi konten
+            // yang menggulir di belakangnya, dan konten yang terlihat menembus
+            // tombol jauh lebih buruk daripada bidang yang menyatu dengan latar.
+            //
+            // surfaceRaised tetap benar untuk kolom isian dan tombol sekunder —
+            // di sana ia menandai permukaan yang BISA DISENTUH, bukan panel
+            // struktural. Jangan menyamakan keduanya.
+            backgroundColor: backgroundColor,
             // Garis ATAS saja. Bar duduk di tepi bawah layar, jadi tiga sisinya
             // yang lain tidak berbatasan dengan apa pun yang perlu dipisahkan.
+            //
+            // Sejak latarnya sama dengan latar halaman, garis ini adalah
+            // SATU-SATUNYA yang menyatakan batas bar. Jangan dicabut.
             borderTopColor: palette.border,
             borderTopWidth: 1,
             bottom: keyboardLift,
+            // Jarak antartombol bertumpuk. Sebelumnya tidak ada sama sekali:
+            // slot ini cuma mewarisi gap dari pemanggilnya, dan fragmen <>
+            // tidak membawa gap — sehingga tombol Masuk dan Daftar di layar
+            // Pembuka menempel tanpa celah.
+            gap: tokens.space.md,
             left: 0,
             paddingBottom: actionBarPaddingBottom,
             paddingHorizontal: spacing.screenHorizontal,
@@ -2104,6 +2134,19 @@ export type ButtonVariant =
   | 'ghost'
   /** @deprecated Tidak ada tombol ikon-saja untuk aksi utama. Nol pemakaian — kandidat cabut paling aman. */
   | 'icon'
+  /**
+   * Baris teks netral: bentuk yang SAMA PERSIS dengan 'danger' — tanpa latar,
+   * tanpa garis, rata tengah, tinggi 52 — tapi berwarna `textMuted`.
+   *
+   * ADA KARENA merah punya arti yang harus dijaga. Merah menandai aksi yang
+   * benar-benar menghancurkan atau menutup sesuatu: mengeluarkan anggota,
+   * membatalkan jadwal, menandai pohon sudah tidak ada, menghapus catatan, dan
+   * keluar dari kebun. "Keluar dari akun" tidak menghapus apa pun — sesi
+   * berakhir, datanya utuh, dan orangnya bisa masuk lagi kapan saja. Mewarnainya
+   * merah bersama aksi-aksi itu melunturkan artinya di tempat yang justru
+   * penting.
+   */
+  | 'neutral'
   | 'primary'
   /** @deprecated Spek batch 1a tidak mengenal varian ini. Akan dipetakan ke 'secondary' atau ke baris daftar; belum diputuskan per titik pakai. */
   | 'quiet'
@@ -2175,6 +2218,11 @@ export function Button({
 }) {
   const isPrimary = variant === 'primary';
   const isDanger = variant === 'danger';
+  const isNeutral = variant === 'neutral';
+  // Kedua varian ini berbentuk SAMA PERSIS — baris teks tanpa latar dan tanpa
+  // garis. Yang membedakan cuma warna labelnya. Setiap cabang bentuk di bawah
+  // memakai `isTextRow`; hanya cabang warna yang membedakan keduanya.
+  const isTextRow = isDanger || isNeutral;
   const isGhost = variant === 'ghost' || variant === 'quiet';
   const isIcon = variant === 'icon';
   const isSmall = size === 'small';
@@ -2211,7 +2259,7 @@ export function Button({
   // Varian merusak ikut dikecualikan sejak batch 1a: ia kini teks tanpa latar
   // DAN tanpa garis, jadi 'strong' di sana akan menggambar kotak yang justru
   // baru saja dibuang.
-  const isStrong = emphasis === 'strong' && !isGhost && !isDanger;
+  const isStrong = emphasis === 'strong' && !isGhost && !isTextRow;
 
   // Tinggi: 56 untuk aksi utama, 52 untuk sekunder dan merusak. Dua angka, dan
   // bedanya membawa arti — tombol utama satu-satunya yang lebih tinggi di
@@ -2221,7 +2269,7 @@ export function Button({
     ? 40
     : isPrimary
       ? touch.primaryButton
-      : isDanger || variant === 'secondary'
+      : isTextRow || variant === 'secondary'
         ? touch.secondaryButton
         : tokens.layout.controlHeight;
 
@@ -2231,9 +2279,11 @@ export function Button({
       ? palette.textOnAccent
       : isDanger
         ? palette.statusBurukInk
-        : isLegacyVariant
-          ? colors.primary
-          : palette.textPrimary;
+        : isNeutral
+          ? palette.textMuted
+          : isLegacyVariant
+            ? colors.primary
+            : palette.textPrimary;
 
   // 18 untuk utama, 17 untuk sekunder dan merusak. Varian usang tetap 16.
   const labelFontSize = isSmall ? 14 : isLegacyVariant ? 16 : isPrimary ? 18 : 17;
@@ -2252,21 +2302,21 @@ export function Button({
         alignItems: 'center',
         // Selebar kolom konten, kecuali ukuran kecil dan varian ikon.
         alignSelf: isSmall || isIcon ? 'flex-start' : 'stretch',
-        // Nonaktif berlatar surfaceSunken — KECUALI varian merusak, yang tetap
-        // tanpa latar. Aksi merusak adalah baris TEKS; memberinya bidang saat
-        // dinonaktifkan membuat tombol teks mendadak tumbuh kotak, lalu kotak
-        // itu lenyap lagi begitu aktif. Nonaktifnya cukup ditandai warna teks
-        // (textMuted lewat contentColor) dan ketidakmampuannya ditekan.
+        // Nonaktif berlatar surfaceSunken — KECUALI baris teks, yang tetap
+        // tanpa latar. Baris teks memang TEKS; memberinya bidang saat
+        // dinonaktifkan membuatnya mendadak tumbuh kotak, lalu kotak itu lenyap
+        // lagi begitu aktif. Nonaktifnya cukup ditandai warna teks (textMuted
+        // lewat contentColor) dan ketidakmampuannya ditekan.
         backgroundColor: isDisabledLook
-          ? isDanger
+          ? isTextRow
             ? 'transparent'
             : palette.surfaceSunken
           : getButtonBackground(variant, pressed),
         borderColor: isStrong ? palette.borderStrong : getButtonBorderColor(variant),
         borderCurve: 'continuous',
         borderRadius: isIcon ? radius.round : shapeRadius.control,
-        // Merusak tanpa garis, dan nonaktif tanpa garis. Sisanya seperti dulu.
-        borderWidth: isGhost || isDanger || isDisabledLook ? 0 : isStrong ? 1.5 : 1,
+        // Baris teks tanpa garis, dan nonaktif tanpa garis. Sisanya seperti dulu.
+        borderWidth: isGhost || isTextRow || isDisabledLook ? 0 : isStrong ? 1.5 : 1,
         flexDirection: 'row',
         gap: spacing.sm,
         height: isIcon ? (isSmall ? 40 : 48) : undefined,
@@ -2446,11 +2496,23 @@ export function SuccessBanner({ message }: { message?: string | null }) {
 // dipakai layarnya setelah selesai memuat, supaya judul dan tombol kembali
 // tidak berpindah tempat saat pemintalnya hilang.
 export function LoadingState({
+  applyTopInset = false,
   header,
   message,
   rowHeight,
   rows,
 }: {
+  /**
+   * Diteruskan apa adanya ke <Screen>. Bawaannya false, jadi 32 pemanggil yang
+   * ada tidak bergeser sedikit pun.
+   *
+   * WAJIB dinyalakan oleh layar yang memanggil LoadingState TANPA header.
+   * Safe-area atas normalnya diterapkan TopAppBar di dalam `header`; layar tanpa
+   * header tidak punya siapa pun yang melakukannya, dan kerangka memuatnya akan
+   * menabrak status bar. Layar status akses adalah pemanggil pertama yang
+   * benar-benar ada di keadaan itu, sejak baris mereknya dicabut.
+   */
+  applyTopInset?: boolean;
   header?: React.ReactNode;
   /**
    * Baris penjelas yang muncul HANYA setelah pemuatan melewati 5 detik.
@@ -2474,7 +2536,7 @@ export function LoadingState({
   rows?: number;
 }) {
   return (
-    <Screen header={header}>
+    <Screen applyTopInset={applyTopInset} header={header}>
       {/* Kerangka duduk di ATAS layar mengikuti aliran isi, bukan dipusatkan
           vertikal seperti pemutar dulu. Itu memang inti perubahannya: bentuknya
           harus berada di tempat isinya akan muncul, supaya tidak ada lompatan
@@ -3222,10 +3284,11 @@ function getButtonBackground(variant: ButtonVariant, pressed: boolean): string {
     return pressed ? palette.accentPressed : palette.accent;
   }
 
-  if (variant === 'danger') {
-    // Tanpa latar, termasuk saat ditekan. Aksi merusak adalah BARIS teks
-    // terpisah, bukan tombol merah — spek menyebutnya eksplisit. Umpan balik
-    // tekannya datang dari opacity pada Pressable, bukan dari bidang warna.
+  if (variant === 'danger' || variant === 'neutral') {
+    // Tanpa latar, termasuk saat ditekan. Keduanya adalah BARIS teks terpisah,
+    // bukan tombol berblok — spek menyebutnya eksplisit untuk aksi merusak, dan
+    // 'neutral' meminjam bentuk yang sama persis. Umpan balik tekannya datang
+    // dari opacity pada Pressable, bukan dari bidang warna.
     return 'transparent';
   }
 

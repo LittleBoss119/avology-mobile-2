@@ -16,7 +16,7 @@ import { acknowledgeAccessNotice, cancelJoinRequest } from '../services/memberSe
 import type { CurrentUserFarm } from '../types/domain';
 import { ConfirmDialog } from './bottom-sheet';
 import { Icon, type IconName } from './icons';
-import { BrandMark, Button, ChipButton, ErrorBanner, LoadingState, Screen, TopAppBar } from './ui';
+import { Button, ErrorBanner, LoadingState, Screen } from './ui';
 
 // Layar ini melayani tiga state sekaligus: pending, rejected, removed.
 //
@@ -46,6 +46,7 @@ export function AccessStatusScreen() {
   const [checkingStatus, setCheckingStatus] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [confirmCancel, setConfirmCancel] = React.useState(false);
+  const [confirmSignOut, setConfirmSignOut] = React.useState(false);
   const [joinedFarm, setJoinedFarm] = React.useState<{ name: string | null } | null>(null);
 
   const isPending = currentFarm?.status === 'pending';
@@ -101,34 +102,19 @@ export function AccessStatusScreen() {
   // satu: useFocusEffect di app/(onboarding)/_layout.tsx — lihat catatan di
   // laporan Fase 3.
 
-  // Susunannya sama persis dengan layar pilih akses: baris merek di slot judul,
-  // chip "Profil" berlabel di kanan. flexShrink 0 pada chip supaya baris merek
-  // yang mengalah kalau ruangnya sempit.
+  // TANPA header — baris merek dan chip "Profil" dicabut, sama seperti di layar
+  // pilih akses dan dengan alasan yang sama persis: spek melarang aksi di
+  // header, chip berlatar terang menambah bidang, dan pengguna di layar ini
+  // belum punya kebun yang bisa diatur dari Profil.
   //
-  // Diangkat ke SATU tempat dan dipakai dua kali — oleh LoadingState di bawah
-  // dan oleh Screen di akhir — supaya app bar tidak menghilang lalu muncul lagi
-  // saat pemuatan selesai. Satu sumber, bukan dua salinan yang bisa berselisih.
-  // Isinya tidak bergantung pada relasi yang sedang dimuat, jadi ia sudah utuh
-  // sebelum currentFarm terbaca.
-  const header = (
-    <TopAppBar
-      variant="main"
-      titleContent={<BrandMark inline />}
-      right={
-        <View style={{ flexShrink: 0 }}>
-          <ChipButton
-            active={false}
-            icon="user"
-            label="Profil"
-            onPress={() => router.push('/profile')}
-          />
-        </View>
-      }
-    />
-  );
-
+  // Kedua layar ini bahkan lebih tidak membutuhkannya daripada layar pilih
+  // akses: ikon 44 dan judul serif di badan layar sudah memberi orientasi
+  // sepenuhnya, jauh lebih jelas daripada logo kecil di pojok.
+  //
+  // applyTopInset WAJIB menyala begitu header hilang — tanpa header tidak ada
+  // lagi yang menerapkan safe-area atas.
   if (!currentFarm) {
-    return <LoadingState header={header} message="Memuat status akses..." />;
+    return <LoadingState applyTopInset message="Memuat status akses..." />;
   }
 
   async function handleCancelRequest() {
@@ -202,10 +188,12 @@ export function AccessStatusScreen() {
     if (result) {
       setActionError(result.message);
       setSigningOut(false);
+      setConfirmSignOut(false);
       return;
     }
 
     setSigningOut(false);
+    setConfirmSignOut(false);
     router.replace('/get-started');
   }
 
@@ -234,7 +222,7 @@ export function AccessStatusScreen() {
 
   return (
     <Screen
-      header={header}
+      applyTopInset
       // SETIAP keadaan punya isi footer sekarang — tidak ada lagi cabang
       // `undefined`. "Batalkan pengajuan" pindah ke sini dari dalam kartu: ia
       // mengubah keadaan, dan aksi yang mengubah keadaan tidak boleh duduk di
@@ -271,13 +259,16 @@ export function AccessStatusScreen() {
               disabled={busy || checkingStatus}
               onPress={() => setConfirmCancel(true)}
             />
+            {/* 'neutral', bukan 'danger' — keluar dari akun tidak menghapus
+                apa pun. Merah disimpan untuk aksi yang benar-benar menutup
+                sesuatu, termasuk "Batalkan pengajuan" tepat di atasnya. */}
             <Button
               title="Keluar dari akun"
-              variant="danger"
+              variant="neutral"
               disabled={busy || checkingStatus}
               loading={signingOut}
               loadingTitle="Keluar…"
-              onPress={() => void handleSignOut()}
+              onPress={() => setConfirmSignOut(true)}
             />
           </>
         ) : (
@@ -302,13 +293,14 @@ export function AccessStatusScreen() {
               loadingTitle="Menyiapkan…"
               onPress={() => void handleRecovery()}
             />
+            {/* 'neutral', alasan sama dengan cabang menunggu di atas. */}
             <Button
               title="Keluar dari akun"
-              variant="danger"
+              variant="neutral"
               disabled={busy}
               loading={signingOut}
               loadingTitle="Keluar…"
-              onPress={() => void handleSignOut()}
+              onPress={() => setConfirmSignOut(true)}
             />
           </>
         )
@@ -404,6 +396,25 @@ export function AccessStatusScreen() {
         title="Batalkan pengajuan?"
         tone="danger"
         visible={confirmCancel}
+      />
+
+      {/* Kata-katanya sama persis dengan lembar keluar di layar Pilih jalur dan
+          Profil — satu kalimat yang sama di ketiganya, supaya orang yang sudah
+          pernah membacanya tidak perlu membacanya ulang. */}
+      <ConfirmDialog
+        cancelLabel="Batal"
+        confirmLabel="Keluar dari akun"
+        loading={signingOut}
+        message="Kamu perlu masuk lagi untuk membuka aplikasi ini."
+        onCancel={() => {
+          if (!signingOut) {
+            setConfirmSignOut(false);
+          }
+        }}
+        onConfirm={() => void handleSignOut()}
+        title="Keluar dari akun?"
+        tone="danger"
+        visible={confirmSignOut}
       />
     </Screen>
   );

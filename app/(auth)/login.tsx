@@ -87,10 +87,20 @@ export default function LoginScreen() {
           seharusnya. flexShrink sengaja tidak ditulis: menuliskannya 0 pun benar,
           tapi diam-diam mengundang orang mengubahnya. */}
       <View style={{ flexGrow: 1, gap: tokens.space.xxxl, justifyContent: 'center' }}>
-        {/* Tanpa subjudul. "Lanjutkan mengelola kebun." dicabut: judulnya sudah
-            menyapa, dan kalimat kedua di bawah sapaan tidak menambah apa pun
-            yang menolong orang mengisi dua kolom di bawahnya. */}
-        <PageIntro align="center" title="Selamat datang kembali" />
+        {/* Subjudul DIKEMBALIKAN setelah verifikasi perangkat. Ia sempat
+            dicabut di batch 2 karena daftar isi layar di spek tidak
+            menyebutnya — dan itu salah baca: daftar itu bukan daftar tertutup,
+            dan layar Daftar di sebelahnya punya barisnya sendiri.
+
+            Kalimatnya menyebut SYARAT, bukan sapaan kedua: email yang dipakai
+            harus yang sudah terdaftar. Itu keterangan yang benar-benar
+            menolong orang mengisi kolom di bawahnya — persis yang tidak
+            dilakukan "Lanjutkan mengelola kebun." yang lama. */}
+        <PageIntro
+          align="center"
+          title="Selamat datang kembali"
+          subtitle="Masuk dengan email yang sudah terdaftar."
+        />
         {/* Zona isian. xl (20) memisahkan sub-blok di dalamnya (banner, kelompok
             field, tombol, tautan); lg (16) di kelompok field adalah jarak antar
             field yang lama, sengaja TIDAK diubah. */}

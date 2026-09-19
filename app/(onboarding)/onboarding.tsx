@@ -1,28 +1,15 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { View } from 'react-native';
 
-import {
-  BrandMark,
-  Button,
-  ChipButton,
-  ErrorBanner,
-  PageIntro,
-  Screen,
-  TopAppBar,
-} from '../../src/components/ui';
+import { Button, ErrorBanner, PageIntro, Screen } from '../../src/components/ui';
+import { ConfirmDialog } from '../../src/components/bottom-sheet';
 import { useAuth } from '../../src/context/auth-context';
 
-// BOBOT SETARA — DIPULIHKAN. BACA INI SEBELUM MEMBALIKNYA LAGI.
+// BOBOT TIDAK LAGI SETARA — DIUBAH SADAR SETELAH VERIFIKASI PERANGKAT.
+// BACA SELURUHNYA SEBELUM MENYENTUH KEDUA TOMBOL DI BAWAH.
 //
-// Versi paling awal layar ini memberi "Buat Kebun" tombol hijau solid dan
-// "Gabung Kebun" tombol outline. Akibatnya pekerja yang tidak membaca menekan
-// yang paling menonjol, membuat kebun sampah, lalu terjebak sebagai pemilik.
-// Versi sesudahnya menutup jalur itu dengan menyamakan bobot keduanya.
-//
-// Redesain sempat mengembalikan pasangan utama/sekunder itu. Keputusan tersebut
-// DIBATALKAN setelah jalur pemulihannya diaudit, dan hasilnya: pemilik kebun
-// kosong benar-benar tidak punya jalan keluar apa pun lewat aplikasi.
+// BAHAYA YANG MASIH NYATA, dan ia tidak hilang oleh perubahan ini: pemilik
+// kebun kosong TIDAK punya jalan keluar apa pun lewat aplikasi.
 //   * leave_current_farm menyaring `role = 'worker'` (migrasi 051:266-277),
 //     jadi pemilik yang memanggilnya ditolak dengan "Active worker membership
 //     not found".
@@ -31,26 +18,38 @@ import { useAuth } from '../../src/context/auth-context';
 //   * Tidak ada alih kepemilikan.
 //   * farm_members_one_active_relation_idx (migrasi 036:150-152) memblokir
 //     baris pending/active yang baru selama baris pemilik itu masih berdiri.
-// Jadi satu ketukan keliru di layar ini mengunci akun itu untuk seterusnya —
-// dan pesan yang diterimanya kemudian, "Keluar dari kebun itu dulu sebelum
-// mengajukan gabung", menyuruh sesuatu yang tidak ada tombolnya.
+// Jadi satu ketukan keliru di layar ini mengunci akun itu untuk seterusnya.
 //
-// Karena itu kedua tombol memakai varian yang SAMA PERSIS. Tidak ada yang lebih
-// menonjol, sehingga tidak ada yang bisa tertekan hanya karena ia menonjol.
+// RIWAYATNYA. Versi paling awal memberi "Buat Kebun" tombol hijau solid dan
+// "Gabung Kebun" tombol outline; pekerja yang tidak membaca menekan yang paling
+// menonjol, membuat kebun sampah, lalu terjebak. Versi sesudahnya menutup jalur
+// itu dengan menyamakan bobot keduanya, dan aturan itu bertahan lama.
 //
-// Pembeda kedua jalur ada di KATA-KATANYA, bukan di bentuknya: keduanya
-// menjawab satu pertanyaan di judul ("Belum" versus "Sudah") lalu menyebut siapa
-// yang memilihnya ("Saya pemilik kebun" versus "Saya punya kode kebun").
+// KENAPA DIUBAH SEKARANG. Dua tombol identik ternyata memindahkan bebannya,
+// bukan menghapusnya: pengguna sasaran aplikasi ini termasuk orang berusia
+// lanjut, dan dua tombol yang persis sama menuntut mereka MEMBACA keduanya
+// sampai tuntas sebelum bisa bergerak. Yang terjadi di perangkat bukan
+// pertimbangan yang cermat, melainkan keraguan.
 //
-// Subjudul itu bukan hiasan dan bukan pembalikan keputusan di atas: ia melekat
-// DI DALAM tombol lewat prop `subtitle` milik Button, jadi kedua tombol tetap
-// berbentuk identik dan sama-sama membawa dua baris. Yang dulu ditolak adalah
-// subjudul TERPISAH di luar tombol dan baris daftar berikon-berchevron, dan
-// keduanya tetap tidak dikembalikan.
+// Yang membuat hierarki aman sekarang — dan tidak aman dulu — ada tiga:
+//   1. Labelnya menjawab pertanyaan di judul ("Belum" versus "Sudah"), jadi
+//      yang dipilih adalah jawaban, bukan perintah yang berdiri sendiri.
+//   2. Setiap tombol membawa subjudul yang menyebut SIAPA yang memilihnya
+//      ("Saya pemilik kebun" versus "Saya punya kode kebun"). Pekerja yang
+//      salah tekan harus mengabaikan kalimat yang menyebut dirinya bukan itu.
+//   3. Yang dijadikan utama adalah "buat kebun" — jalur yang bisa diselesaikan
+//      TANPA bekal apa pun. "Gabung kebun" butuh kode yang mungkin belum
+//      dipegang, dan menjadikannya tombol paling terang berarti mengundang
+//      orang ke jalan buntu.
+//
+// Yang TETAP tidak boleh dikembalikan: subjudul terpisah di luar tombol, dan
+// baris daftar berikon-berchevron. Subjudul di sini melekat DI DALAM tombol
+// lewat prop `subtitle` milik Button.
 
 export default function OnboardingDecisionScreen() {
   const { error, signOut } = useAuth();
   const [signingOut, setSigningOut] = React.useState(false);
+  const [confirmSignOut, setConfirmSignOut] = React.useState(false);
   const [signOutError, setSignOutError] = React.useState<string | null>(null);
 
   // Mengikuti pola di profile-screen.tsx: signOut mengembalikan galat alih-alih
@@ -65,53 +64,40 @@ export default function OnboardingDecisionScreen() {
     if (result) {
       setSignOutError(result.message);
       setSigningOut(false);
+      setConfirmSignOut(false);
       return;
     }
 
     setSigningOut(false);
+    setConfirmSignOut(false);
     router.replace('/get-started');
   }
 
   return (
     <Screen
-      header={
-        // Slot judul diisi baris merek — layar ini titik masuk pertama sesudah
-        // akun dibuat, dan app bar tanpa judul maupun logo terbaca seperti layar
-        // yang belum jadi. Di kanan, chip BERLABEL menggantikan ikon profil
-        // telanjang: "Profil" bisa dibaca, sedangkan ikon orang harus ditebak.
-        //
-        // flexShrink 0 pada chip: kalau ruangnya sempit, baris merek di slot
-        // judul yang mengalah — nama aplikasi masih terbaca dari logonya,
-        // sedangkan chip yang gepeng kehilangan labelnya sama sekali.
-        <TopAppBar
-          variant="main"
-          titleContent={<BrandMark inline />}
-          right={
-            <View style={{ flexShrink: 0 }}>
-              <ChipButton
-                active={false}
-                icon="user"
-                label="Profil"
-                onPress={() => router.push('/profile')}
-              />
-            </View>
-          }
-        />
-      }
-      // Jarak antar kedua tombol TIDAK disetel di sini: slot footer milik Screen
-      // sudah membungkus anaknya dengan gap spacing.md (ui.tsx ~:333). Itu jarak
-      // yang sama dengan pasangan tombol bertumpuk di get-started.tsx dan di
-      // layar status akses, jadi tidak ada angka baru yang dikarang di layar ini.
+      // TANPA header sama sekali — baris merek dan chip "Profil" dicabut.
+      //
+      // Tiga alasan, dan ketiganya berdiri sendiri. Spek melarang aksi di
+      // header. Chip "Profil" berlatar terang menambah satu bidang lagi ke
+      // layar yang seharusnya cuma satu pertanyaan dan dua jawaban. Dan
+      // pengguna di layar ini BELUM punya kebun, jadi hampir tidak ada yang
+      // bisa diatur di Profil.
+      //
+      // Konsekuensi yang diterima sadar: selama belum masuk kebun, tidak ada
+      // jalan ke Edit profil maupun Ubah password. Sempit, dan bisa ditinjau
+      // ulang — tapi jalan keluar yang benar-benar dibutuhkan di sini adalah
+      // "Keluar dari akun", dan itu sekarang berdiri sendiri di bar aksi.
+      //
+      // applyTopInset WAJIB menyala begitu header hilang: tanpa header, tidak
+      // ada lagi yang menerapkan safe-area atas, dan judul akan menabrak
+      // status bar.
+      applyTopInset
       footer={
         <>
-          {/* Kedua tombol WAJIB identik variannya — alasannya di puncak file,
-              dan itu bukan soal selera. Keduanya memakai varian dan emphasis
-              yang sama persis, sehingga tidak ada yang bisa tertekan hanya
-              karena ia lebih menonjol.
-
-              Label kini MENJAWAB pertanyaan di judul ("Belum" / "Sudah"), dan
-              subjudulnya menyebut SIAPA yang memilih jalur itu. Dua penanda
-              untuk satu pilihan yang tidak bisa dibatalkan.
+          {/* URUTAN BOBOT INI PUNYA ALASAN — baca catatan di puncak berkas
+              sebelum menukarnya. Utama untuk "buat kebun" karena ia jalur yang
+              bisa diselesaikan tanpa bekal apa pun; sekunder untuk "gabung
+              kebun" karena ia butuh kode yang mungkin belum dipegang.
 
               Koma di "Belum, buat kebun" melanggar aturan bahasa §6 yang
               melarang koma pada tombol. Dipakai apa adanya karena Langkah 6
@@ -120,8 +106,6 @@ export default function OnboardingDecisionScreen() {
           <Button
             title="Belum, buat kebun"
             subtitle="Saya pemilik kebun"
-            variant="secondary"
-            emphasis="strong"
             onPress={() => router.push('/create-farm')}
           />
           <Button
@@ -131,56 +115,66 @@ export default function OnboardingDecisionScreen() {
             emphasis="strong"
             onPress={() => router.push('/join-farm')}
           />
-          {/* Jalan keluar WAJIB. Tanpa ini layar ini mengunci: dua tombol di
-              atas adalah satu-satunya yang bisa ditekan, dan keduanya membuat
-              relasi kebun yang tidak bisa dibatalkan sendiri oleh pemilik
-              (lihat catatan panjang di puncak berkas). Chip "Profil" di app bar
-              memang memuat logout, tapi ia harus ditemukan dulu — dan tidak ada
-              yang menduga tombol keluar bersembunyi di balik ikon profil.
+          {/* Jalan keluar WAJIB, dan sejak baris merek dicabut ia SATU-SATUNYA.
+              Tanpa ini layar ini mengunci: dua tombol di atas adalah satu-
+              satunya yang bisa ditekan, dan keduanya membuat relasi kebun yang
+              tidak bisa dibatalkan sendiri oleh pemilik (lihat catatan panjang
+              di puncak berkas).
 
-              Baris merusak, bukan tombol berblok: keluar dari akun bukan
-              jawaban atas pertanyaan di judul. */}
+              Baris teks NETRAL, bukan merusak: keluar dari akun tidak menghapus
+              apa pun. Ia juga bukan jawaban atas pertanyaan di judul, jadi ia
+              tidak berbentuk tombol berblok seperti dua tombol di atasnya. */}
           <Button
             title="Keluar dari akun"
-            variant="danger"
+            variant="neutral"
             loading={signingOut}
             loadingTitle="Keluar…"
-            onPress={handleSignOut}
+            onPress={() => setConfirmSignOut(true)}
           />
         </>
       }
     >
-      {/* Naik ke anak pertama, di atas blok sapaan. Dulu ia duduk di antara
-          sapaan dan daftar pilihan; sekarang blok sapaan memakan seluruh ruang
-          kosong, jadi spanduk galat yang ikut terpusat akan melayang di tengah
-          layar jauh dari apa pun. Di puncak layar ia mengikuti kebiasaan setiap
-          layar lain di app ini. */}
       <ErrorBanner message={signOutError ?? error?.message} />
 
-      {/* Blok sapaan duduk di tengah ruang antara header dan tombol.
-          flexGrow: 1, JANGAN flex: 1 — `flex: 1` berarti flexBasis 0, sehingga
-          pembungkus ini tidak menyumbang tinggi apa pun dan konten tidak pernah
-          bisa melampaui viewport, jadi ScrollView tidak punya apa pun untuk
-          digulung. Alasan lengkapnya di get-started.tsx dan ui.tsx ~:323-331.
-          Relevan di sini karena pengguna sasaran termasuk orang yang membesarkan
-          font sistem.
+      {/* ISI MENEMPEL KE ATAS, tidak lagi terpusat vertikal.
+          Pembungkus flexGrow:1 ber-justifyContent:'center' yang dulu ada di
+          sini DICABUT. Ia mendudukkan judul di tengah ruang kosong, dan
+          akibatnya pertanyaan melayang jauh dari jawaban-jawabannya di bar
+          aksi — dua hal yang seharusnya dibaca berurutan dipisahkan ruang
+          kosong sebesar setengah layar.
 
-          TANPA ilustrasi, ikon besar, atau logo: BrandMark sudah berdiri di app
-          bar, dan mengulangnya di badan layar berarti merek dua kali di satu
-          layar. */}
-      <View style={{ flexGrow: 1, justifyContent: 'center' }}>
-        {/* SATU PERTANYAAN sebagai judul, menggantikan sapaan "Halo, {nama}" +
-            "Mulai dari mana?".
-            Sapaan itu ramah tapi tidak menolong: ia tidak memberi tahu apa yang
-            sedang ditanyakan, sehingga dua tombol di bawahnya harus dibaca
-            sebagai teka-teki. Pertanyaan yang lugas membuat kedua tombol jadi
-            JAWABAN — dan sebuah jawaban jauh lebih mudah dipilih daripada dua
-            perintah yang berdiri sendiri.
+          Sekarang judul duduk di puncak seperti judul layar lain, dan ruang
+          kosongnya jatuh di antara judul dan bar aksi. Tidak ada lagi jebakan
+          flex:1 yang perlu dijaga di sini, karena tidak ada lagi pembungkus
+          yang tumbuh. */}
+      {/* SATU PERTANYAAN sebagai judul, menggantikan sapaan "Halo, {nama}" +
+          "Mulai dari mana?".
+          Sapaan itu ramah tapi tidak menolong: ia tidak memberi tahu apa yang
+          sedang ditanyakan, sehingga dua tombol di bawahnya harus dibaca
+          sebagai teka-teki. Pertanyaan yang lugas membuat kedua tombol jadi
+          JAWABAN — dan sebuah jawaban jauh lebih mudah dipilih daripada dua
+          perintah yang berdiri sendiri.
 
-            Nama depan tidak lagi dipakai di sini; getFirstName di bawah ikut
-            dicabut karena ia tidak punya pemanggil lain. */}
-        <PageIntro align="center" title="Kebunnya sudah ada di Avology?" />
-      </View>
+          RATA KIRI, bukan rata tengah. Sejak baris merek dicabut, pertanyaan
+          ini adalah elemen paling atas layar — jadi ia judul layar, dan judul
+          layar di aplikasi ini rata kiri. */}
+      <PageIntro align="left" title="Kebunnya sudah ada di Avology?" />
+
+      <ConfirmDialog
+        cancelLabel="Batal"
+        confirmLabel="Keluar dari akun"
+        loading={signingOut}
+        message="Kamu perlu masuk lagi untuk membuka aplikasi ini."
+        onCancel={() => {
+          if (!signingOut) {
+            setConfirmSignOut(false);
+          }
+        }}
+        onConfirm={() => void handleSignOut()}
+        title="Keluar dari akun?"
+        tone="danger"
+        visible={confirmSignOut}
+      />
     </Screen>
   );
 }

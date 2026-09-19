@@ -287,7 +287,16 @@ function JoinCodeField({
   status: string | null;
   value: string;
 }) {
+  const [focused, setFocused] = React.useState(false);
   const characters = Array.from({ length: JOIN_CODE_LENGTH }, (_, index) => value[index] ?? '');
+  // Petak yang sedang menunggu ketikan berikutnya. Ia PENGGANTI caret sistem
+  // yang dimatikan di bawah: tanpa penanda ini, kolom yang sedang aktif tidak
+  // bisa dibedakan dari kolom yang sekadar terisi sebagian.
+  //
+  // Saat kedelapan petak sudah terisi, tidak ada lagi petak aktif — nilainya
+  // jatuh ke luar rentang dan tidak ada yang tersorot, yang memang benar: tidak
+  // ada lagi yang ditunggu.
+  const activeIndex = focused ? value.length : -1;
 
   return (
     <View style={{ gap: tokens.space.sm }}>
@@ -311,17 +320,20 @@ function JoinCodeField({
                 backgroundColor: palette.surfaceRaised,
                 borderColor: error
                   ? palette.statusBuruk
-                  : character
+                  : index === activeIndex || character
                     ? palette.accent
                     : palette.borderStrong,
                 borderCurve: 'continuous',
                 borderRadius: shapeRadius.control,
-                // Petak terisi bergaris accent 1,5px — penanda maju yang sama
-                // dengan prop `editing` pada Field. Tanpa itu, satu-satunya yang
-                // menandai kemajuan adalah hurufnya sendiri, dan pada layar yang
-                // kena silau huruf tunggal jauh lebih sulit dilihat daripada
-                // garis kotaknya.
-                borderWidth: character ? 1.5 : 1,
+                // Garis accent 1,5px menandai DUA hal: petak yang sudah terisi
+                // (kemajuan) dan petak yang sedang menunggu ketikan (posisi).
+                // Yang kedua menggantikan caret sistem yang dimatikan.
+                //
+                // Keduanya digambar sama, dan itu disengaja: bersama-sama
+                // mereka membentuk satu blok tersorot yang tumbuh dari kiri ke
+                // kanan, jadi kemajuannya terbaca sebagai satu gerakan alih-alih
+                // delapan keadaan lepas.
+                borderWidth: index === activeIndex || character ? 1.5 : 1,
                 // flex 1 + aspectRatio, bukan lebar tetap: delapan petak harus
                 // muat di layar tersempit tanpa angka yang ditebak per perangkat.
                 flex: 1,
@@ -350,24 +362,44 @@ function JoinCodeField({
           // menerimanya — bikin ragu apakah dia mengetik benar.
           autoCapitalize="characters"
           autoCorrect={false}
+          // Caret sistem dimatikan: posisi ketik sudah ditandai garis accent
+          // pada petak yang sedang aktif, dan caret yang melayang di tengah
+          // baris — bukan di dalam petak mana pun — terbaca sebagai garis asing.
+          caretHidden
           maxLength={JOIN_CODE_LENGTH}
+          onBlur={() => setFocused(false)}
           onChangeText={(next) => onChangeText(next.toUpperCase())}
+          onFocus={() => setFocused(true)}
           // Tanpa placeholder: petak kosong SUDAH menunjukkan ada berapa
           // karakter yang diminta dan di mana masing-masing duduk — pekerjaan
           // yang dulu coba dilakukan placeholder dan selalu gagal.
+          //
+          // TANPA contextMenuHidden. Menu tekan-lama itulah jalan TEMPEL, dan
+          // tempel adalah alasan utama struktur satu-input-delapan-petak ini
+          // dipilih: kode kebun sampai ke tangan pekerja lewat WhatsApp, bukan
+          // lewat ingatan.
           value={value}
           style={{
-            // TRANSPARAN dan dibentangkan di atas petak. Warna teksnya juga
-            // transparan supaya ketikan aslinya tidak terbaca ganda di atas
-            // huruf yang sudah digambar petak.
+            // opacity 0, BUKAN hanya color 'transparent'.
             //
-            // Kursor sengaja dibiarkan tampil (tidak di-caretHidden): ia satu-
-            // satunya isyarat bahwa kolom sedang aktif, dan tanpa itu orang yang
-            // mengetuk tidak tahu keyboard sudah siap menerima.
+            // Ini perbaikan bug yang terlihat di perangkat: dengan color
+            // 'transparent' saja, Android TETAP menggambar teksnya, sehingga
+            // kode muncul dua kali — sekali di dalam petak, sekali melayang di
+            // tengah baris. opacity 0 tidak bisa gagal begitu: ia menyembunyikan
+            // seluruh view, caret dan teks komposisi IME sekaligus.
+            //
+            // View ber-opacity 0 TETAP bisa difokus, tetap menerima ketukan, dan
+            // tetap memunculkan menu tempel saat ditekan lama — yang mematikan
+            // tempel adalah contextMenuHidden, dan itu sengaja tidak dipakai.
+            //
+            // color 'transparent' dibiarkan sebagai lapis kedua, bukan karena
+            // ragu: kalau suatu saat opacity dipakai untuk animasi, teksnya
+            // tetap tidak boleh muncul.
             bottom: 0,
             color: 'transparent',
             fontSize: 20,
             left: 0,
+            opacity: 0,
             position: 'absolute',
             right: 0,
             textAlign: 'center',

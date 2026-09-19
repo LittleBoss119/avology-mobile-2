@@ -208,22 +208,42 @@ export function ProfileScreen() {
             />
           </View>
 
-          <Button title="Keluar akun" variant="danger" onPress={() => setConfirmLogout(true)} />
+          {/* 'neutral', bukan 'danger'. Keluar dari akun tidak menghapus apa
+              pun: sesi berakhir, datanya utuh, dan orangnya bisa masuk lagi
+              kapan saja. Merah disimpan untuk aksi yang benar-benar menutup
+              sesuatu — termasuk "Keluar dari kebun", yang memang mengakhiri
+              keanggotaan dan karena itu TETAP merah.
+
+              Labelnya "Keluar dari akun", bukan "Keluar": tanpa kata terakhir
+              itu ia bisa dibaca sebagai "keluar dari layar ini". */}
+          <Button
+            title="Keluar dari akun"
+            variant="neutral"
+            onPress={() => setConfirmLogout(true)}
+          />
         </>
       )}
 
+      {/* Kata-katanya diseragamkan dengan lembar keluar di layar Pilih jalur,
+          Menunggu, dan Ditolak — satu kalimat yang sama persis di keempatnya,
+          supaya orang yang sudah pernah membacanya di satu tempat tidak perlu
+          membacanya ulang di tempat lain.
+
+          `tone="danger"` DIPERTAHANKAN meski tombol pemicunya kini netral:
+          begitu lembarnya terbuka, tombol di dalamnya adalah konfirmasi
+          terakhir, dan di situ penegasan memang berguna. */}
       <ConfirmDialog
         cancelLabel="Batal"
-        confirmLabel="Keluar"
+        confirmLabel="Keluar dari akun"
         loading={loggingOut}
-        message="Kamu perlu masuk lagi untuk membuka Avology."
+        message="Kamu perlu masuk lagi untuk membuka aplikasi ini."
         onCancel={() => {
           if (!loggingOut) {
             setConfirmLogout(false);
           }
         }}
         onConfirm={() => void handleLogout()}
-        title="Keluar akun?"
+        title="Keluar dari akun?"
         tone="danger"
         visible={confirmLogout}
       />
