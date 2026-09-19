@@ -61,10 +61,15 @@ export const colors = {
   pendingBorder: palette.statusPerhatian,
   photoPlaceholder: palette.photoPlaceholderA,
   white: palette.textOnAccent,
-  // Satu-satunya warna literal yang tersisa di berkas ini. Ia hanya dipakai
-  // sebagai shadowColor. Spek melarang shadow sepenuhnya, tapi mencabut shadow
-  // mengubah tampilan, dan itu bukan pekerjaan batch 0.
-  // TODO(batch berikutnya): cabut shadows/elevation, lalu hapus token ini.
+  // Satu-satunya warna literal yang tersisa di berkas ini, dan sejak batch 1a
+  // ia TIDAK DIPAKAI sama sekali: shadows di bawah sudah dikosongkan, dan ia
+  // hanya pernah menjadi shadowColor.
+  //
+  // Sengaja TIDAK dihapus. `colors` diimpor 53 berkas sebagai satu objek, dan
+  // membuang anggotanya adalah penghapusan ekspor — persis yang dilarang
+  // batasan keras batch ini. Biayanya satu baris mati; biaya salahnya adalah
+  // kompilasi gagal di berkas yang belum sempat diperiksa.
+  // TODO(batch 1b+): hapus setelah dipastikan nol pemakai.
   black: '#000000',
 } as const;
 
@@ -77,13 +82,30 @@ export const spacing = {
   '2xl': 24,
   '3xl': 32,
   '4xl': 40,
-  screenHorizontal: 16,
+  // 16 -> 20 (batch 1a). SATU-SATUNYA angka yang berubah di objek ini. Skala
+  // umum xs..4xl sengaja dibiarkan utuh — itu pekerjaan batch 1b.
+  //
+  // Ia bukan bagian skala itu: ia padding tepi layar, dan spek menyebutnya
+  // sebagai angka tersendiri. Mengubahnya di sini menggeser tepi kiri-kanan
+  // setiap layar yang memakai Screen sekaligus, yang memang tujuannya.
+  screenHorizontal: 20,
   sectionGap: 18,
   cardPadding: 16,
   listGap: 12,
   buttonHeight: 52,
 } as const;
 
+// Batch 1a menyentuh DUA entri saja: input dan button, 14 -> 10.
+//
+// Sembilan entri sisanya — sm, md, lg, xl, 2xl, screenCard, imageCard, dan
+// pasangannya tokens.radius.cardInner/card — semuanya radius KARTU, gambar, dan
+// banner. Spek tidak memberi peran untuk itu, dan sebagian besar kartunya
+// dibongkar di batch 3 dan 7. Menyetel radiusnya sekarang adalah kerja yang
+// langsung terbuang, jadi dibiarkan apa adanya.
+//
+// Akibat yang diterima sadar: untuk sementara ada tombol radius 10 duduk di
+// dalam kartu radius 14/16/20. Itu keadaan antara yang disengaja, bukan
+// kelalaian — jangan "dirapikan" sebelum kartunya sendiri diputuskan.
 export const radius = {
   sm: 8,
   md: 12,
@@ -92,8 +114,8 @@ export const radius = {
   '2xl': 24,
   round: 999,
   screenCard: 18,
-  input: 14,
-  button: 14,
+  input: 10,
+  button: 10,
   chip: 999,
   imageCard: 16,
 } as const;
@@ -117,21 +139,20 @@ export const typography = {
   navLabel: { fontSize: 11, fontWeight: '600' as FontWeight, lineHeight: 14 },
 } as const;
 
+// DIKOSONGKAN di batch 1a. Spek: hierarki dibentuk garis 1px, beda bidang, dan
+// ruang kosong — tidak ada bayangan di mana pun.
+//
+// Kedua entri sengaja TETAP ADA sebagai objek kosong, bukan dihapus. Menyebar
+// `...shadows.card` ke sebuah style tetap sah dan sekarang tidak menambahkan
+// apa-apa, jadi tidak satu pun pemanggil perlu disentuh. Keduanya kebetulan
+// nol pemanggil saat ini, tapi bentuk ini yang membuat `tokens.elevation` di
+// bawah — yang PUNYA dua pemanggil — bisa ikut dikosongkan dengan cara sama.
+//
+// Tidak ada yang kehilangan batas: setiap kartu yang dulu memakainya sudah
+// punya garis 1px sendiri.
 export const shadows = {
-  card: {
-    shadowColor: colors.black,
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  } satisfies ViewStyle,
-  elevated: {
-    shadowColor: colors.black,
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 8,
-  } satisfies ViewStyle,
+  card: {} satisfies ViewStyle,
+  elevated: {} satisfies ViewStyle,
 } as const;
 
 export const statusColors = {
@@ -220,15 +241,23 @@ export const tokens = {
   },
   space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32, xxxxl: 40 },
   layout: {
-    screenX: 16, screenTop: 20, sectionGap: 24, cardPadding: 16,
+    // screenX 16 -> 20 (batch 1a), sejalan dengan spacing.screenHorizontal.
+    // Keduanya padding tepi layar; membiarkan salah satunya di 16 akan membuat
+    // layar denah bertepi lebih rapat daripada seluruh layar lain.
+    screenX: 20, screenTop: 20, sectionGap: 24, cardPadding: 16,
     listGap: 12, rowMinHeight: 48, controlHeight: 56, tapTarget: 44,
-    // fieldHeight (54) adalah promosi literal lama di <Field>, nilainya sengaja
-    // TIDAK diubah supaya pemakaian Field yang ada tidak bergeser. Selisih 54 vs
-    // controlHeight 56 kemungkinan tidak disengaja; rekonsiliasinya dijadwalkan
-    // sebagai pass tersendiri dengan verifikasi visual, bukan di sini.
-    fieldHeight: 54,
+    // 54 -> 52 (batch 1a). Selisih 54 vs controlHeight 56 memang tidak
+    // disengaja, dan rekonsiliasinya terjadi di sini: 52 adalah tinggi kolom
+    // isian dan tombol sekunder, 56 tinggi tombol utama. Dua angka, dua peran.
+    fieldHeight: 52,
   },
-  radius: { control: 14, tile: 12, cardInner: 16, card: 20, sheet: 28, pill: 999 },
+  // control 14 -> 10, sheet 28 -> 18, tile 12 -> 8 (batch 1a).
+  //
+  // `tile` adalah radius sel denah kebun ([farm-map-screen.tsx] sel peta dan
+  // sel yang diperbesar), bukan radius ubin generik — namanya menyesatkan,
+  // perannya tidak. cardInner dan card TIDAK disentuh; lihat catatan pada
+  // `radius` di atas.
+  radius: { control: 10, tile: 8, cardInner: 16, card: 20, sheet: 18, pill: 999 },
   type: {
     display:    { fontSize: 32, fontWeight: '700', lineHeight: 38 },
     title:      { fontSize: 24, fontWeight: '700', lineHeight: 30 },
@@ -242,11 +271,17 @@ export const tokens = {
     caption:    { fontSize: 12, fontWeight: '600', lineHeight: 16 },
   },
   icon: { xs: 14, sm: 16, md: 20, lg: 24, stroke: 2 },
+  // DIKOSONGKAN di batch 1a, bersama `shadows` di atas.
+  //
+  // Ini yang benar-benar menggerakkan sesuatu: dua pemanggilnya nyata —
+  // panel di farm-map-screen.tsx dan snackbar.tsx, keduanya menyebar
+  // `...tokens.elevation.overlay`. Sebaran objek kosong tetap sah, jadi tidak
+  // ada berkas yang perlu disentuh; keduanya kehilangan bayangannya saja.
+  //
+  // Snackbar perlu diperiksa di perangkat: ia MELAYANG di atas isi layar dan
+  // bayangan adalah satu-satunya yang memisahkannya dari latar. Kalau ia jadi
+  // sulit dibedakan, jawabannya garis 1px, bukan bayangan yang dikembalikan.
   elevation: {
-    overlay: {
-      // TODO(batch berikutnya): ikut tercabut bersama shadows di atas.
-      shadowColor: '#17231B', shadowOpacity: 0.1, shadowRadius: 16,
-      shadowOffset: { width: 0, height: 4 }, elevation: 6,
-    },
+    overlay: {},
   },
 } as const;

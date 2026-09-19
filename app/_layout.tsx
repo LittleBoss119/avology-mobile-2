@@ -16,14 +16,11 @@ export default function RootLayout() {
   // fontWeight, jadi setiap berat yang dipakai harus dimuat sebagai berkas
   // tersendiri. Kunci di sini WAJIB sama persis dengan nilai di `fonts` pada
   // src/theme/tokens.ts.
-  const [fontsLoaded, fontError] = useFonts({
+  const [fontsLoaded] = useFonts({
     IBMPlexSans_400Regular,
     IBMPlexSans_600SemiBold,
     SourceSerif4_600SemiBold,
   });
-
-  // SEMENTARA (batch 1a, langkah 0): bukti font termuat. Dicabut lagi.
-  console.log('[font]', { fontsLoaded, fontError: fontError ? String(fontError) : null });
 
   // Gerbang render. Tanpa ini layar sempat tampil dengan font sistem lalu
   // melompat begitu font siap.

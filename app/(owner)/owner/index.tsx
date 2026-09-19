@@ -432,6 +432,15 @@ function ActionRow({ row }: { row: ActionRowItem }) {
 //
 // Undefined berarti baris ini memang tidak punya keterangan; bagian itu tidak
 // dirender sama sekali, bukan dirender sebagai teks kosong atau "-".
+// TODO(batch 3 — Beranda): ganti dengan <MenuRow> dari src/components/ui.tsx.
+// MenuRow sudah dibentuk ulang di batch 1a dan sanggup menyerap baris ini apa
+// adanya: `title` -> `label`, `meta` -> `meta`, `icon` dan `onPress` sama
+// namanya. SATU perbedaan yang disengaja: MenuRow menaruh meta di BAWAH judul,
+// bukan di ujung kanan baris — itu susunan yang dikunci spek.
+//
+// Pembungkus <Card> di sekitar <MenuRowGroup> di atas ikut dilepas saat itu.
+// Tidak dikerjakan sekarang karena layar ini dirombak total di batch 3, dan
+// mengeditnya dua kali berarti membuang yang pertama.
 function NavRow({
   icon,
   meta,

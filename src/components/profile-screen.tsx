@@ -8,7 +8,6 @@ import { useAuth } from '../context/auth-context';
 import { consumePendingFeedback } from '../lib/pendingFeedback';
 import type { CurrentUserFarm } from '../types/domain';
 import { formatPersonDisplayName, sanitizeDisplayValue } from '../utils/displayFormat';
-import { fonts } from '../theme/tokens';
 import { isOwnerActive, isWorkerActive } from '../utils/routeGuard';
 import { ConfirmDialog } from './bottom-sheet';
 import { Avatar } from './member-row';
@@ -126,8 +125,6 @@ export function ProfileScreen() {
               selectable
               style={{
                 color: tokens.color.text.primary,
-                // SEMENTARA (batch 1a, langkah 0): bukti font termuat. Dicabut lagi.
-                fontFamily: fonts.serif,
                 fontSize: tokens.type.heading.fontSize,
                 fontWeight: tokens.type.heading.fontWeight,
                 lineHeight: tokens.type.heading.lineHeight,

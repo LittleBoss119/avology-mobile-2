@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { tokens } from '../constants/theme';
+import { colors as palette, fonts, touch } from '../theme/tokens';
 
 // Primitive baris anggota bersama untuk tab Kebun & arsip riwayat akses.
 // Warna diambil dari design token (bukan hardcode). Baris TIDAK menggambar
@@ -33,7 +34,10 @@ export function Avatar({
   size?: 'sm' | 'lg';
   tone?: MemberRowTone;
 }) {
-  const palette = AVATAR_TONE[tone];
+  // Dinamai avatarTone, bukan palette: `palette` kini nama impor token warna di
+  // tingkat modul, dan membiarkan nama lokal ini menutupinya membuat dua hal
+  // yang sangat berbeda terbaca sama di dalam satu berkas.
+  const avatarTone = AVATAR_TONE[tone];
   const box = AVATAR_SIZE[size];
   const textStyle = size === 'lg' ? tokens.type.heading : tokens.type.caption;
 
@@ -41,14 +45,24 @@ export function Avatar({
     <View
       style={{
         alignItems: 'center',
-        backgroundColor: palette.background,
+        backgroundColor: avatarTone.background,
         borderRadius: tokens.radius.pill,
         height: box,
         justifyContent: 'center',
         width: box,
       }}
     >
-      <Text selectable={false} style={{ color: palette.text, fontSize: textStyle.fontSize, fontWeight: '700' }}>
+      {/* fontFamily dipasang supaya inisial memakai muka huruf yang sama dengan
+          nama di sebelahnya. Tanpa itu ia jatuh ke font sistem, dan dua teks
+          yang bersebelahan di dalam satu baris terlihat dari keluarga berbeda. */}
+      <Text
+        selectable={false}
+        style={{
+          color: avatarTone.text,
+          fontFamily: fonts.sansSemiBold,
+          fontSize: textStyle.fontSize,
+        }}
+      >
         {getInitials(name)}
       </Text>
     </View>
@@ -72,6 +86,12 @@ export function MemberRow({
     alignItems: 'center',
     flexDirection: 'row',
     gap: tokens.space.md,
+    // minHeight ditambahkan di batch 1a. paddingVertical 12 saja tidak
+    // menjamin apa pun: baris tanpa `meta` hanya setinggi satu baris teks
+    // (~23) + 24 = 47, tepat di bawah target sentuh 48. Selisih satu piksel,
+    // tapi ia justru pada baris yang paling sering ada — anggota tanpa
+    // keterangan.
+    minHeight: touch.row,
     paddingVertical: tokens.space.md,
   };
 
@@ -83,10 +103,12 @@ export function MemberRow({
           selectable={false}
           numberOfLines={1}
           style={{
-            color: tokens.color.text.primary,
-            fontSize: tokens.type.bodyStrong.fontSize,
-            fontWeight: '700',
-            lineHeight: tokens.type.bodyStrong.lineHeight,
+            color: palette.textPrimary,
+            // 17/600 lewat keluarga font, sejajar dengan MenuRow. fontWeight
+            // dicabut: Android tidak mensintesis berat untuk font kustom.
+            fontFamily: fonts.sansSemiBold,
+            fontSize: 17,
+            lineHeight: 23,
           }}
         >
           {name}
@@ -97,9 +119,13 @@ export function MemberRow({
             numberOfLines={1}
             ellipsizeMode="tail"
             style={{
-              color: tokens.color.text.secondary,
-              fontSize: tokens.type.meta.fontSize,
-              lineHeight: tokens.type.meta.lineHeight,
+              color: palette.textMuted,
+              fontFamily: fonts.sans,
+              // 14, naik dari meta 13. Sejajar dengan meta di MenuRow: dua
+              // bentuk baris daftar yang berdampingan di layar yang sama tidak
+              // boleh memakai dua ukuran keterangan.
+              fontSize: 14,
+              lineHeight: 20,
             }}
           >
             {meta}

@@ -256,6 +256,10 @@ function TreesCard({ treeCounts }: { treeCounts: TreeConditionCounts }) {
   );
 }
 
+// TODO(batch 3 — Beranda): ganti dengan <MenuRow> dari src/components/ui.tsx.
+// Baris ini adalah himpunan bagian paling sederhana dari MenuRow — `title` ->
+// `label`, sisanya sama namanya — jadi penggantiannya lurus tanpa kehilangan
+// apa pun. Pembungkus <Card> di sekitar <MenuRowGroup> ikut dilepas saat itu.
 function NavRow({ icon, onPress, title }: { icon: IconName; onPress: () => void; title: string }) {
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={styles.navRow}>

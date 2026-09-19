@@ -32,10 +32,25 @@ import {
   typography,
   type StatusTone,
 } from '../constants/theme';
-import { colors as palette, fonts } from '../theme/tokens';
+// Keempat komponen batch 1a (Button, Field, Badge, MenuRow) membaca bentuk dan
+// ukurannya dari SINI, bukan dari ekspor `tokens` di constants/theme.ts.
+// Lapisan alih itu tetap melayani 53 berkas lain; yang dibentuk ulang batch ini
+// mengambil langsung dari sumbernya.
+import {
+  colors as palette,
+  fonts,
+  radius as shapeRadius,
+  touch,
+} from '../theme/tokens';
 import { sanitizeDisplayValue, sanitizeUserFacingMessage } from '../utils/displayFormat';
 import { Icon, type IconName } from './icons';
 import { PhotoSourceSheet } from './bottom-sheet';
+import { StatusMarker, type StatusMarkerShape } from './status-marker';
+
+// Diekspor ulang supaya pemanggil punya SATU jalur impor: apa pun yang dipakai
+// bersama <Badge> datang dari './ui', tidak setengah dari sini dan setengah
+// dari './status-marker'. Definisinya tetap di berkasnya sendiri.
+export { StatusMarker, CONDITION_BADGE, type StatusMarkerShape } from './status-marker';
 
 const colors = {
   ...designColors,
@@ -943,14 +958,53 @@ export const badgeColors: Record<BadgeTone, { background: string; border: string
 // langsung di sini, jadi seluruh badge yang sudah ada tidak bergeser satu piksel
 // pun. 'md' hanya untuk badge yang harus mengimbangi teks yang lebih besar di
 // sebelahnya, seperti kode pohon di baris daftar.
+/**
+ * Tampilan eksplisit yang menimpa pemetaan `tone`. `border: null` berarti chip
+ * tanpa garis sama sekali, bukan garis berwarna latar.
+ */
+export type BadgeAppearance = {
+  background: string;
+  border: string | null;
+  text: string;
+};
+
 export function Badge({
+  appearance,
   label,
+  marker,
+  markerColor,
   maxWidth = 128,
   size = 'sm',
   status,
   tone = 'muted',
 }: {
+  /**
+   * Menimpa latar, garis, dan warna teks yang biasanya datang dari `tone`.
+   *
+   * ADA KARENA `tone` tidak sanggup menyatakan tabel kondisi pohon: enam
+   * kondisi memetakan ke hanya tiga BadgeTone (success/warning/danger/muted),
+   * sehingga Hama, Sakit, dan Rusak menjadi chip yang identik. Memperlebar
+   * BadgeTone akan mengubah arti tone bagi 20 pemanggil lain yang tidak ada
+   * urusannya dengan pohon.
+   *
+   * Tanpa nilai, jalur `tone`/`status` berjalan persis seperti sebelumnya.
+   */
+  appearance?: BadgeAppearance;
   label?: string;
+  /**
+   * Penanda bentuk di sisi kiri label. Tanpa nilai, badge tetap chip polos —
+   * itu keadaan setiap pemanggil yang ada sekarang, jadi tidak satu pun
+   * bergeser sampai ada yang mengisinya.
+   *
+   * HANYA untuk badge yang membawa STATUS: kondisi pohon dan status tugas.
+   * Chip informasi — interval pengulangan, grade, varietas, nama fase — tetap
+   * polos. Penanda bentuk adalah kosakata yang harus dipelajari sekali lalu
+   * berlaku seterusnya; memasangnya pada chip yang tidak menyatakan status
+   * membuat kosakata itu berarti "ini sebuah chip", yang tidak berguna.
+   */
+  marker?: StatusMarkerShape;
+  /** Bawaan: warna teks badge. Lihat catatan warna pada CONDITION_BADGE. */
+  markerColor?: string;
   maxWidth?: number;
   size?: 'sm' | 'md';
   status?: string;
@@ -962,30 +1016,50 @@ export function Badge({
     return null;
   }
 
-  const badge = badgeColors[status ? getStatusTone(status) : tone];
+  const badge = appearance ?? badgeColors[status ? getStatusTone(status) : tone];
   const isMedium = size === 'md';
 
   return (
     <View
       style={{
+        alignItems: 'center',
         alignSelf: 'flex-start',
         backgroundColor: badge.background,
-        borderColor: badge.border,
-        borderRadius: radius.round,
-        borderWidth: 1,
+        borderColor: badge.border ?? undefined,
+        borderRadius: shapeRadius.pill,
+        // `border: null` berarti tanpa garis. Chip berlatar warna tidak butuh
+        // garis — latarnya sudah menjadi batasnya, dan garis di atasnya
+        // menambah tepi kedua yang tidak menyampaikan apa pun.
+        borderWidth: badge.border === null ? 0 : 1,
+        flexDirection: 'row',
+        // 7, bukan spasi penuh: penanda harus terbaca MENEMPEL pada labelnya,
+        // bukan berdiri sebagai elemen ketiga di dalam chip.
+        gap: 7,
         maxWidth,
-        paddingHorizontal: isMedium ? spacing.md : 10,
+        // 11 horizontal, 5 vertikal. Angka ganjil dan itu disengaja — chip
+        // radius 999 membutuhkan padding sisi yang lebih besar daripada chip
+        // bersudut untuk terlihat sama lapang, karena lengkungnya memakan
+        // ruang di kedua ujung.
+        paddingHorizontal: isMedium ? spacing.md : 11,
         paddingVertical: isMedium ? 6 : 5,
       }}
     >
+      {marker ? <StatusMarker color={markerColor ?? badge.text} shape={marker} /> : null}
       <Text
         selectable={false}
         numberOfLines={1}
         style={{
           color: badge.text,
-          fontSize: isMedium ? typography.meta.fontSize : typography.caption.fontSize,
-          fontWeight: '700',
-          lineHeight: isMedium ? typography.meta.lineHeight : typography.caption.lineHeight,
+          // Berat dibawa keluarga font, bukan fontWeight.
+          fontFamily: fonts.sansSemiBold,
+          // 13, naik dari caption 12. Badge kondisi pohon adalah salah satu
+          // teks terkecil yang membawa arti sungguhan di aplikasi ini, dan ia
+          // dibaca di kebun, bukan di meja.
+          fontSize: isMedium ? typography.meta.fontSize : 13,
+          lineHeight: isMedium ? typography.meta.lineHeight : 18,
+          // flexShrink supaya label panjang yang terpotong ellipsis tidak
+          // mendorong penanda keluar dari chip.
+          flexShrink: 1,
         }}
       >
         {displayLabel}
@@ -1320,6 +1394,45 @@ type FieldBaseProps = {
   numberOfLines?: number;
   textContentType?: TextInputProps['textContentType'];
   trailing?: React.ReactNode;
+
+  // ——— Tiga prop opsional batch 1a. Ketiganya bernilai bawaan yang
+  // mempertahankan perilaku sekarang PERSIS, jadi 29 pemakaian Field yang ada
+  // tidak bergeser satu piksel pun sampai ada yang mengisinya. ———
+
+  /**
+   * Satuan yang ditulis DI DALAM kolom di sisi kanan: 'kg', 'm²', 'buah'.
+   *
+   * Sengaja di dalam kolom, bukan diimbuhkan ke label. Satuan adalah bagian
+   * dari nilai yang sedang diketik, bukan bagian dari pertanyaannya — menaruhnya
+   * di label ("Berat (kg)") memaksa mata bolak-balik antara label dan kolom
+   * untuk memastikan angka yang barusan diketik satuannya benar.
+   *
+   * Tidak berlaku bersama `trailing`: keduanya memperebutkan sisi kanan yang
+   * sama. Kalau keduanya diisi, `trailing` menang — ia bisa ditekan, satuan
+   * tidak, dan membuang kontrol yang bisa ditekan lebih merugikan.
+   */
+  unit?: string;
+
+  /**
+   * Menambahkan imbuhan ' (boleh kosong)' pada label, berwarna textMuted.
+   *
+   * Sengaja menandai yang OPSIONAL, bukan memberi tanda bintang pada yang
+   * wajib. Di formulir ini mayoritas kolom wajib, jadi menandai yang wajib
+   * berarti membubuhi hampir semua baris dengan simbol yang harus dipelajari
+   * dulu artinya. Menandai minoritasnya, dengan kata-kata, tidak menuntut apa
+   * pun dari pembacanya.
+   */
+  optional?: boolean;
+
+  /**
+   * Garis jadi `accent` 1,5px — untuk layar bermode tampil-lalu-edit, supaya
+   * kolom yang sedang bisa diubah terlihat berbeda dari kolom yang hanya
+   * ditampilkan.
+   *
+   * BUKAN keadaan fokus. Fokus diurus sistem dan berumur pendek; ini menyatakan
+   * "layar sedang dalam mode edit" dan bertahan selama modenya menyala.
+   */
+  editing?: boolean;
 };
 
 // onChangeText ditegakkan tipe, bukan konvensi: hanya field terkunci yang boleh
@@ -1332,10 +1445,12 @@ export type FieldProps =
 export function Field({
   autoCapitalize = 'none',
   autoComplete,
+  editing = false,
   error,
   helperText,
   label,
   locked = false,
+  optional = false,
   value,
   onChangeText,
   placeholder,
@@ -1345,14 +1460,21 @@ export function Field({
   numberOfLines,
   textContentType,
   trailing,
+  unit,
 }: FieldProps) {
   // Dua jalur render yang sengaja dipisah. Jalur "polos" (di bawah, cabang
-  // else) adalah kode lama apa adanya: border digambar oleh TextInput sendiri.
-  // Jalur "baris" hanya aktif kalau `locked` atau `trailing` diisi — border
-  // pindah ke container supaya ikon gembok / tombol mata bisa duduk di dalam
-  // border yang sama. Pemisahan ini disengaja: pemakaian Field yang sudah ada
-  // tidak menyentuh jalur baru sama sekali, jadi tidak ada pergeseran piksel.
-  const useRowLayout = locked || Boolean(trailing);
+  // else) menggambar border pada TextInput itu sendiri. Jalur "baris" aktif
+  // kalau `locked`, `trailing`, atau `unit` diisi — border pindah ke container
+  // supaya ikon gembok, tombol mata, atau teks satuan bisa duduk di dalam
+  // border yang sama.
+  //
+  // Kedua jalur sekarang memakai tinggi, radius, latar, dan warna garis yang
+  // SAMA; pemisahannya tinggal soal siapa yang menggambar bordernya.
+  const useRowLayout = locked || Boolean(trailing) || Boolean(unit);
+
+  // `trailing` menang atas `unit` — keduanya menempati sisi kanan yang sama,
+  // dan yang bisa ditekan tidak boleh kalah oleh yang tidak.
+  const unitLabel = trailing ? undefined : unit;
   // Error mengalahkan helperText; keduanya tidak pernah tampil bersamaan.
   const helperMessage = error ? null : helperText;
   // null di layar yang tidak opt-in. Saat null, handleFocus ikut undefined dan
@@ -1362,29 +1484,50 @@ export function Field({
   const handleFocus = autoScroll
     ? () => autoScroll.requestScrollIntoView(containerRef.current)
     : undefined;
+  // Urutan menang: galat, lalu terkunci, lalu sedang-diedit, lalu bawaan.
+  // Galat di atas segalanya — kolom yang sedang diedit DAN salah isi harus
+  // membaca sebagai salah, bukan sebagai sedang diedit.
   const borderColor = error
-    ? tokens.color.status.danger.text
+    ? palette.statusBuruk
     : locked
-      ? tokens.color.line.hairline
-      : tokens.color.line.card;
+      ? palette.border
+      : editing
+        ? palette.accent
+        : palette.borderStrong;
+  const borderWidth = !error && !locked && editing ? 1.5 : 1;
 
   return (
     <View ref={containerRef} style={{ gap: spacing.sm }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
+      <Text
+        selectable
+        style={{
+          color: colors.text,
+          // Berat dibawa keluarga font, bukan fontWeight — Android tidak
+          // mensintesis berat untuk font kustom.
+          fontFamily: fonts.sansSemiBold,
+          fontSize: 14,
+        }}
+      >
         {label}
+        {optional ? (
+          // Bagian dari <Text> yang sama, bukan elemen di sebelahnya: imbuhan
+          // ini harus ikut membungkus bersama labelnya saat font sistem
+          // dibesarkan, bukan terpisah ke barisnya sendiri.
+          <Text style={{ color: palette.textMuted, fontFamily: fonts.sans }}> (boleh kosong)</Text>
+        ) : null}
       </Text>
       {useRowLayout ? (
         <View
           style={{
             alignItems: multiline ? 'flex-start' : 'center',
-            backgroundColor: locked ? tokens.color.surface.subtle : tokens.color.surface.card,
+            backgroundColor: locked ? palette.surfaceSunken : palette.surfaceRaised,
             borderColor,
             borderCurve: 'continuous',
-            borderRadius: tokens.radius.control,
-            borderWidth: 1,
+            borderRadius: shapeRadius.control,
+            borderWidth,
             flexDirection: 'row',
             gap: tokens.space.sm,
-            minHeight: multiline ? FIELD_MULTILINE_MIN_HEIGHT : tokens.layout.fieldHeight,
+            minHeight: multiline ? FIELD_MULTILINE_MIN_HEIGHT : touch.field,
             paddingLeft: tokens.space.lg,
             // Sisi kanan dirapatkan saat ada trailing supaya slot 44 tidak
             // mendorong ikon terlalu jauh ke dalam.
@@ -1406,15 +1549,20 @@ export function Field({
             onChangeText={onChangeText}
             onFocus={handleFocus}
             placeholder={placeholder}
-            placeholderTextColor={tokens.color.text.tertiary}
+            placeholderTextColor={palette.textMuted}
             secureTextEntry={secureTextEntry}
             style={{
               // Terkunci dibedakan lewat warna teks sekunder + permukaan redup +
               // gembok, bukan lewat opacity: targetnya terbaca "memang tidak bisa
               // diubah", bukan "sedang dinonaktifkan sementara".
-              color: locked ? tokens.color.text.secondary : tokens.color.text.primary,
+              color: locked ? palette.textMuted : palette.textPrimary,
               flex: 1,
-              fontSize: tokens.type.body.fontSize,
+              // 16 minimum, tanpa pengecualian. Di bawah itu Android memicu
+              // zoom otomatis pada sebagian peramban/WebView dan, lebih penting,
+              // angka hasil panen yang diketik di bawah sinar matahari tidak
+              // terbaca ulang untuk diperiksa.
+              fontFamily: fonts.sans,
+              fontSize: 16,
               minHeight: multiline ? FIELD_MULTILINE_MIN_HEIGHT - tokens.space.md * 2 : undefined,
               paddingVertical: 0,
             }}
@@ -1422,6 +1570,22 @@ export function Field({
             textContentType={textContentType}
             value={value}
           />
+          {unitLabel ? (
+            // Satuan duduk DI DALAM border, rapat ke tepi kanan. Tidak bisa
+            // ditekan dan tidak menyusut: flexShrink 0 supaya nilai yang panjang
+            // mendorong dirinya sendiri, bukan memotong satuannya.
+            <Text
+              selectable={false}
+              style={{
+                color: palette.textMuted,
+                flexShrink: 0,
+                fontFamily: fonts.sans,
+                fontSize: 16,
+              }}
+            >
+              {unitLabel}
+            </Text>
+          ) : null}
           {trailing ? (
             // Slot sentuh 44x44 (tokens.layout.tapTarget). Kontraknya: elemen yang
             // dititipkan pemanggil HARUS Pressable yang meregang mengisi slot ini.
@@ -1450,21 +1614,21 @@ export function Field({
           onChangeText={onChangeText}
           onFocus={handleFocus}
           placeholder={placeholder}
-          placeholderTextColor={colors.textSoft}
+          placeholderTextColor={palette.textMuted}
           secureTextEntry={secureTextEntry}
           style={{
-            backgroundColor: colors.surface,
-            borderColor: error ? palette.statusBuruk : colors.border,
+            backgroundColor: palette.surfaceRaised,
+            borderColor,
             borderCurve: 'continuous',
-            borderRadius: 14,
-            borderWidth: 1,
-            color: colors.text,
+            borderRadius: shapeRadius.control,
+            borderWidth,
+            color: palette.textPrimary,
+            fontFamily: fonts.sans,
             fontSize: 16,
-            minHeight: tokens.layout.fieldHeight,
+            minHeight: touch.field,
             paddingHorizontal: spacing.lg,
             ...(multiline
               ? {
-                  // literal borderRadius 14 / fontSize 16 di atas masih disengaja, sejalan dgn FIELD_MULTILINE_MIN_HEIGHT; disapu saat migrasi Field ke tokens
                   minHeight: FIELD_MULTILINE_MIN_HEIGHT,
                   paddingVertical: tokens.space.md,
                 }
@@ -1775,7 +1939,10 @@ export function DateField({
 
   return (
     <View style={{ gap: spacing.sm }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
+      <Text
+        selectable
+        style={{ color: palette.textPrimary, fontFamily: fonts.sansSemiBold, fontSize: 14 }}
+      >
         {label}
       </Text>
       <Pressable
@@ -1783,20 +1950,23 @@ export function DateField({
         onPress={() => setShowPicker(true)}
         style={{
           alignItems: 'center',
-          backgroundColor: colors.surface,
-          borderColor: error ? palette.statusBuruk : colors.border,
+          backgroundColor: palette.surfaceRaised,
+          borderColor: error ? palette.statusBuruk : palette.borderStrong,
           borderCurve: 'continuous',
-          borderRadius: 14,
+          borderRadius: shapeRadius.control,
           borderWidth: 1,
           flexDirection: 'row',
           gap: spacing.md,
           justifyContent: 'center',
-          minHeight: 54,
+          minHeight: touch.field,
           paddingHorizontal: spacing.lg,
         }}
       >
           <Icon name="calendar" size={20} color={colors.primary} />
-          <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
+          <Text
+            selectable
+            style={{ color: palette.textPrimary, fontFamily: fonts.sansSemiBold, fontSize: 16 }}
+          >
             {formatFriendlyDate(value, placeholder)}
           </Text>
         </Pressable>
@@ -1848,7 +2018,24 @@ export function CompactMetaItem({
   );
 }
 
-export type ButtonVariant = 'danger' | 'ghost' | 'icon' | 'primary' | 'quiet' | 'secondary';
+// Spek batch 1a menetapkan EMPAT varian: utama, sekunder, nonaktif (keadaan,
+// bukan nilai varian), dan merusak. Tiga nilai sisanya — 'ghost', 'quiet',
+// 'icon' — ditandai usang, BUKAN dihapus: `ButtonVariant` dan `Button` dipakai
+// 78 kali di 41 berkas, dan membuang nilai varian adalah penghapusan yang
+// dilarang batasan keras batch ini.
+//
+// Ketiganya tidak ikut dibentuk ulang dan tampil persis seperti sebelum batch
+// ini. Pencabutannya butuh keputusan per titik pakai, bukan penghapusan massal.
+export type ButtonVariant =
+  | 'danger'
+  /** @deprecated Spek batch 1a tidak mengenal varian ini. Akan dipetakan ke 'secondary' atau ke baris daftar; belum diputuskan per titik pakai. */
+  | 'ghost'
+  /** @deprecated Tidak ada tombol ikon-saja untuk aksi utama. Nol pemakaian — kandidat cabut paling aman. */
+  | 'icon'
+  | 'primary'
+  /** @deprecated Spek batch 1a tidak mengenal varian ini. Akan dipetakan ke 'secondary' atau ke baris daftar; belum diputuskan per titik pakai. */
+  | 'quiet'
+  | 'secondary';
 
 export function Button({
   accessibilityLabel,
@@ -1899,16 +2086,66 @@ export function Button({
   const isDanger = variant === 'danger';
   const isGhost = variant === 'ghost' || variant === 'quiet';
   const isIcon = variant === 'icon';
-  const contentColor = isPrimary ? colors.white : isDanger ? colors.danger : colors.primary;
-  // Pemintal hanya untuk loading TANPA loadingTitle — itu jalur setiap pemanggil
-  // yang ada sekarang, jadi tidak ada satu pun tombol lama yang berubah.
-  const showSpinner = Boolean(loading) && !loadingTitle;
+  const isSmall = size === 'small';
+  // Ketiga varian usang mempertahankan tampilannya apa adanya; hanya utama,
+  // sekunder, dan merusak yang dibentuk ulang oleh spek batch 1a.
+  const isLegacyVariant = isGhost || isIcon;
+
+  // TAMPILAN nonaktif, dan sengaja BUKAN `disabled || loading`.
+  //
+  // Selama memproses, tombol tetap memakai warna variannya sendiri. Spek
+  // mengunci tombol selama proses (lihat `disabled` pada Pressable di bawah)
+  // tapi memerintahkan labelnya tetap terbaca — dan tombol utama yang berubah
+  // jadi balok abu begitu ditekan membaca seperti "gagal", bukan "sedang
+  // jalan". Yang menandai prosesnya adalah pemintal di sisi kiri label.
+  const isDisabledLook = Boolean(disabled) && !loading;
+
+  // KOREKSI keluhan yang tercatat. Sebelum batch ini, `loading` tanpa
+  // `loadingTitle` membuat pemintal MENGGANTIKAN label — tombol berubah jadi
+  // lingkaran berputar tanpa kata, dan tidak ada lagi yang memberi tahu aksi
+  // apa yang sedang berjalan. Sekarang pemintal selalu mendampingi label, tidak
+  // pernah menggantikannya.
+  //
+  // `loadingTitle` TETAP berfungsi seperti dulu sebagai pengganti teks
+  // ("Menghapus…" menggantikan "Hapus"); yang berubah hanya: ia kini ikut
+  // ditemani pemintal. Tidak ada pemanggil yang perlu disentuh.
+  const showSpinner = Boolean(loading);
   const resolvedTitle = loading && loadingTitle ? loadingTitle : title;
+
   // Penegasan hanya berlaku untuk tombol yang MEMANG punya border. Varian ghost
   // dan quiet digambar tanpa border sama sekali (borderWidth 0 di bawah), jadi
   // 'strong' di sana tidak boleh diam-diam memunculkan garis yang sebelumnya
   // tidak ada — bentuk tombolnya akan berubah, bukan sekadar menegas.
-  const isStrong = emphasis === 'strong' && !isGhost;
+  //
+  // Varian merusak ikut dikecualikan sejak batch 1a: ia kini teks tanpa latar
+  // DAN tanpa garis, jadi 'strong' di sana akan menggambar kotak yang justru
+  // baru saja dibuang.
+  const isStrong = emphasis === 'strong' && !isGhost && !isDanger;
+
+  // Tinggi: 56 untuk aksi utama, 52 untuk sekunder dan merusak. Dua angka, dan
+  // bedanya membawa arti — tombol utama satu-satunya yang lebih tinggi di
+  // layarnya, jadi ia terbaca lebih dulu tanpa perlu warna tambahan.
+  // Nonaktif mengikuti tinggi varian asalnya, jadi tidak ada baris tersendiri.
+  const buttonHeight = isSmall
+    ? 40
+    : isPrimary
+      ? touch.primaryButton
+      : isDanger || variant === 'secondary'
+        ? touch.secondaryButton
+        : tokens.layout.controlHeight;
+
+  const contentColor = isDisabledLook
+    ? palette.textMuted
+    : isPrimary
+      ? palette.textOnAccent
+      : isDanger
+        ? palette.statusBurukInk
+        : isLegacyVariant
+          ? colors.primary
+          : palette.textPrimary;
+
+  // 18 untuk utama, 17 untuk sekunder dan merusak. Varian usang tetap 16.
+  const labelFontSize = isSmall ? 14 : isLegacyVariant ? 16 : isPrimary ? 18 : 17;
 
   return (
     <Pressable
@@ -1918,51 +2155,71 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: 'center',
-        alignSelf: size === 'small' || isIcon ? 'flex-start' : 'stretch',
-        backgroundColor: getButtonBackground(variant, pressed),
-        borderColor: isStrong ? tokens.color.brand.border : getButtonBorderColor(variant),
+        // Selebar kolom konten, kecuali ukuran kecil dan varian ikon.
+        alignSelf: isSmall || isIcon ? 'flex-start' : 'stretch',
+        backgroundColor: isDisabledLook
+          ? isDanger
+            ? 'transparent'
+            : palette.surfaceSunken
+          : getButtonBackground(variant, pressed),
+        borderColor: isStrong ? palette.borderStrong : getButtonBorderColor(variant),
         borderCurve: 'continuous',
-        borderRadius: isIcon ? radius.round : size === 'small' ? radius.button : radius.button,
-        borderWidth: isGhost ? 0 : isStrong ? 1.5 : 1,
+        borderRadius: isIcon ? radius.round : shapeRadius.control,
+        // Merusak tanpa garis, dan nonaktif tanpa garis. Sisanya seperti dulu.
+        borderWidth: isGhost || isDanger || isDisabledLook ? 0 : isStrong ? 1.5 : 1,
         flexDirection: 'row',
         gap: spacing.sm,
-        height: isIcon ? (size === 'small' ? 40 : 48) : undefined,
+        height: isIcon ? (isSmall ? 40 : 48) : undefined,
         justifyContent: 'center',
-        minHeight: isIcon ? undefined : size === 'small' ? 40 : tokens.layout.controlHeight,
-        minWidth: isIcon ? (size === 'small' ? 40 : 48) : undefined,
-        // `loading` ikut meredupkan, bukan hanya `disabled`. Tombol memang sudah
-        // terkunci selama memproses (lihat prop `disabled` di atas), tapi sebelum
-        // ini ia terlihat PERSIS sama dengan tombol yang siap ditekan — satu-satunya
-        // tanda hanya pemintal, dan pada pemakaian ber-loadingTitle bahkan itu pun
-        // tidak ada. Berlaku di seluruh app dan itu disengaja.
-        opacity: disabled || loading ? 0.6 : 1,
-        paddingHorizontal: isIcon ? 0 : size === 'small' ? spacing.md : spacing.lg,
+        minHeight: isIcon ? undefined : buttonHeight,
+        minWidth: isIcon ? (isSmall ? 40 : 48) : undefined,
+        // Peredupan DICABUT untuk keadaan nonaktif: warnanya sudah dibedakan
+        // sendiri (surfaceSunken + textMuted), dan menumpuknya dengan opacity
+        // 0,6 membuat labelnya jatuh di bawah ambang kontras AA.
+        //
+        // Tetap berlaku untuk `loading`, di mana warna variannya sengaja
+        // dipertahankan sehingga peredupan adalah satu-satunya isyarat pasif
+        // yang tersisa — pemintal di kiri label adalah isyarat aktifnya.
+        opacity: loading ? 0.6 : 1,
+        paddingHorizontal: isIcon ? 0 : isSmall ? spacing.md : spacing.lg,
       })}
     >
-      {showSpinner ? (
-        <ActivityIndicator color={contentColor} />
-      ) : (
-        <>
-          {icon}
-          {isIcon && !resolvedTitle ? null : (
-            <Text
-              selectable={false}
-              numberOfLines={1}
-              style={{
-                color: isPrimary ? colors.white : isDanger ? colors.danger : isGhost ? colors.primary : colors.text,
-                fontSize: size === 'small' ? 14 : 16,
-                fontWeight: '700',
-              }}
-            >
-              {resolvedTitle}
-            </Text>
-          )}
-        </>
+      {/* Pemintal MENDAMPINGI label di sisi kiri, tidak menggantikannya. Ukuran
+          'small' supaya ia tidak menaikkan tinggi baris pada tombol 52. */}
+      {showSpinner ? <ActivityIndicator size="small" color={contentColor} /> : icon}
+      {isIcon && !resolvedTitle ? null : (
+        <Text
+          selectable={false}
+          numberOfLines={1}
+          style={{
+            color: contentColor,
+            // Berat 600 dibawa oleh KELUARGA font, bukan oleh fontWeight.
+            // Android tidak mensintesis berat untuk font kustom; `fontWeight`
+            // di sebelah `fontFamily` tidak berguna dan pada sebagian perangkat
+            // memicu fallback ke muka huruf yang salah.
+            fontFamily: fonts.sansSemiBold,
+            fontSize: labelFontSize,
+            // Aksi merusak rata tengah seperti tombol lain. Ditulis eksplisit
+            // karena ia satu-satunya varian tanpa latar, dan tanpa ini ia
+            // mengandalkan perataan induknya untuk sesuatu yang dikunci spek.
+            textAlign: 'center',
+          }}
+        >
+          {resolvedTitle}
+        </Text>
       )}
     </Pressable>
   );
 }
 
+/**
+ * @deprecated Spek batch 1a: tidak ada FAB, dan tidak ada tombol ikon-saja
+ * untuk aksi utama. Aksi utama adalah tombol berlabel selebar kolom konten.
+ *
+ * Nol pemanggil saat ini — prop `floatingAction` pada <Screen> juga nol
+ * pemanggil. Keduanya DIBIARKAN berdiri karena membuang ekspor melanggar
+ * batasan keras batch ini; pencabutannya aman dilakukan kapan saja.
+ */
 export function FloatingActionButton({
   icon = 'plus',
   label,
@@ -2204,15 +2461,44 @@ export function MenuRow({
   danger = false,
   icon,
   label,
+  meta,
+  navigates,
   onPress,
+  trailing,
 }: {
   danger?: boolean;
   icon: IconName;
   label: string;
+  /**
+   * Keterangan di BAWAH judul, 14px, textMuted. Bukan di ujung kanan baris.
+   *
+   * Spek mengunci susunannya: penanda -> judul + meta -> aksi atau chevron.
+   * Meta yang duduk di ujung kanan memaksa mata melompati judul untuk
+   * membacanya, lalu kembali; ditumpuk di bawah judul ia terbaca dalam satu
+   * gerakan turun bersama barisnya.
+   */
+  meta?: string;
+  /**
+   * Apakah baris ini benar-benar MEMBUKA sesuatu. Chevron hanya muncul bila
+   * ya.
+   *
+   * Bawaannya `!danger`, yang mereproduksi perilaku sebelum batch 1a persis.
+   * Diisi eksplisit `false` untuk baris yang hanya menyalakan sesuatu di
+   * tempat, atau yang menjalankan aksi tanpa berpindah layar — chevron di sana
+   * menjanjikan halaman yang tidak pernah datang.
+   */
+  navigates?: boolean;
   onPress: () => void;
+  /**
+   * Elemen di ujung kanan, menggantikan chevron: badge, sakelar, atau tombol
+   * kecil. Bila diisi, chevron tidak dirender meski `navigates` true —
+   * keduanya berebut tempat yang sama, dan yang membawa informasi menang.
+   */
+  trailing?: React.ReactNode;
 }) {
-  const contentColor = danger ? tokens.color.status.danger.text : tokens.color.text.primary;
-  const iconColor = danger ? tokens.color.status.danger.text : tokens.color.brand.base;
+  const contentColor = danger ? palette.statusBurukInk : palette.textPrimary;
+  const iconColor = danger ? palette.statusBurukInk : tokens.color.brand.base;
+  const showChevron = (navigates ?? !danger) && !trailing;
 
   return (
     <Pressable
@@ -2222,26 +2508,49 @@ export function MenuRow({
         alignItems: 'center',
         flexDirection: 'row',
         gap: tokens.space.md,
-        minHeight: tokens.layout.controlHeight,
+        // 48 minimum + padding 12, turun dari controlHeight 56. Baris daftar
+        // bukan kontrol: ia tidak perlu setinggi tombol, dan tinggi berlebih
+        // memperpendek jumlah baris yang muat di satu layar tanpa menambah
+        // apa pun pada keterbacaannya. 48 tetap target sentuh yang aman.
+        minHeight: touch.row,
         opacity: pressed ? 0.6 : 1,
+        paddingVertical: tokens.space.md,
       })}
     >
       <Icon name={icon} size={tokens.icon.md} color={iconColor} />
-      <Text
-        selectable={false}
-        numberOfLines={1}
-        style={{
-          color: contentColor,
-          flex: 1,
-          fontSize: tokens.type.bodyStrong.fontSize,
-          fontWeight: tokens.type.bodyStrong.fontWeight,
-          lineHeight: tokens.type.bodyStrong.lineHeight,
-        }}
-      >
-        {label}
-      </Text>
-      {/* Varian danger tidak bernavigasi ke halaman lain, jadi tanpa chevron. */}
-      {danger ? null : <Icon name="chevron-right" size={tokens.icon.md} color={tokens.color.text.tertiary} />}
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text
+          selectable={false}
+          numberOfLines={1}
+          style={{
+            color: contentColor,
+            // 17/600 lewat keluarga font, bukan fontWeight.
+            fontFamily: fonts.sansSemiBold,
+            fontSize: 17,
+            lineHeight: 23,
+          }}
+        >
+          {label}
+        </Text>
+        {meta ? (
+          <Text
+            selectable={false}
+            numberOfLines={1}
+            style={{
+              color: palette.textMuted,
+              fontFamily: fonts.sans,
+              fontSize: 14,
+              lineHeight: 20,
+            }}
+          >
+            {meta}
+          </Text>
+        ) : null}
+      </View>
+      {trailing ? <View style={{ flexShrink: 0 }}>{trailing}</View> : null}
+      {showChevron ? (
+        <Icon name="chevron-right" size={tokens.icon.md} color={palette.textMuted} />
+      ) : null}
     </Pressable>
   );
 }
@@ -2258,9 +2567,14 @@ export function MenuRowGroup({ children }: { children: React.ReactNode }) {
       {rows.map((row, index) => (
         <View
           key={index}
+          // Pemisah antarbaris adalah GARIS 1px, bukan jarak dan bukan kartu.
+          // Urutan pemisah yang dipakai di seluruh redesign: jarak dulu, lalu
+          // garis, lalu kotak. Daftar baris yang seragam sudah terbaca sebagai
+          // daftar lewat garis; membungkus tiap barisnya jadi kartu adalah
+          // tingkat ketiga untuk pekerjaan yang selesai di tingkat kedua.
           style={
             index < rows.length - 1
-              ? { borderBottomColor: tokens.color.line.hairline, borderBottomWidth: 1 }
+              ? { borderBottomColor: palette.border, borderBottomWidth: 1 }
               : undefined
           }
         >
@@ -2659,11 +2973,19 @@ export function getStatusTone(status: string): StatusTone {
 
 function getButtonBackground(variant: ButtonVariant, pressed: boolean): string {
   if (variant === 'primary') {
-    return pressed ? colors.primaryPressed : colors.primary;
+    // palette.accent, BUKAN colors.primary. Keduanya jingga-bata dan mudah
+    // tertukar: colors.primary adalah accentText (#A84D26), yang digelapkan
+    // untuk dipakai sebagai TEKS di atas kanvas terang. Latar tombol utama
+    // adalah accent (#B4552E) — itu yang dikunci spek, dan textOnAccent putih
+    // dihitung kontrasnya terhadap nilai itu.
+    return pressed ? palette.accentPressed : palette.accent;
   }
 
   if (variant === 'danger') {
-    return pressed ? colors.dangerBorder : colors.dangerSurface;
+    // Tanpa latar, termasuk saat ditekan. Aksi merusak adalah BARIS teks
+    // terpisah, bukan tombol merah — spek menyebutnya eksplisit. Umpan balik
+    // tekannya datang dari opacity pada Pressable, bukan dari bidang warna.
+    return 'transparent';
   }
 
   if (variant === 'ghost' || variant === 'quiet') {
@@ -2674,23 +2996,28 @@ function getButtonBackground(variant: ButtonVariant, pressed: boolean): string {
     return pressed ? colors.primarySoft : colors.surface;
   }
 
-  return pressed ? colors.surfaceMuted : colors.surface;
+  // Sekunder: surfaceRaised, ditegaskan garis borderStrong 1px di pemanggilnya.
+  return pressed ? palette.surfaceSunken : palette.surfaceRaised;
 }
 
 function getButtonBorderColor(variant: ButtonVariant): string {
   if (variant === 'primary') {
-    return colors.primary;
-  }
-
-  if (variant === 'danger') {
-    return colors.dangerBorder;
+    // Tombol utama tidak lagi menggambar garis (borderWidth 0 lewat isStrong
+    // yang bernilai false secara bawaan). Nilai ini hanya terpakai bila
+    // pemanggil meminta emphasis 'strong'.
+    return palette.accent;
   }
 
   if (variant === 'icon') {
     return colors.border;
   }
 
-  return colors.border;
+  // Sekunder memakai borderStrong, bukan border. `border` (#E2DCD2) di atas
+  // surfaceRaised (#FFFDFA) berkontras ~1,1:1 — di luar ruangan dengan layar
+  // kena silau, tombolnya hilang sama sekali. borderStrong (#9A9081) yang
+  // membuat batasnya bertahan, dan sejak batch 1a ia batas bawaan, bukan lagi
+  // sesuatu yang harus diminta lewat emphasis='strong'.
+  return palette.borderStrong;
 }
 
 function getCardVariantStyle(

@@ -40,6 +40,7 @@ import {
   badgeColors,
   Button,
   Card,
+  CONDITION_BADGE,
   DateField,
   EmptyState,
   Field,
@@ -642,10 +643,29 @@ function TreeFormSection({
   );
 }
 
+// Satu-satunya tempat di mana TreeConditionStatus diikat ke tampilannya.
+//
+// CONDITION_BADGE menggantikan getConditionTone untuk badge ini, dan itu
+// memperbaiki penggabungan yang nyata: getConditionTone memetakan
+// pest_attacked, disease_indicated, DAN damaged ke satu nada 'danger' yang
+// sama, sehingga Hama, Sakit, dan Rusak tampil sebagai chip yang identik
+// kecuali labelnya. Sekarang ketiganya punya bentuk sendiri.
+//
+// getConditionTone SENGAJA dibiarkan hidup di bawah: ia masih dipakai jalur
+// lain, dan mengubahnya berarti mengubah tampilan di luar badge ini.
 export function ConditionStatusBadge({ size, status }: ConditionStatusBadgeProps) {
-  const tone = getConditionTone(status);
+  const appearance = CONDITION_BADGE[status];
 
-  return <Badge label={formatTreeConditionStatus(status)} maxWidth={180} size={size} tone={tone} />;
+  return (
+    <Badge
+      appearance={appearance}
+      label={formatTreeConditionStatus(status)}
+      marker={appearance.shape}
+      markerColor={appearance.markerColor}
+      maxWidth={180}
+      size={size}
+    />
+  );
 }
 
 export function GrowthPhaseBadge({ ageDays, phase }: GrowthPhaseBadgeProps) {

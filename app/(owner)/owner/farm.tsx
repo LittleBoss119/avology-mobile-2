@@ -551,6 +551,16 @@ function RowGroup({ children }: { children: React.ReactNode }) {
   );
 }
 
+// TODO(batch 7 — Data kebun): ganti dengan <MenuRow> dari src/components/ui.tsx.
+// `title` -> `label`, `subtitle` -> `meta`, `icon` dan `onPress` sama namanya.
+//
+// SATU kemampuan yang TIDAK ikut pindah, dan itu disengaja: lingkaran 38px
+// berlatar surfaceSunken di belakang ikon. MenuRow merender ikon polos. Bidang
+// warna di belakang ikon adalah hiasan — ia tidak membedakan satu baris dari
+// baris lain, karena semua baris punya lingkaran yang sama — dan spek membentuk
+// hierarki dari garis, beda bidang, dan ruang kosong, bukan dari bentuk
+// berlatar. Kalau lingkaran itu ternyata dipertahankan, itu keputusan yang
+// diambil di batch 7, bukan sesuatu yang diselundupkan lewat MenuRow.
 function NavRow({
   icon,
   onPress,
