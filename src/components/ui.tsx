@@ -769,11 +769,22 @@ export function BrandMark({
   compact = false,
   inline = false,
   showWordmark = true,
+  tagline,
 }: {
   align?: 'left' | 'center';
   compact?: boolean;
   inline?: boolean;
   showWordmark?: boolean;
+  /**
+   * Satu baris di bawah kata "Avology", `textMuted`.
+   *
+   * Menggantikan kalimat tetap "Operasional kebun alpukat" yang dulu ditulis
+   * mati di sini — kalimat itu tidak pernah tampil, karena kedua pemanggil
+   * BrandMark non-inline mengirim showWordmark={false}. Jadi tidak ada teks
+   * yang hilang; yang ada hanyalah teks yang akhirnya bisa ditentukan
+   * pemanggilnya.
+   */
+  tagline?: string;
 }) {
   if (inline) {
     return <InlineBrandMark />;
@@ -786,14 +797,20 @@ export function BrandMark({
       <View
         style={{
           alignItems: 'center',
-          backgroundColor: palette.accent,
+          // brandGreen, BUKAN palette.accent. Ini satu-satunya tempat di seluruh
+          // antarmuka yang boleh memakai hijau, bersama splash — dan ia bukan
+          // warna baru di layar, melainkan KOREKSI: kotak ini cuma cadangan di
+          // belakang icon.png, dan icon.png itu sendiri berlatar hijau. Selama
+          // cadangannya jingga, satu-satunya keadaan yang menampilkannya —
+          // aset gagal dimuat — menampilkan warna yang salah.
+          backgroundColor: palette.brandGreen,
           borderColor: colors.primaryBorder,
           borderCurve: 'continuous',
           borderRadius: compact ? radius.lg : radius['2xl'],
           borderWidth: 1,
-          height: compact ? 52 : 72,
+          height: compact ? 52 : 76,
           justifyContent: 'center',
-          width: compact ? 52 : 72,
+          width: compact ? 52 : 76,
         }}
       >
         <Image
@@ -810,12 +827,34 @@ export function BrandMark({
       </View>
       {showWordmark ? (
         <View style={{ alignItems, gap: spacing.xs }}>
-          <Text selectable style={{ color: colors.text, fontSize: compact ? 20 : 24, fontWeight: '700' }}>
+          {/* Serif 46. Satu-satunya kata di aplikasi yang dirender sebesar ini,
+              dan satu-satunya yang memang sebuah NAMA, bukan label antarmuka.
+              Serif dipakai untuk hal yang dibaca sekali lalu ditinggalkan. */}
+          <Text
+            selectable
+            style={{
+              color: palette.textPrimary,
+              fontFamily: fonts.serif,
+              fontSize: compact ? 20 : 46,
+              lineHeight: compact ? 26 : 54,
+            }}
+          >
             Avology
           </Text>
-          <Text selectable style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>
-            Operasional kebun alpukat
-          </Text>
+          {tagline ? (
+            <Text
+              selectable
+              style={{
+                color: palette.textMuted,
+                fontFamily: fonts.sans,
+                fontSize: 16,
+                lineHeight: 22,
+                textAlign: alignItems === 'center' ? 'center' : 'left',
+              }}
+            >
+              {tagline}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -1773,11 +1812,21 @@ export function PasswordField({
             opacity: pressed ? 0.6 : 1,
           })}
         >
-          <Icon
-            name={visible ? 'eye-off' : 'eye'}
-            size={tokens.icon.md}
-            color={tokens.color.text.tertiary}
-          />
+          {/* LABEL TEKS, bukan ikon mata.
+              Ikon mata menuntut dipelajari lebih dulu, dan arahnya ambigu
+              bahkan bagi yang sudah hafal: mata tercoret berarti "sedang
+              tersembunyi" atau "tekan untuk menyembunyikan"? Kata kerjanya
+              tidak punya keraguan itu — "Lihat" berarti tekan untuk melihat,
+              "Tutup" berarti tekan untuk menutup.
+
+              accentText, bukan accent: teks 14 adalah bentuk huruf tipis dan
+              butuh varian yang digelapkan untuk lolos ambang kontras. */}
+          <Text
+            selectable={false}
+            style={{ color: palette.accentText, fontFamily: fonts.sansSemiBold, fontSize: 14 }}
+          >
+            {visible ? 'Tutup' : 'Lihat'}
+          </Text>
         </Pressable>
       }
     />
@@ -2069,6 +2118,7 @@ export function Button({
   loadingTitle,
   onPress,
   size = 'regular',
+  subtitle,
   title = '',
   variant = 'primary',
 }: {
@@ -2102,6 +2152,24 @@ export function Button({
   loadingTitle?: string;
   onPress: () => void;
   size?: 'regular' | 'small';
+  /**
+   * Frasa kedua di bawah label, `textMuted` 14. Tanpa nilai, tombol setinggi
+   * satu baris persis seperti sebelumnya — 78 pemanggil yang ada tidak bergeser.
+   *
+   * ADA UNTUK layar Pilih jalur, tempat dua tombol menjawab satu pertanyaan dan
+   * masing-masing perlu menyebut SIAPA yang memilihnya ("Saya pemilik kebun" /
+   * "Saya punya kode kebun"). Tanpa frasa itu, orang yang dikirimi kode oleh
+   * pemiliknya harus menebak jalur mana miliknya — dan pilihan itu tidak bisa
+   * dibatalkan (lihat catatan panjang di onboarding.tsx).
+   *
+   * SENGAJA prop tombol, bukan komponen baru. Membuat "tombol besar bersubjudul"
+   * sebagai bentuk lokal berarti tinggi, radius, warna nonaktif, dan perilaku
+   * tekannya lepas dari Button dan bisa melenceng sendiri.
+   *
+   * Tidak dirender pada varian 'icon' maupun size 'small' — keduanya tidak punya
+   * ruang untuk baris kedua.
+   */
+  subtitle?: string;
   title?: string;
   variant?: ButtonVariant;
 }) {
@@ -2170,6 +2238,10 @@ export function Button({
   // 18 untuk utama, 17 untuk sekunder dan merusak. Varian usang tetap 16.
   const labelFontSize = isSmall ? 14 : isLegacyVariant ? 16 : isPrimary ? 18 : 17;
 
+  // Subjudul hanya pada tombol berukuran penuh yang bukan varian ikon —
+  // keduanya tidak punya ruang untuk baris kedua.
+  const showSubtitle = Boolean(subtitle) && !isSmall && !isIcon;
+
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel ?? title}
@@ -2210,12 +2282,50 @@ export function Button({
         // yang tersisa — pemintal di kiri label adalah isyarat aktifnya.
         opacity: loading ? 0.6 : 1,
         paddingHorizontal: isIcon ? 0 : isSmall ? spacing.md : spacing.lg,
+        // Tombol bersubjudul tumbuh dari isinya, bukan dari tinggi tetap: dua
+        // baris teks (23 + 20) sudah hampir memenuhi minHeight 52, dan tanpa
+        // ruang atas-bawah keduanya menempel ke garis tombol.
+        paddingVertical: showSubtitle ? 14 : 0,
       })}
     >
       {/* Pemintal MENDAMPINGI label di sisi kiri, tidak menggantikannya. Ukuran
           'small' supaya ia tidak menaikkan tinggi baris pada tombol 52. */}
       {showSpinner ? <ActivityIndicator size="small" color={contentColor} /> : icon}
-      {isIcon && !resolvedTitle ? null : (
+      {isIcon && !resolvedTitle ? null : showSubtitle ? (
+        // Dua baris: label lalu frasa. Dibungkus <View> supaya keduanya menumpuk
+        // sementara pemintal dan ikon tetap duduk di sampingnya, bukan di atasnya.
+        <View style={{ gap: 2 }}>
+          <Text
+            selectable={false}
+            numberOfLines={1}
+            style={{
+              color: contentColor,
+              fontFamily: fonts.sansSemiBold,
+              fontSize: labelFontSize,
+              textAlign: 'center',
+            }}
+          >
+            {resolvedTitle}
+          </Text>
+          <Text
+            selectable={false}
+            numberOfLines={1}
+            style={{
+              // textMuted, BUKAN contentColor yang diredupkan. Frasa ini
+              // keterangan, dan keterangan punya warnanya sendiri di seluruh
+              // aplikasi. Pada tombol nonaktif ia ikut jadi textMuted lewat
+              // contentColor — sama, dan itu memang benar: keduanya redup.
+              color: isDisabledLook ? contentColor : palette.textMuted,
+              fontFamily: fonts.sans,
+              fontSize: 14,
+              lineHeight: 20,
+              textAlign: 'center',
+            }}
+          >
+            {subtitle}
+          </Text>
+        </View>
+      ) : (
         <Text
           selectable={false}
           numberOfLines={1}
@@ -2404,16 +2514,20 @@ function EmptyStateGlyph({ background, name }: { background: string; name: IconN
 //   'dashed' — kotak border putus-putus, rata tengah. Untuk "belum dicatat"
 //              dan slot foto kosong, yang mengundang user menekan sesuatu.
 //
-// Varian 'card' dan 'plain' sengaja tidak berubah perilakunya bagi pemanggil
-// yang sudah ada. Satu-satunya perbaikan pada 'card': prop `icon` dulu DIAM-DIAM
-// diabaikan di cabang itu, sekarang dirender. Aman untuk pemanggil lama karena
-// tidak ada satu pun yang mengirim `icon` bersama varian 'card'.
+// NAMA VARIAN 'card' KINI MENYESATKAN, dan itu disengaja dibiarkan: ia tidak
+// lagi menggambar kartu. Mengganti namanya berarti menyentuh 19 pemanggil, dan
+// penggantian nama dilarang batasan keras. Yang berubah bentuknya, bukan
+// namanya.
 export function EmptyState({
   icon,
   subtitle,
   title,
   variant = 'card',
 }: {
+  /**
+   * @deprecated Varian 'card' mengabaikannya sejak batch 2, dan nol dari 19
+   * pemanggilnya pernah mengirimnya. Masih dipakai varian 'plain' dan 'dashed'.
+   */
   icon?: IconName;
   subtitle?: string;
   title: string;
@@ -2513,19 +2627,50 @@ export function EmptyState({
     );
   }
 
+  // Blok GALAT / TIDAK-DITEMUKAN / TANPA-AKSES — bukan keadaan kosong.
+  //
+  // Audit batch 1b membaca 19 pemanggilnya: hampir seluruhnya berpasangan
+  // "kondisi + sebab" ("Jadwal tidak ditemukan" / "Jadwal mungkin tidak
+  // tersedia atau akses ditolak."), bukan daftar yang kebetulan kosong. Bagian
+  // Empty state di spek tidak mengatur blok semacam ini; bentuknya ditetapkan
+  // di batch 2.
+  //
+  // TANPA <Card>. Ia sering dirender DI DALAM kartu lain, dan kartu di dalam
+  // kartu dilarang spek. Yang memisahkannya dari isi sekitarnya adalah ruang —
+  // gap sectionGap milik Screen — bukan bidang.
+  //
+  // Judul dan subtitle DIPERTAHANKAN sebagai dua baris terpisah, tidak dilebur.
+  // Keduanya membawa hal berbeda: judul menyatakan KONDISI, subtitle menyatakan
+  // SEBAB atau langkah berikutnya. Meleburnya ke satu kalimat akan menghapus
+  // salah satunya — dan di satu titik pakai (daftar tugas pemilik) judulnya
+  // bahkan bersyarat, satu-satunya yang membedakan "belum ada tugas" dari
+  // "tidak ada tugas pada filter ini".
+  //
+  // Rata KIRI. Blok ini muncul di tengah aliran isi yang rata kiri; memusatkan
+  // teksnya membuatnya terbaca sebagai keadaan seluruh layar, padahal sering
+  // kali ia cuma satu bagian yang gagal dimuat.
   return (
-    <Card>
-      {icon ? <EmptyStateGlyph background={tokens.color.surface.subtle} name={icon} /> : null}
-      {/* Tanpa fontWeight — berat dibawa keluarga huruf. */}
-      <Text selectable style={{ color: colors.text, fontFamily: fonts.sansSemiBold, fontSize: typography.h3.fontSize }}>
+    <View style={{ gap: tokens.space.xs }}>
+      <Text
+        selectable
+        style={{
+          color: palette.textPrimary,
+          fontFamily: fonts.sansSemiBold,
+          fontSize: 17,
+          lineHeight: 23,
+        }}
+      >
         {title}
       </Text>
       {subtitle ? (
-        <Text selectable style={{ color: colors.muted, fontFamily: fonts.sans, lineHeight: 21 }}>
+        <Text
+          selectable
+          style={{ color: palette.textMuted, fontFamily: fonts.sans, fontSize: 16, lineHeight: 22 }}
+        >
           {subtitle}
         </Text>
       ) : null}
-    </Card>
+    </View>
   );
 }
 

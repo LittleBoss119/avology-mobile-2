@@ -1,10 +1,10 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Platform, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 
 import { Button, Card, ErrorBanner, Screen, TopAppBar } from '../../src/components/ui';
 import { tokens } from '../../src/constants/theme';
-import { colors as palette } from '../../src/theme/tokens';
+import { colors as palette, fonts, radius as shapeRadius, touch } from '../../src/theme/tokens';
 import { useAuth } from '../../src/context/auth-context';
 import { previewFarmByJoinCode, requestJoinFarm } from '../../src/services/memberService';
 import type { FarmPreview } from '../../src/types/domain';
@@ -253,6 +253,23 @@ export default function JoinFarmScreen() {
 
 // Lokal di layar ini: <Field> dari ui.tsx tidak menerima maxLength, textAlign,
 // maupun gaya monospace, dan ui.tsx tidak boleh disentuh di fase ini.
+// DELAPAN petak, bukan enam.
+//
+// Spek redesign menulis "6 petak besar" dan aturan "Huruf besar semua, 6
+// karakter". Itu keliru terhadap data: kode kebun dibuat di database oleh
+// generate_join_code() sebagai `upper(substr(md5(...), 1, 8))` — DELAPAN
+// karakter heksadesimal kapital (migrasi 006:72). Enam petak berarti kode yang
+// sah tidak akan pernah muat, dan tombol "Gabung" tidak akan pernah menyala.
+//
+// Memperbaikinya ke enam menuntut migrasi database dan perubahan validasi, dan
+// batch 2 melarang keduanya. Jadi jumlah petaknya mengikuti kenyataan, bukan
+// spek — persis seperti panjang kata sandi dan nama pemilik di batch yang sama.
+//
+// SATU TextInput, delapan petak. Petaknya cuma gambar; yang menerima ketikan,
+// tempelan, dan saran keyboard tetap satu kolom tunggal yang dibentangkan
+// transparan di atasnya. Delapan input terpisah akan memecah tempelan kode dari
+// WhatsApp — cara kode ini benar-benar sampai ke tangan pekerja — menjadi satu
+// huruf di kotak pertama.
 function JoinCodeField({
   error,
   onChangeText,
@@ -270,39 +287,110 @@ function JoinCodeField({
   status: string | null;
   value: string;
 }) {
+  const characters = Array.from({ length: JOIN_CODE_LENGTH }, (_, index) => value[index] ?? '');
+
   return (
     <View style={{ gap: tokens.space.sm }}>
-      <Text selectable style={{ color: tokens.color.text.primary, fontSize: 14, fontWeight: '700' }}>
+      <Text
+        selectable
+        style={{ color: palette.textPrimary, fontFamily: fonts.sansSemiBold, fontSize: 14 }}
+      >
         Kode kebun
       </Text>
-      <TextInput
-        // Tanpa ini user melihat ketikannya huruf kecil padahal sistem
-        // menerimanya — bikin ragu apakah dia mengetik benar.
-        autoCapitalize="characters"
-        autoCorrect={false}
-        maxLength={JOIN_CODE_LENGTH}
-        onChangeText={(next) => onChangeText(next.toUpperCase())}
-        // Sengaja TANPA placeholder. "Contoh: AVOL-ABC123" salah di ketiga
-        // cirinya — kode sebenarnya 8 karakter heksadesimal tanpa awalan
-        // (contoh 85CBFCD4) — dan penggantinya, delapan tanda hubung rapat,
-        // terbaca seperti garis coret alih-alih tempat kosong, yang bisa tampak
-        // seperti kolom nonaktif. Label "Kode kebun" di atas kolom yang rata
-        // tengah dan berjarak sudah cukup menjelaskan.
-        value={value}
-        style={[
-          codeTextStyle,
-          {
-            backgroundColor: tokens.color.surface.card,
-            borderColor: error ? palette.statusBuruk : tokens.color.line.card,
-            borderCurve: 'continuous',
-            borderRadius: tokens.radius.control,
-            borderWidth: 1,
-            height: tokens.layout.fieldHeight,
-            paddingHorizontal: tokens.space.lg,
+
+      {/* Pembungkus setinggi petaknya. TextInput di dalamnya dibentangkan
+          absolut menutupi seluruh baris, jadi menekan petak mana pun menaruh
+          kursor — tidak ada petak yang "mati". */}
+      <View>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {characters.map((character, index) => (
+            <View
+              key={index}
+              style={{
+                alignItems: 'center',
+                backgroundColor: palette.surfaceRaised,
+                borderColor: error
+                  ? palette.statusBuruk
+                  : character
+                    ? palette.accent
+                    : palette.borderStrong,
+                borderCurve: 'continuous',
+                borderRadius: shapeRadius.control,
+                // Petak terisi bergaris accent 1,5px — penanda maju yang sama
+                // dengan prop `editing` pada Field. Tanpa itu, satu-satunya yang
+                // menandai kemajuan adalah hurufnya sendiri, dan pada layar yang
+                // kena silau huruf tunggal jauh lebih sulit dilihat daripada
+                // garis kotaknya.
+                borderWidth: character ? 1.5 : 1,
+                // flex 1 + aspectRatio, bukan lebar tetap: delapan petak harus
+                // muat di layar tersempit tanpa angka yang ditebak per perangkat.
+                flex: 1,
+                height: touch.field,
+                justifyContent: 'center',
+              }}
+            >
+              <Text
+                selectable={false}
+                style={{
+                  color: palette.textPrimary,
+                  fontFamily: fonts.sansSemiBold,
+                  // 20, bukan 24: delapan petak di layar 360 menyisakan ~36px
+                  // per petak, dan huruf 24 menyentuh dinding kotaknya.
+                  fontSize: 20,
+                }}
+              >
+                {character}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <TextInput
+          // Tanpa ini user melihat ketikannya huruf kecil padahal sistem
+          // menerimanya — bikin ragu apakah dia mengetik benar.
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={JOIN_CODE_LENGTH}
+          onChangeText={(next) => onChangeText(next.toUpperCase())}
+          // Tanpa placeholder: petak kosong SUDAH menunjukkan ada berapa
+          // karakter yang diminta dan di mana masing-masing duduk — pekerjaan
+          // yang dulu coba dilakukan placeholder dan selalu gagal.
+          value={value}
+          style={{
+            // TRANSPARAN dan dibentangkan di atas petak. Warna teksnya juga
+            // transparan supaya ketikan aslinya tidak terbaca ganda di atas
+            // huruf yang sudah digambar petak.
+            //
+            // Kursor sengaja dibiarkan tampil (tidak di-caretHidden): ia satu-
+            // satunya isyarat bahwa kolom sedang aktif, dan tanpa itu orang yang
+            // mengetuk tidak tahu keyboard sudah siap menerima.
+            bottom: 0,
+            color: 'transparent',
+            fontSize: 20,
+            left: 0,
+            position: 'absolute',
+            right: 0,
             textAlign: 'center',
-          },
-        ]}
-      />
+            top: 0,
+          }}
+        />
+      </View>
+
+      {/* SATU baris aturan, selalu tampil — bukan helperText yang lenyap begitu
+          ada galat. Ia menyebut dua hal yang tidak bisa disimpulkan dari petak
+          kosong: bahwa hurufnya kapital semua, dan ada berapa. */}
+      <Text
+        selectable
+        style={{
+          color: palette.textMuted,
+          fontFamily: fonts.sans,
+          fontSize: 14,
+          lineHeight: 20,
+        }}
+      >
+        Huruf besar semua, {JOIN_CODE_LENGTH} karakter.
+      </Text>
+
       {/* Galat tampil sebaris di bawah kolom, bukan snackbar yang keburu hilang.
           Galat mengalahkan penanda pencarian, mengikuti aturan yang sama yang
           dipakai Field di ui.tsx untuk error versus helperText — keduanya tidak
@@ -335,10 +423,3 @@ function JoinCodeField({
   );
 }
 
-const codeTextStyle = {
-  color: tokens.color.text.primary,
-  fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-  fontSize: 24,
-  fontWeight: '700',
-  letterSpacing: 6,
-} as const;

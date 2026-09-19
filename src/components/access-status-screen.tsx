@@ -3,8 +3,14 @@ import React from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 
 import { tokens } from '../constants/theme';
+import { colors as palette, fonts } from '../theme/tokens';
 import { useAuth } from '../context/auth-context';
-import { setPendingAccessRoute } from '../lib/pendingAccessRoute';
+// setPendingAccessRoute TIDAK lagi diimpor: satu-satunya pemanggilnya adalah
+// handleRecovery, dan sejak batch 2 ia tidak menyatakan tujuan apa pun.
+// Modulnya sendiri dibiarkan berdiri — guard di (onboarding)/_layout.tsx masih
+// membaca dan membersihkannya, dan membuang ekspor dilarang batasan keras.
+// Selama tidak ada yang menyetelnya, peekPendingAccessRoute() selalu null dan
+// guard jatuh ke perhitungan tujuan yang normal.
 import { getCurrentUserFarm } from '../services/farmService';
 import { acknowledgeAccessNotice, cancelJoinRequest } from '../services/memberService';
 import type { CurrentUserFarm } from '../types/domain';
@@ -34,9 +40,11 @@ const POLL_INTERVAL_MS = 15000;
 // tidak diketahui pembungkusnya. Ketiga rute pembungkus (pending-approval,
 // rejected, removed-access) memang cuma menentukan rute mana yang dipakai guard.
 export function AccessStatusScreen() {
-  const { currentFarm, error, profile, refresh } = useAuth();
+  const { currentFarm, error, profile, refresh, signOut } = useAuth();
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [checkingStatus, setCheckingStatus] = React.useState(false);
+  const [signingOut, setSigningOut] = React.useState(false);
   const [confirmCancel, setConfirmCancel] = React.useState(false);
   const [joinedFarm, setJoinedFarm] = React.useState<{ name: string | null } | null>(null);
 
@@ -147,7 +155,18 @@ export function AccessStatusScreen() {
     setConfirmCancel(false);
   }
 
-  async function handleRecovery(target: '/create-farm' | '/join-farm') {
+  // TANPA argumen tujuan sejak batch 2. Dulu ia menerima '/create-farm' atau
+  // '/join-farm' dan menyatakannya lewat setPendingAccessRoute; sekarang
+  // pilihannya diambil di layar Pilih jalur, bukan di sini.
+  //
+  // Tidak menyatakan tujuan berarti tujuannya jatuh ke perhitungan alami guard
+  // di _layout.tsx: pengguna tanpa relasi mendarat di layar pilih akses. Jalur
+  // itu bukan hal baru — handleCancelRequest di atas sudah mengandalkannya.
+  //
+  // Alasan lama tetap berlaku dan itu sebabnya tidak ada router.replace() di
+  // sini: kalau layar ini menavigasi sendiri, ia berlomba dengan guard yang
+  // masih memegang relasi basi, dan penggunanya dipantulkan dua kali.
+  async function handleRecovery() {
     setBusy(true);
     setActionError(null);
 
@@ -159,15 +178,35 @@ export function AccessStatusScreen() {
       return;
     }
 
-    // MENYATAKAN tujuan, bukan menavigasi. Kalau layar ini memanggil
-    // router.replace() sendiri, ia berlomba dengan guard di _layout.tsx yang
-    // masih memegang relasi basi: guard memantulkan ke layar pemberitahuan,
-    // lalu memantulkan sekali lagi ke pilih akses setelah relasinya null.
-    // Dengan menyatakan tujuan, perpindahan baru terjadi di render yang benar-
-    // benar sudah melihat relasi null — satu kali, ke tempat yang diminta.
-    setPendingAccessRoute(target);
     await refresh();
     setBusy(false);
+  }
+
+  // Memakai refresh() yang SAMA dengan yang dipakai polling di efek atas —
+  // tidak ada panggilan data baru. Yang ditambahkannya cuma keadaan tertekan
+  // yang terlihat, supaya orang yang menunggu punya sesuatu untuk dilakukan
+  // selain menutup dan membuka ulang aplikasi.
+  async function handleCheckStatus() {
+    setCheckingStatus(true);
+    setActionError(null);
+    await refresh();
+    setCheckingStatus(false);
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    setActionError(null);
+
+    const result = await signOut();
+
+    if (result) {
+      setActionError(result.message);
+      setSigningOut(false);
+      return;
+    }
+
+    setSigningOut(false);
+    router.replace('/get-started');
   }
 
   // Satu-satunya tempat relasi diperbarui setelah pengajuan disetujui. Sesudah
@@ -177,8 +216,21 @@ export function AccessStatusScreen() {
     await refresh();
   }
 
-  const view = resolveStatusView(currentFarm);
   const farmName = currentFarm.farm?.name?.trim();
+  const view = resolveStatusView(currentFarm, farmName);
+  // Nama kebun dan tanggal jadi SATU baris. Keduanya keterangan sekunder dengan
+  // bobot yang sama; memisahnya jadi dua baris memberi nama kebun bobot judul
+  // yang tidak ia minta.
+  //
+  // Pada keadaan ditolak/dicabut nama kebun SUDAH masuk ke judul ("Akses ke X
+  // sudah ditutup"), jadi ia dibuang dari baris ini supaya tidak disebut dua
+  // kali dalam satu layar.
+  const metaLine = [
+    view.showFarmNameInMeta ? farmName : undefined,
+    view.dateValue ? `${view.dateLabel} ${view.dateValue}` : undefined,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(' · ');
 
   return (
     <Screen
@@ -191,41 +243,72 @@ export function AccessStatusScreen() {
       // adalah chip Profil di app bar.
       footer={
         isPending ? (
-          // Tombol teks bernada bahaya, bentuk yang sudah dipakai aksi merusak
-          // di layar ini dan di layar lain (owner/farm.tsx, worker/farm.tsx).
-          // SENGAJA bukan tombol berblok: membatalkan pengajuan adalah jalan
-          // mundur, bukan aksi utama layar ini — yang utama justru menunggu.
-          <TextAction
-            title="Batalkan pengajuan"
-            tone="danger"
-            disabled={busy}
-            onPress={() => setConfirmCancel(true)}
-          />
-        ) : (
           <>
-            {/* Bobot SETARA, alasannya sama persis dengan layar pilih akses:
-                tidak ada jalur pemulihan bagi pemilik kebun kosong, jadi jalur
-                "buat kebun" tidak boleh terlihat lebih mengundang daripada
-                jalur "gabung". Dulu tombol pertama berblok hijau penuh dan yang
-                kedua cuma teks — persis ketimpangan yang dilarang itu.
-
-                `disabled={busy}` di KEDUANYA, tanpa pemintal. Keduanya memanggil
-                handleRecovery yang sama dan `busy` tidak tahu tombol mana yang
-                ditekan; menaruh pemintal di salah satunya akan mengabarkan hal
-                yang belum tentu benar. */}
+            {/* "Periksa status" sebagai aksi UTAMA. Layar ini sudah memantau
+                sendiri lewat polling, tapi pemantauan yang tidak terlihat sama
+                saja dengan tidak ada bagi orang yang menunggu — dan yang ia
+                lakukan tanpa tombol ini adalah menutup lalu membuka ulang
+                aplikasi. Tombolnya memanggil refresh() yang sama dengan yang
+                dipakai polling; tidak ada panggilan data baru. */}
             <Button
-              title="Coba kode lain"
-              variant="secondary"
-              emphasis="strong"
-              disabled={busy}
-              onPress={() => void handleRecovery('/join-farm')}
+              title="Periksa status"
+              loading={checkingStatus}
+              loadingTitle="Memeriksa…"
+              onPress={() => void handleCheckStatus()}
+            />
+            {/* TIGA aksi, sementara spek Langkah 9 menyebut dua.
+                Yang ditambahkan adalah "Batalkan pengajuan", dan ia TIDAK boleh
+                dibuang: ini satu-satunya tempat di seluruh aplikasi yang bisa
+                menarik kembali pengajuan gabung. Membuangnya demi mencocokkan
+                daftar dua baris berarti menghapus fungsi, bukan menata ulang.
+
+                TextAction lokal diganti Button varian merusak: bentuknya sudah
+                sama sejak batch 1a (teks tanpa latar), dan dua jalur untuk satu
+                bentuk cuma bisa melenceng. */}
+            <Button
+              title="Batalkan pengajuan"
+              variant="danger"
+              disabled={busy || checkingStatus}
+              onPress={() => setConfirmCancel(true)}
             />
             <Button
-              title="Buat kebun baru"
-              variant="secondary"
-              emphasis="strong"
+              title="Keluar dari akun"
+              variant="danger"
+              disabled={busy || checkingStatus}
+              loading={signingOut}
+              loadingTitle="Keluar…"
+              onPress={() => void handleSignOut()}
+            />
+          </>
+        ) : (
+          <>
+            {/* SATU aksi pemulihan, menggantikan pasangan "Coba kode lain" +
+                "Buat kebun baru".
+                Keduanya dulu dipasang berbobot setara supaya tidak ada yang
+                tertekan hanya karena menonjol — kekhawatiran yang sah dan tidak
+                hilang. Yang berubah: pilihannya tidak lagi diambil DI SINI.
+                "Pilih ulang" mengembalikan orang ke layar Pilih jalur, tempat
+                pertanyaan itu memang diajukan lengkap dengan subjudul yang
+                menyebut siapa memilih apa. Satu tombol di sini berarti tidak ada
+                lagi pasangan yang bisa timpang.
+
+                Tanpa argumen tujuan: begitu acknowledgeAccessNotice() membuat
+                relasinya null, guard di _layout.tsx sendiri yang memindahkan ke
+                layar pilih akses — itu memang tujuan alaminya untuk pengguna
+                tanpa relasi, dan jalur itu sudah dipakai handleCancelRequest. */}
+            <Button
+              title="Pilih ulang"
+              loading={busy}
+              loadingTitle="Menyiapkan…"
+              onPress={() => void handleRecovery()}
+            />
+            <Button
+              title="Keluar dari akun"
+              variant="danger"
               disabled={busy}
-              onPress={() => void handleRecovery('/create-farm')}
+              loading={signingOut}
+              loadingTitle="Keluar…"
+              onPress={() => void handleSignOut()}
             />
           </>
         )
@@ -234,45 +317,33 @@ export function AccessStatusScreen() {
       <ErrorBanner message={actionError ?? (profile ? error?.message : undefined)} />
 
       <View style={{ alignItems: 'center', gap: tokens.space.lg, paddingTop: tokens.space.xxxl }}>
-        <View
-          style={{
-            alignItems: 'center',
-            backgroundColor: view.iconBackground,
-            borderRadius: tokens.radius.pill,
-            height: 88,
-            justifyContent: 'center',
-            width: 88,
-          }}
-        >
-          <Icon name={view.icon} size={40} color={view.iconColor} />
-        </View>
+        {/* Ikon GARIS 44, tanpa lingkaran berlatar 88.
+            Lingkaran penuh berwarna status membuat keadaan menunggu terbaca
+            sekeras keadaan ditolak — bidang warna sebesar itu adalah alarm, dan
+            menunggu bukan alarm. Yang membedakan ketiga keadaan sekarang adalah
+            BENTUK ikonnya (jam, silang, gembok) plus warna goresannya, sejalan
+            dengan penanda bentuk pada badge di batch 1a.
+
+            strokeWidth 1,5, alasan sama dengan EmptyState varian 'plain':
+            goresan diukur dalam satuan viewBox 24, jadi pada 44px goresan 2
+            menjadi ~3,7 piksel dan ikonnya terbaca gempal. */}
+        <Icon name={view.icon} size={44} strokeWidth={1.5} color={view.iconColor} />
 
         <Text
           selectable
           style={{
-            color: tokens.color.text.primary,
-            fontSize: tokens.type.title.fontSize,
-            fontWeight: tokens.type.title.fontWeight,
-            lineHeight: tokens.type.title.lineHeight,
+            color: palette.textPrimary,
+            // Serif, sejajar dengan judul EmptyState varian 'plain'. Judul di
+            // sini menamai SEBUAH KEADAAN yang dibaca sekali lalu ditinggalkan,
+            // bukan label antarmuka yang dipindai berulang kali.
+            fontFamily: fonts.serif,
+            fontSize: 30,
+            lineHeight: 38,
             textAlign: 'center',
           }}
         >
           {view.title}
         </Text>
-
-        {farmName ? (
-          <Text
-            selectable
-            style={{
-              color: tokens.color.text.secondary,
-              fontSize: tokens.type.body.fontSize,
-              lineHeight: tokens.type.body.lineHeight,
-              textAlign: 'center',
-            }}
-          >
-            {farmName}
-          </Text>
-        ) : null}
 
         {/* Satu kalimat, bahasa sehari-hari. Layar ini sebelumnya hanya menyebut
             status tanpa pernah mengatakan apa yang sedang terjadi dan apa yang
@@ -281,35 +352,38 @@ export function AccessStatusScreen() {
         <Text
           selectable
           style={{
-            color: tokens.color.text.secondary,
-            fontSize: tokens.type.bodySmall.fontSize,
-            lineHeight: tokens.type.bodySmall.lineHeight,
+            color: palette.textMuted,
+            fontFamily: fonts.sans,
+            fontSize: 16,
+            lineHeight: 22,
             textAlign: 'center',
           }}
         >
           {view.description}
         </Text>
 
-        {/* Tanggal turun lagi jadi baris keterangan biasa, di bawah kalimat
-            penjelas. Sebagai kartu berbingkai ia menjanjikan sebuah berkas lalu
-            hanya berisi satu baris — bingkai yang tidak membawa apa-apa, dan
-            bingkai itu ikut menyeret aksinya ke dalam wadah bacaan.
+        {/* SATU baris meta, menggabungkan nama kebun dan tanggal dengan pemisah
+            ' · ' — konvensi yang sama dengan buildFarmMetaLine (farmFormat.ts).
+            Dulu keduanya dua baris terpisah, dan nama kebun yang berdiri sendiri
+            sebagai baris 16 di bawah judul terbaca seperti judul kedua.
 
-            Tanpa tanggal, barisnya HILANG. Tidak ada tanda hubung dan tidak ada
-            teks pengganti: '—' menuntut pembaca menerjemahkan sebuah simbol
-            hanya untuk sampai pada kesimpulan bahwa tidak ada yang perlu
-            dibaca. */}
-        {view.dateValue ? (
+            Bagian yang kosong HILANG alih-alih jadi placeholder, jadi tidak ada
+            pemisah yang menggantung; kalau keduanya kosong, barisnya tidak
+            dirender sama sekali. Tidak ada tanda hubung dan tidak ada teks
+            pengganti: '—' menuntut pembaca menerjemahkan sebuah simbol hanya
+            untuk sampai pada kesimpulan bahwa tidak ada yang perlu dibaca. */}
+        {metaLine ? (
           <Text
             selectable
             style={{
-              color: tokens.color.text.tertiary,
-              fontSize: tokens.type.meta.fontSize,
-              lineHeight: tokens.type.meta.lineHeight,
+              color: palette.textMuted,
+              fontFamily: fonts.sans,
+              fontSize: 14,
+              lineHeight: 20,
               textAlign: 'center',
             }}
           >
-            {`${view.dateLabel} ${view.dateValue}`}
+            {metaLine}
           </Text>
         ) : null}
       </View>
@@ -424,40 +498,13 @@ function JoinedFarmModal({
   );
 }
 
-// Tombol teks. <Button variant="ghost"> selalu memakai warna merek, sedangkan
-// aksi membatalkan butuh warna bahaya tanpa blok berwarna. ui.tsx tidak boleh
-// disentuh di fase ini, jadi versinya lokal.
-function TextAction({
-  disabled = false,
-  onPress,
-  title,
-  tone = 'brand',
-}: {
-  disabled?: boolean;
-  onPress: () => void;
-  title: string;
-  tone?: 'brand' | 'danger';
-}) {
-  const color = tone === 'danger' ? tokens.color.status.danger.text : tokens.color.brand.base;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: tokens.layout.tapTarget,
-        opacity: pressed || disabled ? 0.5 : 1,
-      })}
-    >
-      <Text selectable={false} style={{ color, fontSize: 16, fontWeight: '700' }}>
-        {title}
-      </Text>
-    </Pressable>
-  );
-}
+// TextAction DICABUT di batch 2.
+//
+// Ia dulu ada karena <Button variant="ghost"> selalu memakai warna merek
+// sedangkan aksi membatalkan butuh warna bahaya tanpa blok berwarna — dan
+// ui.tsx tidak boleh disentuh saat itu. Sejak batch 1a, <Button variant="danger">
+// PERSIS berbentuk itu: teks statusBurukInk tanpa latar dan tanpa garis. Tidak
+// ada lagi yang perlu ditiru secara lokal.
 
 // dateLine yang dulu satu string ("Diajukan 3 Maret") kini dipecah jadi label +
 // nilai: kartunya menaruh label di kiri dan nilainya di kanan, jadi keduanya
@@ -471,10 +518,12 @@ type StatusView = {
   icon: IconName;
   iconBackground: string;
   iconColor: string;
+  // Nama kebun ikut ke baris meta HANYA kalau judulnya belum menyebutnya.
+  showFarmNameInMeta: boolean;
   title: string;
 };
 
-function resolveStatusView(membership: CurrentUserFarm): StatusView {
+function resolveStatusView(membership: CurrentUserFarm, farmName?: string): StatusView {
   if (membership.status === 'pending') {
     // updated_at hanya terisi kalau baris ini pernah ditimpa oleh pengajuan
     // ulang (cabang on conflict di request_join_farm); pada pengajuan baru ia
@@ -487,7 +536,20 @@ function resolveStatusView(membership: CurrentUserFarm): StatusView {
       description: 'Pengajuanmu sudah dikirim ke kebun ini. Pemilik kebun sedang meninjaunya.',
       icon: 'clock',
       iconBackground: tokens.color.status.warning.bg,
-      iconColor: tokens.color.status.warning.text,
+      iconColor: palette.statusPerhatian,
+      showFarmNameInMeta: true,
+      // TANPA NAMA PEMILIK, dan itu bukan kelalaian.
+      //
+      // Spek redesign menulis "Menunggu persetujuan Abah" — "Abah" adalah nama
+      // pemilik pada studi kasus, bukan kata yang berlaku umum. Nama pemilik
+      // yang sebenarnya TIDAK tersedia di layar ini: get_current_user_access
+      // hanya mengembalikan nama kebun, dan tipe Farm (types/domain.ts) tidak
+      // punya kolom pemilik sama sekali. Menambahkannya berarti panggilan data
+      // baru, yang dilarang batch 2.
+      //
+      // Jadi judulnya berhenti di "Menunggu persetujuan", dan yang menyebut
+      // siapa penyetujunya adalah kalimat di bawahnya ("Pemilik kebun sedang
+      // meninjaunya") — peran, bukan nama.
       title: 'Menunggu persetujuan',
     };
   }
@@ -511,8 +573,10 @@ function resolveStatusView(membership: CurrentUserFarm): StatusView {
     // tertukar dengan silang maupun jam pada ukuran kecil.
     icon: membership.status === 'rejected' ? 'x' : 'lock',
     iconBackground: tokens.color.status.danger.bg,
-    iconColor: tokens.color.status.danger.text,
-    title: resolveEndedTitle(membership),
+    iconColor: palette.statusBuruk,
+    // Nama kebun sudah masuk ke judul di bawah, jadi tidak diulang di meta.
+    showFarmNameInMeta: false,
+    title: resolveEndedTitle(membership, farmName),
   };
 }
 
@@ -547,7 +611,17 @@ function resolveEndedDescription(membership: CurrentUserFarm): string {
   return 'Catatan dan tugas kebun itu sudah tidak bisa kamu buka. Kamu bebas bergabung ke kebun lain sekarang.';
 }
 
-function resolveEndedTitle(membership: CurrentUserFarm): string {
+// Judul menyebut NAMA KEBUNNYA. Seorang pekerja bisa saja pernah mengajukan ke
+// beberapa kebun; "Pengajuan ditolak" tanpa nama tidak memberi tahu yang mana.
+//
+// Nama kebun dipakai HANYA kalau ada. Untuk relasi non-aktif, RPC-nya memang
+// masih mengembalikan nama kebun — tapi kalau suatu saat tidak, judul berhenti
+// di bentuk tanpa nama alih-alih berbunyi "Akses ke  sudah ditutup".
+function resolveEndedTitle(membership: CurrentUserFarm, farmName?: string): string {
+  if (farmName) {
+    return `Akses ke ${farmName} sudah ditutup`;
+  }
+
   if (membership.status === 'rejected') {
     return 'Pengajuan ditolak';
   }

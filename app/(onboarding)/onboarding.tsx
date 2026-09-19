@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import React from 'react';
 import { View } from 'react-native';
 
 import {
@@ -37,15 +38,39 @@ import { useAuth } from '../../src/context/auth-context';
 // Karena itu kedua tombol memakai varian yang SAMA PERSIS. Tidak ada yang lebih
 // menonjol, sehingga tidak ada yang bisa tertekan hanya karena ia menonjol.
 //
-// Pembeda kedua jalur sekarang ada di LABELNYA, bukan di bentuknya: "Buat kebun
-// baru" versus "Gabung pakai kode". Masing-masing menyebut syarat jalurnya —
-// kata "kode" dikenali orang yang memang dikirimi kode oleh pemiliknya. Baris
-// daftar, ikon kotak, chevron, dan subjudul terpisah TIDAK dikembalikan; label
-// itu sendiri yang memikul pembedaannya.
+// Pembeda kedua jalur ada di KATA-KATANYA, bukan di bentuknya: keduanya
+// menjawab satu pertanyaan di judul ("Belum" versus "Sudah") lalu menyebut siapa
+// yang memilihnya ("Saya pemilik kebun" versus "Saya punya kode kebun").
+//
+// Subjudul itu bukan hiasan dan bukan pembalikan keputusan di atas: ia melekat
+// DI DALAM tombol lewat prop `subtitle` milik Button, jadi kedua tombol tetap
+// berbentuk identik dan sama-sama membawa dua baris. Yang dulu ditolak adalah
+// subjudul TERPISAH di luar tombol dan baris daftar berikon-berchevron, dan
+// keduanya tetap tidak dikembalikan.
 
 export default function OnboardingDecisionScreen() {
-  const { error, profile } = useAuth();
-  const firstName = getFirstName(profile?.fullName);
+  const { error, signOut } = useAuth();
+  const [signingOut, setSigningOut] = React.useState(false);
+  const [signOutError, setSignOutError] = React.useState<string | null>(null);
+
+  // Mengikuti pola di profile-screen.tsx: signOut mengembalikan galat alih-alih
+  // melempar, dan navigasinya eksplisit ke '/get-started' karena sesudah logout
+  // tidak ada guard yang bisa menghitung tujuan dari relasi yang sudah hilang.
+  async function handleSignOut() {
+    setSigningOut(true);
+    setSignOutError(null);
+
+    const result = await signOut();
+
+    if (result) {
+      setSignOutError(result.message);
+      setSigningOut(false);
+      return;
+    }
+
+    setSigningOut(false);
+    router.replace('/get-started');
+  }
 
   return (
     <Screen
@@ -80,25 +105,47 @@ export default function OnboardingDecisionScreen() {
       footer={
         <>
           {/* Kedua tombol WAJIB identik variannya — alasannya di puncak file,
-              dan itu bukan soal selera.
+              dan itu bukan soal selera. Keduanya memakai varian dan emphasis
+              yang sama persis, sehingga tidak ada yang bisa tertekan hanya
+              karena ia lebih menonjol.
 
-              emphasis="strong" mengikuti get-started.tsx dengan alasan yang sama
-              persis: latar `secondary` (surface) di atas kanvas berkontras
-              ~1,03:1, jadi batas tombol datang dari bordernya saja — dan border
-              bawaannya terlalu pucat untuk layar yang kena silau di kebun. Di
-              sini ia dipakai DUA KALI, sehingga keduanya sama-sama terbaca
-              sebagai tombol tanpa satu pun yang lebih mengundang. */}
+              Label kini MENJAWAB pertanyaan di judul ("Belum" / "Sudah"), dan
+              subjudulnya menyebut SIAPA yang memilih jalur itu. Dua penanda
+              untuk satu pilihan yang tidak bisa dibatalkan.
+
+              Koma di "Belum, buat kebun" melanggar aturan bahasa §6 yang
+              melarang koma pada tombol. Dipakai apa adanya karena Langkah 6
+              menuliskannya begitu secara eksplisit, dan komanya memang bekerja:
+              ia yang menyambungkan jawaban ke tindakannya. */}
           <Button
-            title="Buat kebun baru"
+            title="Belum, buat kebun"
+            subtitle="Saya pemilik kebun"
             variant="secondary"
             emphasis="strong"
             onPress={() => router.push('/create-farm')}
           />
           <Button
-            title="Gabung pakai kode"
+            title="Sudah, gabung kebun"
+            subtitle="Saya punya kode kebun"
             variant="secondary"
             emphasis="strong"
             onPress={() => router.push('/join-farm')}
+          />
+          {/* Jalan keluar WAJIB. Tanpa ini layar ini mengunci: dua tombol di
+              atas adalah satu-satunya yang bisa ditekan, dan keduanya membuat
+              relasi kebun yang tidak bisa dibatalkan sendiri oleh pemilik
+              (lihat catatan panjang di puncak berkas). Chip "Profil" di app bar
+              memang memuat logout, tapi ia harus ditemukan dulu — dan tidak ada
+              yang menduga tombol keluar bersembunyi di balik ikon profil.
+
+              Baris merusak, bukan tombol berblok: keluar dari akun bukan
+              jawaban atas pertanyaan di judul. */}
+          <Button
+            title="Keluar dari akun"
+            variant="danger"
+            loading={signingOut}
+            loadingTitle="Keluar…"
+            onPress={handleSignOut}
           />
         </>
       }
@@ -108,7 +155,7 @@ export default function OnboardingDecisionScreen() {
           kosong, jadi spanduk galat yang ikut terpusat akan melayang di tengah
           layar jauh dari apa pun. Di puncak layar ia mengikuti kebiasaan setiap
           layar lain di app ini. */}
-      <ErrorBanner message={error?.message} />
+      <ErrorBanner message={signOutError ?? error?.message} />
 
       {/* Blok sapaan duduk di tengah ruang antara header dan tombol.
           flexGrow: 1, JANGAN flex: 1 — `flex: 1` berarti flexBasis 0, sehingga
@@ -122,13 +169,18 @@ export default function OnboardingDecisionScreen() {
           bar, dan mengulangnya di badan layar berarti merek dua kali di satu
           layar. */}
       <View style={{ flexGrow: 1, justifyContent: 'center' }}>
-        <PageIntro align="center" title={`Halo, ${firstName}`} subtitle="Mulai dari mana?" />
+        {/* SATU PERTANYAAN sebagai judul, menggantikan sapaan "Halo, {nama}" +
+            "Mulai dari mana?".
+            Sapaan itu ramah tapi tidak menolong: ia tidak memberi tahu apa yang
+            sedang ditanyakan, sehingga dua tombol di bawahnya harus dibaca
+            sebagai teka-teki. Pertanyaan yang lugas membuat kedua tombol jadi
+            JAWABAN — dan sebuah jawaban jauh lebih mudah dipilih daripada dua
+            perintah yang berdiri sendiri.
+
+            Nama depan tidak lagi dipakai di sini; getFirstName di bawah ikut
+            dicabut karena ia tidak punya pemanggil lain. */}
+        <PageIntro align="center" title="Kebunnya sudah ada di Avology?" />
       </View>
     </Screen>
   );
-}
-
-function getFirstName(fullName?: string | null): string {
-  const firstWord = fullName?.trim().split(/\s+/)[0];
-  return firstWord && firstWord.length > 0 ? firstWord : 'Pengguna';
 }

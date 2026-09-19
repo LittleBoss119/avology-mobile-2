@@ -142,10 +142,13 @@ export default function CreateFarmScreen() {
       }
     >
       <ErrorBanner message={error} />
-      {/* SATU field saja. Lokasi dan luas lahan dicabut dari layar ini: keduanya
-          opsional, tidak dipakai satu pun keputusan sesudah kebun terbentuk, dan
-          memajangnya di sini membuat langkah pertama seorang pemilik baru terlihat
-          seperti formulir pendaftaran.
+      {/* SATU field saja, dan itu TETAP satu di batch 2.
+          Spek redesign mendeskripsikan tiga kolom di layar ini — nama, lokasi,
+          luas lahan — tetapi lokasi dan luas lahan memang sudah dicabut dari
+          sini pada pekerjaan sebelumnya: keduanya opsional, tidak dipakai satu
+          pun keputusan sesudah kebun terbentuk, dan memajangnya membuat langkah
+          pertama seorang pemilik baru terlihat seperti formulir pendaftaran.
+          Batch 2 melarang menambah field, jadi keduanya tidak dikembalikan.
 
           Tanpa tanda bintang. Yang dulu ditandai justru yang opsional — bintang
           itu konvensi web yang tidak berarti apa-apa bagi pengguna layar ini.
@@ -169,8 +172,29 @@ export default function CreateFarmScreen() {
         value={name}
         onChangeText={setName}
         placeholder="Kebun Ngawi"
+        // TUJUANNYA SENGAJA TIDAK DIUBAH di batch 2. Baris "Data kebun" pindah
+        // dari Beranda ke tab Profil di batch 7; menulis ulang kalimat ini
+        // sekarang membuatnya menunjuk ke tempat yang belum ada. Ia ikut
+        // berpindah bersama barisnya, bukan mendahuluinya.
         helperText="Lokasi dan luas lahan bisa diisi nanti lewat baris Data kebun di Beranda."
       />
+
+      {/* Satu baris penjelas, terpisah dari helperText di atas dan memang
+          berbeda jenis: helperText menerangkan kolom di atasnya, kalimat ini
+          menerangkan hal yang TIDAK ada di layar ini sama sekali — bahwa petak
+          denah kebun belum ditanyakan di sini dan tidak perlu dipikirkan
+          sekarang. Tanpa itu, pemilik baru yang sudah membayangkan denahnya
+          akan mencarinya di layar ini. */}
+      <Text
+        selectable
+        style={{
+          color: tokens.color.text.secondary,
+          fontSize: tokens.type.body.fontSize,
+          lineHeight: tokens.type.body.lineHeight,
+        }}
+      >
+        Ukuran denah kebun diatur nanti di Data Kebun.
+      </Text>
 
       <FarmCreatedModal
         farm={created}

@@ -87,7 +87,10 @@ export default function LoginScreen() {
           seharusnya. flexShrink sengaja tidak ditulis: menuliskannya 0 pun benar,
           tapi diam-diam mengundang orang mengubahnya. */}
       <View style={{ flexGrow: 1, gap: tokens.space.xxxl, justifyContent: 'center' }}>
-        <PageIntro align="center" title="Masuk" subtitle="Lanjutkan mengelola kebun." />
+        {/* Tanpa subjudul. "Lanjutkan mengelola kebun." dicabut: judulnya sudah
+            menyapa, dan kalimat kedua di bawah sapaan tidak menambah apa pun
+            yang menolong orang mengisi dua kolom di bawahnya. */}
+        <PageIntro align="center" title="Selamat datang kembali" />
         {/* Zona isian. xl (20) memisahkan sub-blok di dalamnya (banner, kelompok
             field, tombol, tautan); lg (16) di kelompok field adalah jarak antar
             field yang lama, sengaja TIDAK diubah. */}

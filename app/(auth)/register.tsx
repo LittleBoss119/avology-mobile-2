@@ -84,7 +84,15 @@ export default function RegisterScreen() {
           xxxl (32) memisahkan zona judul dari zona isian; gap seragam 18 milik
           Screen tidak lagi berlaku karena seluruh isi kini satu anak tunggal. */}
       <View style={{ gap: tokens.space.xxxl }}>
-        <PageIntro align="center" title="Buat akun" subtitle="Setelah ini Anda memilih kebun." />
+        {/* Subjudul DIPERTAHANKAN meski spek tidak menyebutnya, tapi ditulis
+            ulang. Ia memikul informasi yang dulu dipikul label tombol "Lanjut":
+            bahwa alurnya belum selesai di layar ini. Begitu tombolnya jadi
+            "Daftar" sesuai spek, kalimat inilah satu-satunya yang tersisa untuk
+            mengabarkan masih ada satu langkah lagi.
+
+            "pilih kebun", bukan "Anda memilih kebun" — aturan bahasa spek §6
+            melarang menyapa pengguna sebagai "Anda". */}
+        <PageIntro align="center" title="Buat akun dulu" subtitle="Setelah ini pilih kebun." />
         <View style={{ gap: tokens.space.xl }}>
           <ErrorBanner message={error} />
           <View style={{ gap: tokens.space.lg }}>
@@ -135,14 +143,20 @@ export default function RegisterScreen() {
               onChangeText={setPassword}
             />
           </View>
-          {/* "Lanjut", bukan "Buat akun": alur belum selesai di layar ini. Setelah
-              registrasi berhasil, router.replace('/') menyerahkan tujuan ke
-              resolveAccessRoute, dan akun baru yang belum punya membership selalu
-              mendarat di /onboarding untuk memilih buat kebun atau gabung kebun.
-              Tombol berbunyi "Buat akun" yang disusul layar pemilihan membuat orang
-              mengira prosesnya sudah selesai. */}
+          {/* "Daftar", MENGGANTIKAN "Lanjut" atas perintah spek batch 2.
+              Keberatan yang dulu ditulis di sini tetap sah dan dicatat: alur
+              belum selesai di layar ini — setelah registrasi berhasil,
+              router.replace('/') menyerahkan tujuan ke resolveAccessRoute, dan
+              akun baru selalu mendarat di /onboarding untuk memilih buat kebun
+              atau gabung kebun. Tombol berbunyi "Daftar" yang disusul layar
+              pemilihan bisa membuat orang mengira prosesnya sudah selesai.
+
+              Yang memikul keberatan itu sekarang adalah subjudul di atas
+              ("Setelah ini pilih kebun."), bukan label tombol. Tombol pintu
+              masuk di layar Pembuka juga berbunyi "Daftar", jadi label yang sama
+              di ujung alurnya memang lebih konsisten. */}
           <Button
-            title="Lanjut"
+            title="Daftar"
             loading={submitting}
             loadingTitle="Memproses…"
             onPress={handleSubmit}
