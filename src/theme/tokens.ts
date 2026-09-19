@@ -114,7 +114,21 @@ export const text = {
   stat80: { fontFamily: fonts.serif, fontSize: 80 },
 } as const satisfies Record<string, TextStyle>;
 
-export const space = { xs: 4, sm: 8, md: 12, lg: 18, xl: 22, xxl: 26 } as const;
+// Skala jarak. Enam langkah pertama — 4, 8, 12, 18, 22, 26 — adalah skala spek
+// apa adanya.
+//
+// `xxxl: 32` adalah PERPANJANGAN DI LUAR SPEK, ditambahkan di batch 1b dengan
+// persetujuan eksplisit. Jangan "mengoreksi"-nya kembali ke 26.
+//
+// Alasannya: skala spek berhenti di 26, sedangkan aplikasi punya enam titik
+// yang butuh jarak lebih besar dari itu — ruang antarblok di layar Masuk dan
+// Daftar, paddingBottom daftar denah, dan cadangan bawah <Screen> yang menjaga
+// isi terakhir tidak tertutup bar aksi. Memampatkan semuanya ke 26 menyempitkan
+// kelima tempat itu tanpa ada yang meminta.
+//
+// Rasionya sejalan dengan langkah sebelumnya: 22 -> 26 adalah 1,18; 26 -> 32
+// adalah 1,23. Ia langkah ketujuh yang wajar, bukan angka yang diselundupkan.
+export const space = { xs: 4, sm: 8, md: 12, lg: 18, xl: 22, xxl: 26, xxxl: 32 } as const;
 export const screenPadding = 20;
 export const radius = { control: 10, pill: 999, cell: 8, sheet: 18 } as const;
 export const touch = {

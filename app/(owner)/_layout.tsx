@@ -10,7 +10,7 @@ import {
   resolveAccessRoute,
   shouldRedirectAccess,
 } from '../../src/utils/routeGuard';
-import { colors as palette } from '../../src/theme/tokens';
+import { colors as palette, fonts } from '../../src/theme/tokens';
 
 export default function OwnerLayout() {
   const { currentFarm, initializing, profile, refresh } = useAuth();
@@ -84,8 +84,12 @@ export default function OwnerLayout() {
             headerBackTitle: 'Kembali',
             headerStyle: { backgroundColor: palette.surface },
             headerShadowVisible: false,
-            headerTintColor: palette.accentText,
-            headerTitleStyle: { color: palette.textPrimary, fontWeight: '700' },
+            headerTintColor: palette.textPrimary,
+            headerTitleAlign: 'center',
+            // 17 rata tengah, berat dibawa keluarga huruf. Sama persis dengan judul
+            // pada <TopAppBar>, supaya layar berheader bawaan dan layar berheader
+            // dalam-isi tidak terlihat berasal dari dua aplikasi berbeda.
+            headerTitleStyle: { color: palette.textPrimary, fontFamily: fonts.sansSemiBold, fontSize: 17 },
             contentStyle: { backgroundColor: palette.surface },
           }}
         >
@@ -106,7 +110,21 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/schedules/create" options={{ headerShown: false, title: 'Jadwal Manual' }} />
           <Stack.Screen name="owner/schedules/[scheduleId]" options={{ headerShown: false, title: 'Detail Jadwal' }} />
           <Stack.Screen name="owner/schedules/[scheduleId]/edit" options={{ headerShown: false, title: 'Edit Jadwal' }} />
-          <Stack.Screen name="owner/tasks/index" options={{ title: 'Tugas Pekerja' }} />
+          {/* Judul SENGAJA dikosongkan, bukan dihapus prop-nya.
+              Layar ini merender judulnya sendiri lewat <PageIntro> di badan
+              layar, jadi header bawaan yang juga berjudul membuat dua judul
+              bertumpuk — dan sebelum batch 1b keduanya bahkan berbunyi berbeda:
+              'Tugas Pekerja' di header, 'Tugas Lapangan' di isi.
+
+              Header tetap MENYALA karena ia satu-satunya sumber tombol kembali
+              di layar ini; layar ini tidak punya <TopAppBar>. Mematikannya akan
+              mengurung pengguna.
+
+              PERBAIKAN SEMENTARA. Bentuk akhirnya: judul 17 rata tengah di
+              header dan tanpa PageIntro, sesuai aturan "layar lain". Itu
+              menuntut edit berkas layar, jadi dikerjakan di batch 6 bersama
+              keputusan penamaannya. */}
+          <Stack.Screen name="owner/tasks/index" options={{ title: '' }} />
           <Stack.Screen name="owner/tasks/[taskId]" options={{ headerShown: false, title: 'Detail Tugas' }} />
           <Stack.Screen name="owner/farm" options={{ headerShown: false, title: 'Anggota' }} />
           <Stack.Screen name="owner/workers" options={{ title: 'Riwayat Akses' }} />

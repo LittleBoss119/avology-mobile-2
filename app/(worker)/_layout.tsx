@@ -10,7 +10,7 @@ import {
   resolveAccessRoute,
   shouldRedirectAccess,
 } from '../../src/utils/routeGuard';
-import { colors as palette } from '../../src/theme/tokens';
+import { colors as palette, fonts } from '../../src/theme/tokens';
 
 export default function WorkerLayout() {
   const { currentFarm, initializing, profile, refresh } = useAuth();
@@ -85,8 +85,12 @@ export default function WorkerLayout() {
             headerBackTitle: 'Kembali',
             headerStyle: { backgroundColor: palette.surface },
             headerShadowVisible: false,
-            headerTintColor: palette.accentText,
-            headerTitleStyle: { color: palette.textPrimary, fontWeight: '700' },
+            headerTintColor: palette.textPrimary,
+            headerTitleAlign: 'center',
+            // 17 rata tengah, berat dibawa keluarga huruf. Sama persis dengan judul
+            // pada <TopAppBar>, supaya layar berheader bawaan dan layar berheader
+            // dalam-isi tidak terlihat berasal dari dua aplikasi berbeda.
+            headerTitleStyle: { color: palette.textPrimary, fontFamily: fonts.sansSemiBold, fontSize: 17 },
             contentStyle: { backgroundColor: palette.surface },
           }}
         >

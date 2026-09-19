@@ -19,7 +19,6 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -46,6 +45,11 @@ import { sanitizeDisplayValue, sanitizeUserFacingMessage } from '../utils/displa
 import { Icon, type IconName } from './icons';
 import { PhotoSourceSheet } from './bottom-sheet';
 import { StatusMarker, type StatusMarkerShape } from './status-marker';
+import { SkeletonBlock, SkeletonList, SlowLoadNotice } from './skeleton';
+
+// Diekspor ulang dengan alasan yang sama seperti StatusMarker: satu jalur impor
+// untuk pemanggil. Batch 2-7 memakainya untuk meniru bentuk isi tiap layar.
+export { SkeletonBlock, SkeletonList, SlowLoadNotice } from './skeleton';
 
 // Diekspor ulang supaya pemanggil punya SATU jalur impor: apa pun yang dipakai
 // bersama <Badge> datang dari './ui', tidak setengah dari sini dan setengah
@@ -83,19 +87,16 @@ type AutoScrollContextValue = {
 
 const AutoScrollContext = React.createContext<AutoScrollContextValue | null>(null);
 
-// Tinggi pita gradasi di atas stickyFooter. Setinggi satu kontrol (56) —
-// cukup panjang untuk memudar halus, tidak sepanjang blok yang menutupi konten.
-// Angka ini juga dipakai saat menghitung ruang bawah konten scroll, jadi
-// mengubahnya di sini otomatis ikut menggeser padding-nya.
-const STICKY_FOOTER_FADE_HEIGHT = tokens.layout.controlHeight;
+// Padding bar aksi: 14 atas, 20 samping, 18 bawah. Sisi samping mengikuti
+// padding tepi layar supaya tombol di dalam bar sejajar dengan isi di atasnya.
+const ACTION_BAR_PADDING_TOP = 14;
+const ACTION_BAR_PADDING_BOTTOM = 18;
 
-// Perkiraan ruang bawah yang dipakai HANYA pada frame pertama, sebelum footer
-// sempat diukur onLayout. Bukan angka ajaib: satu tombol setinggi controlHeight
-// + pita gradasi + satu jarak. Kebetulan hasilnya 128, sama persis dengan
-// konstanta lama yang digantikannya, jadi frame pertama tidak bergeser sedikit
-// pun dibanding sebelum perubahan ini.
-const STICKY_FOOTER_FALLBACK_RESERVE =
-  tokens.layout.controlHeight + STICKY_FOOTER_FADE_HEIGHT + tokens.space.lg;
+// Perkiraan ruang bawah yang dipakai HANYA pada frame pertama, sebelum bar
+// sempat diukur onLayout. Bukan angka ajaib: satu tombol utama setinggi 56 +
+// padding atas-bawah bar + satu jarak.
+const ACTION_BAR_FALLBACK_RESERVE =
+  tokens.layout.controlHeight + ACTION_BAR_PADDING_TOP + ACTION_BAR_PADDING_BOTTOM + tokens.space.lg;
 
 // Mengubah token warna heksadesimal jadi rgba beralfa.
 //
@@ -108,6 +109,13 @@ const STICKY_FOOTER_FALLBACK_RESERVE =
 // Hanya menerima heksadesimal 6 digit — itu bentuk semua token warna di
 // theme.ts. Kalau kelak ada token 3 digit atau rgba, fungsi ini harus ikut
 // disesuaikan.
+/**
+ * NOL PEMAKAIAN sejak batch 1b — satu-satunya pemanggilnya adalah pita gradasi
+ * di atas bar aksi, yang dicabut bersama gradasinya.
+ *
+ * Sengaja tidak dihapus: ia ekspor publik, dan membuang ekspor dilarang
+ * batasan keras batch ini. Fungsinya juga masih benar dan murah.
+ */
 export function withAlpha(hexColor: string, alpha: number): string {
   const normalized = hexColor.replace('#', '');
   const red = parseInt(normalized.slice(0, 2), 16);
@@ -155,22 +163,23 @@ export function Screen({
   stickyFooter?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
-  const hasStickyFooter = Boolean(stickyFooter);
+  // SATU bar aksi, dua nama prop. `footer` dulu dirender sebagai anak TERAKHIR
+  // di dalam ScrollView sehingga ia ikut menggulir, sementara `stickyFooter`
+  // menempel di dasar layar — dua mekanisme untuk satu hal, dan akibatnya
+  // posisi bar aksi berpindah-pindah antarlayar. Sejak batch 1b keduanya
+  // melewati jalur yang sama dan menempel.
+  //
+  // Kedua nama dipertahankan: 9 layar memanggil `footer`, 17 memanggil
+  // `stickyFooter`, dan mengganti nama prop dilarang batasan keras. Tidak ada
+  // satu pun berkas yang mengirim keduanya, jadi `??` tidak pernah menyembunyikan
+  // apa pun; kalau kelak ada, `footer` yang menang.
+  const actionBar = footer ?? stickyFooter;
+  const hasActionBar = Boolean(actionBar);
   const keyboard = useKeyboardMetrics();
   const backgroundColor =
     variant === 'surface' ? colors.surface : variant === 'soft' ? colors.backgroundDeep : colors.background;
-  // Warna dasar footer sekaligus titik AKHIR gradasi. Diambil dari tokens dan
-  // dipetakan per variant supaya selalu cocok dengan latar layar yang sedang
-  // dipakai. Nilainya identik dengan `backgroundColor` di atas — hanya jalur
-  // tokennya yang berbeda, jadi tidak ada pergeseran warna.
-  const footerBaseColor =
-    variant === 'surface'
-      ? tokens.color.surface.card
-      : variant === 'soft'
-        ? tokens.color.surface.subtle
-        : tokens.color.surface.canvas;
-  // Tinggi footer diukur, bukan ditebak. 0 berarti belum sempat diukur.
-  const [stickyFooterHeight, setStickyFooterHeight] = React.useState(0);
+  // Tinggi bar aksi diukur, bukan ditebak. 0 berarti belum sempat diukur.
+  const [actionBarHeight, setActionBarHeight] = React.useState(0);
 
   // Window tidak menyusut saat keyboard naik (adjustResize tidak berlaku di Android
   // edge-to-edge), jadi stickyFooter yang position:absolute harus diangkat manual.
@@ -197,32 +206,31 @@ export function Screen({
     : keyboardVisible
       ? Math.max(0, keyboard.height - insets.bottom)
       : 0;
-  // Hanya stickyFooter yang perlu DIANGKAT (position:absolute). Nilainya identik
-  // dengan sebelum keyboardOverlap dipisah: saat hasStickyFooter benar, ekspresi
-  // lama persis sama dengan keyboardOverlap; saat salah, sama-sama 0.
-  const keyboardLift = hasStickyFooter ? keyboardOverlap : 0;
+  // Hanya bar aksi yang perlu DIANGKAT (position:absolute).
+  const keyboardLift = hasActionBar ? keyboardOverlap : 0;
   // Overlap sudah dihitung sampai dasar display, jadi insets.bottom TIDAK dikurangi
   // lagi di sini — nav bar tertutup keyboard, ruang untuknya tidak relevan. Saat
-  // keyboard tertutup (atau saat fallback aktif) padding kembali ke rumus lama persis.
-  const footerPaddingBottom = screenYBasisActive ? spacing.md : Math.max(insets.bottom, spacing.md);
-  // Ruang bawah yang harus dikosongkan konten scroll supaya item TERAKHIR tidak
-  // tertutup footer yang kini mengambang di atasnya.
+  // keyboard tertutup padding kembali ke ruang aman perangkat, minimal 18.
   //
-  // Begitu footer terukur, angkanya = tinggi footer + tinggi pita gradasi + satu
-  // jarak. Pita gradasi ikut dihitung karena item terakhir harus berhenti di
-  // ATAS gradasi, bukan di tengahnya — kalau berhenti di tengah, teksnya
-  // separuh pudar dan terlihat seperti bug.
-  const stickyFooterReserve =
-    stickyFooterHeight > 0
-      ? stickyFooterHeight + STICKY_FOOTER_FADE_HEIGHT + tokens.space.lg
-      : STICKY_FOOTER_FALLBACK_RESERVE + insets.bottom;
+  // 18 bawah vs 14 atas (ACTION_BAR_PADDING_TOP): asimetris dan disengaja. Sisi
+  // bawah bar berbatasan dengan tepi layar atau nav bar, sisi atasnya dengan
+  // garis pemisah — tepi butuh ruang lebih banyak daripada garis supaya tombol
+  // tidak terbaca menempel ke dasar perangkat.
+  const actionBarPaddingBottom = screenYBasisActive
+    ? ACTION_BAR_PADDING_BOTTOM
+    : Math.max(insets.bottom, ACTION_BAR_PADDING_BOTTOM);
+  // Ruang bawah yang harus dikosongkan konten scroll supaya isi TERAKHIR tidak
+  // tertutup bar aksi yang menempel di atasnya.
+  //
+  // Tidak ada lagi pita gradasi yang ikut dihitung: bar kini buram dan bergaris
+  // atas, jadi batasnya tegas dan konten tinggal berhenti tepat di atasnya.
+  const actionBarReserve =
+    actionBarHeight > 0 ? actionBarHeight + tokens.space.lg : ACTION_BAR_FALLBACK_RESERVE + insets.bottom;
 
-  // keyboardOverlap, bukan keyboardLift: jalur non-sticky juga perlu ruang bawah
-  // supaya field yang tertutup keyboard bisa digulung naik. Untuk layar ber-sticky
-  // nilainya tidak berubah — di sana keyboardLift memang sama dengan
-  // keyboardOverlap, jadi hasil penjumlahannya identik dengan sebelumnya.
+  // keyboardOverlap, bukan keyboardLift: layar tanpa bar aksi juga perlu ruang
+  // bawah supaya field yang tertutup keyboard bisa digulung naik.
   const overlayBottomPadding =
-    (hasStickyFooter ? stickyFooterReserve : floatingAction ? 132 : tokens.space.xxxl) + keyboardOverlap;
+    (hasActionBar ? actionBarReserve : floatingAction ? 132 : tokens.space.xxxl) + keyboardOverlap;
 
   // Ref internal dipakai kalau pemanggil tidak mengoper scrollRef sendiri, supaya
   // auto-scroll tetap punya pegangan ke ScrollView. Untuk layar yang mengoper
@@ -345,57 +353,43 @@ export function Screen({
             bawaan) pembungkus tetap memenuhi layar saat konten pendek — itu yang
             menjaga justifyContent 'center' tetap bekerja — tapi boleh tumbuh
             melewati viewport saat konten panjang, dan barulah bisa di-scroll. */}
+        {/* `footer` TIDAK lagi dirender di sini. Ia dulu anak terakhir di dalam
+            ScrollView, sehingga ikut menggulir dan baru terlihat setelah
+            pengguna menggulung sampai dasar. Sekarang ia keluar sebagai saudara
+            ScrollView, di bawah. */}
         <View style={{ flexGrow: 1, gap: spacing.sectionGap }}>{children}</View>
-        {footer ? <View style={{ gap: spacing.md, paddingBottom: spacing.lg }}>{footer}</View> : null}
       </ScrollView>
-      {stickyFooter ? (
-        // Footer mengambang. Pembungkus luar TIDAK punya latar sendiri dan tidak
-        // punya garis pemisah — yang memisahkannya dari konten adalah pita
-        // gradasi di bawah ini.
+      {hasActionBar ? (
+        // Bar aksi. Menempel di dasar layar sebagai SAUDARA ScrollView, bukan
+        // anak di dalamnya — posisinya karena itu sama di semua layar, apa pun
+        // panjang isinya.
+        //
+        // Pita gradasi yang dulu ada di sini DICABUT. Ia memudarkan konten ke
+        // warna latar supaya batas bar terbaca tanpa garis; sekarang bar punya
+        // latar buram sendiri dan garis atas 1px, jadi batasnya sudah tegas dan
+        // gradasinya tinggal menghabiskan 56px ruang tanpa menambah apa pun.
         //
         // `bottom: keyboardLift` dipertahankan apa adanya. Jangan diutak-atik:
         // rumusnya memakai `screenY`, bukan `height`, dan itu sudah dibetulkan
         // dengan susah payah (lihat catatan panjang di atas).
         <View
-          onLayout={(event) => setStickyFooterHeight(event.nativeEvent.layout.height)}
+          onLayout={(event) => setActionBarHeight(event.nativeEvent.layout.height)}
           style={{
+            backgroundColor: palette.surfaceRaised,
+            // Garis ATAS saja. Bar duduk di tepi bawah layar, jadi tiga sisinya
+            // yang lain tidak berbatasan dengan apa pun yang perlu dipisahkan.
+            borderTopColor: palette.border,
+            borderTopWidth: 1,
             bottom: keyboardLift,
             left: 0,
+            paddingBottom: actionBarPaddingBottom,
+            paddingHorizontal: spacing.screenHorizontal,
+            paddingTop: ACTION_BAR_PADDING_TOP,
             position: 'absolute',
             right: 0,
           }}
         >
-          {/* Pita gradasi. Duduk DI ATAS footer lewat top negatif, sehingga
-              tidak menambah tinggi pembungkus (anak absolute tidak dihitung
-              layout induk) dan tinggi hasil onLayout tetap murni tinggi footer.
-
-              Memudar dari alfa 0 di puncak ke warna latar solid tepat di batas
-              footer, jadi teks yang lewat di belakangnya menghilang perlahan,
-              bukan terpotong garis.
-
-              pointerEvents 'none' WAJIB: tanpa itu pita ini menangkap sentuhan
-              dan konten di bawahnya tidak bisa digulung maupun ditekan. */}
-          <LinearGradient
-            colors={[withAlpha(footerBaseColor, 0), footerBaseColor]}
-            pointerEvents="none"
-            style={{
-              height: STICKY_FOOTER_FADE_HEIGHT,
-              left: 0,
-              position: 'absolute',
-              right: 0,
-              top: -STICKY_FOOTER_FADE_HEIGHT,
-            }}
-          />
-          <View
-            style={{
-              backgroundColor: footerBaseColor,
-              paddingBottom: footerPaddingBottom,
-              paddingHorizontal: spacing.screenHorizontal,
-              paddingTop: spacing.md,
-            }}
-          >
-            {stickyFooter}
-          </View>
+          {actionBar}
         </View>
       ) : null}
       {floatingAction ? (
@@ -501,9 +495,14 @@ export function PageIntro({
         selectable
         style={{
           color: colors.text,
+          // Berat dibawa keluarga huruf. Android tidak mensintesis berat untuk
+          // font kustom, jadi `fontWeight` di sebelah `fontFamily` tidak berguna
+          // dan pada sebagian perangkat memicu fallback ke muka huruf yang salah.
+          // typography.h1.fontWeight ('700') sengaja tidak diganti fonts kustom
+          // berbobot 700 — yang dimuat hanya 400 dan 600, dan 600 itulah yang
+          // dipakai di sini lewat fonts.sansSemiBold.
           fontFamily: fonts.sansSemiBold,
           fontSize: typography.h1.fontSize,
-          fontWeight: typography.h1.fontWeight,
           letterSpacing: 0,
           lineHeight: typography.h1.lineHeight,
           textAlign,
@@ -528,6 +527,12 @@ export function PageIntro({
     </View>
   );
 }
+
+// Lebar slot kiri dan kanan pada header "layar lain". Keduanya WAJIB sama:
+// slot kanan dibiarkan kosong justru supaya judul di antara keduanya benar-benar
+// berada di tengah layar, bukan di tengah sisa ruang setelah tombol kembali.
+// Begitu keduanya berbeda, judul bergeser sebesar selisihnya.
+const BACK_SLOT_SIZE = 48;
 
 export function TopAppBar({
   right,
@@ -580,36 +585,45 @@ export function TopAppBar({
         }}
       >
         {onBack ? (
-          // Label WAJIB ditulis: isinya hanya ikon chevron tanpa teks, jadi
+          // Label WAJIB ditulis: isinya hanya ikon panah tanpa teks, jadi
           // tanpa ini TalkBack membacakannya sebagai elemen tanpa nama. Mengikuti
           // ProfileIconButton dan toggle PasswordField yang sudah benar.
+          //
+          // KOTAK BERGARIS DICABUT di batch 1b. Tombol kembali bukan tombol
+          // yang perlu menonjol — ia afordans navigasi yang sudah dikenal, dan
+          // membingkainya dengan kotak 32x32 bergaris membuatnya menuntut
+          // perhatian yang sama besar dengan aksi utama layar. Yang tersisa
+          // ikonnya saja, di dalam slot 48 yang tetap memenuhi target sentuh.
           <Pressable
             accessibilityLabel="Kembali"
             accessibilityRole="button"
-            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
             onPress={onBack}
-            style={{
+            style={({ pressed }) => ({
               alignItems: 'center',
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              borderCurve: 'continuous',
-              borderRadius: 11,
-              borderWidth: 1,
-              height: 32,
+              height: BACK_SLOT_SIZE,
               justifyContent: 'center',
-              width: 32,
-            }}
+              // Digeser ke kiri sebesar selisih slot dan ikon, supaya ikonnya
+              // sejajar dengan tepi kiri konten layar. Tanpa ini slot 48 yang
+              // menengahkan ikon 24 membuat panah menjorok 12px ke dalam,
+              // sementara seluruh isi layar di bawahnya rata di tepi 20.
+              marginLeft: -((BACK_SLOT_SIZE - tokens.icon.lg) / 2),
+              opacity: pressed ? 0.6 : 1,
+              width: BACK_SLOT_SIZE,
+            })}
           >
-            <Icon name="chevron-left" size={20} color={colors.primary} />
+            {/* Panah, bukan chevron. Pengguna Android mengharapkan panah untuk
+                "kembali"; chevron adalah kosakata iOS. Mengganti afordans
+                navigasi bukan pekerjaan redesign visual. */}
+            <Icon name="arrow-left" size={tokens.icon.lg} color={palette.textPrimary} />
           </Pressable>
         ) : isMain ? (
           // Penyeimbang kiri selebar slot kanan. Saat `right` tidak dikirim
           // lebarnya 0, dan judul yang flex:1 di antara dua tepi nol tetap duduk
           // persis di tengah — jadi cabang ini benar untuk kedua keadaan tanpa
           // syarat tambahan.
-          <View style={{ height: 32, width: rightSlotWidth }} />
+          <View style={{ height: BACK_SLOT_SIZE, width: rightSlotWidth }} />
         ) : (
-          <View style={{ height: 32, width: 32 }} />
+          <View style={{ height: BACK_SLOT_SIZE, width: BACK_SLOT_SIZE }} />
         )}
         <View
           style={{
@@ -626,10 +640,16 @@ export function TopAppBar({
               selectable
               numberOfLines={1}
               style={{
-                color: colors.text,
-                fontSize: isMain ? typography.screenTitle.fontSize : 20,
-                fontWeight: isMain ? typography.screenTitle.fontWeight : '700',
-                lineHeight: typography.screenTitle.lineHeight,
+                color: palette.textPrimary,
+                // 17 rata tengah untuk SEMUA varian, turun dari 20/screenTitle.
+                // Judul di sini menamai tempat, bukan membuka halaman — ia tidak
+                // perlu sebesar judul layar root tab (26) yang memang jadi elemen
+                // teratas halamannya.
+                //
+                // Berat dibawa keluarga huruf; fontWeight dicabut.
+                fontFamily: fonts.sansSemiBold,
+                fontSize: 17,
+                lineHeight: 23,
                 textAlign: titleAlign,
               }}
             >
@@ -643,7 +663,10 @@ export function TopAppBar({
           // sebelum pembungkus ini ada.
           <View onLayout={(event) => setRightSlotWidth(event.nativeEvent.layout.width)}>{right}</View>
         ) : (
-          <View style={{ height: 32, width: isMain ? 0 : 32 }} />
+          // Slot kanan kosong selebar slot kembali. Ia TIDAK punya isi dan itu
+          // memang tugasnya: ia penyeimbang, satu-satunya yang membuat judul
+          // duduk di tengah layar dan bukan di tengah sisa ruang.
+          <View style={{ height: BACK_SLOT_SIZE, width: isMain ? 0 : BACK_SLOT_SIZE }} />
         )}
       </View>
       {subtitle ? (
@@ -856,9 +879,9 @@ export function SectionHeader({
           style={{
             color: colors.text,
             flex: 1,
+            // Tanpa fontWeight — berat dibawa keluarga huruf.
             fontFamily: fonts.sansSemiBold,
             fontSize: typography.h3.fontSize,
-            fontWeight: '700',
             lineHeight: typography.h3.lineHeight,
           }}
         >
@@ -2157,6 +2180,11 @@ export function Button({
         alignItems: 'center',
         // Selebar kolom konten, kecuali ukuran kecil dan varian ikon.
         alignSelf: isSmall || isIcon ? 'flex-start' : 'stretch',
+        // Nonaktif berlatar surfaceSunken — KECUALI varian merusak, yang tetap
+        // tanpa latar. Aksi merusak adalah baris TEKS; memberinya bidang saat
+        // dinonaktifkan membuat tombol teks mendadak tumbuh kotak, lalu kotak
+        // itu lenyap lagi begitu aktif. Nonaktifnya cukup ditandai warna teks
+        // (textMuted lewat contentColor) dan ketidakmampuannya ditekan.
         backgroundColor: isDisabledLook
           ? isDanger
             ? 'transparent'
@@ -2309,18 +2337,41 @@ export function SuccessBanner({ message }: { message?: string | null }) {
 // tidak berpindah tempat saat pemintalnya hilang.
 export function LoadingState({
   header,
-  message = 'Memuat data...',
+  message,
+  rowHeight,
+  rows,
 }: {
   header?: React.ReactNode;
+  /**
+   * Baris penjelas yang muncul HANYA setelah pemuatan melewati 5 detik.
+   *
+   * Perannya BERUBAH di batch 1b. Dulu ia teks yang langsung tampil di bawah
+   * pemutar; sekarang ia keterangan keterlambatan. Bawaannya dicabut (dulu
+   * 'Memuat data...') supaya SlowLoadNotice bisa membedakan "pemanggil memang
+   * mengirim kalimat" dari "tidak ada yang dikirim" — tanpa itu, setiap
+   * pemanggil selalu terhitung mengirim sesuatu dan cabang bawaan spek
+   * ('Sedang menyiapkan data.') tidak akan pernah menyala.
+   *
+   * 33 pemanggil mengirim kalimat sendiri ('Memuat tugas pekerja...' dan
+   * sejenisnya). Kalimat itu tidak hilang — ia hanya tidak lagi muncul pada
+   * detik pertama, karena kerangka di atasnya sudah mengabarkan hal yang sama
+   * tanpa kata.
+   */
   message?: string;
+  /** Tinggi tiap baris kerangka. Lihat SkeletonList. */
+  rowHeight?: number;
+  /** Jumlah baris kerangka. Lihat SkeletonList. */
+  rows?: number;
 }) {
   return (
     <Screen header={header}>
-      <View style={{ flex: 1, justifyContent: 'center', gap: spacing.md }}>
-        <ActivityIndicator color={colors.primary} />
-        <Text selectable style={{ color: colors.muted, textAlign: 'center' }}>
-          {message}
-        </Text>
+      {/* Kerangka duduk di ATAS layar mengikuti aliran isi, bukan dipusatkan
+          vertikal seperti pemutar dulu. Itu memang inti perubahannya: bentuknya
+          harus berada di tempat isinya akan muncul, supaya tidak ada lompatan
+          saat data tiba. */}
+      <View style={{ gap: spacing.lg }}>
+        <SkeletonList rowHeight={rowHeight} rows={rows} />
+        <SlowLoadNotice message={message} />
       </View>
     </Screen>
   );
@@ -2370,13 +2421,57 @@ export function EmptyState({
 }) {
   if (variant === 'plain') {
     return (
-      <View style={{ alignItems: 'center', gap: tokens.space.sm }}>
-        {icon ? <EmptyStateGlyph background={tokens.color.surface.subtle} name={icon} /> : null}
-        <Text selectable style={{ ...tokens.type.subheading, color: tokens.color.text.primary, textAlign: 'center' }}>
+      // Daftar kosong satu layar penuh. Ini SATU-SATUNYA varian yang dibentuk
+      // ulang di batch 1b: ia satu-satunya yang menjadi isi utama layarnya dan
+      // punya ruang untuk judul 34. Varian 'card' dan 'dashed' adalah blok kecil
+      // di tengah isi — judul sebesar ini di sana akan lebih besar daripada
+      // judul layarnya sendiri.
+      <View style={{ alignItems: 'center', gap: tokens.space.md, paddingVertical: tokens.space.xxl }}>
+        {icon ? (
+          // Ikon GARIS 44, bukan lagi ikon 24 di dalam lingkaran berlatar 56.
+          // Lingkaran itu bidang berwarna yang tidak menyatakan apa pun —
+          // keadaan kosong bukan status, jadi ia tidak diberi bidang.
+          //
+          // strokeWidth 1,5 (bawaannya 2): goresan diukur dalam satuan viewBox
+          // 24, jadi pada 44px goresan 2 menjadi ~3,7 piksel dan ikonnya
+          // terbaca gempal. 1,5 mengembalikannya ke ~2,75.
+          //
+          // Warnanya neutralCell, dan itu keputusan yang TIDAK ditetapkan spek —
+          // spek hanya menyebut "ikon garis 44" tanpa warna. neutralCell dipilih
+          // karena ia token bidang netral yang sudah dipakai penanda kondisi
+          // sehat: netral, terlihat, dan bukan warna status.
+          <Icon name={icon} size={44} strokeWidth={1.5} color={palette.neutralCell} />
+        ) : null}
+        <Text
+          selectable
+          style={{
+            color: palette.textPrimary,
+            // Pemakaian fonts.serif PERTAMA yang benar-benar tampil di aplikasi.
+            // Serif dipakai untuk angka besar dan judul keadaan — tempat yang
+            // dibaca sekali lalu ditinggalkan — bukan untuk teks antarmuka yang
+            // dipindai berulang kali.
+            fontFamily: fonts.serif,
+            fontSize: 34,
+            lineHeight: 40,
+            textAlign: 'center',
+          }}
+        >
           {title}
         </Text>
         {subtitle ? (
-          <Text selectable style={{ ...tokens.type.meta, color: tokens.color.text.tertiary, textAlign: 'center' }}>
+          // SATU kalimat. Komponen tidak bisa menegakkannya — kalau pemanggil
+          // mengirim paragraf, paragraf itu yang tampil. Yang bisa ditegakkan
+          // di sini cuma bentuknya; isinya diperiksa saat layarnya digarap.
+          <Text
+            selectable
+            style={{
+              color: palette.textMuted,
+              fontFamily: fonts.sans,
+              fontSize: 16,
+              lineHeight: 22,
+              textAlign: 'center',
+            }}
+          >
             {subtitle}
           </Text>
         ) : null}
@@ -2421,7 +2516,8 @@ export function EmptyState({
   return (
     <Card>
       {icon ? <EmptyStateGlyph background={tokens.color.surface.subtle} name={icon} /> : null}
-      <Text selectable style={{ color: colors.text, fontFamily: fonts.sansSemiBold, fontSize: typography.h3.fontSize, fontWeight: '700' }}>
+      {/* Tanpa fontWeight — berat dibawa keluarga huruf. */}
+      <Text selectable style={{ color: colors.text, fontFamily: fonts.sansSemiBold, fontSize: typography.h3.fontSize }}>
         {title}
       </Text>
       {subtitle ? (

@@ -9,7 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider } from '../src/context/auth-context';
 import { SnackbarProvider } from '../src/components/snackbar';
-import { colors } from '../src/theme/tokens';
+import { colors, fonts } from '../src/theme/tokens';
 
 export default function RootLayout() {
   // Tiga varian, bukan lebih. Berat di Android diatur lewat fontFamily, bukan
@@ -45,8 +45,12 @@ export default function RootLayout() {
               headerBackTitle: 'Kembali',
               headerStyle: { backgroundColor: colors.surface },
               headerShadowVisible: false,
-              headerTintColor: colors.accentText,
-              headerTitleStyle: { color: colors.textPrimary, fontWeight: '700' },
+              headerTintColor: colors.textPrimary,
+              headerTitleAlign: 'center',
+              // 17 rata tengah, berat dibawa keluarga huruf. Sama persis dengan judul
+              // pada <TopAppBar>, supaya layar berheader bawaan dan layar berheader
+              // dalam-isi tidak terlihat berasal dari dua aplikasi berbeda.
+              headerTitleStyle: { color: colors.textPrimary, fontFamily: fonts.sansSemiBold, fontSize: 17 },
               contentStyle: { backgroundColor: colors.surface },
             }}
           >

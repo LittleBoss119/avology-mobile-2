@@ -3,7 +3,8 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, radius, spacing, tokens, typography } from '../constants/theme';
+import { spacing, tokens } from '../constants/theme';
+import { colors as palette, fonts, radius as shapeRadius, touch } from '../theme/tokens';
 import type { MemberRole } from '../types/domain';
 import { Icon, type IconName } from './icons';
 
@@ -43,25 +44,25 @@ export function RoleBottomNavigation({ role }: { role: MemberRole }) {
   }
 
   return (
+    // Bar tepi-ke-tepi, bukan kartu melayang. Kartu ber-radius 18 dengan margin
+    // di ketiga sisinya membuat bar terbaca sebagai benda yang MENUMPANG di atas
+    // layar; bar navigasi bukan benda yang menumpang, ia batas bawah aplikasi.
+    // Yang memisahkannya dari isi sekarang satu garis atas 1px, sejalan dengan
+    // bar aksi bawah di <Screen>.
     <View
       style={{
-        backgroundColor: colors.bg,
+        backgroundColor: palette.surfaceRaised,
+        borderTopColor: palette.border,
+        borderTopWidth: 1,
         paddingBottom: Math.max(insets.bottom, spacing.sm),
-        paddingHorizontal: spacing.md,
-        paddingTop: spacing.xs,
+        paddingHorizontal: spacing.sm,
+        paddingTop: spacing.sm,
       }}
     >
       <View
         style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderCurve: 'continuous',
-          borderRadius: radius.screenCard,
-          borderWidth: 1,
           flexDirection: 'row',
-          gap: 4,
-          minHeight: 64,
-          padding: 5,
+          gap: spacing.xs,
         }}
       >
         {items.map((item) => {
@@ -71,32 +72,50 @@ export function RoleBottomNavigation({ role }: { role: MemberRole }) {
             <Pressable
               key={item.href}
               onPress={() => router.replace(item.href)}
+              // PIL BERLATAR DI BALIK TAB AKTIF DIPERTAHANKAN, dan itu
+              // disengaja meski spek tidak menyebutnya.
+              //
+              // Tanpa pil, satu-satunya pembeda aktif dan nonaktif tinggal
+              // WARNA — persis yang dilarang aturan spek sendiri. Bagi mata yang
+              // tidak membedakan jingga dari abu, keempat tab jadi identik dan
+              // tidak ada lagi yang memberi tahu sedang berada di mana. Pil
+              // adalah pembeda berbasis BIDANG, alasan yang sama persis dengan
+              // penanda bentuk pada badge di batch 1a.
+              //
+              // Latarnya surfaceSunken, bukan brand.soft: bidang netral yang
+              // menyatakan "di sini", bukan bidang berwarna yang menyatakan
+              // "ada masalah".
               style={{
                 alignItems: 'center',
-                backgroundColor: isActive ? tokens.color.brand.soft : 'transparent',
+                backgroundColor: isActive ? palette.surfaceSunken : 'transparent',
                 borderCurve: 'continuous',
-                borderRadius: tokens.radius.cardInner,
+                borderRadius: shapeRadius.control,
                 flex: 1,
                 gap: 2,
                 justifyContent: 'center',
-                minHeight: 52,
-                paddingHorizontal: 4,
+                minHeight: touch.row,
+                paddingHorizontal: spacing.xs,
                 paddingVertical: 5,
               }}
             >
               <Icon
                 name={NAV_ICON[item.icon]}
                 size={tokens.icon.lg}
-                color={isActive ? tokens.color.brand.base : tokens.color.text.tertiary}
+                color={isActive ? palette.accent : palette.tabInactive}
               />
               <Text
                 selectable={false}
                 numberOfLines={1}
                 style={{
-                  color: isActive ? tokens.color.brand.base : tokens.color.text.tertiary,
-                  fontSize: typography.navLabel.fontSize,
-                  fontWeight: isActive ? '500' : '400',
-                  lineHeight: typography.navLabel.lineHeight,
+                  // accentText, BUKAN accent. Label 12px adalah bentuk huruf
+                  // tipis, bukan bidang seperti ikon di atasnya — ia butuh
+                  // varian yang digelapkan untuk lolos ambang kontras terhadap
+                  // pil surfaceSunken di belakangnya.
+                  color: isActive ? palette.accentText : palette.tabInactive,
+                  // Berat dibawa keluarga huruf; fontWeight dicabut.
+                  fontFamily: isActive ? fonts.sansSemiBold : fonts.sans,
+                  fontSize: 12,
+                  lineHeight: 16,
                   textAlign: 'center',
                 }}
               >
