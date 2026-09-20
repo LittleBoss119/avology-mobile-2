@@ -1,16 +1,14 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 
 import { colors, spacing, tokens, typography } from '../constants/theme';
 import { colors as palette, text as typeScale } from '../theme/tokens';
 import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import {
-  deleteTreeMainPhoto,
   getTreeMainPhoto,
   listConditionRecordPhotosForTree,
-  uploadTreeMainPhoto,
 } from '../services/photoAttachmentService';
 import {
   getTreeDetail,
@@ -18,7 +16,6 @@ import {
   startTreePlanting,
 } from '../services/treeService';
 import { useAuth } from '../context/auth-context';
-import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import { consumePendingFeedback } from '../lib/pendingFeedback';
 import type {
   Tree,
@@ -26,11 +23,7 @@ import type {
   TreeHistoryItem,
   TreePlanting,
 } from '../types/domain';
-import type {
-  ConditionRecordPhotoMap,
-  PickedPhotoAsset,
-  TreeMainPhoto,
-} from '../types/media';
+import type { ConditionRecordPhotoMap, TreeMainPhoto } from '../types/media';
 import { daysSinceLocal } from '../utils/dateDiff';
 // cycleStartKey dan isOnOrAfterCycleStart TIDAK LAGI DIPAKAI DI SINI: keduanya
 // dulu dipakai untuk mencari sendiri tanggal fase di daftar riwayat, dan itu
@@ -43,12 +36,12 @@ import { PhotoViewerModal } from './media';
 import {
   ConditionReportList,
   ConditionStatusBadge,
+  formatHarvestFactValue,
   formatHistoryRowDate,
-  formatHistoryRowTitle,
   TreeHistoryTimeline,
   type TreeHistoryRouteRecordType,
 } from './tree-components';
-import { BottomSheet, PhotoSourceSheet, SheetActionRow } from './bottom-sheet';
+import { BottomSheet, SheetActionRow } from './bottom-sheet';
 import {
   StartTreePlantingSheet,
   type StartTreePlantingFormValues,
@@ -107,9 +100,6 @@ export function TreeDetailScreen({
   const [cycleLoading, setCycleLoading] = React.useState(false);
   const [startSheetOpen, setStartSheetOpen] = React.useState(false);
   const [conditionPhotoMap, setConditionPhotoMap] = React.useState<ConditionRecordPhotoMap>({});
-  const [photoActionLoading, setPhotoActionLoading] = React.useState(false);
-  const [photoActionLabel, setPhotoActionLabel] = React.useState<string | null>(null);
-  const [photoSourceOpen, setPhotoSourceOpen] = React.useState(false);
   const [reports, setReports] = React.useState<TreeConditionReport[]>([]);
   const [tree, setTree] = React.useState<Tree | null>(null);
   const [treeMainPhoto, setTreeMainPhoto] = React.useState<TreeMainPhoto | null>(null);
@@ -294,137 +284,24 @@ export function TreeDetailScreen({
     );
   }
 
-  function handleOpenPhotoSource() {
-    setPhotoSourceOpen(true);
-  }
-
-  // Layar ini mengunggah LANGSUNG setelah memilih, jadi keadaan sibuknya
-  // menyelimuti dua tahap berturut-turut: perkecil, lalu unggah. Hanya tahap
-  // pertama yang diberi keterangan; tahap unggah tetap seperti sebelumnya,
-  // pemintal tanpa teks.
-  async function handlePickPhotoFromGallery() {
-    setPhotoActionLoading(true);
-    setPhotoActionLabel(PHOTO_PROCESSING_MESSAGE);
-
-    try {
-      const result = await pickImageFromGallery();
-
-      if (result.error) {
-        setError(result.error.message);
-        return;
-      }
-
-      if (!result.data) {
-        setPhotoSourceOpen(false);
-        return;
-      }
-
-      await runTreePhotoUpload(result.data);
-    } finally {
-      setPhotoActionLoading(false);
-      setPhotoActionLabel(null);
-    }
-  }
-
-  async function handleTakePhotoFromCamera() {
-    setPhotoActionLoading(true);
-    setPhotoActionLabel(PHOTO_PROCESSING_MESSAGE);
-
-    try {
-      const result = await takePhotoFromCamera();
-
-      if (result.error) {
-        setError(result.error.message);
-        return;
-      }
-
-      if (!result.data) {
-        setPhotoSourceOpen(false);
-        return;
-      }
-
-      await runTreePhotoUpload(result.data);
-    } finally {
-      setPhotoActionLoading(false);
-      setPhotoActionLabel(null);
-    }
-  }
-
-  async function runTreePhotoUpload(asset: PickedPhotoAsset) {
-    if (!tree) {
-      return;
-    }
-
-    setPhotoActionLoading(true);
-    setPhotoActionLabel(null);
-    setError(null);
-
-    const result = await uploadTreeMainPhoto({
-      base64: asset.base64,
-      farmId: tree.farmId,
-      fileName: asset.fileName,
-      localUri: asset.uri,
-      mimeType: asset.mimeType,
-      treeId: tree.id,
-    });
-
-    if (result.error) {
-      setError(result.error.message);
-      setPhotoActionLoading(false);
-      return;
-    }
-
-    setTreeMainPhoto(result.data);
-    setPhotoSourceOpen(false);
-    setPhotoActionLoading(false);
-  }
-
-  function handleDeletePhoto() {
-    if (!treeMainPhoto || !tree) {
-      return;
-    }
-
-    Alert.alert(
-      'Hapus foto pohon?',
-      'Foto utama pohon akan dihapus dari penyimpanan. Data pohon dan riwayat tetap tersimpan.',
-      [
-        {
-          text: 'Batal',
-          style: 'cancel',
-        },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: () => {
-            runDeletePhoto();
-          },
-        },
-      ]
-    );
-  }
-
-  async function runDeletePhoto() {
-    if (!tree) {
-      return;
-    }
-
-    setPhotoActionLoading(true);
-    setError(null);
-
-    const result = await deleteTreeMainPhoto({
-      farmId: tree.farmId,
-      treeId: tree.id,
-    });
-
-    if (result.error) {
-      setError(result.error.message);
-      setPhotoActionLoading(false);
-      return;
-    }
-
-    setTreeMainPhoto(null);
-    setPhotoActionLoading(false);
-  }
+  // SELURUH MESIN UNGGAH DAN HAPUS FOTO DICABUT DARI LAYAR INI (batch 4b).
+  //
+  // Yang memicunya adalah tombol kamera bundar yang melayang di pojok foto:
+  // tombol IKON-SAJA, dilarang aturan tombol yang berlaku, dan yang terakhir
+  // tersisa di aplikasi setelah tombol zoom denah dicabut di batch 4a.
+  //
+  // Penggantinya bukan tombol berteks di layar ini, melainkan TIDAK ADA APA-APA:
+  // layar Ubah sudah punya bagian "Foto pohon" yang lengkap — pilih dari galeri,
+  // ambil dari kamera, hapus, batalkan penghapusan — dan tombol "Edit" yang
+  // membukanya sudah berdiri di bar atas layar ini. Dua jalur ke satu pekerjaan
+  // berarti dua tempat yang bisa berbeda perilakunya, dan yang di sini adalah
+  // yang paling jarang diperiksa: ia mengunggah LANGSUNG tanpa tombol simpan,
+  // sementara yang di layar Ubah menunggu "Simpan perubahan".
+  //
+  // Yang ikut pergi: handleOpenPhotoSource, handlePickPhotoFromGallery,
+  // handleTakePhotoFromCamera, runTreePhotoUpload, handleDeletePhoto,
+  // runDeletePhoto, <PhotoSourceSheet>, dan ketiga state photoAction*/
+  // photoSourceOpen. Foto di layar ini sekarang DIBACA saja.
 
   function handleOpenHistoryRecord(item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) {
     if (!item.sourceId || !tree) {
@@ -529,10 +406,6 @@ export function TreeDetailScreen({
       {activePlanting ? (
         <TreeDetailHero
           displayCode={displayCode}
-          mode={mode}
-          onPhotoPress={handleOpenPhotoSource}
-          photoLoading={photoActionLoading}
-          photoLoadingLabel={photoActionLabel}
           photoUrl={treeMainPhoto?.signedUrl}
           planting={activePlanting}
           tree={tree}
@@ -540,17 +413,6 @@ export function TreeDetailScreen({
       ) : (
         <EmptyPositionHeader displayCode={displayCode} />
       )}
-      <PhotoSourceSheet
-        hasPhoto={Boolean(treeMainPhoto)}
-        onCameraPress={handleTakePhotoFromCamera}
-        onClose={() => setPhotoSourceOpen(false)}
-        onDeletePhoto={() => {
-          setPhotoSourceOpen(false);
-          handleDeletePhoto();
-        }}
-        onGalleryPress={handlePickPhotoFromGallery}
-        visible={photoSourceOpen}
-      />
 
       {activePlanting ? (
         <TreeFactRows
@@ -660,19 +522,11 @@ const DETAIL_PHOTO_SIZE = 140;
 
 function TreeDetailHero({
   displayCode,
-  mode,
-  onPhotoPress,
-  photoLoading,
-  photoLoadingLabel,
   photoUrl,
   planting,
   tree,
 }: {
   displayCode: string;
-  mode: TreeDetailMode;
-  onPhotoPress: () => void;
-  photoLoading?: boolean;
-  photoLoadingLabel?: string | null;
   photoUrl?: string | null;
   // Siklus AKTIF, dioper terpisah walau ada di dalam `tree`. Pemanggil hanya
   // merender komponen ini ketika siklusnya ada, dan prop tersendiri membuat
@@ -680,14 +534,14 @@ function TreeDetailHero({
   planting: TreePlanting;
   tree: Tree;
 }) {
-  // Pemilik selalu punya isi: fotonya, atau pemicu "Tambah foto". Pekerja hanya
-  // punya isi kalau fotonya memang ada — dan kalau tidak, kotaknya tidak
-  // dirender sama sekali alih-alih berdiri kosong setinggi 140.
-  const showPhoto = Boolean(photoUrl) || mode === 'owner';
-
   return (
     <View style={{ gap: spacing.md }}>
-      {showPhoto ? (
+      {/* Kotaknya tidak dirender sama sekali kalau tidak ada foto — bukan
+          berdiri kosong setinggi 140 bertuliskan "Belum ada foto".
+          Pemberitahuan tanpa jalan keluar yang menghabiskan ruang di layar
+          teratas adalah pertukaran yang buruk, dan jalan keluarnya memang tidak
+          ada di layar ini: menambah foto dilakukan dari layar Ubah. */}
+      {photoUrl ? (
         <View
           style={{
             borderCurve: 'continuous',
@@ -700,38 +554,7 @@ function TreeDetailHero({
             width: DETAIL_PHOTO_SIZE,
           }}
         >
-          <TreePhotoArea mode={mode} onPhotoPress={onPhotoPress} photoUrl={photoUrl} />
-          {photoLoading ? (
-            <View
-              style={{
-                alignItems: 'center',
-                backgroundColor: tokens.color.overlay.scrim,
-                bottom: 0,
-                gap: spacing.sm,
-                justifyContent: 'center',
-                left: 0,
-                padding: spacing.sm,
-                position: 'absolute',
-                right: 0,
-                top: 0,
-              }}
-            >
-              <ActivityIndicator color={tokens.color.brand.on} />
-              {photoLoadingLabel ? (
-                <Text
-                  selectable={false}
-                  numberOfLines={2}
-                  style={{
-                    color: tokens.color.text.onBrand,
-                    textAlign: 'center',
-                    ...tokens.type.meta,
-                  }}
-                >
-                  {photoLoadingLabel}
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
+          <TreePhotoArea photoUrl={photoUrl} />
         </View>
       ) : null}
 
@@ -817,11 +640,17 @@ function TreeFactRows({
         // jadi barisnya tetap berdiri dengan kalimatnya sendiri.
         emptyText="Belum dicatat"
       />
+      {/* SATU NILAI, bukan seluruh ruas angka. '21 kg · 20 Sep', bukan
+          'Jumlah buah: 12, Berat: 21 kg · 20 Sep' — yang membungkus jadi dua
+          baris dan mengulang label yang sudah berdiri di sisi kiri.
+          Lihat aturan pemilihannya di formatHarvestFactValue. */}
       <TreeFactRow
         label="Panen terakhir"
         value={
           lastHarvest
-            ? `${formatHistoryRowTitle(lastHarvest)} · ${formatHistoryRowDate(lastHarvest.happenedAt)}`
+            ? [formatHarvestFactValue(lastHarvest.description), formatHistoryRowDate(lastHarvest.happenedAt)]
+                .filter(Boolean)
+                .join(' · ') || null
             : null
         }
         emptyText="Belum ada panen"
@@ -980,15 +809,22 @@ function EmptyPositionNotice({ planting }: { planting: TreePlanting | null }) {
   );
 }
 
-function TreePhotoArea({
-  mode,
-  onPhotoPress,
-  photoUrl,
-}: {
-  mode: TreeDetailMode;
-  onPhotoPress: () => void;
-  photoUrl?: string | null;
-}) {
+// Foto pohon di layar detail: DIBACA SAJA.
+//
+// `mode` dan `onPhotoPress` dicabut bersama tombol kamera bundar. Komponen ini
+// tidak lagi punya cabang peran sama sekali — pemilik dan pekerja melihat hal
+// yang sama persis, karena keduanya memang hanya melihat.
+//
+// KETUK-UNTUK-MEMBESARKAN DIPERTAHANKAN, dan itu keputusan yang perlu ditulis
+// alasannya. Yang dilarang adalah tombol ikon-saja dan gestur tersembunyi untuk
+// MENGGANTI foto; membuka viewer bukan keduanya — ia tidak mengubah apa pun,
+// dan pada kotak yang baru saja menyusut dari 220 ke 140 kemampuan memeriksa
+// fotonya lebih dekat justru jadi lebih berguna, bukan kurang.
+//
+// Kalau ini ternyata juga harus dicabut, yang perlu dihapus hanya <Pressable>
+// pembungkus dan <PhotoViewerModal> di bawah; <Image> beserta kedua keadaan
+// muatnya berdiri sendiri tanpa keduanya.
+function TreePhotoArea({ photoUrl }: { photoUrl?: string | null }) {
   const [previewOpen, setPreviewOpen] = React.useState(false);
   // KEADAAN MUAT DAN GAGAL MUAT, keduanya wajib ada (batch 4b).
   //
@@ -1016,16 +852,14 @@ function TreePhotoArea({
     return (
       <>
         {/*
-          Foto utama pohon kini dibuka lewat viewer bersama yang sama dengan
-          foto catatan, foto bukti kerja, dan foto kondisi. Sebelumnya ia
-          satu-satunya foto di aplikasi yang tidak bisa dicubit sama sekali,
-          padahal justru foto ini yang paling sering dibuka pemilik.
+          Foto utama pohon dibuka lewat viewer bersama yang sama dengan foto
+          catatan, foto bukti kerja, dan foto kondisi.
 
-          Tombol kamera di bawah SENGAJA dibiarkan utuh sebagai kontrol
-          terpisah: mengetuk fotonya berarti "lihat lebih besar", mengetuk
-          tombol kamera berarti "ganti atau hapus". Keduanya tidak pernah
-          bertukar arti, dan tombol kamera dirender setelah Pressable ini
-          sehingga tetap berada di atas dan tetap menerima tekanannya sendiri.
+          Catatan lama di sini menjelaskan pembagian kerja dengan tombol kamera
+          di pojok — "ketuk foto berarti lihat lebih besar, ketuk tombol berarti
+          ganti atau hapus". Tombol itu sudah dicabut, jadi tidak ada lagi yang
+          perlu dibagi: satu-satunya hal yang bisa dilakukan pada foto ini
+          adalah melihatnya.
         */}
         <Pressable
           accessibilityLabel="Lihat foto pohon ukuran penuh"
@@ -1087,31 +921,10 @@ function TreePhotoArea({
             </View>
           )}
         </Pressable>
-        {mode === 'owner' ? (
-          // 32, turun dari 40, dan insetnya dari space.md ke space.sm: kotaknya
-          // sendiri turun dari 220 ke 140, dan tombol seukuran lama akan
-          // menutupi hampir seperempat fotonya. hitSlop mengembalikan target
-          // sentuhnya tanpa menambah apa yang tergambar di atas foto.
-          <Pressable
-            accessibilityLabel="Edit foto pohon"
-            accessibilityRole="button"
-            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
-            onPress={onPhotoPress}
-            style={{
-              alignItems: 'center',
-              backgroundColor: palette.accent,
-              borderRadius: tokens.radius.pill,
-              bottom: tokens.space.sm,
-              height: 32,
-              justifyContent: 'center',
-              position: 'absolute',
-              right: tokens.space.sm,
-              width: 32,
-            }}
-          >
-            <Icon name="camera" size={tokens.icon.sm} color={tokens.color.brand.on} />
-          </Pressable>
-        ) : null}
+        {/* TOMBOL KAMERA BUNDAR DICABUT DI SINI (batch 4b). Ia tombol
+            ikon-saja, dan ia yang terakhir tersisa di aplikasi setelah tombol
+            zoom denah dicabut di batch 4a. Mengganti foto pindah seluruhnya ke
+            layar Ubah, yang sudah punya bagian "Foto pohon" berlabel lengkap. */}
         <PhotoViewerModal
           onClose={() => setPreviewOpen(false)}
           photoUrl={photoUrl}
@@ -1121,41 +934,20 @@ function TreePhotoArea({
     );
   }
 
-  if (mode === 'owner') {
-    return (
-      <Pressable
-        accessibilityLabel="Tambah foto pohon"
-        accessibilityRole="button"
-        onPress={onPhotoPress}
-        style={{
-          alignItems: 'center',
-          backgroundColor: tokens.color.surface.subtle,
-          borderColor: palette.emptyCellBorder,
-          borderStyle: 'dashed',
-          borderWidth: 1,
-          flex: 1,
-          gap: tokens.space.xs,
-          justifyContent: 'center',
-          padding: tokens.space.sm,
-        }}
-      >
-        {/* Lingkaran berlatar di belakang ikon DICABUT: pada kotak 140 ia
-            bidang berwarna yang menghabiskan ruang tanpa membedakan apa pun,
-            dan arah visual yang berlaku membentuk hierarki dari garis dan ruang
-            kosong, bukan dari bentuk berlatar. */}
-        <Icon name="camera" size={tokens.icon.lg} color={tokens.color.brand.base} />
-        <Text
-          selectable
-          numberOfLines={1}
-          style={{ ...tokens.type.bodySmall, color: tokens.color.text.secondary }}
-        >
-          Tambah foto
-        </Text>
-      </Pressable>
-    );
-  }
-
-  // Pekerja tanpa foto: TIDAK ADA APA-APA.
+  // TANPA FOTO: TIDAK ADA APA-APA, untuk KEDUA peran.
+  //
+  // Di sini dulu ada dua cabang. Pemilik mendapat kotak bergaris putus-putus
+  // bertuliskan "Tambah foto" yang membuka lembar sumber foto; pekerja tidak
+  // mendapat apa-apa.
+  //
+  // Cabang pemilik ikut pergi bersama tombol kameranya, dan dengan alasan yang
+  // sama: menambah foto dilakukan dari layar Ubah, dan kotak yang menjanjikan
+  // pekerjaan itu di sini adalah jalur kedua ke satu hal yang sama. Yang
+  // tersisa sekarang berlaku untuk keduanya, dan itu justru menyederhanakan:
+  // komponen ini tidak lagi tahu apa pun tentang peran.
+  //
+  // Pemanggilnya (TreeDetailHero) tidak mengandalkan null di sini — ia sendiri
+  // sudah tidak merender pembungkus 140-nya sama sekali saat photoUrl kosong.
   //
   // Di sini dulu berdiri kotak setinggi 220 bertuliskan "Belum ada foto". Kotak
   // itu memberi tahu pekerja sesuatu yang tidak bisa ia tindak lanjuti — hanya

@@ -461,13 +461,30 @@ export function TreeVisualPlaceholder({
 export function TreeForm({ errors, mode, onChange, positionStatus, values }: TreeFormProps) {
   const previewCode = buildTreeDisplayCode(values);
   const trimmedVariety = values.variety.trim();
-  // Apakah kolom teks bebas sedang terbuka. Dibuka oleh tombol 'Lain', dan
-  // dibuka SENDIRI saat nilai yang sudah ada bukan salah satu preset — itu
-  // keadaan layar Edit untuk pohon yang varietasnya diketik sebelum ketiga
-  // tombol ini ada, dan juga keadaan pohon yang varietasnya memang lain.
-  const [otherOpen, setOtherOpen] = React.useState(
-    () => trimmedVariety.length > 0 && !isVarietyPreset(trimmedVariety)
-  );
+  // Apakah pemilik MENEKAN tombol 'Lain'. Hanya itu yang disimpan sebagai
+  // state; terbuka-atau-tidaknya kolom teks DITURUNKAN di bawah.
+  const [otherChosen, setOtherChosen] = React.useState(false);
+
+  // KOLOM TEKS BEBAS TERBUKA kalau pemilik menekan 'Lain', ATAU kalau nilai
+  // yang tersimpan bukan salah satu preset.
+  //
+  // DITURUNKAN TIAP RENDER, BUKAN DIPOTRET SEKALI DI useState. Bedanya adalah
+  // kehilangan data, bukan kerapian:
+  //
+  // useState dengan penginisialisasi malas hanya membaca nilainya pada render
+  // PERTAMA. Layar Edit memuat pohonnya secara asinkron, jadi ada jalur di mana
+  // form ter-mount sebelum varietas tersimpan sampai ke `values` — dan begitu
+  // itu terjadi, potretnya selamanya `false`: 'Lain' tidak terpilih, kolom
+  // teksnya tidak pernah terbuka, dan varietas "Mentega" yang tersimpan tidak
+  // terlihat di mana pun DI LAYAR YANG GUNANYA MENGUBAHNYA. Nilainya masih ikut
+  // terkirim saat disimpan, jadi kerusakannya diam: pemilik melihat tiga tombol
+  // yang semuanya padam, menekan salah satunya untuk "mengisi yang kosong", dan
+  // varietasnya tertimpa tanpa ia pernah tahu ada nilai di sana.
+  //
+  // Sebagai nilai turunan, varietas yang datang terlambat membuka kolomnya
+  // sendiri pada render berikutnya. Tidak ada jalur di mana nilai tersimpan
+  // bisa tidak terlihat.
+  const otherOpen = otherChosen || (trimmedVariety.length > 0 && !isVarietyPreset(trimmedVariety));
 
   function updateTextValue(field: 'rowPosition' | 'columnPosition' | 'variety', value: string) {
     onChange({
@@ -484,16 +501,22 @@ export function TreeForm({ errors, mode, onChange, positionStatus, values }: Tre
   }
 
   function chooseVariety(preset: string) {
-    setOtherOpen(false);
+    setOtherChosen(false);
     updateTextValue('variety', preset);
   }
 
   function chooseOther() {
-    setOtherOpen(true);
+    setOtherChosen(true);
 
     // Nilai preset DIKOSONGKAN saat beralih ke 'Lain'. Membiarkannya berarti
     // kolom teks terbuka sudah berisi "Miki", dan pemilik yang menekan 'Lain'
     // justru karena varietasnya bukan Miki harus menghapusnya dulu.
+    //
+    // PENJAGANYA WAJIB, dan ia yang melindungi "Mentega". Tanpa pemeriksaan
+    // isVarietyPreset, menekan 'Lain' pada pohon yang varietasnya sudah bernilai
+    // bebas akan MENGHAPUS nilai itu — persis nilai yang tombolnya ada untuk
+    // menampungnya. Varietas di luar daftar tidak pernah dikosongkan oleh
+    // tombol mana pun di form ini.
     if (isVarietyPreset(trimmedVariety)) {
       updateTextValue('variety', '');
     }
@@ -882,8 +905,9 @@ function TreeFormSection({
 // sama, sehingga Hama, Sakit, dan Rusak tampil sebagai chip yang identik
 // kecuali labelnya. Sekarang ketiganya punya bentuk sendiri.
 //
-// getConditionTone SENGAJA dibiarkan hidup di bawah: ia masih dipakai jalur
-// lain, dan mengubahnya berarti mengubah tampilan di luar badge ini.
+// getConditionTone sudah DIHAPUS di batch 4b setelah pemanggil terakhirnya
+// pergi — lihat catatan di tempatnya dulu berdiri. CONDITION_BADGE kini
+// satu-satunya pemetaan kondisi ke rupa di seluruh repo.
 export function ConditionStatusBadge({ size, status }: ConditionStatusBadgeProps) {
   const appearance = CONDITION_BADGE[status];
 
@@ -1179,7 +1203,7 @@ function TreeHistoryTimelineItem({
           width: 34,
         }}
       >
-        {getTimelineIcon(item.historyType, getTimelineTextColor(item.historyType))}
+        {getTimelineIcon(item, getTimelineTextColor(item.historyType))}
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <View style={{ alignItems: 'baseline', flexDirection: 'row', gap: spacing.sm }}>
@@ -1340,6 +1364,49 @@ function formatHarvestAmountSummary(description: string | null): string | null {
   }
 
   return amount;
+}
+
+// SATU nilai panen, untuk baris fakta "Panen terakhir" di layar detail pohon.
+//
+// BERBEDA dari formatHarvestAmountSummary di atas, dan perbedaannya disengaja:
+// yang di atas mengembalikan ruas angka APA ADANYA ('Jumlah buah: 12, Berat: 21
+// kg') untuk baris timeline, yang punya lebar penuh dan memang menampilkan
+// selengkap-lengkapnya. Baris fakta hanya punya sisa lebar setelah labelnya,
+// dan dua nilai berlabel di sana membungkus jadi dua baris.
+//
+// ATURANNYA: berat kalau ada, kalau tidak jumlah buah. TIDAK PERNAH keduanya.
+//
+// Berat didahulukan karena ia yang dipakai menjual — dan karena ia satu-satunya
+// dari keduanya yang bisa dijumlahkan antarpanen tanpa berbohong (berat alpukat
+// terlalu bervariasi untuk dikonversi dari jumlah; lihat catatan kolom
+// harvest_weight_kg di migrasi 045).
+//
+// TIDAK ADA TEBAKAN DI SINI. Bentuk kalimatnya dirakit view tree_history_view
+// (045:282-318) dengan label harfiah 'Jumlah buah: ' dan 'Berat: ', dan
+// constraint harvest_records_amount_present_check menjamin setidaknya satu
+// terisi. Jadi mana berat dan mana jumlah dibaca dari labelnya sendiri, bukan
+// disimpulkan dari bentuk angkanya.
+//
+// Awalan labelnya DIBUANG dari keluaran: baris nilai tidak mengulang label yang
+// sudah berdiri di sisi kiri barisnya. Satuan 'kg' ikut karena ia bagian dari
+// nilainya; untuk jumlah buah, 'buah' DITAMBAHKAN — angka telanjang di sebelah
+// tanggal terbaca sebagai angka apa saja.
+export function formatHarvestFactValue(description: string | null): string | null {
+  const amount = formatHarvestAmountSummary(description);
+
+  if (!amount) {
+    return null;
+  }
+
+  const weight = /Berat:\s*([^,]+)/.exec(amount)?.[1]?.trim();
+
+  if (weight) {
+    return weight;
+  }
+
+  const fruitCount = /Jumlah buah:\s*([^,]+)/.exec(amount)?.[1]?.trim();
+
+  return fruitCount ? `${fruitCount} buah` : null;
 }
 
 // Kata pertama baris meta. Untuk perawatan yang dipakai ASALNYA
@@ -1517,16 +1584,51 @@ function getTimelineTextColor(type: TreeHistoryType): string {
   return tokens.color.record.care.text;
 }
 
-function getTimelineIcon(type: TreeHistoryType, color: string) {
-  if (type === 'condition') {
+// Penanda baris timeline.
+//
+// BARIS KONDISI MEMBACA CONDITION_BADGE, tabel rupa kondisi pohon yang dibangun
+// di batch 1a — bukan ikon tetap menurut jenis catatan.
+//
+// Yang diperbaiki: sebelum ini SETIAP baris kondisi mendapat segitiga ambar,
+// apa pun kondisinya, karena fungsi ini hanya menerima `historyType` dan tidak
+// pernah melihat kondisi apa yang dicatat. Baris "Sehat" karena itu tampil
+// dengan penanda "perlu perhatian" — bukan kurang tepat, melainkan MENGABARKAN
+// KEBALIKANNYA, di layar yang gunanya membaca riwayat satu pohon.
+//
+// CONDITION_BADGE adalah satu-satunya tabel yang boleh memetakan kondisi ke
+// rupanya. Ia sudah melayani badge kondisi (ConditionStatusBadge), sel denah,
+// dan baris daftar pohon; pemetaan kedua di sini berarti dua sumber untuk satu
+// pertanyaan, dan dua sumber selalu berakhir menyimpang — persis seperti yang
+// baru saja terjadi.
+//
+// item.title pada baris kondisi berisi nilai enum mentah ('healthy',
+// 'needs_attention', ...) — lihat tree_history_view, yang menaruh
+// tcr.condition_status::text di kolom title. isTreeConditionStatus yang
+// menjaganya; kalau bentuknya ternyata lain, baris itu jatuh ke ikon lama
+// alih-alih menabrak indeks yang tidak ada.
+//
+// KETIGA JENIS LAIN TIDAK BERUBAH. Fase, panen, dan perawatan tidak punya
+// ragam yang perlu dibedakan di kiri baris — ikon jenisnya sudah benar.
+//
+// RUPA TIMELINE SELEBIHNYA SENGAJA TIDAK DISENTUH: lingkaran berlatar,
+// pembungkus Card, dan susunan barisnya dikerjakan di batch 7 bersama layar
+// Riwayat Pohon. Yang diperbaiki di sini hanya pemetaan yang SALAH.
+function getTimelineIcon(item: TreeHistoryItem, color: string) {
+  if (item.historyType === 'condition') {
+    if (isTreeConditionStatus(item.title)) {
+      const visual = CONDITION_BADGE[item.title];
+
+      return <StatusMarker color={visual.markerColor} shape={visual.shape} size={14} />;
+    }
+
     return <AlertTriangleIcon color={color} size={18} />;
   }
 
-  if (type === 'phase') {
+  if (item.historyType === 'phase') {
     return <FlowerIcon color={color} size={18} />;
   }
 
-  if (type === 'harvest') {
+  if (item.historyType === 'harvest') {
     return <BasketIcon color={color} size={18} />;
   }
 
@@ -1570,21 +1672,19 @@ function formatActorDisplayName({
   return 'Anggota kebun';
 }
 
-function getConditionTone(status: TreeConditionStatus): BadgeTone {
-  if (status === 'healthy') {
-    return 'success';
-  }
-
-  if (status === 'needs_attention') {
-    return 'warning';
-  }
-
-  if (status === 'dead') {
-    return 'muted';
-  }
-
-  return 'danger';
-}
+// getConditionTone DIHAPUS di batch 4b.
+//
+// Ia pemetaan KEDUA dari kondisi pohon ke rupanya, di samping CONDITION_BADGE —
+// dan ia memetakan pest_attacked, disease_indicated, DAN damaged ke satu nada
+// 'danger' yang sama, sehingga ketiganya tidak bisa dibedakan. Pemanggil
+// terakhirnya (baris daftar pohon) pindah ke <ConditionStatusBadge> di batch
+// 4a, dan sejak itu ia tidak pernah dipanggil lagi.
+//
+// Dibiarkan hidup, ia justru berbahaya: pemetaan kedua yang tidak dirender
+// siapa pun adalah pemetaan yang akan menyimpang dari CONDITION_BADGE tanpa ada
+// yang tahu, lalu dipakai lagi suatu hari karena namanya terdengar benar.
+// Persis begitu baris timeline kondisi berakhir bersegitiga ambar untuk pohon
+// sehat — satu pemetaan yang lupa diperbarui.
 
 function getGrowthPhaseTone(phase: GrowthPhase): BadgeTone {
   if (phase === 'flowering') {
