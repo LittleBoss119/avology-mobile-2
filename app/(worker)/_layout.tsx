@@ -104,7 +104,16 @@ export default function WorkerLayout() {
           <Stack.Screen name="worker/trees/[treeId]/harvest" options={{ headerShown: false, title: 'Catat Panen' }} />
           <Stack.Screen name="worker/tasks/index" options={{ headerShown: false, title: 'Tugas' }} />
           <Stack.Screen name="worker/tasks/[taskId]" options={{ headerShown: false, title: 'Detail Tugas' }} />
-          <Stack.Screen name="worker/tasks/[taskId]/record" options={{ headerShown: false, title: 'Catat Hasil Kerja' }} />
+          {/* gestureEnabled:false — pasangan wajib useUnsavedChangesGuard di
+              dalam layar itu (batch 6b), alasan yang sama persis dengan
+              worker/profile-edit di bawah: swipe-back iOS tidak bisa dicegat
+              lewat API publik expo-router, jadi ia dimatikan supaya foto bukti
+              kerja yang baru dipotret tidak bisa hilang lewat gestur. Back tetap
+              ada di chevron, dan chevron itulah yang menanyakan konfirmasinya. */}
+          <Stack.Screen
+            name="worker/tasks/[taskId]/record"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Catat Hasil Kerja' }}
+          />
           <Stack.Screen name="worker/farm" options={{ headerShown: false, title: 'Anggota' }} />
           <Stack.Screen name="worker/profile" options={{ headerShown: false, title: 'Profil Akun' }} />
           {/* gestureEnabled:false disengaja — swipe-back iOS tidak bisa dicegat lewat

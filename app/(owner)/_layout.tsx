@@ -109,7 +109,19 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/schedules/index" options={{ headerShown: false, title: 'Jadwal Perawatan' }} />
           <Stack.Screen name="owner/schedules/create" options={{ headerShown: false, title: 'Jadwal Manual' }} />
           <Stack.Screen name="owner/schedules/[scheduleId]" options={{ headerShown: false, title: 'Detail Jadwal' }} />
-          <Stack.Screen name="owner/schedules/[scheduleId]/edit" options={{ headerShown: false, title: 'Edit Jadwal' }} />
+          {/* gestureEnabled:false — pasangan wajib useUnsavedChangesGuard di
+              dalam layar itu (batch 6b), alasan yang sama persis dengan
+              owner/profile-edit di bawah: swipe-back iOS tidak bisa dicegat
+              lewat API publik expo-router, jadi ia dimatikan supaya perubahan
+              yang belum disimpan tidak bisa hilang lewat gestur. Back tetap ada
+              di chevron, dan chevron itulah yang menanyakan konfirmasinya.
+
+              Layar Edit Pohon memasangnya sendiri lewat <Stack.Screen> di dalam
+              berkas layarnya, jadi ia tidak punya baris di sini. */}
+          <Stack.Screen
+            name="owner/schedules/[scheduleId]/edit"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Edit Jadwal' }}
+          />
           {/* Judul SENGAJA dikosongkan, bukan dihapus prop-nya.
               Layar ini merender judulnya sendiri lewat <PageIntro> di badan
               layar, jadi header bawaan yang juga berjudul membuat dua judul

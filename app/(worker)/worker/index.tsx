@@ -3,10 +3,8 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { tokens } from '../../../src/constants/theme';
-import { formatCareTarget } from '../../../src/components/care-schedule-components';
+import { WorkerTaskCard } from '../../../src/components/care-schedule-components';
 import {
-  Button,
-  Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
@@ -19,7 +17,7 @@ import { useAuth } from '../../../src/context/auth-context';
 import { getWorkerTasks } from '../../../src/services/careTaskService';
 import { colors as palette, text as typeScale } from '../../../src/theme/tokens';
 import type { CareTask } from '../../../src/types/domain';
-import { formatCareCategory, formatPersonDisplayName } from '../../../src/utils/displayFormat';
+import { formatPersonDisplayName } from '../../../src/utils/displayFormat';
 import { formatFullDate, getTodayIsoDate, taskTimeBucket } from '../../../src/utils/taskDueDate';
 
 export default function WorkerDashboardScreen() {
@@ -141,9 +139,33 @@ export default function WorkerDashboardScreen() {
                 </Text>
               </View>
 
+              {/* KARTU BERSAMA dengan tab Tugas (batch 6b). TaskCard lokal
+                  yang dulu berdiri di dasar berkas ini sudah diangkat ke
+                  care-schedule-components.tsx apa adanya.
+
+                  Yang memaksa pengangkatan: tab Tugas kini memakai bentuk kartu
+                  yang sama, dan dua bentuk kartu tugas yang berbeda di dua layar
+                  adalah beban belajar kedua bagi orang yang sama.
+
+                  `showDate` sengaja tidak dioper: seluruh daftar ini hari ini,
+                  dan angka besar di atasnya sudah menyatakannya.
+
+                  Baris judulnya kini MEMBUKA DETAIL, dan itu tidak membatalkan
+                  pencabutan "Lihat detail" di batch 4a: yang dicabut adalah
+                  TOMBOL KEDUA yang memaksa memilih tiap kali, bukan jalur ke
+                  detailnya. Baris berchevron adalah spesies yang berbeda —
+                  bentuk yang sama dengan <MenuRow> di seluruh aplikasi — dan
+                  instruksinya tetap dicetak di kartu, jadi jalur umumnya tetap
+                  tidak butuh perpindahan layar sama sekali. */}
               <View style={styles.taskList}>
                 {todayTasks.map((task) => (
-                  <TaskCard key={task.id} task={task} />
+                  <WorkerTaskCard
+                    key={task.id}
+                    instruction={task.instruction}
+                    task={task}
+                    onOpenDetail={() => router.push(`/worker/tasks/${task.id}`)}
+                    onRecord={() => router.push(`/worker/tasks/${task.id}/record?mode=create`)}
+                  />
                 ))}
               </View>
             </>
@@ -174,67 +196,6 @@ export default function WorkerDashboardScreen() {
   );
 }
 
-// Kartu tugas dengan SATU tombol: "Catat hasil".
-//
-// Konsekuensinya hanya 2-3 kartu yang muat per layar, dan itu memang harganya:
-// tanpa tombol ini, mencatat satu hasil kerja menuntut buka detail, gulung ke
-// bawah, tekan tombol — tiga langkah untuk pekerjaan yang paling sering
-// dilakukan di aplikasi ini. Jangan dipadatkan.
-//
-// TOMBOL "LIHAT DETAIL" DICABUT (batch 4a), dan penggantinya bukan tombol lain
-// melainkan INSTRUKSINYA SENDIRI, dicetak di kartu.
-//
-// Alasannya: satu-satunya hal di layar detail yang benar-benar dibutuhkan
-// sebelum mengerjakan adalah instruksi dari pemilik. Menyembunyikannya di balik
-// tombol kedua berarti menukar satu baris teks dengan satu perjalanan layar —
-// dan menaruh dua tombol berdampingan memaksa orang menimbang mana yang benar
-// tiap kali, di layar yang seharusnya tidak menuntut pertimbangan apa pun.
-//
-// Informasi ditaruh di tempat aksinya. Detail tugas tetap terjangkau lewat tab
-// Tugas, yang barisnya memang mengantar ke sana.
-function TaskCard({ task }: { task: CareTask }) {
-  // Kategori, bukan judul yang diketik pemilik — alasan yang sama dengan baris
-  // di layar Tugas: judul bebas berbunyi "Test" atau "awas", sedangkan
-  // "Penyemprotan" memberi tahu apa yang harus dibawa. 'Tugas perawatan' adalah
-  // teks jatuh-balik yang sudah dipakai di sana, dipertahankan apa adanya.
-  const title = task.category ? formatCareCategory(task.category) : 'Tugas perawatan';
-  const instruction = task.instruction?.trim();
-
-  return (
-    <Card padding={tokens.layout.cardPadding}>
-      <View style={styles.taskHead}>
-        <Text selectable style={styles.taskTitle}>
-          {title}
-        </Text>
-        {/* Target saja. Tanggalnya tidak ditulis: seluruh daftar ini hari ini,
-            dan angka 80 di atasnya sudah menyatakannya. */}
-        <Text selectable style={styles.taskMeta}>
-          {formatCareTarget(task)}
-        </Text>
-      </View>
-
-      {/* Instruksi pemilik, DI KARTU. Dibatasi tiga baris: instruksi yang
-          lebih panjang dari itu bukan lagi "apa yang harus dikerjakan"
-          melainkan catatan, dan kartu yang tumbuh sesuai panjang ketikan
-          pemilik akan mendorong tugas kedua keluar layar.
-
-          Tidak dirender sama sekali kalau kosong — bukan dirender sebagai
-          baris kosong yang menyisakan tingginya. Kolom care_tasks.instruction
-          memang nullable, dan sebagian besar tugas berulang tidak mengisinya. */}
-      {instruction ? (
-        <Text selectable numberOfLines={3} style={styles.taskInstruction}>
-          {instruction}
-        </Text>
-      ) : null}
-
-      <Button
-        title="Catat hasil"
-        onPress={() => router.push(`/worker/tasks/${task.id}/record?mode=create`)}
-      />
-    </Card>
-  );
-}
-
 const styles = StyleSheet.create({
   // Serif 80, satu tingkat di atas angka 72 Beranda pemilik. Pemilik membaca
   // layarnya sambil duduk; pekerja membacanya sambil berdiri di kebun, sering
@@ -243,14 +204,10 @@ const styles = StyleSheet.create({
   bigNumberCaption: { ...typeScale.meta, color: palette.textMuted },
 
   // listGap, bukan sectionGap: kartu-kartu ini satu daftar, bukan beberapa
-  // seksi yang berdiri sendiri.
+  // seksi yang berdiri sendiri. Nilai yang sama dipakai daftar kartu di tab
+  // Tugas.
+  //
+  // Gaya ISI kartu (judul, meta, instruksi) tidak lagi di sini: ia ikut pindah
+  // ke <WorkerTaskCard> bersama kartunya.
   taskList: { gap: tokens.layout.listGap },
-  taskHead: { gap: tokens.space.xs },
-  taskTitle: { ...tokens.type.subheading, color: palette.textPrimary },
-  taskMeta: { ...tokens.type.bodySmall, color: palette.textMuted },
-  // textPrimary, bukan textMuted seperti baris target di atasnya. Instruksi
-  // adalah hal yang harus DIKERJAKAN; target hanya menyebutkan di mana.
-  // Meredupkannya bersama meta akan menaruh satu-satunya kalimat yang berisi
-  // perintah di lapisan yang sama dengan keterangan.
-  taskInstruction: { ...tokens.type.body, color: palette.textPrimary },
 });

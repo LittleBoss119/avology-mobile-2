@@ -3,31 +3,40 @@ import React from 'react';
 import { Text, View } from 'react-native';
 
 import {
+  CARE_STATE_MARK,
   TargetTreeCodeList,
   formatCareTarget,
 } from '../../../../src/components/care-schedule-components';
-import { Icon } from '../../../../src/components/icons';
 import { WorkResultList } from '../../../../src/components/work-result-list';
 import { useSnackbar } from '../../../../src/components/snackbar';
 import {
   Badge,
   Button,
-  CameraGlyph,
   Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MetaRow,
   Screen,
+  SectionLabel,
   TopAppBar,
 } from '../../../../src/components/ui';
-import { colors, spacing, statusColors, typography } from '../../../../src/constants/theme';
+import type { BadgeTone } from '../../../../src/components/ui';
+import type { StatusMarkerShape } from '../../../../src/components/status-marker';
+import { colors, spacing } from '../../../../src/constants/theme';
+import { colors as palette, text as typeScale } from '../../../../src/theme/tokens';
 import { consumePendingFeedback } from '../../../../src/lib/pendingFeedback';
 import { getTaskDetail } from '../../../../src/services/careTaskService';
 import { listTaskProofPhotosForActivities } from '../../../../src/services/photoAttachmentService';
 import type { CareTaskDetail } from '../../../../src/types/domain';
 import type { TaskProofPhotoMap } from '../../../../src/types/media';
-import { formatCareCategory, formatTaskStatus } from '../../../../src/utils/displayFormat';
-import { dueDatePill, formatFullDate, getTodayIsoDate, type DueDatePill } from '../../../../src/utils/taskDueDate';
+import { formatCareCategory } from '../../../../src/utils/displayFormat';
+import {
+  dayDifference,
+  formatFullDate,
+  getTodayIsoDate,
+  taskTimeBucket,
+} from '../../../../src/utils/taskDueDate';
 
 export default function WorkerTaskDetailScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
@@ -116,16 +125,21 @@ export default function WorkerTaskDetailScreen() {
   }
 
   const activeTask = task;
+  const todayIso = getTodayIsoDate();
   const isCancelledByOwner = activeTask.scheduleIsCancelled === true;
   const showFooter = !isCancelledByOwner && activeTask.status !== 'completed';
-
-  const pill: DueDatePill = isCancelledByOwner
-    ? { tone: 'neutral', label: 'Dibatalkan owner' }
-    : dueDatePill({ status: activeTask.status, dueDate: activeTask.dueDate }, getTodayIsoDate());
+  const statusMark = taskStatusMark(activeTask, todayIso);
 
   return (
     <Screen
       header={<TopAppBar title="Detail tugas" onBack={() => router.back()} />}
+      // SATU tombol, dan TIDAK ADA pilihan "Tunda" di layar ini.
+      //
+      // Keputusan selesai-atau-tunda hidup di layar pencatatan, tempat field
+      // wajibnya berada. Menaruh "Tunda" di sini berarti pekerja memilih lebih
+      // dulu lalu baru diberi tahu ada tanggal yang wajib diisi — atau lebih
+      // buruk, mendarat di jalan buntu karena tugasnya hangus dan penundaan
+      // memang sudah tertutup untuknya.
       stickyFooter={
         showFooter ? (
           <Button
@@ -137,37 +151,55 @@ export default function WorkerTaskDetailScreen() {
     >
       <ErrorBanner message={error} />
 
+      {/* SUSUNAN KEPALA, sejajar dengan Detail Jadwal pemilik (batch 6a) dan
+          detail catatan pohon (batch 5):
+            1. badge status   2. nilai utama serif   3. baris fakta
+
+          Judulnya JENIS PERAWATAN, bukan `task.title`. Judul di data dirakit
+          program dari jenis dan target ("Pemupukan — 3 pohon"), dan tugas lama
+          masih memegang judul yang diketik pemiliknya ("Test", "awas").
+          Keduanya bukan nama yang layak jadi baris terbesar di layar; yang
+          selalu berarti sama bagi siapa pun — dan yang memberi tahu pekerja apa
+          yang harus dibawa ke kebun — adalah jenis pekerjaannya. Judul aslinya
+          tidak hilang: ia turun jadi baris fakta "Dari". */}
       <View style={{ gap: spacing.sm }}>
-        <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
-          <Text
-            selectable
-            style={{
-              color: colors.primary,
-              flex: 1,
-              fontSize: typography.h2.fontSize,
-              fontWeight: '600',
-              lineHeight: typography.h2.lineHeight,
-            }}
-          >
-            {activeTask.title}
-          </Text>
-          <View style={{ alignItems: 'center', flexDirection: 'row', flexShrink: 0, gap: spacing.sm }}>
-            <Badge label={formatTaskStatus(activeTask.status)} tone={getTaskTone(activeTask.status)} />
-            {activeTask.requiresPhoto ? <ProofPhotoIndicator /> : null}
-          </View>
-        </View>
-        <Text selectable style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
-          {`${activeTask.category ? formatCareCategory(activeTask.category) : 'Tanpa kategori'} · ${formatCareTarget(activeTask)}`}
-        </Text>
-        {/* Tanggal jatuh tempo sebagai baris meta redup. Chip di bawah tetap
-            ada dan tidak mengulanginya: chip menyatakan TUNGGAKAN ("Terlambat 3
-            hari"), baris ini menyatakan tanggalnya. */}
-        <Text selectable style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
-          {formatFullDate(activeTask.dueDate)}
+        <Badge
+          label={statusMark.label}
+          marker={statusMark.marker}
+          maxWidth={220}
+          tone={statusMark.tone}
+        />
+        <Text
+          accessibilityRole="header"
+          selectable
+          style={{ ...typeScale.stat36, color: palette.textPrimary }}
+        >
+          {activeTask.category ? formatCareCategory(activeTask.category) : 'Tugas perawatan'}
         </Text>
       </View>
 
-      <DueDatePillView pill={pill} />
+      {/* TIGA BARIS FAKTA, urutannya dikunci spek: di pohon, jatuh tempo, dari.
+
+          Menggantikan dua baris meta bertitik-tengah, satu chip tempo, dan satu
+          lingkaran kamera tanpa label. Keempatnya dulu tersebar di tiga
+          ketinggian berbeda, dan dua di antaranya — lingkaran kamera dan chip
+          tempo — hanya bisa dibaca oleh orang yang sudah tahu artinya.
+
+          "Bukti foto" ikut sebagai baris keempat meski spek menyebut tiga: ia
+          menentukan apakah pekerja perlu membawa ponselnya ke pohon, dan itu
+          keputusan yang diambil SEBELUM berangkat. Sebagai lingkaran kamera
+          tanpa kata, ia tidak pernah menyatakannya.
+
+          "Dari" berisi judul jadwal induknya — satu-satunya jawaban untuk "ini
+          datang dari mana" yang tersedia tanpa permintaan tambahan. Nama orang
+          yang menugaskan hanya ada sebagai UUID di `assignedBy`, dan
+          menerjemahkannya menuntut kueri baru. */}
+      <View style={{ gap: spacing.md }}>
+        <MetaRow label="Di pohon" value={formatCareTarget(activeTask)} />
+        <MetaRow label="Jatuh tempo" value={formatFullDate(activeTask.dueDate)} />
+        <MetaRow label="Dari" value={activeTask.title} />
+        <MetaRow label="Bukti foto" value={activeTask.requiresPhoto ? 'Wajib' : 'Tidak wajib'} />
+      </View>
 
       {/* Daftar kode pohon yang LENGKAP, sengaja di atas instruksi dan di atas
           tombol catat hasil kerja. Pekerja harus tahu pohon mana saja yang
@@ -195,13 +227,15 @@ export default function WorkerTaskDetailScreen() {
 
       {/* Section "Instruksi" tidak dirender kalau kosong — dulu ia tetap muncul
           dengan isi "Belum ada instruksi tambahan.", dua baris yang cuma
-          menyatakan bahwa tidak ada apa-apa di sana. */}
+          menyatakan bahwa tidak ada apa-apa di sana.
+
+          Instruksi memang SUDAH dicetak di kartu daftar sejak batch 6b, tapi di
+          sana ia dipotong dua baris. Di sini ia utuh, dan itulah sebab utama
+          layar ini dibuka sama sekali. */}
       {activeTask.instruction ? (
         <View style={{ gap: spacing.xs }}>
-          <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
-            Instruksi
-          </Text>
-          <Text selectable style={{ color: colors.textMuted, fontSize: 16, lineHeight: 23 }}>
+          <SectionLabel title="Instruksi" />
+          <Text selectable style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>
             {activeTask.instruction}
           </Text>
         </View>
@@ -217,12 +251,7 @@ export default function WorkerTaskDetailScreen() {
           layar detail tugas owner, yang di luar lingkup batch ini. */}
       {activeTask.activities.length > 0 ? (
         <View style={{ gap: spacing.md }}>
-          <Text
-            selectable
-            style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700', lineHeight: typography.h3.lineHeight }}
-          >
-            Riwayat hasil kerja
-          </Text>
+          <SectionLabel title="Riwayat hasil kerja" />
           {/* Bentuk barisnya milik WorkResultList, dipakai bersama layar owner.
               Tugas yang sudah dibatalkan owner tidak lagi menawarkan aksi
               perbaiki — handler-nya tidak dioper sama sekali. */}
@@ -243,72 +272,60 @@ export default function WorkerTaskDetailScreen() {
   );
 }
 
-function DueDatePillView({ pill }: { pill: DueDatePill }) {
-  const palette =
-    pill.tone === 'warning'
-      ? statusColors.warning
-      : pill.tone === 'success'
-        ? statusColors.success
-        : statusColors.neutral;
-
-  return (
-    <View
-      style={{
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        backgroundColor: palette.background,
-        borderColor: palette.border,
-        borderCurve: 'continuous',
-        borderRadius: 10,
-        borderWidth: 1,
-        flexDirection: 'row',
-        gap: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-      }}
-    >
-      <Icon name="calendar" size={14} color={palette.text} />
-      <Text selectable style={{ color: palette.text, fontSize: 13, fontWeight: '700' }}>
-        {pill.label}
-      </Text>
-    </View>
-  );
-}
-
-function ProofPhotoIndicator() {
-  return (
-    <View
-      accessibilityLabel="Perlu bukti foto"
-      style={{
-        alignItems: 'center',
-        backgroundColor: colors.warningBg,
-        borderColor: colors.warningBorder,
-        borderCurve: 'continuous',
-        borderRadius: 999,
-        borderWidth: 1,
-        height: 26,
-        justifyContent: 'center',
-        width: 26,
-      }}
-    >
-      <CameraGlyph color={colors.warning} />
-    </View>
-  );
-}
-
-// getActivityTone() dihapus bersama WorkResultCard: status hasil kerja kini
-// ditandai ikon berwarna di dalam baris, bukan Badge.
-
-function getTaskTone(status: CareTaskDetail['status']): 'danger' | 'muted' | 'success' | 'warning' {
-  if (status === 'completed') {
-    return 'success';
+// Keadaan tugas, menggantikan Badge status + chip tempo yang dulu berdampingan
+// di kepala layar ini — dua chip yang menyatakan keadaan yang sama dengan dua
+// kosakata berbeda ("Belum dikerjakan" di samping "Terlambat 3 hari").
+//
+// BENTUK DAN NADANYA datang dari CARE_STATE_MARK, tabel bersama dengan layar
+// Detail Jadwal pemilik. Yang tinggal di sini hanya penyimpulan kuncinya dari
+// bentuk data tugas, dan kata yang dicetak.
+//
+// 'cancelled' berbunyi "Dibatalkan owner", bukan "Dibatalkan" seperti di sisi
+// pemilik: di sana pemilik membaca akibat keputusannya sendiri, di sini pekerja
+// perlu tahu bahwa yang membatalkan adalah orang lain.
+function taskStatusMark(
+  task: CareTaskDetail,
+  todayIso: string
+): { label: string; marker?: StatusMarkerShape; tone: BadgeTone } {
+  if (task.scheduleIsCancelled === true) {
+    return { label: 'Dibatalkan owner', ...CARE_STATE_MARK.cancelled };
   }
 
-  if (status === 'postponed') {
-    return 'warning';
+  if (task.status === 'completed') {
+    return { label: 'Selesai', ...CARE_STATE_MARK.done };
   }
 
-  return 'muted';
+  // Ember waktu yang SAMA yang dipakai daftar Tugas untuk menempatkan kartu ini
+  // di seksi Telat/Hari ini/Besok. Dipakai ulang, bukan dihitung ulang: badge
+  // yang berbunyi "Jatuh tempo hari ini" pada tugas yang barusan duduk di bawah
+  // label "Telat" adalah dua jawaban untuk satu pertanyaan.
+  //
+  // scheduleIsCancelled false: cabang pembatalan sudah ditangani di atas.
+  const bucket = taskTimeBucket(task, todayIso, false);
+
+  if (bucket === 'missed') {
+    return { label: 'Hangus', ...CARE_STATE_MARK.missed };
+  }
+
+  if (bucket === 'overdue') {
+    return {
+      label: `Telat ${Math.max(1, dayDifference(task.dueDate, todayIso))} hari`,
+      ...CARE_STATE_MARK.overdue,
+    };
+  }
+
+  if (bucket === 'today') {
+    return { label: 'Jatuh tempo hari ini', ...CARE_STATE_MARK.dueToday };
+  }
+
+  // Diperiksa SESUDAH ember waktu: tugas yang ditunda ke tanggal yang sudah
+  // lewat tetap tunggakan lebih dulu, dan "Ditunda" pada tugas yang telat tiga
+  // hari menutupi kabar yang lebih mendesak.
+  if (task.status === 'postponed') {
+    return { label: 'Ditunda', ...CARE_STATE_MARK.postponed };
+  }
+
+  return { label: 'Belum dikerjakan', ...CARE_STATE_MARK.pending };
 }
 
 function feedbackMessage(feedback: string | null): string | null {
@@ -327,18 +344,3 @@ function feedbackMessage(feedback: string | null): string | null {
   return null;
 }
 
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString('id-ID', {
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}

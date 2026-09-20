@@ -1,6 +1,6 @@
 import React from 'react';
 import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
-import { Platform, Pressable, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
 
 import type {
   CareTask,
@@ -17,9 +17,17 @@ import {
 } from '../utils/displayFormat';
 import { compareTreePosition } from '../services/scheduleTreeService';
 import { formatTreeDisplayCode } from '../utils/treeFormat';
-import { colors, radius, spacing, tokens } from '../constants/theme';
+// formatFullDate, BUKAN formatDate lokal di dasar berkas ini. Yang pertama
+// memecah 'YYYY-MM-DD' lewat komponennya sehingga tidak bisa bergeser sehari
+// oleh zona waktu; yang kedua melewatkannya ke new Date(), yang menafsirkannya
+// sebagai tengah malam UTC. Kartu tugas pekerja dibaca untuk memutuskan apa
+// yang dikerjakan HARI INI, jadi tanggalnya tidak boleh meleset.
+import { formatFullDate } from '../utils/taskDueDate';
+import { colors, radius, spacing, statusColors, tokens } from '../constants/theme';
 import { colors as palette, touch } from '../theme/tokens';
-import { Badge, Card, ChoiceRowGroup, CompactMetaItem } from './ui';
+import { Badge, Button, Card, ChoiceRowGroup, CompactMetaItem } from './ui';
+import type { BadgeTone } from './ui';
+import type { StatusMarkerShape } from './status-marker';
 import { Icon } from './icons';
 import { careCategoryOptions } from '../constants/careCategory';
 
@@ -43,6 +51,46 @@ export type ManualScheduleFormValues = {
   targetType: TargetType;
 };
 
+/**
+ * Apakah dua isian form jadwal identik.
+ *
+ * ADA UNTUK penjaga "perubahan belum disimpan" di layar Edit Jadwal, yang butuh
+ * satu pertanyaan yang bisa dijawab: "apakah yang di layar sekarang berbeda dari
+ * yang barusan dimuat?".
+ *
+ * TINGGAL DI BERKAS INI, bukan di layar yang memakainya, dan itu disengaja: ia
+ * harus duduk tepat di bawah ManualScheduleFormValues supaya ruas baru yang
+ * kelak ditambahkan ke tipe itu terlihat oleh orang yang sama, pada layar yang
+ * sama. Perbandingan yang tinggal di berkas lain akan diam-diam melewatkan ruas
+ * baru, dan yang hilang bukan pesan error melainkan perubahan pengguna.
+ *
+ * targetTreeIds dibandingkan sebagai HIMPUNAN BERURUT: urutan di dalamnya
+ * ditentukan urutan ketukan pemilik, bukan oleh arti apa pun, jadi memilih dua
+ * pohon dengan urutan terbalik bukan perubahan.
+ *
+ * Pemisahnya koma, dan itu aman TANPA syarat tambahan: isinya UUID, yang tidak
+ * pernah mengandung koma, sehingga tidak ada dua himpunan berbeda yang bisa
+ * menghasilkan satu string yang sama.
+ */
+export function scheduleFormValuesEqual(
+  left: ManualScheduleFormValues,
+  right: ManualScheduleFormValues
+): boolean {
+  return (
+    left.assignedWorkerId === right.assignedWorkerId &&
+    left.category === right.category &&
+    left.customTargetNote === right.customTargetNote &&
+    left.instruction === right.instruction &&
+    left.repeatEnabled === right.repeatEnabled &&
+    left.repeatEveryDays === right.repeatEveryDays &&
+    left.requiresPhoto === right.requiresPhoto &&
+    left.scheduledDate === right.scheduledDate &&
+    left.targetType === right.targetType &&
+    left.targetTreeIds.length === right.targetTreeIds.length &&
+    [...left.targetTreeIds].sort().join(',') === [...right.targetTreeIds].sort().join(',')
+  );
+}
+
 // Batas jarak pengulangan yang diterima form. Database hanya mensyaratkan
 // > 0 (care_schedules_repeat_every_days_check); batas atas 365 murni penjaga
 // salah ketik di UI.
@@ -60,6 +108,69 @@ export const careScheduleTargetOptions: TargetType[] = [
   'tree',
   'custom',
 ];
+
+/**
+ * Keadaan sebuah pekerjaan perawatan, dipakai bersama SISI PEMILIK dan SISI
+ * PEKERJA. Kuncinya sengaja netral terhadap bentuk datanya — sebuah jadwal
+ * (CareScheduleDetail) dan sebuah tugas (CareTaskDetail) sampai ke keadaan yang
+ * sama lewat jalan yang berbeda, dan yang harus sama di antara keduanya bukan
+ * cara menghitungnya melainkan cara MENAMPILKANNYA.
+ */
+export type CareStateKey =
+  | 'cancelled'
+  | 'done'
+  | 'missed'
+  | 'overdue'
+  | 'dueToday'
+  | 'postponed'
+  | 'pending';
+
+/**
+ * SATU tabel bentuk dan nada untuk ketujuh keadaan, dipakai badge di layar
+ * Detail Jadwal (pemilik) dan Detail Tugas (pekerja).
+ *
+ * TABELNYA DIBAGI, PERHITUNGANNYA TIDAK. Setiap layar tetap menyimpulkan
+ * kuncinya sendiri dari data yang dipegangnya; yang dilarang adalah dua layar
+ * memutuskan sendiri-sendiri bahwa "Hangus" itu segitiga di satu tempat dan
+ * silang di tempat lain. Kosakata bentuk hanya berguna kalau ia dipelajari
+ * sekali lalu berlaku di mana-mana.
+ *
+ * PENANDA BENTUK, bukan hanya nada warna — aturan yang sama yang melahirkan
+ * StatusMarker di batch 1a: warna dilarang jadi satu-satunya pembeda.
+ *
+ *   cancelled  circle-outline  danger   rencananya ada, isinya kosong
+ *   done       circle-filled   success
+ *   missed     cross           danger   lewat toleransi, tidak bisa ditunda lagi
+ *   overdue    triangle-up     danger   tunggakan, masih bisa dikerjakan
+ *   dueToday   square          warning
+ *   postponed  triangle-down   warning  didorong ke belakang
+ *   pending    (tanpa penanda) muted    keadaan dasar: belum ada apa-apa, dan tidak ada yang salah
+ *
+ * Baris terakhir sengaja POLOS. Aturan pada prop `marker` di <Badge> menyimpan
+ * penanda bentuk untuk chip yang membawa STATUS; 'pending' adalah ketiadaan
+ * status, dan memberinya bentuk membuat kosakata bentuk berarti "ini sebuah
+ * chip", yang tidak berguna.
+ *
+ * LABELNYA TIDAK DI SINI, dan itu disengaja: 'overdue' berbunyi "Telat 3 hari"
+ * dengan angka yang hanya diketahui pemanggilnya, dan 'cancelled' berbunyi
+ * "Dibatalkan" di sisi pemilik tapi "Dibatalkan owner" di sisi pekerja — yang
+ * membatalkan memang orang lain di sana. Yang mengikat adalah bentuk dan nada.
+ *
+ * Kata "Terlambat" TIDAK dipakai untuk 'overdue' maupun 'missed' di layar mana
+ * pun: yang telat berbunyi "Telat N hari", yang hangus berbunyi "Hangus".
+ */
+export const CARE_STATE_MARK: Record<
+  CareStateKey,
+  { marker?: StatusMarkerShape; tone: BadgeTone }
+> = {
+  cancelled: { marker: 'circle-outline', tone: 'danger' },
+  done: { marker: 'circle-filled', tone: 'success' },
+  missed: { marker: 'cross', tone: 'danger' },
+  overdue: { marker: 'triangle-up', tone: 'danger' },
+  dueToday: { marker: 'square', tone: 'warning' },
+  postponed: { marker: 'triangle-down', tone: 'warning' },
+  pending: { tone: 'muted' },
+};
 
 export function CareTaskSummaryCard({
   assignedWorkerName,
@@ -1260,3 +1371,231 @@ function getTaskTone(status: TaskStatus): 'danger' | 'muted' | 'success' | 'warn
 }
 
 export { formatTaskSource, formatTaskStatus, getTaskTone };
+
+// ---------------------------------------------------------------------------
+// Kartu tugas pekerja (batch 6b)
+// ---------------------------------------------------------------------------
+
+/**
+ * SATU kartu tugas untuk DUA layar: Beranda pekerja dan tab Tugas.
+ *
+ * Diangkat ke sini dari TaskCard lokal di worker/index.tsx, yang sebelumnya
+ * satu-satunya pemakainya. Yang memaksa pengangkatan: batch 6b menuntut bentuk
+ * yang sama persis di kedua layar. Dua bentuk kartu tugas yang berbeda di dua
+ * layar adalah beban belajar kedua bagi orang yang sama — dan justru beban itu
+ * yang dihindari aturan "satu tombol per kartu".
+ *
+ * DUA TARGET SENTUH, BERSEBELAHAN DAN TIDAK BERTUMPUK. Aturan spek melarang
+ * membungkus kartu dengan Pressable lalu menaruh tombol di dalamnya, dan
+ * alasannya tepat: pada target bertumpuk, ketukan yang meleset dari tombol
+ * mendarat di layar yang salah. Di sini yang bisa ditekan hanya (1) BARIS JUDUL
+ * di atas dan (2) tombol "Catat hasil" di bawah; ruang di antaranya — instruksi,
+ * penanda — mati. Ketukan yang meleset tidak mendarat di mana pun.
+ *
+ * KENAPA BARIS JUDUL TETAP MEMBUKA DETAIL. Daftar Tugas adalah SATU-SATUNYA
+ * jalan masuk ke layar Detail Tugas; tidak ada layar lain yang menautkannya.
+ * Batch 4a mencabut tombol "Lihat detail" dari kartu Beranda justru dengan
+ * alasan "detail tetap terjangkau dari tab Tugas" — menutup jalur itu juga akan
+ * membuat layar detail tidak bisa dibuka siapa pun.
+ *
+ * CHEVRON WAJIB pada baris itu. Tanpa chevron, baris yang bisa ditekan hanya
+ * mencegah salah-tekan tanpa memberi tahu siapa pun bahwa ia ada. Chevron sudah
+ * jadi afordans "baris ini membuka sesuatu" di seluruh aplikasi lewat <MenuRow>,
+ * dan aturannya di sana berlaku di sini: chevron HANYA bila barisnya memang
+ * membuka sesuatu.
+ *
+ * INSTRUKSI DICETAK DI KARTU, dipotong dua baris. Ia satu-satunya isi layar
+ * detail yang benar-benar dibutuhkan sebelum bekerja, jadi jalur umum tidak
+ * perlu berpindah layar sama sekali — detail hanya dibuka saat instruksinya
+ * memang panjang. Dipotong DUA baris, bukan tiga seperti versi lama di Beranda:
+ * kartu di tab Tugas membawa satu ruas meta lebih banyak (tanggal), dan kartu
+ * yang tumbuh sesuai panjang ketikan pemilik akan mendorong tugas kedua keluar
+ * layar. Spek menerima 2-3 kartu per layar; itu batas bawahnya, bukan targetnya.
+ */
+export function WorkerTaskCard({
+  instruction,
+  marker,
+  onOpenDetail,
+  onRecord,
+  showDate = false,
+  task,
+}: {
+  /**
+   * Instruksi pemilik. Dioper terpisah alih-alih dibaca dari `task` supaya
+   * pemanggil yang memegang CareTaskDetail tidak perlu menyempitkan tipenya
+   * lebih dulu, dan supaya layar yang memang tidak ingin mencetaknya bisa
+   * melepasnya tanpa mengarang nilai kosong.
+   */
+  instruction?: string | null;
+  /**
+   * Penanda keadaan di ujung baris judul: "Telat N hari", "Hangus", "Ditunda".
+   * Dirakit pemanggil lewat <WorkerTaskMarker>, bukan di sini — Beranda hanya
+   * menampilkan tugas hari ini dan tidak punya satu pun dari ketiganya untuk
+   * ditampilkan.
+   */
+  marker?: React.ReactNode;
+  onOpenDetail: () => void;
+  onRecord: () => void;
+  /**
+   * Tanggal jatuh tempo ikut di baris meta. Mati di Beranda (seluruh daftarnya
+   * hari ini) dan di seksi "Hari ini" pada tab Tugas, yang labelnya sudah
+   * menyatakan tanggal itu untuk semua kartu di bawahnya.
+   */
+  showDate?: boolean;
+  task: CareTask;
+}) {
+  // Kategori, BUKAN judul yang diketik pemilik. Judul bebas berbunyi "Test",
+  // "Gawe baru", "awas" — kata yang hanya berarti bagi orang yang mengetiknya,
+  // pada hari ia mengetiknya. Bagi pekerja yang membacanya di kebun,
+  // "Penyemprotan" memberi tahu apa yang harus dibawa; "awas" tidak.
+  // 'Tugas perawatan' adalah teks jatuh-balik lama untuk category yang null
+  // (kolomnya memang nullable), dipertahankan apa adanya.
+  const title = task.category ? formatCareCategory(task.category) : 'Tugas perawatan';
+  const metaLine = [formatCareTarget(task), showDate ? formatFullDate(task.dueDate) : null]
+    .filter(Boolean)
+    .join(' · ');
+  const instructionText = instruction?.trim();
+
+  return (
+    <Card padding={tokens.layout.cardPadding}>
+      <Pressable
+        accessibilityHint="Membuka detail tugas"
+        accessibilityRole="button"
+        onPress={onOpenDetail}
+        style={({ pressed }) => ({
+          alignItems: 'center',
+          flexDirection: 'row',
+          gap: tokens.space.sm,
+          opacity: pressed ? 0.6 : 1,
+        })}
+      >
+        <View style={{ flex: 1, gap: tokens.space.xs }}>
+          <Text selectable={false} numberOfLines={1} style={workerTaskCardStyles.title}>
+            {title}
+          </Text>
+          <Text selectable={false} numberOfLines={2} style={workerTaskCardStyles.meta}>
+            {metaLine}
+          </Text>
+        </View>
+        {marker}
+        <Icon name="chevron-right" size={tokens.icon.md} color={tokens.color.text.tertiary} />
+      </Pressable>
+
+      {/* textPrimary, bukan textMuted seperti baris meta di atasnya. Instruksi
+          adalah hal yang harus DIKERJAKAN; meta hanya menyebutkan di mana dan
+          kapan. Meredupkannya bersama meta menaruh satu-satunya kalimat berisi
+          perintah di lapisan yang sama dengan keterangan.
+
+          Tidak dirender sama sekali kalau kosong — bukan dirender sebagai baris
+          kosong yang menyisakan tingginya. Sebagian besar tugas berulang memang
+          tidak mengisinya. */}
+      {instructionText ? (
+        <Text selectable numberOfLines={2} style={workerTaskCardStyles.instruction}>
+          {instructionText}
+        </Text>
+      ) : null}
+
+      {/* Kewajiban foto disebut DI SINI, bukan hanya di layar pencatatan: ia
+          menentukan apakah pekerja perlu membawa ponselnya ke pohon, dan itu
+          keputusan yang diambil sebelum berangkat. */}
+      {task.requiresPhoto ? (
+        <View style={workerTaskCardStyles.proofPill}>
+          <Icon name="camera" size={tokens.icon.xs} color={statusColors.warning.text} />
+          <Text selectable={false} style={workerTaskCardStyles.proofPillText}>
+            Butuh bukti
+          </Text>
+        </View>
+      ) : null}
+
+      <Button title="Catat hasil" onPress={onRecord} />
+    </Card>
+  );
+}
+
+const workerTaskCardStyles = StyleSheet.create({
+  title: { ...tokens.type.subheading, color: tokens.color.text.primary },
+  meta: { ...tokens.type.bodySmall, color: tokens.color.text.secondary },
+  instruction: { ...tokens.type.body, color: tokens.color.text.primary },
+  proofPill: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: statusColors.warning.background,
+    borderRadius: tokens.radius.pill,
+    flexDirection: 'row',
+    gap: tokens.space.xs,
+    paddingHorizontal: tokens.space.sm,
+    paddingVertical: 2,
+  },
+  proofPillText: { ...tokens.type.caption, color: statusColors.warning.text },
+});
+
+/**
+ * Penanda keadaan untuk <WorkerTaskCard>.
+ *
+ * PALING BANYAK SATU penanda, berprioritas menurun dari yang paling menuntut
+ * tindakan:
+ *
+ *   1. Hangus  -- sudah lewat masa toleransi; TIDAK BISA DITUNDA LAGI.
+ *   2. Telat   -- tunggakan yang masih bisa dikerjakan DAN masih bisa ditunda.
+ *   3. Ditunda -- care_tasks.status, milik tugas itu sendiri.
+ *
+ * "Berulang" tidak ada di sini: pengulangan adalah sifat care_schedules
+ * (repeat_every_days) dan CareTask tidak membawanya. "Dibatalkan" juga tidak:
+ * getWorkerTasks sudah menyaring keluar tugas dari jadwal yang dibatalkan
+ * sebelum datanya sampai ke layar mana pun.
+ *
+ * HANGUS DIBEDAKAN DARI TELAT, dengan pasangan kata dan bentuk yang SAMA PERSIS
+ * dengan sisi pemilik (batch 6a, baris daftar Perawatan dan badge detail
+ * jadwal): badge "Hangus" berpenanda silang, lawan teks polos "Telat N hari".
+ * Keduanya berperilaku berbeda — yang hangus tidak bisa ditunda lagi — dan
+ * sebelum ini keduanya tampil identik di kedua sisi aplikasi.
+ *
+ * Kata "Terlambat" TIDAK dipakai untuk satu pun dari keduanya, di sini maupun di
+ * sisi pemilik.
+ */
+export function WorkerTaskMarker({
+  overdueDays,
+  task,
+}: {
+  /** Non-null hanya di seksi "Telat". */
+  overdueDays: number | null;
+  task: CareTask;
+}) {
+  if (task.missedAt) {
+    return <Badge label="Hangus" marker="cross" maxWidth={110} tone="danger" />;
+  }
+
+  if (overdueDays !== null) {
+    return (
+      <Text selectable={false} style={workerTaskMarkerStyles.overdue}>
+        {`Telat ${overdueDays} hari`}
+      </Text>
+    );
+  }
+
+  if (task.status === 'postponed') {
+    return (
+      <View style={workerTaskMarkerStyles.neutralPill}>
+        <Text selectable={false} style={workerTaskMarkerStyles.neutralPillText}>
+          Ditunda
+        </Text>
+      </View>
+    );
+  }
+
+  return null;
+}
+
+const workerTaskMarkerStyles = StyleSheet.create({
+  overdue: { ...tokens.type.label, color: tokens.color.status.danger.text, flexShrink: 0 },
+  neutralPill: {
+    alignItems: 'center',
+    backgroundColor: tokens.color.status.neutral.bg,
+    borderRadius: tokens.radius.pill,
+    flexDirection: 'row',
+    flexShrink: 0,
+    paddingHorizontal: tokens.space.sm,
+    paddingVertical: 2,
+  },
+  neutralPillText: { ...tokens.type.caption, color: tokens.color.status.neutral.text },
+});

@@ -55,6 +55,7 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MenuRow,
   MetaRow,
   Screen,
   SectionLabel,
@@ -126,6 +127,35 @@ type DetailState = {
   // false untuk record read-only-by-design (perawatan): sembunyikan hint
   // "hanya bisa diubah oleh pelapor" yang tidak relevan. Default (undefined) = tampil.
   supportsEdit?: boolean;
+  /**
+   * Aksi hapus dirender sebagai BARIS MERUSAK di badan layar, bukan tombol di
+   * bar aksi. Hanya catatan perawatan memakainya (batch 6b).
+   *
+   * ADA KARENA layar ini melayani empat jenis catatan dengan dua bentuk aksi
+   * yang berbeda. Tiga jenis lain punya tombol "Edit" sebagai aksi utamanya, dan
+   * "Hapus" duduk di sebelahnya sebagai aksi kedua — di sana bar aksi memang
+   * tempatnya. Perawatan TIDAK punya aksi utama sama sekali: bar aksi yang
+   * isinya cuma satu tombol merah membuat menghapus terbaca sebagai hal yang
+   * memang diharapkan dilakukan di layar ini.
+   *
+   * Sebagai baris merusak di dasar badan layar, ia harus digulung untuk
+   * ditemukan — sepadan dengan seberapa jarang ia dipakai, dan bentuk yang sama
+   * dengan "Pohon sudah tidak ada" di layar edit pohon (batch 4b) dan
+   * "Batalkan jadwal" di detail jadwal (batch 6a).
+   *
+   * Tanpa nilai, jalur bar aksi berjalan persis seperti sebelumnya.
+   */
+  deleteAsRow?: boolean;
+  /**
+   * Kalimat yang menjelaskan kenapa catatan ini tidak bisa diubah, DAN apa
+   * gantinya.
+   *
+   * Hanya diisi untuk perawatan INISIATIF, yang memang punya jalan keluar
+   * (hapus lalu catat ulang). Perawatan TERJADWAL sengaja tidak mendapatnya:
+   * di sana tidak ada tombol hapus dan tidak ada jalan keluar apa pun, jadi
+   * kalimat yang menawarkannya akan menunjuk ke pintu yang tidak ada.
+   */
+  immutableNotice?: string | null;
   updatedAt?: string | null;
 };
 
@@ -263,8 +293,11 @@ export function TreeRecordDetailScreen({
       // Kombinasi "tidak bisa ubah, bisa hapus" bukan kasus tepi — itu keadaan
       // pemilik kebun yang membuka catatan pekerjanya, dan di sana tombol Hapus
       // berdiri sendirian.
+      //
+      // KECUALI saat `deleteAsRow`: di sana hapus turun ke badan layar dan bar
+      // aksi tidak dirender sama sekali. Lihat catatan pada prop itu.
       footer={
-        detail.canEdit || detail.canDelete ? (
+        detail.canEdit || (detail.canDelete && !detail.deleteAsRow) ? (
           <>
             {detail.canEdit ? (
               /* 'Edit', bukan 'Ubah' dan bukan 'Edit catatan'. Satu kata: bar
@@ -276,7 +309,7 @@ export function TreeRecordDetailScreen({
                 onPress={() => router.push(`${basePath}/${treeId}/records/${normalizedType}/${recordId}/edit`)}
               />
             ) : null}
-            {detail.canDelete ? (
+            {detail.canDelete && !detail.deleteAsRow ? (
               /* loadingTitle, BUKAN pemintal: label berganti jadi teks biasa
                  sehingga lebar tombolnya tidak berubah saat diproses. Itu satu-
                  satunya jalur Button yang tidak memasang ActivityIndicator. */
@@ -417,6 +450,49 @@ export function TreeRecordDetailScreen({
         <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
           Catatan ini hanya bisa diubah oleh pelapor.
         </Text>
+      ) : null}
+
+      {/* Keterangan "tidak bisa diubah" milik catatan yang memang TIDAK PERNAH
+          bisa diubah siapa pun — bukan yang kebetulan bukan milik pembacanya.
+          Keduanya dipisah karena jalan keluarnya berbeda: yang di atas bisa
+          diminta ke pelapornya, yang ini harus dihapus lalu dicatat ulang.
+
+          Dicetak TEPAT DI ATAS baris hapusnya, karena ia yang menjelaskan
+          kenapa baris itu ada sama sekali. */}
+      {detail.immutableNotice ? (
+        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+          {detail.immutableNotice}
+        </Text>
+      ) : null}
+
+      {/* BARIS MERUSAK, menggantikan tombol Hapus di bar aksi untuk catatan
+          perawatan. Lihat catatan lengkap pada prop `deleteAsRow`.
+
+          Kata "HAPUS" BENAR DI SINI, dan itu kebalikan dari aturan di batch 4b
+          dan 6a. Di sana kata itu dilarang karena datanya tidak dihapus —
+          siklus ditutup, jadwal dibatalkan, barisnya tetap ada. Catatan
+          perawatan inisiatif BENAR-BENAR hilang dari riwayat lewat
+          soft_delete_care_activity, jadi menghaluskannya jadi "batalkan" akan
+          berbohong ke arah yang berlawanan.
+
+          navigates={false}: ia membuka dialog di tempat, bukan berpindah layar.
+          <MenuRow> memang sudah menjatuhkan chevron untuk baris danger secara
+          bawaan; ditulis eksplisit supaya alasannya terbaca. */}
+      {detail.canDelete && detail.deleteAsRow ? (
+        <MenuRow
+          danger
+          icon="x"
+          label={deleting ? 'Menghapus…' : 'Hapus catatan'}
+          meta="Catatan ini hilang dari riwayat pohon."
+          navigates={false}
+          onPress={() => {
+            if (deleting) {
+              return;
+            }
+
+            setConfirmDeleteOpen(true);
+          }}
+        />
       ) : null}
     </Screen>
   );
@@ -712,11 +788,39 @@ async function loadRecordDetail(
         authorVerb: 'recorded',
         canEdit: false,
         canDelete: care.canDelete === true,
+        // Baris merusak, bukan tombol di bar aksi — lihat prop `deleteAsRow`.
+        //
+        // canDelete SENDIRI sudah menutup perawatan TERJADWAL tanpa penjaga
+        // tambahan di sini: resolveCareActivityCanDelete mengembalikan false
+        // untuk apa pun yang bukan 'inisiatif', cerminan persis penjaga di
+        // dalam soft_delete_care_activity (migrasi 067). Jadi perawatan
+        // terjadwal tidak punya tombol aksi apa pun di layar ini, dan itu
+        // memang yang benar: ia tidak bisa diedit DAN tidak bisa dihapus.
+        deleteAsRow: true,
         createdAt: null,
         eventAt: care.performedAt,
         eventLabel: 'Tanggal perawatan',
         farmId: care.farmId,
         headline: buildCareHeadline(care.category),
+        // HANYA untuk yang INISIATIF (adendum §1.5).
+        //
+        // Spek asli menulis "Tombol Edit + baris 'Perubahan tersimpan sebagai
+        // catatan baru'" untuk layar ini, dan itu salah: care_activities
+        // bersifat menambah, dan pemicu rantai jadwal berulang hanya berbunyi
+        // saat penyimpanan baru — tidak ada jalur edit sama sekali, untuk
+        // asal mana pun. Kalimat itu benar di layar Perbaiki catatan hasil
+        // kerja, tempat koreksinya memang tersedia, dan tinggal di sana.
+        //
+        // Perawatan TERJADWAL tidak mendapat kalimat ini walaupun ia juga tidak
+        // bisa diubah. Alasannya ada di separuh keduanya: "hapus lalu catat
+        // ulang" adalah jalan keluar yang TIDAK tersedia untuknya — ia tidak
+        // punya tombol hapus, dan pekerjaannya milik sebuah tugas, bukan milik
+        // orang yang membuka layar ini. Menawarkan pintu yang tidak ada lebih
+        // buruk daripada diam.
+        immutableNotice:
+          care.asal === 'inisiatif'
+            ? 'Catatan perawatan tidak bisa diubah. Bila keliru, hapus lalu catat ulang.'
+            : null,
         note: care.note,
         originLabel: care.asal === 'terjadwal' ? 'Terjadwal' : 'Inisiatif',
         // Hanya yang inisiatif. Foto perawatan terjadwal adalah 'task_proof'

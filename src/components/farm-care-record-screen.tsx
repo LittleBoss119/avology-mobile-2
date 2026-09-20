@@ -471,6 +471,36 @@ export function FarmCareRecordScreen() {
         </View>
       ) : null}
 
+      {/* JENIS PERAWATAN DI ATAS DAFTAR POHON (batch 6b). Urutannya dibalik
+          dari sebelumnya, dan spek yang memintanya benar: jenis pekerjaan
+          adalah pertanyaan pertama yang harus dijawab pemilik, sementara daftar
+          pohonnya SUDAH TERJAWAB — ia datang dari denah, dan sebagian besar
+          kunjungan ke layar ini tidak menyentuhnya sama sekali. Menaruh daftar
+          yang sudah benar di puncak berarti setiap pemilik menggulir melewati
+          sampai dua belas chip sebelum sampai ke kolom pertama yang harus ia
+          isi.
+
+          Pemberitahuan "posisi gugur" TETAP DI ATAS keduanya: ia mengabarkan
+          bahwa daftarnya sudah berubah tanpa diminta, dan itu harus terbaca
+          sebelum pemilik mengisi apa pun.
+
+          Ketiga bidang di bawah ditiru PERSIS dari tree-care-activity-screen:
+          tanggal, jenis perawatan, produk, catatan. Tidak lebih, tidak kurang. */}
+      <FormSection title="Jenis perawatan" description="Catat aktivitas perawatan yang dilakukan tanpa jadwal tugas.">
+        <View style={{ gap: tokens.space.sm }}>
+          <DateField label="Tanggal perawatan *" onChangeDate={setEventDate} value={eventDate} />
+          <OptionGroupCategory
+            disabled={submitting}
+            error={fieldErrors.category}
+            onChange={(value) => {
+              setFieldErrors((prev) => ({ ...prev, category: undefined }));
+              setCategory(value);
+            }}
+            value={category}
+          />
+        </View>
+      </FormSection>
+
       <FormSection
         title="Pohon yang dicatat"
         description="Daftar ini datang dari denah kebun. Ketuk kode untuk membuangnya; menambah pohon dilakukan dari peta."
@@ -506,41 +536,64 @@ export function FarmCareRecordScreen() {
                 Kalau diukur dari yang tersembunyi, tombolnya tetap tampil
                 setelah pemilik memangkas daftar di bawah batas sambil terbuka —
                 tombol yang menjanjikan melipat sesuatu yang sudah tidak ada. */}
+            {/* "+N LAGI", bukan "Lihat semua (N)" (batch 6b).
+
+                Angka yang disebut kini yang TERSEMBUNYI, bukan seluruh daftar.
+                "Lihat semua (40)" di bawah dua belas chip yang sudah terlihat
+                memaksa pembacanya mengurangi sendiri untuk tahu berapa lagi
+                yang ada di baliknya; "+28 lagi" menjawabnya langsung. Bentuknya
+                pun sepadan dengan chip di atasnya, yang memang deretannya ia
+                lanjutkan.
+
+                `variant="secondary"`, menggantikan `variant="quiet"` yang
+                USANG — penugasan yang tertunda dari batch sebelumnya. Quiet
+                menggambar tombol tanpa latar dan tanpa garis sama sekali,
+                sehingga di bawah deret chip berbingkai ia terbaca sebagai teks
+                yang kebetulan bisa ditekan. Secondary memberinya bingkai yang
+                sama dengan chip-chip itu. Ia kini satu-satunya varian usang yang
+                tersisa nol pemakaian di seluruh aplikasi. */}
             {trees.length > VISIBLE_CODE_LIMIT ? (
               <Button
                 onPress={() => setExpanded((current) => !current)}
                 size="small"
-                title={expanded ? 'Sembunyikan sebagian' : `Lihat semua (${trees.length})`}
-                variant="quiet"
+                title={expanded ? 'Sembunyikan' : `+${trees.length - VISIBLE_CODE_LIMIT} lagi`}
+                variant="secondary"
               />
             ) : null}
           </View>
         )}
       </FormSection>
 
-      {/* Keempat bidang di bawah ditiru PERSIS dari tree-care-activity-screen:
-          tanggal, jenis perawatan, produk, catatan. Tidak lebih, tidak kurang. */}
-      <FormSection title="Jenis perawatan" description="Catat aktivitas perawatan yang dilakukan tanpa jadwal tugas.">
-        <View style={{ gap: tokens.space.sm }}>
-          <DateField label="Tanggal perawatan *" onChangeDate={setEventDate} value={eventDate} />
-          <OptionGroupCategory
-            disabled={submitting}
-            error={fieldErrors.category}
-            onChange={(value) => {
-              setFieldErrors((prev) => ({ ...prev, category: undefined }));
-              setCategory(value);
-            }}
-            value={category}
-          />
-        </View>
-      </FormSection>
+      {/* "Bahan", bukan "Produk" (batch 6b). Kata yang sama dengan blok "Bahan
+          yang dipakai" di layar Catat Hasil Kerja pekerja, dan dengan baris
+          "Bahan" di detail catatan perawatan — tiga tempat yang menyebut hal
+          yang sama, kini dengan satu kata. Nama kolomnya di database tetap
+          `produk`.
 
-      <FormSection title="Produk yang dipakai" description="Opsional. Merek pupuk atau pestisida yang digunakan.">
-        <Field label="" onChangeText={setProduk} placeholder="Opsional" value={produk} />
+          DITANDAI OPSIONAL lewat prop `optional` pada <Field>, bukan lewat kata
+          "Opsional." di kalimat deskripsi dan placeholder. Penandanya kini
+          menempel pada labelnya sendiri, tempat yang sama dengan setiap field
+          opsional lain di aplikasi — dan placeholder-nya bisa kembali
+          mengerjakan tugasnya yang sebenarnya: memberi contoh. */}
+      <FormSection title="Bahan yang dipakai" description="Merek pupuk atau pestisida yang digunakan.">
+        <Field
+          label="Bahan"
+          optional
+          onChangeText={setProduk}
+          placeholder="Contoh: NPK Mutiara"
+          value={produk}
+        />
       </FormSection>
 
       <FormSection title="Catatan perawatan">
-        <Field label="" multiline onChangeText={setNote} placeholder="Opsional" value={note} />
+        <Field
+          label="Catatan"
+          multiline
+          optional
+          onChangeText={setNote}
+          placeholder="Keterangan tambahan tentang perawatan ini"
+          value={note}
+        />
       </FormSection>
 
       {/* KONFIRMASI WAJIB, dan sengaja berbeda dari layar satu-pohon yang tidak

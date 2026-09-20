@@ -1,17 +1,19 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
-import { BottomSheet, PhotoSourceSheet } from '../../../../../src/components/bottom-sheet';
+import { BottomSheet, ConfirmDialog } from '../../../../../src/components/bottom-sheet';
 import { FormDateField } from '../../../../../src/components/care-schedule-components';
+import { useUnsavedChangesGuard } from '../../../../../src/hooks/useUnsavedChangesGuard';
 import { Icon, type IconName } from '../../../../../src/components/icons';
 import {
   Badge,
   Button,
-  EmptyState,
   ErrorBanner,
   LoadingState,
   OptionChip,
+  OptionGroup,
+  PhotoPickerCard,
   Screen,
   TopAppBar,
 } from '../../../../../src/components/ui';
@@ -61,6 +63,52 @@ type RecordMode = 'create' | 'edit';
 const TUNDA_TERTUTUP_NOTICE =
   'Tugas ini sudah tidak bisa ditunda. Catat sebagai selesai kalau sudah dikerjakan.';
 
+// Tiga alasan penundaan yang SUDAH BERNAMA, ditawarkan sebagai chip.
+//
+// Mereka datang dari apa yang benar-benar terjadi di kebun: bahan belum
+// tersedia, hujan, alat rusak. Sebelum ini ketiganya harus DIKETIK — dan
+// mengetik di ponsel sambil berdiri di kebun, dengan tangan kotor, adalah
+// pekerjaan yang jauh lebih besar daripada yang terlihat dari meja. Akibatnya
+// bisa ditebak dan sudah terbukti di kolom bebas lain di basis data ini:
+// "hujan", "Hujan", "hujan deras", "ujan" — empat nilai untuk satu maksud, dari
+// satu orang.
+//
+// Nilainya SAMA DENGAN LABELNYA, bukan kode pendek. Yang tersimpan ke
+// care_activities.note adalah teks ini apa adanya, dan kolom itu sudah berisi
+// kalimat bebas dari catatan lama — menyimpan 'rain' di sebelah "Stok air belum
+// tersedia" akan membuat satu kolom berisi dua bahasa yang berbeda.
+const POSTPONE_REASONS = ['Bahan habis', 'Hujan', 'Alat rusak'] as const;
+
+// Kunci chip "Lainnya". Sengaja BUKAN string kosong dan bukan salah satu label:
+// ia harus bisa dibedakan dari "belum memilih apa-apa" supaya validasi tahu
+// bedanya antara chip yang belum ditekan dan kolom teks yang belum diisi.
+const POSTPONE_REASON_OTHER = 'lainnya';
+
+/**
+ * Seluruh isian form yang bisa diubah pekerja, dalam satu objek.
+ *
+ * ADA KARENA layar ini kini dijaga useUnsavedChangesGuard, dan penjaga itu butuh
+ * satu pertanyaan yang bisa dijawab: "apakah yang di layar sekarang berbeda dari
+ * keadaan saat layar dibuka?". Tanpa objek acuan, jawabannya harus dirakit dari
+ * delapan useState yang tersebar — dan setiap field baru yang kelak ditambahkan
+ * akan lolos dari perbandingan tanpa ada yang menyadarinya.
+ *
+ * FOTO TIDAK DI SINI. `newPhoto` dan `removeExistingPhoto` cukup diperiksa
+ * sebagai "ada/tidak": keduanya hanya bisa bergerak dari keadaan awalnya, tidak
+ * pernah kembali ke sana lewat jalan lain, jadi menyimpannya sebagai acuan tidak
+ * menambah satu pun jawaban.
+ */
+type RecordBaseline = {
+  note: string;
+  postponedUntil: string;
+  produk: string;
+  produkJumlah: string;
+  produkSatuan: SatuanBahan | null;
+  reasonChoice: string;
+  reasonOther: string;
+  status: ActivityStatus;
+};
+
 export default function WorkerTaskRecordScreen() {
   const params = useLocalSearchParams<{ taskId: string; mode?: string; activityId?: string }>();
   const taskId = params.taskId;
@@ -68,6 +116,34 @@ export default function WorkerTaskRecordScreen() {
   const activityId = params.activityId?.trim() || null;
 
   const scrollRef = React.useRef<ScrollView>(null);
+
+  // Isi form SAAT LAYAR DIBUKA, acuan penjaga "perubahan belum disimpan".
+  //
+  // Dihitung SEKALI lewat useMemo, lalu dipakai dua kali: sebagai acuan, dan
+  // sebagai nilai awal `postponedUntil` di bawah. Dulu tanggal besok dihitung
+  // langsung di penginisialisasi useState; kalau acuannya menghitungnya sendiri
+  // untuk kedua kalinya, keduanya bisa berselisih sehari pada layar yang dibuka
+  // tepat di tengah malam — dan layar itu lalu mengira dirinya sudah berubah
+  // sebelum pekerja menyentuh apa pun.
+  const initialBaseline = React.useMemo<RecordBaseline>(
+    () => ({
+      note: '',
+      // Default besok: RPC menolak hari ini dan masa lalu, jadi membuka picker
+      // di tanggal hari ini hanya akan menyeret pekerja ke pesan error.
+      postponedUntil: addDaysToIsoDate(getTodayIsoDate(), 1),
+      produk: '',
+      produkJumlah: '',
+      produkSatuan: null,
+      reasonChoice: '',
+      reasonOther: '',
+      status: 'completed',
+    }),
+    []
+  );
+  // Ditimpa di mode PERBAIKI begitu barisnya terbaca — lihat loadTask. Di mode
+  // catat ia tetap nilai awalnya seumur layar.
+  const [baseline, setBaseline] = React.useState<RecordBaseline>(initialBaseline);
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
 
   const [task, setTask] = React.useState<CareTaskDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -80,6 +156,15 @@ export default function WorkerTaskRecordScreen() {
   const [editingActivity, setEditingActivity] = React.useState<CareActivity | null>(null);
 
   const [note, setNote] = React.useState('');
+  // Alasan penundaan, DUA state dan bukan satu.
+  //
+  // `reasonChoice` adalah chip yang sedang menyala; `reasonOther` adalah teks
+  // yang hanya berarti saat chipnya "Lainnya". Dipisah supaya berpindah dari
+  // "Lainnya" ke "Hujan" lalu kembali tidak membuang apa yang sudah diketik —
+  // dan supaya yang TERSIMPAN tidak pernah bergantung pada state yang sedang
+  // tidak terlihat. Yang masuk ke note dirakit sekali di postponeReasonText().
+  const [reasonChoice, setReasonChoice] = React.useState('');
+  const [reasonOther, setReasonOther] = React.useState('');
   const [produk, setProduk] = React.useState('');
   const [produkJumlah, setProdukJumlah] = React.useState('');
   const [produkSatuan, setProdukSatuan] = React.useState<SatuanBahan | null>(null);
@@ -93,11 +178,7 @@ export default function WorkerTaskRecordScreen() {
   const [photoError, setPhotoError] = React.useState<string | null>(null);
   const [processingPhoto, setProcessingPhoto] = React.useState(false);
   const [reasonError, setReasonError] = React.useState<string | null>(null);
-  // Default besok: RPC menolak hari ini dan masa lalu, jadi membuka picker di
-  // tanggal hari ini hanya akan menyeret pekerja ke pesan error.
-  const [postponedUntil, setPostponedUntil] = React.useState(() =>
-    addDaysToIsoDate(getTodayIsoDate(), 1)
-  );
+  const [postponedUntil, setPostponedUntil] = React.useState(initialBaseline.postponedUntil);
   const [postponedUntilError, setPostponedUntilError] = React.useState<string | undefined>(undefined);
 
   const loadTask = React.useCallback(async () => {
@@ -129,10 +210,46 @@ export default function WorkerTaskRecordScreen() {
       setEditingActivity(activity ?? null);
 
       if (activity) {
-        setNote(activity.note ?? '');
-        setProduk(activity.produk ?? '');
-        setProdukJumlah(activity.produkJumlah === null ? '' : String(activity.produkJumlah));
-        setProdukSatuan(activity.produkSatuan);
+        // Alasan lama DIPULIHKAN KE BENTUK CHIP kalau teksnya memang salah satu
+        // dari ketiganya; kalau tidak, ia jatuh ke "Lainnya" dengan teksnya
+        // utuh di kolom. Tanpa pemulihan ini, membuka kembali penundaan yang
+        // dicatat lewat chip "Hujan" akan menampilkan form tanpa satu pun chip
+        // menyala — pekerja lalu mengira alasannya hilang.
+        //
+        // Berlaku juga untuk catatan penundaan LAMA yang dibuat sebelum chip
+        // ada: teks bebasnya tetap terbaca dan tetap bisa dikoreksi, lewat
+        // cabang "Lainnya".
+        const savedReason = (activity.note ?? '').trim();
+        const matchedReason = POSTPONE_REASONS.find((reason) => reason === savedReason);
+
+        // SATU objek, dipakai untuk mengisi form DAN jadi acuannya. Kalau
+        // keduanya dirakit terpisah dan menyimpang satu ruas, layar akan
+        // mengira dirinya berubah sejak dibuka dan menahan pekerja dengan
+        // dialog buang-perubahan untuk perubahan yang tidak pernah terjadi.
+        //
+        // `postponedUntil` mengikuti nilai awal, bukan tanggal penundaan yang
+        // tersimpan: update_task_realization TIDAK menerima tanggal sama sekali
+        // — kolom tanggalnya memang tidak dirender di mode perbaiki — jadi
+        // acuan apa pun selain nilai awal akan menandai layar "berubah" untuk
+        // ruas yang tidak bisa dikirim ke mana pun.
+        const loaded: RecordBaseline = {
+          note: activity.note ?? '',
+          postponedUntil: initialBaseline.postponedUntil,
+          produk: activity.produk ?? '',
+          produkJumlah: activity.produkJumlah === null ? '' : String(activity.produkJumlah),
+          produkSatuan: activity.produkSatuan,
+          reasonChoice: matchedReason ?? (savedReason ? POSTPONE_REASON_OTHER : ''),
+          reasonOther: matchedReason ? '' : savedReason,
+          status: activity.status,
+        };
+
+        setNote(loaded.note);
+        setProduk(loaded.produk);
+        setProdukJumlah(loaded.produkJumlah);
+        setProdukSatuan(loaded.produkSatuan);
+        setReasonChoice(loaded.reasonChoice);
+        setReasonOther(loaded.reasonOther);
+        setBaseline(loaded);
       } else {
         // Dulu form tetap terbuka dengan nilai kosong dan pekerja baru tahu ada
         // yang salah setelah menekan Simpan. Sekarang dikatakan di depan.
@@ -148,7 +265,7 @@ export default function WorkerTaskRecordScreen() {
         setExistingProof(proofResult.data[activityId] ?? null);
       }
     }
-  }, [activityId, mode, taskId]);
+  }, [activityId, initialBaseline.postponedUntil, mode, taskId]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -156,6 +273,42 @@ export default function WorkerTaskRecordScreen() {
       loadTask().finally(() => setLoading(false));
     }, [loadTask])
   );
+
+  // Foto diperiksa sebagai "ada/tidak", bukan lewat acuan: keduanya hanya bisa
+  // bergerak dari keadaan awalnya dan tidak pernah kembali ke sana lewat jalan
+  // lain. Lihat catatan pada RecordBaseline.
+  const hasUnsavedChanges =
+    note !== baseline.note ||
+    postponedUntil !== baseline.postponedUntil ||
+    produk !== baseline.produk ||
+    produkJumlah !== baseline.produkJumlah ||
+    produkSatuan !== baseline.produkSatuan ||
+    reasonChoice !== baseline.reasonChoice ||
+    reasonOther !== baseline.reasonOther ||
+    status !== baseline.status ||
+    newPhoto !== null ||
+    removeExistingPhoto;
+
+  // PENJAGA PERUBAHAN (batch 6b). Layar ini tidak punya tombol "Batal" untuk
+  // dicabut — bar aksinya memang sudah satu tombol — jadi yang dipasang hanya
+  // penjaganya, dan ia menutup jalur kehilangan data yang berdiri sendiri:
+  // sebelum ini, menekan chevron kembali sesudah memotret bukti kerja membuang
+  // foto itu tanpa satu pun peringatan, dan memotretnya ulang menuntut kembali
+  // ke pohonnya.
+  const { handleBackPress } = useUnsavedChangesGuard({
+    // Saat penyimpanan berjalan, dialog tidak ditawarkan: tidak ada gunanya
+    // menanyakan "buang perubahan" untuk perubahan yang sedang dikirim ke
+    // server.
+    hasUnsavedChanges: hasUnsavedChanges && !submitting,
+    onBlocked: () => setConfirmDiscard(true),
+    onLeave: () => {
+      if (submitting) {
+        return;
+      }
+
+      router.back();
+    },
+  });
 
   async function handlePickFromGallery() {
     setProcessingPhoto(true);
@@ -296,10 +449,22 @@ export default function WorkerTaskRecordScreen() {
       return;
     }
 
-    if (!isCompleted && !note.trim()) {
-      setReasonError('Isi alasan penundaan.');
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
-      return;
+    // DUA pesan berbeda untuk dua kegagalan berbeda. "Isi alasan penundaan."
+    // yang lama benar saat alasannya satu kolom teks; sejak ia jadi chip,
+    // kalimat itu tidak memberi tahu apakah yang kurang adalah memilih chip
+    // atau mengetik di kolom yang baru saja terbuka.
+    if (!isCompleted) {
+      if (!reasonChoice) {
+        setReasonError('Pilih alasan penundaan.');
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        return;
+      }
+
+      if (reasonChoice === POSTPONE_REASON_OTHER && !reasonOther.trim()) {
+        setReasonError('Tulis alasannya.');
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        return;
+      }
     }
 
     // Cermin dari validasi RPC (migrasi 049). Diperiksa di sini juga supaya
@@ -374,12 +539,27 @@ export default function WorkerTaskRecordScreen() {
     router.back();
   }
 
+  // Teks alasan yang benar-benar TERSIMPAN, dirakit di satu tempat.
+  //
+  // Dua jalur menulis kolom yang sama (postponeTask dan updateTaskRealization),
+  // dan keduanya harus merakitnya dengan aturan yang sama persis — kalau salah
+  // satu mengirim `note` mentah, mengoreksi sebuah penundaan akan menyimpan isi
+  // field yang sedang tidak terlihat di layar.
+  function postponeReasonText(): string {
+    return reasonChoice === POSTPONE_REASON_OTHER ? reasonOther.trim() : reasonChoice;
+  }
+
+  function selectReason(next: string) {
+    setReasonChoice(next);
+    setReasonError(null);
+  }
+
   async function submitPostpone(currentTask: CareTaskDetail) {
     setSubmitting(true);
     setBannerError(null);
 
     const result = await postponeTask({
-      note,
+      note: postponeReasonText(),
       postponedUntil,
       taskId: currentTask.id,
     });
@@ -409,7 +589,11 @@ export default function WorkerTaskRecordScreen() {
     // lama pun ikut dibersihkan kalau entah bagaimana pernah terisi.
     const result = await updateTaskRealization({
       activityId,
-      note,
+      // Baris SELESAI menyimpan catatan bebas; baris DITUNDA menyimpan
+      // alasannya. Keduanya jatuh ke kolom note yang sama, jadi yang dikirim
+      // harus dipilih menurut status barisnya — bukan menurut field mana yang
+      // kebetulan terisi.
+      note: isCompleted ? note : postponeReasonText(),
       produk: isCompleted ? produk : null,
       produkJumlah: isCompleted ? parseDecimalInput(produkJumlah) : null,
       produkSatuan: isCompleted ? produkSatuan : null,
@@ -487,7 +671,7 @@ export default function WorkerTaskRecordScreen() {
 
   return (
     <Screen
-      header={<TopAppBar title={headerTitle} onBack={() => router.back()} />}
+      header={<TopAppBar title={headerTitle} onBack={handleBackPress} />}
       scrollRef={scrollRef}
       stickyFooter={<Button title={submitLabel} loading={submitting} disabled={submitting} onPress={handleSubmit} />}
     >
@@ -500,10 +684,29 @@ export default function WorkerTaskRecordScreen() {
       <View style={{ gap: spacing.sm }}>
         <SectionLabel text="Hasil pekerjaan" />
         {mode === 'edit' ? (
-          // TERKUNCI, bukan disembunyikan: pekerja tetap harus tahu entri ini
-          // Selesai atau Ditunda. Yang tidak boleh adalah mengubahnya —
-          // RPC update_task_realization tidak menerima status sama sekali.
-          <LockedResultRow status={effectiveStatus} />
+          <>
+            {/* TERKUNCI, bukan disembunyikan: pekerja tetap harus tahu entri ini
+                Selesai atau Ditunda. Yang tidak boleh adalah mengubahnya —
+                RPC update_task_realization tidak menerima status sama sekali. */}
+            <LockedResultRow status={effectiveStatus} />
+            {/* "TERSIMPAN SEBAGAI CATATAN BARU." (#33).
+
+                Ia BENAR di layar ini, dan hanya di layar ini. Koreksi hasil
+                kerja memang tersedia, dan update_task_realization memang
+                menuliskan baris baru alih-alih menimpa yang lama — riwayat di
+                layar detail tugas karena itu tumbuh satu baris tiap kali
+                dikoreksi, dan pekerja yang tidak diberi tahu akan mengira
+                koreksinya gagal lalu menekan Simpan lagi.
+
+                JANGAN membawanya ke detail catatan perawatan. Di sana tidak ada
+                jalur edit sama sekali (care_activities menambah, dan pemicu
+                rantai jadwal berulang hanya berbunyi saat penyimpanan baru),
+                jadi kalimat yang sama akan menjanjikan tombol yang tidak
+                pernah ada. */}
+            <Text selectable style={{ ...tokens.type.meta, color: tokens.color.text.secondary }}>
+              Tersimpan sebagai catatan baru.
+            </Text>
+          </>
         ) : (
           <>
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -573,22 +776,42 @@ export default function WorkerTaskRecordScreen() {
             />
           </View>
 
-          <View style={{ gap: spacing.sm }}>
-            <SectionLabel
-              optional={!task.requiresPhoto}
-              required={task.requiresPhoto}
-              text="Foto"
-            />
-            <ProofPhotoField
-              disabled={submitting || processingPhoto}
-              imageUri={photoUri}
-              processing={processingPhoto}
-              onCameraPress={handleTakeFromCamera}
-              onDeletePhoto={handleDeletePhoto}
-              onGalleryPress={handlePickFromGallery}
-            />
-            {photoError ? <FieldError message={photoError} /> : null}
-          </View>
+          {/* <PhotoPickerCard> BERSAMA, menggantikan ProofPhotoField lokal
+              (batch 6b).
+
+              Dua hal sekaligus dicabut bersamanya. Pertama, TOMBOL KAMERA
+              BUNDAR BERIKON-SAJA di pojok foto — sisa penugasan batch 5, yang
+              mencabut tombol yang sama dari PhotoPickerCard tapi tidak
+              menjangkau salinan lokal di berkas ini. Kedua, salinan lokalnya
+              sendiri: ia memetakan "satu slot foto" ke rupanya untuk kedua
+              kalinya, di aplikasi yang sudah punya pemetaan pertama.
+
+              Yang hilang hanya perbedaan yang memang tidak punya alasan: tinggi
+              gambar 200 lawan 180, dan pesan galat sebagai teks kecil lawan
+              spanduk. Yang tetap: sheet sumber foto yang sama, baris "Hapus
+              foto" di dalamnya, dan badge "Wajib" saat jadwalnya menuntut bukti.
+
+              `changeHint` WAJIB di sini: setelah tombol bundarnya pergi,
+              ketukan pada gambar adalah satu-satunya jalan ke ganti/hapus, dan
+              gestur yang jadi satu-satunya jalan ke sebuah fungsi harus
+              mengumumkan dirinya. */}
+          <PhotoPickerCard
+            changeHint="Ketuk foto untuk mengganti atau menghapusnya."
+            choosePhotoLabel="Pilih galeri"
+            description={processingPhoto ? PHOTO_PROCESSING_MESSAGE : undefined}
+            emptyLabel="Tambah foto"
+            error={photoError}
+            imageUri={photoUri}
+            loading={submitting || processingPhoto}
+            optional={!task.requiresPhoto}
+            removeLabel="Hapus foto"
+            required={task.requiresPhoto}
+            takePhotoLabel="Ambil foto"
+            title="Foto bukti kerja"
+            onChoosePhoto={handlePickFromGallery}
+            onRemovePhoto={hasUsableProof ? handleDeletePhoto : undefined}
+            onTakePhoto={handleTakeFromCamera}
+          />
         </>
       ) : (
         <>
@@ -609,19 +832,40 @@ export default function WorkerTaskRecordScreen() {
             />
           </View>
 
+          {/* ALASAN SEBAGAI CHIP, bukan kolom teks (adendum §1.6).
+
+              Tiga alasan yang sudah bernama bisa dipilih dengan satu ketukan.
+              Mengetik di ponsel sambil berdiri di kebun dengan tangan kotor
+              adalah pekerjaan yang jauh lebih besar daripada yang terlihat dari
+              meja — dan hasilnya sudah terbukti di kolom bebas lain di basis
+              data ini: empat ejaan untuk satu maksud, dari satu orang.
+
+              "LAINNYA" MEMBUKA SATU KOLOM TEKS, dan hanya itu yang menuntut
+              mengetik. Mewajibkan ketikan untuk ketiga alasan yang sudah
+              bernama berarti membuang seluruh gunanya chip. */}
           <View style={{ gap: spacing.sm }}>
             <SectionLabel text="Alasan tunda" />
-            <NoteInput
-              error={reasonError}
-              onChangeText={(value) => {
-                setNote(value);
-                if (value.trim()) {
-                  setReasonError(null);
-                }
-              }}
-              placeholder="Contoh: Stok air belum tersedia"
-              value={note}
+            <OptionGroup
+              error={reasonError ?? undefined}
+              options={[
+                ...POSTPONE_REASONS.map((reason) => ({ label: reason, value: reason })),
+                { label: 'Lainnya', value: POSTPONE_REASON_OTHER },
+              ]}
+              value={reasonChoice}
+              onChange={selectReason}
             />
+            {reasonChoice === POSTPONE_REASON_OTHER ? (
+              <NoteInput
+                onChangeText={(value) => {
+                  setReasonOther(value);
+                  if (value.trim()) {
+                    setReasonError(null);
+                  }
+                }}
+                placeholder="Contoh: Stok air belum tersedia"
+                value={reasonOther}
+              />
+            ) : null}
           </View>
         </>
       )}
@@ -635,6 +879,23 @@ export default function WorkerTaskRecordScreen() {
         }}
         selected={produkSatuan}
         visible={satuanSheetOpen}
+      />
+
+      {/* Bentuk dan literalnya sepadan dengan dialog yang sama di layar Edit
+          profil, Edit catatan, Edit pohon, dan Edit jadwal. Yang berbeda hanya
+          kata bendanya. */}
+      <ConfirmDialog
+        cancelLabel="Buang perubahan"
+        cancelTone="danger"
+        confirmLabel="Lanjut isi"
+        message="Catatan ini belum disimpan. Kalau keluar sekarang, isian dan fotonya hilang."
+        title="Perubahan belum disimpan"
+        visible={confirmDiscard}
+        onCancel={() => {
+          setConfirmDiscard(false);
+          router.back();
+        }}
+        onConfirm={() => setConfirmDiscard(false)}
       />
     </Screen>
   );
@@ -801,110 +1062,10 @@ function LockedResultRow({ status }: { status: ActivityStatus }) {
   );
 }
 
-// Slot foto tunggal, dua keadaan. Kosong memakai EmptyState varian 'dashed'
-// yang dibuat di Tahap B, dibungkus Pressable supaya seluruh kotaknya jadi
-// target sentuh — bukan cuma ikonnya. Ada foto = gambar penuh dengan tombol
-// kamera hijau di pojok. Sumber foto lewat PhotoSourceSheet bersama.
-// `processing` dipisahkan dari `disabled` dengan sengaja: `disabled` berarti
-// formulirnya sedang dikirim, `processing` berarti fotonya sedang diperkecil.
-// Bagi pengguna keduanya kejadian yang berbeda, dan hanya yang kedua yang perlu
-// menerangkan dirinya lewat teks. Pemanggilnya menyalakan `disabled` juga selama
-// memproses, sehingga bidang ini tidak bisa ditekan dua kali di tengah jalan.
-function ProofPhotoField({
-  disabled,
-  imageUri,
-  onCameraPress,
-  onDeletePhoto,
-  onGalleryPress,
-  processing,
-}: {
-  disabled: boolean;
-  imageUri: string | null;
-  onCameraPress: () => void;
-  onDeletePhoto: () => void;
-  onGalleryPress: () => void;
-  processing: boolean;
-}) {
-  const [sheetOpen, setSheetOpen] = React.useState(false);
-  const hasPhoto = Boolean(imageUri);
-
-  function openSheet() {
-    if (disabled) {
-      return;
-    }
-
-    setSheetOpen(true);
-  }
-
-  return (
-    <>
-      <PhotoSourceSheet
-        cameraLabel="Ambil foto"
-        deleteLabel="Hapus foto"
-        galleryLabel="Pilih galeri"
-        hasPhoto={hasPhoto}
-        subtitle="Pilih sumber foto."
-        title="Foto bukti kerja"
-        visible={sheetOpen}
-        onCameraPress={() => {
-          setSheetOpen(false);
-          onCameraPress();
-        }}
-        onClose={() => setSheetOpen(false)}
-        onDeletePhoto={() => {
-          setSheetOpen(false);
-          onDeletePhoto();
-        }}
-        onGalleryPress={() => {
-          setSheetOpen(false);
-          onGalleryPress();
-        }}
-      />
-
-      {hasPhoto ? (
-        <View style={{ borderCurve: 'continuous', borderRadius: tokens.radius.tile, overflow: 'hidden' }}>
-          <Image resizeMode="cover" source={{ uri: imageUri ?? undefined }} style={{ height: 200, width: '100%' }} />
-          <Pressable
-            accessibilityLabel="Edit foto"
-            accessibilityRole="button"
-            disabled={disabled}
-            onPress={openSheet}
-            style={{
-              alignItems: 'center',
-              backgroundColor: palette.accent,
-              borderRadius: tokens.radius.pill,
-              bottom: spacing.md,
-              height: 38,
-              justifyContent: 'center',
-              position: 'absolute',
-              right: spacing.md,
-              width: 38,
-            }}
-          >
-            <Icon name="camera" size={tokens.icon.md} color={tokens.color.brand.on} />
-          </Pressable>
-        </View>
-      ) : (
-        <Pressable accessibilityLabel="Tambah foto" accessibilityRole="button" disabled={disabled} onPress={openSheet}>
-          <EmptyState
-            icon="camera"
-            subtitle={processing ? PHOTO_PROCESSING_MESSAGE : 'Pencet untuk ambil atau pilih foto.'}
-            title={processing ? 'Menyiapkan foto' : 'Tambah foto'}
-            variant="dashed"
-          />
-        </Pressable>
-      )}
-
-      {/* Cabang berfoto tidak memakai EmptyState, jadi keterangannya ditaruh di
-          bawah gambar — satu pesan per cabang, tidak pernah keduanya. */}
-      {processing && hasPhoto ? (
-        <Text selectable style={{ color: tokens.color.text.secondary, ...tokens.type.bodySmall }}>
-          {PHOTO_PROCESSING_MESSAGE}
-        </Text>
-      ) : null}
-    </>
-  );
-}
+// ProofPhotoField DICABUT (batch 6b). Ia salinan lokal dari <PhotoPickerCard>,
+// dan satu-satunya perbedaannya yang punya arti adalah tombol kamera bundar
+// berikon-saja di pojok foto — justru yang dilarang aturan desain proyek ini,
+// dan yang sudah dicabut dari PhotoPickerCard sendiri di batch 5.
 
 function SectionLabel({
   optional = false,

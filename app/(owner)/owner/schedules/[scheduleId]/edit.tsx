@@ -7,10 +7,13 @@ import {
   clearResolvedScheduleFormErrors,
   hasScheduleFormErrors,
   scheduleFormFieldOrder,
+  scheduleFormValuesEqual,
   validateScheduleForm,
   type ManualScheduleFormValues,
   type ScheduleFormErrors,
 } from '../../../../../src/components/care-schedule-components';
+import { ConfirmDialog } from '../../../../../src/components/bottom-sheet';
+import { useUnsavedChangesGuard } from '../../../../../src/hooks/useUnsavedChangesGuard';
 import { Button, Card, EmptyState, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../../src/components/ui';
 import { colors, tokens } from '../../../../../src/constants/theme';
 import { useAuth } from '../../../../../src/context/auth-context';
@@ -28,7 +31,12 @@ import type { CareCategory, CareScheduleDetail, Tree, WorkerMembership } from '.
 export default function EditCareScheduleScreen() {
   const { currentFarm } = useAuth();
   const { scheduleId } = useLocalSearchParams<{ scheduleId: string }>();
+  // Isi form SAAT DIMUAT, acuan penjaga "perubahan belum disimpan". null =
+  // belum pernah terisi (masih memuat, atau pemuatannya gagal), dan di keadaan
+  // itu tidak ada perubahan yang mungkin ada.
+  const [baseline, setBaseline] = React.useState<ManualScheduleFormValues | null>(null);
   const [blockedReason, setBlockedReason] = React.useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<ScheduleFormErrors>({});
   const [loading, setLoading] = React.useState(true);
@@ -85,8 +93,15 @@ export default function EditCareScheduleScreen() {
         return;
       }
 
+      const loadedValues = buildInitialValues(scheduleResult.data);
+
       setSchedule(scheduleResult.data);
-      setValues(buildInitialValues(scheduleResult.data));
+      setValues(loadedValues);
+      // Acuan disetel dari objek YANG SAMA, bukan dari pemanggilan kedua
+      // buildInitialValues: dua perakitan yang menyimpang satu ruas akan membuat
+      // layar mengira dirinya berubah sejak dibuka dan menahan pemiliknya dengan
+      // dialog buang-perubahan untuk perubahan yang tidak pernah terjadi.
+      setBaseline(loadedValues);
 
       if (eligibilityResult.error) {
         setBlockedReason(eligibilityResult.error.message);
@@ -122,6 +137,32 @@ export default function EditCareScheduleScreen() {
     setValues(next);
     setErrors((prev) => clearResolvedScheduleFormErrors(prev, next));
   }
+
+  // PENJAGA PERUBAHAN (batch 6b). Layar ini tidak punya tombol "Batal" untuk
+  // dicabut, jadi ini bukan lanjutan pencabutan di batch 6a — ia menutup jalur
+  // kehilangan data yang berdiri sendiri: sebelum ini, menekan chevron kembali
+  // di tengah pengisian membuang seluruh isian tanpa satu pun peringatan.
+  //
+  // Jadwal yang TERKUNCI (blockedReason terisi) tidak pernah merender form, jadi
+  // values-nya tidak bisa bergeser dan penjaga ini diam dengan sendirinya —
+  // tidak perlu syarat tambahan untuknya.
+  const hasUnsavedChanges =
+    baseline !== null && values !== null && !scheduleFormValuesEqual(values, baseline);
+
+  const { handleBackPress } = useUnsavedChangesGuard({
+    // Saat penyimpanan berjalan, dialog tidak ditawarkan: tidak ada gunanya
+    // menanyakan "buang perubahan" untuk perubahan yang sedang dikirim ke
+    // server.
+    hasUnsavedChanges: hasUnsavedChanges && !submitting,
+    onBlocked: () => setConfirmDiscard(true),
+    onLeave: () => {
+      if (submitting) {
+        return;
+      }
+
+      router.back();
+    },
+  });
 
   function scrollToFirstError(nextErrors: ScheduleFormErrors) {
     const firstKey = scheduleFormFieldOrder.find((key) => nextErrors[key]);
@@ -272,7 +313,7 @@ export default function EditCareScheduleScreen() {
 
   return (
     <Screen
-      header={<TopAppBar title="Edit jadwal" onBack={() => router.back()} />}
+      header={<TopAppBar title="Edit jadwal" onBack={handleBackPress} />}
       scrollRef={scrollRef}
       stickyFooter={
         <View style={{ gap: tokens.space.sm }}>
@@ -325,6 +366,21 @@ export default function EditCareScheduleScreen() {
         />
       </View>
 
+      {/* Bentuk dan literalnya sepadan dengan dialog yang sama di layar Edit
+          profil, Edit catatan, dan Edit pohon. */}
+      <ConfirmDialog
+        cancelLabel="Buang perubahan"
+        cancelTone="danger"
+        confirmLabel="Lanjut isi"
+        message="Perubahan pada jadwal ini belum disimpan. Kalau keluar sekarang, perubahan itu hilang."
+        title="Perubahan belum disimpan"
+        visible={confirmDiscard}
+        onCancel={() => {
+          setConfirmDiscard(false);
+          router.back();
+        }}
+        onConfirm={() => setConfirmDiscard(false)}
+      />
     </Screen>
   );
 }

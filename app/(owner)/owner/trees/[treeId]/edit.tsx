@@ -27,6 +27,8 @@ import {
   Screen,
   TopAppBar,
 } from '../../../../../src/components/ui';
+import { ConfirmDialog } from '../../../../../src/components/bottom-sheet';
+import { useUnsavedChangesGuard } from '../../../../../src/hooks/useUnsavedChangesGuard';
 import { pickImageFromGallery, takePhotoFromCamera } from '../../../../../src/lib/media';
 import { setPendingFeedback } from '../../../../../src/lib/pendingFeedback';
 import {
@@ -48,6 +50,11 @@ const initialValues: TreeFormValues = {
 export default function OwnerEditTreeScreen() {
   const { treeId } = useLocalSearchParams<{ treeId: string }>();
   const showSnackbar = useSnackbar();
+  // Isi form SAAT DIMUAT, acuan penjaga "perubahan belum disimpan". null =
+  // belum pernah terisi (masih memuat, atau pemuatannya gagal), dan di keadaan
+  // itu tidak ada perubahan yang mungkin ada.
+  const [baseline, setBaseline] = React.useState<TreeFormValues | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
   const [currentPhoto, setCurrentPhoto] = React.useState<TreeMainPhoto | null>(null);
   const [deletePhotoRequested, setDeletePhotoRequested] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -107,7 +114,7 @@ export default function OwnerEditTreeScreen() {
       // mengatakannya sebelum orang mengetik apa pun.
       setHasActivePlanting(Boolean(result.data.activePlanting));
 
-      setValues({
+      const loadedValues: TreeFormValues = {
         // rowPosition kini number (smallint di database, migrasi 054) sementara
         // field form selalu string — String() menjembataninya. `?? ''` saja
         // tidak cukup: ia menghasilkan number, bukan string.
@@ -118,7 +125,15 @@ export default function OwnerEditTreeScreen() {
         // activePlanting, dan update_tree_with_planting akan menolaknya.
         variety: result.data.activePlanting?.variety ?? '',
         plantedAt: parseDbDate(result.data.activePlanting?.plantedAt ?? null),
-      });
+      };
+
+      setValues(loadedValues);
+      // Acuan disetel dari objek YANG SAMA, bukan dirakit ulang dari
+      // result.data untuk kedua kalinya: dua perakitan yang menyimpang satu
+      // ruas akan membuat layar mengira dirinya berubah sejak dibuka dan
+      // menahan pemiliknya dengan dialog buang-perubahan untuk perubahan yang
+      // tidak pernah terjadi.
+      setBaseline(loadedValues);
       setFarmId(result.data.farmId);
 
       // Foto siklus lampau tidak boleh muncul sebagai foto yang sedang diedit:
@@ -148,6 +163,47 @@ export default function OwnerEditTreeScreen() {
       isMounted = false;
     };
   }, [treeId]);
+
+  // Foto ikut dihitung: memilih foto baru atau meminta yang lama dihapus adalah
+  // perubahan yang sama tidak bisa dipulihkannya dengan mengetik ulang posisi.
+  // Keduanya cukup diperiksa sebagai "ada/tidak" — begitu salah satunya
+  // menyala, form ini memang sudah berbeda dari keadaan saat dibuka.
+  //
+  // plantedAt dibandingkan lewat getTime(): ia objek Date, dan dua Date dengan
+  // tanggal yang sama adalah dua objek berbeda yang tidak pernah `===`.
+  const hasUnsavedChanges =
+    baseline !== null &&
+    (values.rowPosition !== baseline.rowPosition ||
+      values.columnPosition !== baseline.columnPosition ||
+      values.variety !== baseline.variety ||
+      (values.plantedAt?.getTime() ?? null) !== (baseline.plantedAt?.getTime() ?? null) ||
+      selectedPhoto !== null ||
+      deletePhotoRequested);
+
+  // PENJAGA PERUBAHAN (batch 6b). Layar ini tidak punya tombol "Batal" untuk
+  // dicabut, jadi ini bukan lanjutan pencabutan di batch 6a — ia menutup jalur
+  // kehilangan data yang berdiri sendiri: sebelum ini, menekan chevron kembali
+  // di tengah pengisian membuang seluruh isian tanpa satu pun peringatan.
+  //
+  // Catatan di runEndPlanting di bawah menyebut bahwa TIDAK ada penjaga di
+  // layar ini; kalimat itu berbicara tentang jalur "pohon sudah tidak ada", dan
+  // ia TETAP BERLAKU — penjaga ini hanya mencegat tombol kembali, bukan
+  // penutupan siklus, yang memang sengaja membuang isian karena isian itu sudah
+  // tidak bisa disimpan ke mana pun.
+  const { handleBackPress } = useUnsavedChangesGuard({
+    // Saat penyimpanan atau penutupan siklus berjalan, dialog tidak ditawarkan:
+    // tidak ada gunanya menanyakan "buang perubahan" untuk perubahan yang
+    // sedang dikirim ke server.
+    hasUnsavedChanges: hasUnsavedChanges && !submitting && !cycleLoading,
+    onBlocked: () => setConfirmDiscard(true),
+    onLeave: () => {
+      if (submitting || cycleLoading) {
+        return;
+      }
+
+      router.back();
+    },
+  });
 
   async function handleSubmit() {
     const normalizedTreeId = treeId?.trim();
@@ -378,10 +434,10 @@ export default function OwnerEditTreeScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen options={{ gestureEnabled: false, headerShown: false }} />
       <Screen
         footer={<Button title="Simpan perubahan" loading={submitting} onPress={handleSubmit} />}
-        header={<TopAppBar title="Edit pohon" onBack={() => router.back()} />}
+        header={<TopAppBar title="Edit pohon" onBack={handleBackPress} />}
       >
         <ErrorBanner message={error} />
         <TreeForm errors={errors} mode="edit" values={values} onChange={handleValuesChange} />
@@ -443,6 +499,27 @@ export default function OwnerEditTreeScreen() {
           onClose={() => setEndSheetOpen(false)}
           onSubmit={runEndPlanting}
           visible={endSheetOpen}
+        />
+
+        {/* Bentuk dan literalnya sepadan dengan dialog yang sama di layar Edit
+            profil dan Edit catatan. Tiga layar yang menanyakan hal yang sama
+            tidak boleh menanyakannya dengan tiga kalimat yang berbeda.
+
+            "Buang perubahan" adalah tombol BATAL dialog, bukan tombol utamanya:
+            yang keluar dari sini kehilangan pekerjaannya, jadi tombol yang
+            paling mudah ditekan harus yang mengembalikannya ke form. */}
+        <ConfirmDialog
+          cancelLabel="Buang perubahan"
+          cancelTone="danger"
+          confirmLabel="Lanjut isi"
+          message="Perubahan pada data pohon belum disimpan. Kalau keluar sekarang, perubahan itu hilang."
+          title="Perubahan belum disimpan"
+          visible={confirmDiscard}
+          onCancel={() => {
+            setConfirmDiscard(false);
+            router.back();
+          }}
+          onConfirm={() => setConfirmDiscard(false)}
         />
       </Screen>
     </>

@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 
 import { ConfirmDialog } from '../../../../src/components/bottom-sheet';
 import {
+  CARE_STATE_MARK,
   FormChipGroup,
   TargetTreeCodeList,
   formatCareTarget,
@@ -615,8 +616,8 @@ function AssignWorkerNotice({
 // getActivityTone() dan WorkResultCard dihapus: bentuk baris hasil kerja kini
 // milik WorkResultList, dipakai bersama layar pekerja.
 
-// SATU tabel keadaan jadwal, menggantikan formatScheduleStatus + getScheduleTone
-// + scheduleDueDatePill yang dulu berdampingan di layar ini.
+// Keadaan jadwal, menggantikan formatScheduleStatus + getScheduleTone +
+// scheduleDueDatePill yang dulu berdampingan di layar ini.
 //
 // Ketiganya bersama-sama menghasilkan DUA chip di kepala layar — satu berbunyi
 // "Belum dikerjakan", satu lagi "Terlambat 3 hari" — yang menyatakan keadaan
@@ -624,27 +625,10 @@ function AssignWorkerNotice({
 // mengulang tanggal yang sudah tertulis di baris fakta di bawahnya. Sekarang
 // satu badge, satu kata, satu bentuk.
 //
-// PENANDA BENTUK di tiap keadaan, bukan hanya warna — aturan yang sama yang
-// melahirkan StatusMarker di batch 1a: nada warna dilarang jadi satu-satunya
-// pembeda. Pemetaannya:
-//
-//   Dibatalkan           circle-outline  danger   rencananya ada, isinya kosong
-//   Hangus               cross           danger   lewat toleransi, tidak bisa ditunda lagi
-//   Telat N hari         triangle-up     danger   tunggakan, masih bisa dikerjakan
-//   Jatuh tempo hari ini square          warning
-//   Ditunda              triangle-down   warning  didorong ke belakang
-//   Selesai              circle-filled   success
-//   Belum dikerjakan     (tanpa penanda) muted    keadaan dasar: belum ada apa-apa, dan tidak ada yang salah
-//
-// Baris terakhir sengaja POLOS. Aturan pada prop `marker` di <Badge> menyimpan
-// penanda bentuk untuk chip yang membawa STATUS; "Belum dikerjakan" adalah
-// ketiadaan status, dan memberinya bentuk membuat kosakata bentuk berarti "ini
-// sebuah chip", yang tidak berguna.
-//
-// "Hangus" dan "Telat" SENGAJA memakai kata dan bentuk yang berbeda, dan itu
-// yang diminta adendum §4.6. Kata "Terlambat" tidak dipakai untuk satu pun dari
-// keduanya di layar ini — baris daftar di /owner/schedules memakai pasangan kata
-// dan bentuk yang sama persis.
+// BENTUK DAN NADANYA datang dari CARE_STATE_MARK, tabel bersama dengan layar
+// Detail Tugas pekerja (batch 6b). Yang tinggal di sini hanya PENYIMPULAN
+// kuncinya dari bentuk data jadwal, dan kata yang dicetak — keduanya memang
+// milik layar ini. Lihat catatan lengkap pada tabel itu.
 type ScheduleStatusMark = {
   label: string;
   marker?: StatusMarkerShape;
@@ -653,11 +637,11 @@ type ScheduleStatusMark = {
 
 function scheduleStatusMark(schedule: CareScheduleDetail, todayIso: string): ScheduleStatusMark {
   if (schedule.isCancelled) {
-    return { label: 'Dibatalkan', marker: 'circle-outline', tone: 'danger' };
+    return { label: 'Dibatalkan', ...CARE_STATE_MARK.cancelled };
   }
 
   if (schedule.tasks.length > 0 && schedule.tasks.every((task) => task.status === 'completed')) {
-    return { label: 'Selesai', marker: 'circle-filled', tone: 'success' };
+    return { label: 'Selesai', ...CARE_STATE_MARK.done };
   }
 
   // Ember waktu yang SAMA yang dipakai daftar jadwal untuk menempatkan baris ini
@@ -667,27 +651,27 @@ function scheduleStatusMark(schedule: CareScheduleDetail, todayIso: string): Sch
   const bucket = scheduleTimeBucket(schedule, schedule.tasks, todayIso);
 
   if (bucket === 'missed') {
-    return { label: 'Hangus', marker: 'cross', tone: 'danger' };
+    return { label: 'Hangus', ...CARE_STATE_MARK.missed };
   }
 
   if (bucket === 'overdue') {
     const days = Math.max(1, dayDifference(scheduleOverdueSinceIso(schedule), todayIso));
 
-    return { label: `Telat ${days} hari`, marker: 'triangle-up', tone: 'danger' };
+    return { label: `Telat ${days} hari`, ...CARE_STATE_MARK.overdue };
   }
 
   if (bucket === 'today') {
-    return { label: 'Jatuh tempo hari ini', marker: 'square', tone: 'warning' };
+    return { label: 'Jatuh tempo hari ini', ...CARE_STATE_MARK.dueToday };
   }
 
   // Diperiksa SESUDAH ember waktu: tugas yang ditunda ke tanggal yang sudah
   // lewat tetap tunggakan lebih dulu, dan "Ditunda" pada baris yang telat tiga
   // hari menutupi kabar yang lebih mendesak.
   if (schedule.tasks.some((task) => task.status === 'postponed')) {
-    return { label: 'Ditunda', marker: 'triangle-down', tone: 'warning' };
+    return { label: 'Ditunda', ...CARE_STATE_MARK.postponed };
   }
 
-  return { label: 'Belum dikerjakan', tone: 'muted' };
+  return { label: 'Belum dikerjakan', ...CARE_STATE_MARK.pending };
 }
 
 // Tanggal acuan penghitungan keterlambatan, sama persis dengan yang dipakai
