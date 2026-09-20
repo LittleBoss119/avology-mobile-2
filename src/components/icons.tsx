@@ -43,6 +43,7 @@ export type IconName =
   | 'search'
   | 'adjustments-horizontal'
   | 'plus'
+  | 'minus'
   | 'calendar-plus'
   | 'flower'
   | 'flower-off'
@@ -175,6 +176,10 @@ const ICON_PATHS: Record<IconName, string[]> = {
     'M12 5l0 14',
     'M5 12l14 0',
   ],
+  // Pasangan `plus`, dipakai tombol stepper interval pengulangan di form jadwal.
+  // Path-nya persis batang mendatar milik `plus`, jadi kedua tombol stepper
+  // punya berat goresan yang sama saat berdampingan.
+  minus: ['M5 12l14 0'],
   'calendar-plus': [
     'M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v4',
     'M16 3v4',

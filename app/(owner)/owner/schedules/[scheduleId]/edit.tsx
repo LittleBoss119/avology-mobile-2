@@ -11,14 +11,12 @@ import {
   type ManualScheduleFormValues,
   type ScheduleFormErrors,
 } from '../../../../../src/components/care-schedule-components';
-import { ConfirmDialog } from '../../../../../src/components/bottom-sheet';
 import { Button, Card, EmptyState, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../../src/components/ui';
 import { colors, tokens } from '../../../../../src/constants/theme';
 import { useAuth } from '../../../../../src/context/auth-context';
 import { setPendingFeedback } from '../../../../../src/lib/pendingFeedback';
 import {
   buildScheduleTitle,
-  cancelCareSchedule,
   getCareScheduleDetail,
   getScheduleEditEligibility,
   updateCareSchedule,
@@ -31,8 +29,6 @@ export default function EditCareScheduleScreen() {
   const { currentFarm } = useAuth();
   const { scheduleId } = useLocalSearchParams<{ scheduleId: string }>();
   const [blockedReason, setBlockedReason] = React.useState<string | null>(null);
-  const [cancelConfirmOpen, setCancelConfirmOpen] = React.useState(false);
-  const [cancelLoading, setCancelLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<ScheduleFormErrors>({});
   const [loading, setLoading] = React.useState(true);
@@ -212,43 +208,22 @@ export default function EditCareScheduleScreen() {
     router.back();
   }
 
-  // "Batalkan jadwal" tinggal DI SINI, bukan di layar detail.
+  // "BATALKAN JADWAL" DICABUT DARI LAYAR INI (adendum §1.8), dan ia tidak
+  // pindah ke tempat baru — ia KEMBALI ke layar detail jadwal.
   //
-  // Mengikuti pola yang sudah terkunci di aplikasi ini: aksi destruktif "tandai
-  // pohon hilang" juga ada di dalam layar edit pohon, bukan di detailnya. Sebuah
-  // layar detail dibuka untuk MELIHAT; menaruh aksi yang tidak bisa ditarik
-  // kembali di sana berarti ia bisa tersenggol oleh orang yang sekadar
-  // memeriksa.
+  // Spek internal bertentangan sendiri: #28 menaruhnya di Detail, #29 di Edit.
+  // Adendum memutuskan Detail, atas dasar keluhan yang tercatat bahwa aksi itu
+  // terkubur di dalam layar edit — pemilik yang ingin membatalkan sebuah jadwal
+  // harus lebih dulu masuk ke layar yang tujuannya MENGUBAH, lalu menggulir
+  // melewati seluruh formulir untuk menemukannya.
   //
-  // Pemindahan ini juga menutup satu masalah dengan sendirinya. Syarat kunci
-  // Edit dan Batalkan identik — keduanya isLocked di layar detail, dan di sisi
-  // service keduanya lewat getScheduleEditEligibility. Karena Batalkan kini
-  // hanya bisa dicapai dari DALAM layar edit, dan layar edit sendiri sudah
-  // menolak masuk lewat blockedReason, tidak ada penjaga tambahan yang perlu
-  // ditulis: jadwal yang tidak bisa diedit tidak punya jalan sampai ke tombol
-  // ini.
-  async function runCancelSchedule() {
-    if (!schedule) {
-      return;
-    }
-
-    setCancelLoading(true);
-    setError(null);
-
-    const result = await cancelCareSchedule({ scheduleId: schedule.id });
-
-    if (result.error) {
-      setError(result.error.message);
-      setCancelLoading(false);
-      setCancelConfirmOpen(false);
-      return;
-    }
-
-    setCancelLoading(false);
-    setCancelConfirmOpen(false);
-    setPendingFeedback('schedule_updated');
-    router.back();
-  }
+  // Yang hilang bersama pemindahan ini: penjaga yang dulu datang gratis. Dulu
+  // layar edit menolak masuk lewat blockedReason, sehingga jadwal yang tidak
+  // bisa diedit otomatis tidak punya jalan sampai ke tombol Batalkan. Di layar
+  // detail syarat itu ditulis EKSPLISIT — barisnya dirender hanya kalau
+  // `!isLocked`, ukuran yang sama persis dengan yang mematikan tombol Edit di
+  // sana. Ketiganya (layar detail, cancel_care_schedule, dan
+  // getScheduleEditEligibilityFromDetail) harus bergerak bersama.
 
   if (loading) {
     return <LoadingState message="Menyiapkan form edit jadwal..." />;
@@ -350,71 +325,8 @@ export default function EditCareScheduleScreen() {
         />
       </View>
 
-      {/* Aksi merusak duduk DI BAWAH form, di badan layar — BUKAN di
-          stickyFooter bersama "Simpan perubahan".
-          Bentuknya disalin apa adanya dari layar edit pohon, tempat "Pohon sudah
-          tidak ada" berdiri di posisi yang sama dengan alasan yang sama: footer
-          adalah tempat aksi utama, dan dua tombol yang artinya berlawanan
-          berdampingan di sana membuat keduanya sama-sama terbaca sebagai
-          "selesai". Di badan layar, ia harus digulung untuk ditemukan —
-          sepadan dengan seberapa jarang ia dipakai.
-
-          Nada 'danger' di sini merah LEMBUT, bukan tombol merah pekat. */}
-      <Button
-        disabled={submitting}
-        title="Batalkan jadwal"
-        variant="danger"
-        onPress={() => setCancelConfirmOpen(true)}
-      />
-
-      {/* ConfirmDialog bersama, bukan Alert.alert: dialog bawaan sistem tidak
-          bisa memakai token warna proyek ini dan judul/tombolnya tidak bisa
-          dijamin berbahasa Indonesia di semua perangkat. */}
-      <ConfirmDialog
-        confirmLabel="Batalkan jadwal"
-        loading={cancelLoading}
-        message={buildCancelConfirmMessage(schedule, workers)}
-        title="Batalkan jadwal?"
-        tone="danger"
-        visible={cancelConfirmOpen}
-        onCancel={() => setCancelConfirmOpen(false)}
-        onConfirm={runCancelSchedule}
-      />
     </Screen>
   );
-}
-
-// Kalimatnya dirakit, bukan satu template. Dipindahkan dari layar detail jadwal
-// bersama tombolnya, dengan satu perbedaan: nama pekerja dibaca dari daftar
-// pekerja aktif yang memang sudah dimuat layar ini, bukan dari peta profil
-// terpisah. Jadwal berulang wajib disebut supaya owner tahu membatalkan ikut
-// menghentikan rantainya.
-function buildCancelConfirmMessage(
-  schedule: CareScheduleDetail,
-  workers: WorkerMembership[]
-): string {
-  const nameByUserId = new Map(workers.map((worker) => [worker.userId, worker.fullName]));
-  const workerNamesList = Array.from(
-    new Set(
-      schedule.tasks
-        .map((task) => nameByUserId.get(task.assignedTo))
-        .filter((name): name is string => Boolean(name))
-    )
-  );
-
-  const lead =
-    schedule.tasks.length === 0
-      ? 'Jadwal ini belum punya tugas, jadi tidak ada pekerjaan aktif yang dibatalkan.'
-      : workerNamesList.length > 0
-        ? `Tugas dari jadwal ini tidak lagi muncul sebagai pekerjaan aktif untuk ${workerNamesList.join(', ')}.`
-        : 'Tugas dari jadwal ini tidak lagi muncul sebagai pekerjaan aktif.';
-
-  const repeatNote =
-    schedule.repeatEveryDays !== null
-      ? ' Pengulangannya ikut berhenti, jadi tidak ada jadwal lanjutan yang dibuat.'
-      : '';
-
-  return `${lead}${repeatNote} Tindakan ini tidak bisa dibatalkan.`;
 }
 
 function buildInitialValues(schedule: CareScheduleDetail): ManualScheduleFormValues {

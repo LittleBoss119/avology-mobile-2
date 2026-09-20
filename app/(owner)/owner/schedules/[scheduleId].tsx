@@ -13,19 +13,26 @@ import { WorkResultList } from '../../../../src/components/work-result-list';
 import {
   Badge,
   Button,
-  CameraGlyph,
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MenuRow,
+  MenuRowGroup,
+  MetaRow,
   Screen,
+  SectionLabel,
   SuccessBanner,
   TopAppBar,
 } from '../../../../src/components/ui';
-import { colors, radius, spacing, statusColors, tokens, typography } from '../../../../src/constants/theme';
+import type { BadgeTone } from '../../../../src/components/ui';
+import type { StatusMarkerShape } from '../../../../src/components/status-marker';
+import { colors, radius, spacing, statusColors } from '../../../../src/constants/theme';
+import { colors as palette, text as typeScale } from '../../../../src/theme/tokens';
 import { useAuth } from '../../../../src/context/auth-context';
 import { consumePendingFeedback } from '../../../../src/lib/pendingFeedback';
 import {
   assignWorkerToSchedule,
+  cancelCareSchedule,
   getCareScheduleDetail,
   stopScheduleRepeat,
 } from '../../../../src/services/careScheduleService';
@@ -40,7 +47,12 @@ import type {
 } from '../../../../src/types/domain';
 import type { TaskProofPhotoMap } from '../../../../src/types/media';
 import { formatCareCategory } from '../../../../src/utils/displayFormat';
-import { getTodayIsoDate, scheduleDueDatePill, type DueDatePill } from '../../../../src/utils/taskDueDate';
+import {
+  dayDifference,
+  formatFullDate,
+  getTodayIsoDate,
+  scheduleTimeBucket,
+} from '../../../../src/utils/taskDueDate';
 
 export default function CareScheduleDetailScreen() {
   const { currentFarm } = useAuth();
@@ -49,6 +61,8 @@ export default function CareScheduleDetailScreen() {
   const [activeWorkers, setActiveWorkers] = React.useState<WorkerMembership[]>([]);
   const [assignLoading, setAssignLoading] = React.useState(false);
   const [assignWorkerId, setAssignWorkerId] = React.useState('');
+  const [cancelConfirmOpen, setCancelConfirmOpen] = React.useState(false);
+  const [cancelLoading, setCancelLoading] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [proofPhotoMap, setProofPhotoMap] = React.useState<TaskProofPhotoMap>({});
   const [schedule, setSchedule] = React.useState<CareScheduleDetail | null>(null);
@@ -174,12 +188,10 @@ export default function CareScheduleDetailScreen() {
   }
 
   const activeSchedule = schedule;
+  const todayIso = getTodayIsoDate();
   const hasWorkResult = scheduleHasWorkResult(activeSchedule, taskDetailMap);
   const isLocked = activeSchedule.isCancelled === true || hasWorkResult;
-
-  const pill: DueDatePill = activeSchedule.isCancelled
-    ? { tone: 'neutral', label: 'Jadwal dibatalkan' }
-    : scheduleDueDatePill(activeSchedule, activeSchedule.tasks, getTodayIsoDate());
+  const statusMark = scheduleStatusMark(activeSchedule, todayIso);
 
   // Sejak migration 041 jadwal boleh punya NOL tugas: penerus rantai dibuat
   // tanpa tugas kalau pekerjanya sudah keluar dari kebun saat itu.
@@ -189,21 +201,49 @@ export default function CareScheduleDetailScreen() {
   const canStopRepeat = isRecurring && activeSchedule.isCancelled !== true;
   const showEditButton = !isLocked;
 
-  // "Batalkan jadwal" TIDAK LAGI DI LAYAR INI — ia pindah ke layar Edit Jadwal,
-  // mengikuti pola yang sudah terkunci di aplikasi ini: aksi destruktif "tandai
-  // pohon hilang" juga tinggal di dalam layar edit pohon, bukan di detailnya.
+  // "BATALKAN JADWAL" KEMBALI KE LAYAR INI, dan dicabut dari layar Edit
+  // (adendum §1.8). Spek internal bertentangan — #28 menaruhnya di Detail, #29
+  // di Edit — dan adendum memutuskan Detail, atas dasar keluhan yang tercatat
+  // bahwa aksi itu terkubur di dalam layar edit: pemilik yang ingin
+  // membatalkan harus lebih dulu masuk ke layar yang tujuannya MENGUBAH.
   //
-  // Pemindahan itu sekaligus menutup satu hal dengan sendirinya: syarat kunci
-  // Edit dan Batalkan identik (keduanya isLocked), jadi begitu layar edit tidak
-  // bisa dimasuki, Batalkan otomatis tidak terjangkau. Tidak ada penjaga
-  // tambahan yang perlu ditulis di sini.
+  // Syaratnya sama persis dengan yang dulu berlaku lewat pintu layar edit:
+  // isLocked. Jadwal yang sudah punya hasil kerja tidak boleh dibatalkan, dan
+  // barisnya karena itu tidak dirender sama sekali — bukan dirender lalu
+  // dimatikan. Ini cerminan penjaga di cancel_care_schedule dan di
+  // getScheduleEditEligibilityFromDetail; ketiganya harus bergerak bersama.
+  const canCancelSchedule = !isLocked;
 
   // Tanpa jeda setTimeout lagi: dulu perlu menunggu sheet "Kelola jadwal"
   // menutup dulu supaya tidak ada dua overlay bertumpuk. Sheet-nya sudah tidak
-  // ada, tombolnya langsung di stickyFooter, jadi dialognya boleh muncul
+  // ada, barisnya langsung di badan layar, jadi dialognya boleh muncul
   // seketika.
   function handleRequestStopRepeat() {
     setStopRepeatConfirmOpen(true);
+  }
+
+  // Dipindahkan apa adanya dari layar Edit Jadwal bersama tombolnya. Satu
+  // perbedaan: sesudah berhasil, layar ini MEMUAT ULANG dirinya alih-alih
+  // router.back(). Jadwal yang dibatalkan masih sah dibuka — ia tetap tercatat,
+  // datanya tidak hilang — dan memuat ulang membuat badge "Dibatalkan" serta
+  // alasan pembatalannya langsung terlihat di tempat yang sama.
+  async function runCancelSchedule() {
+    setCancelLoading(true);
+    setError(null);
+
+    const result = await cancelCareSchedule({ scheduleId: activeSchedule.id });
+
+    if (result.error) {
+      setError(result.error.message);
+      setCancelLoading(false);
+      setCancelConfirmOpen(false);
+      return;
+    }
+
+    await loadDetail();
+    setCancelLoading(false);
+    setCancelConfirmOpen(false);
+    setSuccess('Jadwal dibatalkan. Catatannya tetap tersimpan.');
   }
 
   async function runStopRepeat() {
@@ -259,48 +299,32 @@ export default function CareScheduleDetailScreen() {
         // sekarang tombol lebar berlabel di bawah layar.
         <TopAppBar title="Detail jadwal" onBack={() => router.back()} />
       }
+      // SATU tombol di bar aksi: "Edit jadwal". Kedua aksi merusak turun ke
+      // badan layar sebagai baris — lihat blok <MenuRowGroup> di bawah.
+      //
       // Hanya aksi yang BERLAKU yang dirender; tidak ada satu pun tombol dalam
       // keadaan mati. Tombol mati yang tidak menanggapi ketukan lebih
-      // membingungkan daripada tombol yang tidak ada, dan chip status di atas
+      // membingungkan daripada tombol yang tidak ada, dan badge status di atas
       // sudah menjelaskan kenapa.
-      //
-      //   sekali   + belum ada hasil kerja -> Edit jadwal
-      //   berulang + belum ada hasil kerja -> Edit jadwal, Hentikan pengulangan
-      //   berulang + sudah ada hasil kerja -> Hentikan pengulangan
-      //   sekali   + sudah ada hasil kerja -> tidak ada
-      //   dibatalkan                       -> tidak ada
-      //
-      // Kedua syaratnya sudah ada dan SENGAJA TIDAK SAMA: isLocked mengunci
-      // Edit, tapi canStopRepeat tidak ikut terkunci hasil kerja. Jadwal
-      // berulang yang tugas pertamanya sudah selesai justru saat paling wajar
-      // owner ingin menyetop rantainya — kalau ikut terkunci, rantainya jalan
-      // selamanya.
       stickyFooter={
-        showEditButton || canStopRepeat ? (
-          <View style={{ gap: tokens.space.sm }}>
-            {showEditButton ? (
-              <Button
-                title="Edit jadwal"
-                variant="primary"
-                onPress={() => router.push(`/owner/schedules/${activeSchedule.id}/edit`)}
-              />
-            ) : null}
-            {canStopRepeat ? (
-              <Button
-                loading={stopRepeatLoading}
-                title="Hentikan pengulangan"
-                variant="secondary"
-                onPress={handleRequestStopRepeat}
-              />
-            ) : null}
-          </View>
+        showEditButton ? (
+          <Button
+            title="Edit jadwal"
+            variant="primary"
+            onPress={() => router.push(`/owner/schedules/${activeSchedule.id}/edit`)}
+          />
         ) : undefined
       }
     >
+      {/* SATU KALIMAT, dan kalimat itu yang diminta adendum §4.4 apa adanya.
+          Versi lama menjelaskan mekanisme rantai ("tidak ada jadwal baru yang
+          dibuat setelah tugasnya selesai") — benar, tapi menjawab pertanyaan
+          yang tidak ditanyakan. Yang ditakutkan pemilik saat menekan tombol ini
+          adalah kehilangan apa yang SUDAH ada, dan itulah yang dijawab. */}
       <ConfirmDialog
         confirmLabel="Hentikan pengulangan"
         loading={stopRepeatLoading}
-        message="Jadwal ini tetap dikerjakan seperti biasa — hanya kelanjutannya yang berhenti, jadi tidak ada jadwal baru yang dibuat setelah tugasnya selesai."
+        message="Tugas yang sudah ada tetap tersimpan."
         title="Hentikan pengulangan?"
         tone="default"
         visible={stopRepeatConfirmOpen}
@@ -308,39 +332,76 @@ export default function CareScheduleDetailScreen() {
         onConfirm={runStopRepeat}
       />
 
+      {/* ConfirmDialog bersama, bukan Alert.alert: dialog bawaan sistem tidak
+          bisa memakai token warna proyek ini dan judul/tombolnya tidak bisa
+          dijamin berbahasa Indonesia di semua perangkat. */}
+      <ConfirmDialog
+        confirmLabel="Batalkan jadwal"
+        loading={cancelLoading}
+        message={buildCancelConfirmMessage(activeSchedule, workerNames)}
+        title="Batalkan jadwal?"
+        tone="danger"
+        visible={cancelConfirmOpen}
+        onCancel={() => setCancelConfirmOpen(false)}
+        onConfirm={runCancelSchedule}
+      />
+
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
 
+      {/* SUSUNAN KEPALA, sejajar dengan detail catatan pohon (batch 5):
+            1. badge status   2. nilai utama serif   3. baris fakta
+
+          Judulnya JENIS PERAWATAN, bukan `schedule.title`. Judul di data
+          dirakit program dari jenis dan target ("Pemupukan — 3 pohon"), dan
+          jadwal lama masih memegang judul yang diketik manusia ("Test",
+          "awas"). Keduanya bukan nama yang layak jadi baris terbesar di layar;
+          yang selalu berarti sama bagi siapa pun adalah jenis pekerjaannya.
+          Targetnya tidak hilang — ia turun jadi baris fakta di bawah. */}
       <View style={{ gap: spacing.sm }}>
-        <View style={{ alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
-          <Text
-            selectable
-            style={{
-              color: colors.primary,
-              flex: 1,
-              fontSize: typography.h2.fontSize,
-              fontWeight: '600',
-              lineHeight: typography.h2.lineHeight,
-            }}
-          >
-            {activeSchedule.title}
+        <Badge
+          label={statusMark.label}
+          marker={statusMark.marker}
+          maxWidth={220}
+          tone={statusMark.tone}
+        />
+        <Text
+          accessibilityRole="header"
+          selectable
+          style={{ ...typeScale.stat36, color: palette.textPrimary }}
+        >
+          {formatCareCategory(activeSchedule.category)}
+        </Text>
+        {activeSchedule.isCancelled && activeSchedule.cancelReason ? (
+          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
+            {`Alasan: ${activeSchedule.cancelReason}`}
           </Text>
-          <View style={{ alignItems: 'center', flexDirection: 'row', flexShrink: 0, gap: spacing.sm }}>
-            <Badge label={formatScheduleStatus(activeSchedule)} tone={getScheduleTone(activeSchedule)} />
-            {activeSchedule.requiresPhoto ? <ProofPhotoIndicator /> : null}
-          </View>
-        </View>
-        <Text selectable style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
-          {`${formatCareCategory(activeSchedule.category)} · ${formatCareTarget(activeSchedule)}`}
-        </Text>
-        {/* Tanggal dan pekerja jadi SATU baris meta redup, menggantikan grid dua
-            kolom "Tanggal | Pekerja" yang dulu ada di bawah. Sebelumnya tanggal
-            muncul dua kali di satu layar: sekali di chip tempo, sekali lagi di
-            grid. Chip tempo tetap ada — ia menyatakan TUNGGAKAN ("Terlambat 3
-            hari"), bukan tanggal. */}
-        <Text selectable style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
-          {`${formatDate(activeSchedule.scheduledDate)} · ${formatScheduleWorkers(activeSchedule, workerNames)}`}
-        </Text>
+        ) : null}
+      </View>
+
+      {/* LIMA BARIS FAKTA, urutannya dikunci spek: jatuh tempo, pengulangan,
+          pekerja, target, bukti foto.
+
+          Menggantikan dua baris meta bertitik-tengah, satu chip tempo, satu
+          chip pengulangan, dan satu lingkaran kamera tanpa label. Kelimanya
+          dulu tersebar di tiga ketinggian berbeda dan dua di antaranya —
+          lingkaran kamera dan chip pengulangan — hanya bisa dibaca oleh orang
+          yang sudah tahu artinya. Sebagai baris berlabel, semuanya menyebut
+          namanya sendiri.
+
+          Tanggal dipakai lewat formatFullDate dari taskDueDate, bukan
+          toLocaleDateString lokal yang dulu ada di dasar berkas ini: yang
+          terakhir mengurai 'YYYY-MM-DD' sebagai UTC dan bergeser sehari di zona
+          negatif, padahal seluruh klasifikasi waktu aplikasi ini dipatok WIB. */}
+      <View style={{ gap: spacing.md }}>
+        <MetaRow label="Jatuh tempo" value={formatFullDate(activeSchedule.scheduledDate)} />
+        <MetaRow
+          label="Pengulangan"
+          value={isRecurring ? `Tiap ${activeSchedule.repeatEveryDays} hari` : 'Sekali'}
+        />
+        <MetaRow label="Pekerja" value={formatScheduleWorkers(activeSchedule, workerNames)} />
+        <MetaRow label="Target" value={formatCareTarget(activeSchedule)} />
+        <MetaRow label="Bukti foto" value={activeSchedule.requiresPhoto ? 'Wajib' : 'Tidak wajib'} />
       </View>
 
       {activeSchedule.targetType === 'tree' ? (
@@ -360,46 +421,44 @@ export default function CareScheduleDetailScreen() {
         />
       ) : null}
 
-      {/* Chip tempo dan chip pengulangan SEBARIS. Kartu penjelasan rantai yang
-          dulu berdiri sendiri di atas — latar hijau tipis, dua kalimat tentang
-          bagaimana tanggal berikutnya dihitung — dipangkas jadi chip ini saja.
-          Kedua kalimatnya menjelaskan mekanisme internal dan tidak mengubah satu
-          pun keputusan yang bisa diambil owner dari layar ini. */}
-      <View style={{ gap: spacing.xs }}>
-        <View style={{ alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          <DueDatePillView pill={pill} />
-          {isRecurring ? <RepeatChip repeatEveryDays={activeSchedule.repeatEveryDays} /> : null}
-        </View>
-        {activeSchedule.isCancelled && activeSchedule.cancelReason ? (
-          <Text selectable style={{ color: colors.textMuted, fontSize: 13, lineHeight: 18 }}>
-            {`Alasan: ${activeSchedule.cancelReason}`}
-          </Text>
-        ) : null}
-      </View>
-
       {/* Section "Instruksi" tidak dirender sama sekali kalau kosong. Teks
           "Belum ada instruksi tambahan." adalah judul section yang menjelaskan
           bahwa section itu tidak punya isi — dua baris untuk menyampaikan
           ketiadaan. */}
       {activeSchedule.instruction ? (
         <View style={{ gap: spacing.xs }}>
-          <Text selectable style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>
-            Instruksi
-          </Text>
-          <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
+          <SectionLabel title="Instruksi" />
+          <Text selectable style={{ color: colors.text, fontSize: 16, lineHeight: 24 }}>
             {activeSchedule.instruction}
           </Text>
         </View>
       ) : null}
 
-      {/* Tanpa tugas tidak ada hasil kerja yang mungkin ada — dulu heading ini
-          tetap dirender lalu [].map() menyisakan judul yatim tanpa isi. */}
-      {hasTasks ? (
-        <View style={{ gap: spacing.md }}>
-          <Text selectable style={{ color: colors.text, fontSize: typography.h3.fontSize, fontWeight: '700', lineHeight: typography.h3.lineHeight }}>
-            Hasil kerja
+      {/* SEKSI "HASIL KERJA" SELALU DIRENDER, termasuk saat jadwalnya belum
+          punya tugas sama sekali.
+
+          Sebelum ini seksinya HILANG di keadaan itu, dan hilangnya diam-diam:
+          pemilik yang membuka jadwal penerus rantai — yang lahir tanpa tugas
+          karena pekerjanya sudah keluar — tidak melihat apa pun tentang hasil
+          kerja dan tidak punya cara tahu apakah itu berarti "belum ada" atau
+          "seksinya memang tidak berlaku di sini".
+
+          Kalimat kosongnya menyebut SEBAB, bukan ketiadaan data. Sebuah jadwal
+          membawa TUGAS, bukan riwayat penyelesaian; kalau belum ada yang
+          mencatat, yang benar adalah mengatakan begitu — bukan "belum ada data",
+          yang terbaca seperti kegagalan memuat.
+
+          Namanya disebut kalau memang ada di data yang sudah diambil layar ini
+          (peta workerNames dari getFarmMemberBasicProfiles). Kalau tidak,
+          kalimatnya berjalan tanpa nama — tidak ada nama karangan. */}
+      <View style={{ gap: spacing.md }}>
+        <SectionLabel title="Hasil kerja" />
+        {!hasTasks ? (
+          <Text selectable style={emptyResultStyle}>
+            Jadwal ini belum ditugaskan ke siapa pun, jadi belum ada yang bisa mencatat hasil kerja.
           </Text>
-          {activeSchedule.tasks.map((task) => {
+        ) : (
+          activeSchedule.tasks.map((task) => {
             const activities = taskDetailMap[task.id]?.activities ?? [];
             const workerName = workerNames[task.assignedTo];
 
@@ -417,8 +476,10 @@ export default function CareScheduleDetailScreen() {
                     sama. WorkResultList sendiri tidak diubah: ia masih dipakai
                     layar detail tugas owner yang di luar lingkup batch ini. */}
                 {activities.length === 0 ? (
-                  <Text selectable style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
-                    {`${workerName ?? 'Pekerja'} belum mencatat.`}
+                  <Text selectable style={emptyResultStyle}>
+                    {workerName
+                      ? `${workerName} belum mencatat hasil kerja untuk jadwal ini.`
+                      : 'Pekerjanya belum mencatat hasil kerja untuk jadwal ini.'}
                   </Text>
                 ) : (
                   // Bentuk yang sama dengan layar detail tugas — pekerja maupun
@@ -435,12 +496,57 @@ export default function CareScheduleDetailScreen() {
                 )}
               </View>
             );
-          })}
-        </View>
+          })
+        )}
+      </View>
+
+      {/* DUA AKSI MERUSAK, sebagai BARIS di badan layar — bukan tombol di bar
+          aksi. Bentuk yang sama persis dengan "Pohon sudah tidak ada" di layar
+          edit pohon (batch 4b), dan dengan alasan yang sama: bar aksi adalah
+          tempat aksi utama layar ini, dan tombol yang artinya berlawanan
+          berdampingan di sana membuat keduanya sama-sama terbaca sebagai
+          "selesai". Di badan layar, keduanya harus digulung untuk ditemukan —
+          sepadan dengan seberapa jarang dipakai.
+
+          navigates={false}: keduanya membuka dialog di tempat, bukan berpindah
+          layar. <MenuRow> memang sudah menjatuhkan chevron untuk baris danger
+          secara bawaan; ditulis eksplisit supaya alasannya terbaca.
+
+          SYARATNYA SENGAJA TIDAK SAMA. "Batalkan jadwal" terkunci oleh hasil
+          kerja (isLocked); "Hentikan pengulangan" TIDAK. Jadwal berulang yang
+          tugas pertamanya sudah selesai justru saat paling wajar pemilik ingin
+          menyetop rantainya — kalau ikut terkunci, rantainya jalan selamanya. */}
+      {canCancelSchedule || canStopRepeat ? (
+        <MenuRowGroup>
+          {canCancelSchedule ? (
+            <MenuRow
+              danger
+              icon="x"
+              label="Batalkan jadwal"
+              meta="Tugasnya berhenti. Catatannya tetap tersimpan."
+              navigates={false}
+              onPress={() => setCancelConfirmOpen(true)}
+            />
+          ) : null}
+          {canStopRepeat ? (
+            <MenuRow
+              danger
+              icon="repeat"
+              label="Hentikan pengulangan"
+              meta="Jadwal ini tetap dikerjakan. Tidak ada lanjutannya."
+              navigates={false}
+              onPress={handleRequestStopRepeat}
+            />
+          ) : null}
+        </MenuRowGroup>
       ) : null}
     </Screen>
   );
 }
+
+// Gaya kalimat "belum ada apa-apa" di seksi Hasil kerja. SATU nilai untuk
+// ketiga kalimatnya supaya tidak ada yang bisa menyimpang sendiri.
+const emptyResultStyle = { color: colors.textMuted, fontSize: 14, lineHeight: 20 };
 
 // Blok penugasan untuk jadwal yang belum punya tugas. Pill pekerja memakai
 // FormChipGroup yang sama dengan form Buat/Edit jadwal, bukan salinan gayanya.
@@ -505,147 +611,146 @@ function AssignWorkerNotice({
   );
 }
 
-// Penanda rantai, dipangkas jadi chip sebaris dengan chip tempo.
-//
-// Menggantikan RecurringScheduleNotice: kartu bertint setinggi tiga baris yang
-// berisi "Berulang tiap N hari", keterangan pangkal-atau-lanjutan, dan dua
-// kalimat tentang bagaimana tanggal berikutnya dihitung. Yang tersisa hanyalah
-// fakta yang mengubah keputusan owner — bahwa jadwal ini berulang, dan
-// jaraknya. Sisanya mekanisme internal.
-//
-// Bentuknya sengaja sepadan dengan pil "Tiap N hari" di baris daftar jadwal
-// (batch 1), supaya penanda yang sama terbaca sama di dua tempat.
-function RepeatChip({ repeatEveryDays }: { repeatEveryDays: number | null }) {
-  if (repeatEveryDays === null) {
-    return null;
-  }
-
-  return (
-    <View
-      style={{
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        backgroundColor: tokens.color.brand.soft,
-        borderColor: tokens.color.brand.border,
-        borderCurve: 'continuous',
-        borderRadius: 10,
-        borderWidth: 1,
-        flexDirection: 'row',
-        gap: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-      }}
-    >
-      <Icon name="repeat" size={14} color={tokens.color.brand.base} />
-      <Text selectable style={{ color: tokens.color.brand.base, fontSize: 13, fontWeight: '700' }}>
-        {`Tiap ${repeatEveryDays} hari`}
-      </Text>
-    </View>
-  );
-}
-
-function DueDatePillView({ pill }: { pill: DueDatePill }) {
-  const palette =
-    pill.tone === 'warning'
-      ? statusColors.warning
-      : pill.tone === 'success'
-        ? statusColors.success
-        : statusColors.neutral;
-
-  return (
-    <View
-      style={{
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        backgroundColor: palette.background,
-        borderColor: palette.border,
-        borderCurve: 'continuous',
-        borderRadius: 10,
-        borderWidth: 1,
-        flexDirection: 'row',
-        gap: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-      }}
-    >
-      <Icon name="calendar" size={14} color={palette.text} />
-      <Text selectable style={{ color: palette.text, fontSize: 13, fontWeight: '700' }}>
-        {pill.label}
-      </Text>
-    </View>
-  );
-}
-
-function ProofPhotoIndicator() {
-  return (
-    <View
-      accessibilityLabel="Perlu bukti foto"
-      style={{
-        alignItems: 'center',
-        backgroundColor: colors.warningBg,
-        borderColor: colors.warningBorder,
-        borderCurve: 'continuous',
-        borderRadius: 999,
-        borderWidth: 1,
-        height: 26,
-        justifyContent: 'center',
-        width: 26,
-      }}
-    >
-      <CameraGlyph color={colors.warning} />
-    </View>
-  );
-}
 
 // getActivityTone() dan WorkResultCard dihapus: bentuk baris hasil kerja kini
 // milik WorkResultList, dipakai bersama layar pekerja.
 
-function formatScheduleStatus(schedule: CareScheduleDetail): string {
+// SATU tabel keadaan jadwal, menggantikan formatScheduleStatus + getScheduleTone
+// + scheduleDueDatePill yang dulu berdampingan di layar ini.
+//
+// Ketiganya bersama-sama menghasilkan DUA chip di kepala layar — satu berbunyi
+// "Belum dikerjakan", satu lagi "Terlambat 3 hari" — yang menyatakan keadaan
+// yang sama dengan dua kosakata yang berbeda, dan salah satunya (chip tempo)
+// mengulang tanggal yang sudah tertulis di baris fakta di bawahnya. Sekarang
+// satu badge, satu kata, satu bentuk.
+//
+// PENANDA BENTUK di tiap keadaan, bukan hanya warna — aturan yang sama yang
+// melahirkan StatusMarker di batch 1a: nada warna dilarang jadi satu-satunya
+// pembeda. Pemetaannya:
+//
+//   Dibatalkan           circle-outline  danger   rencananya ada, isinya kosong
+//   Hangus               cross           danger   lewat toleransi, tidak bisa ditunda lagi
+//   Telat N hari         triangle-up     danger   tunggakan, masih bisa dikerjakan
+//   Jatuh tempo hari ini square          warning
+//   Ditunda              triangle-down   warning  didorong ke belakang
+//   Selesai              circle-filled   success
+//   Belum dikerjakan     (tanpa penanda) muted    keadaan dasar: belum ada apa-apa, dan tidak ada yang salah
+//
+// Baris terakhir sengaja POLOS. Aturan pada prop `marker` di <Badge> menyimpan
+// penanda bentuk untuk chip yang membawa STATUS; "Belum dikerjakan" adalah
+// ketiadaan status, dan memberinya bentuk membuat kosakata bentuk berarti "ini
+// sebuah chip", yang tidak berguna.
+//
+// "Hangus" dan "Telat" SENGAJA memakai kata dan bentuk yang berbeda, dan itu
+// yang diminta adendum §4.6. Kata "Terlambat" tidak dipakai untuk satu pun dari
+// keduanya di layar ini — baris daftar di /owner/schedules memakai pasangan kata
+// dan bentuk yang sama persis.
+type ScheduleStatusMark = {
+  label: string;
+  marker?: StatusMarkerShape;
+  tone: BadgeTone;
+};
+
+function scheduleStatusMark(schedule: CareScheduleDetail, todayIso: string): ScheduleStatusMark {
   if (schedule.isCancelled) {
-    return 'Jadwal dibatalkan';
+    return { label: 'Dibatalkan', marker: 'circle-outline', tone: 'danger' };
   }
 
-  if (schedule.tasks.length === 0) {
-    return 'Belum ada tugas';
+  if (schedule.tasks.length > 0 && schedule.tasks.every((task) => task.status === 'completed')) {
+    return { label: 'Selesai', marker: 'circle-filled', tone: 'success' };
   }
 
-  if (schedule.tasks.every((task) => task.status === 'completed')) {
-    return 'Selesai';
+  // Ember waktu yang SAMA yang dipakai daftar jadwal untuk menempatkan baris ini
+  // di section Telat/Hari ini/Mendatang. Dipakai ulang, bukan dihitung ulang:
+  // badge yang berbunyi "Jatuh tempo hari ini" pada jadwal yang barusan duduk di
+  // bawah label "Telat" adalah dua jawaban untuk satu pertanyaan.
+  const bucket = scheduleTimeBucket(schedule, schedule.tasks, todayIso);
+
+  if (bucket === 'missed') {
+    return { label: 'Hangus', marker: 'cross', tone: 'danger' };
   }
 
+  if (bucket === 'overdue') {
+    const days = Math.max(1, dayDifference(scheduleOverdueSinceIso(schedule), todayIso));
+
+    return { label: `Telat ${days} hari`, marker: 'triangle-up', tone: 'danger' };
+  }
+
+  if (bucket === 'today') {
+    return { label: 'Jatuh tempo hari ini', marker: 'square', tone: 'warning' };
+  }
+
+  // Diperiksa SESUDAH ember waktu: tugas yang ditunda ke tanggal yang sudah
+  // lewat tetap tunggakan lebih dulu, dan "Ditunda" pada baris yang telat tiga
+  // hari menutupi kabar yang lebih mendesak.
   if (schedule.tasks.some((task) => task.status === 'postponed')) {
-    return 'Ditunda';
+    return { label: 'Ditunda', marker: 'triangle-down', tone: 'warning' };
   }
 
-  // "Belum dikerjakan", bukan "Belum". Satu kata itu tidak berdiri sendiri —
-  // belum apa? Bagi pembaca yang tidak sedang menebak-nebak konteks chip, kata
-  // kerjanya harus ikut.
-  return 'Belum dikerjakan';
+  return { label: 'Belum dikerjakan', tone: 'muted' };
 }
 
-function getScheduleTone(schedule: CareScheduleDetail): 'danger' | 'muted' | 'success' | 'warning' {
-  if (schedule.isCancelled) {
-    return 'danger';
+// Tanggal acuan penghitungan keterlambatan, sama persis dengan yang dipakai
+// daftar jadwal. Tugas boleh punya due_date sendiri, jadi dipakai tenggat
+// TERAWAL yang belum selesai; kalau jadwal belum punya tugas sama sekali,
+// acuannya tanggal jadwal itu sendiri.
+function scheduleOverdueSinceIso(schedule: CareScheduleDetail): string {
+  const openDueDates = schedule.tasks
+    .filter((task) => task.status !== 'completed')
+    .map((task) => task.dueDate);
+
+  if (openDueDates.length === 0) {
+    return schedule.scheduledDate;
   }
 
-  if (schedule.tasks.length === 0) {
-    return 'muted';
-  }
-
-  if (schedule.tasks.every((task) => task.status === 'completed')) {
-    return 'success';
-  }
-
-  if (schedule.tasks.some((task) => task.status === 'postponed')) {
-    return 'warning';
-  }
-
-  return 'muted';
+  return openDueDates.reduce((earliest, dueDate) => (dueDate < earliest ? dueDate : earliest));
 }
 
-// Menentukan `isLocked`, yang mematikan "Edit jadwal" DAN "Batalkan jadwal" di
-// sheet Kelola jadwal — jadi inilah aturan yang benar-benar terlihat di
-// perangkat, bukan penjaga di sisi database.
+// Kalimat konfirmasi pembatalan, dirakit — bukan satu template. Dipindahkan dari
+// layar Edit Jadwal bersama tombolnya (adendum §1.8), dengan satu perbedaan:
+// nama pekerja dibaca dari peta profil yang memang sudah dipegang layar ini,
+// bukan dari daftar pekerja aktif. Jadwal berulang wajib disebut supaya pemilik
+// tahu membatalkan ikut menghentikan rantainya.
+//
+// TANPA KATA "HAPUS", dan itu mengikat (adendum §1.8). Yang terjadi adalah
+// PEMBATALAN: barisnya tetap ada di database, tugasnya tetap tercatat, dan
+// jadwalnya masih bisa dibuka sesudahnya. Kata "hapus" akan salah menamai apa
+// yang terjadi, persis seperti "Pohon sudah tidak ada" di batch 4b.
+function buildCancelConfirmMessage(
+  schedule: CareScheduleDetail,
+  workerNames: Record<string, string>
+): string {
+  const names = Array.from(
+    new Set(
+      schedule.tasks
+        .map((task) => workerNames[task.assignedTo])
+        .filter((name): name is string => Boolean(name))
+    )
+  );
+
+  const lead =
+    schedule.tasks.length === 0
+      ? 'Jadwal ini belum punya tugas, jadi tidak ada pekerjaan aktif yang dibatalkan.'
+      : names.length > 0
+        ? `Tugas dari jadwal ini tidak lagi muncul sebagai pekerjaan aktif untuk ${names.join(', ')}.`
+        : 'Tugas dari jadwal ini tidak lagi muncul sebagai pekerjaan aktif.';
+
+  const repeatNote =
+    schedule.repeatEveryDays !== null
+      ? ' Pengulangannya ikut berhenti, jadi tidak ada jadwal lanjutan yang dibuat.'
+      : '';
+
+  return `${lead}${repeatNote} Catatannya tetap tersimpan, tapi pembatalan ini tidak bisa ditarik kembali.`;
+}
+
+// Menentukan `isLocked`, yang mematikan "Edit jadwal" DAN baris "Batalkan
+// jadwal" — jadi inilah aturan yang benar-benar terlihat di perangkat, bukan
+// penjaga di sisi database.
+//
+// Sejak migrasi 052: hanya aktivitas ber-status 'completed' yang mengunci.
+// Baris 'postponed' dulu ikut mengunci, sehingga tugas yang ditunda pekerja
+// membuat owner kehabisan aksi sama sekali — tidak bisa mengedit, tidak bisa
+// membatalkan, padahal pekerjaannya justru belum terjadi.
 //
 // Sejak migrasi 052: hanya aktivitas ber-status 'completed' yang mengunci.
 // Baris 'postponed' dulu ikut mengunci, sehingga tugas yang ditunda pekerja
@@ -674,32 +779,3 @@ function formatScheduleWorkers(
   return names.length > 0 ? names.join(', ') : 'Belum ada pekerja';
 }
 
-function formatDate(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString('id-ID', {
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}

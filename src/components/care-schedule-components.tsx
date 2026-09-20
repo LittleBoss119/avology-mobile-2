@@ -17,9 +17,9 @@ import {
 } from '../utils/displayFormat';
 import { compareTreePosition } from '../services/scheduleTreeService';
 import { formatTreeDisplayCode } from '../utils/treeFormat';
-import { colors, radius, spacing } from '../constants/theme';
-import { colors as palette } from '../theme/tokens';
-import { Badge, Card, CompactMetaItem } from './ui';
+import { colors, radius, spacing, tokens } from '../constants/theme';
+import { colors as palette, touch } from '../theme/tokens';
+import { Badge, Card, ChoiceRowGroup, CompactMetaItem } from './ui';
 import { Icon } from './icons';
 import { careCategoryOptions } from '../constants/careCategory';
 
@@ -48,6 +48,12 @@ export type ManualScheduleFormValues = {
 // salah ketik di UI.
 export const REPEAT_EVERY_DAYS_MIN = 1;
 export const REPEAT_EVERY_DAYS_MAX = 365;
+
+// Nilai yang ditawarkan placeholder kolom interval, dan nilai yang dipasang
+// stepper saat kolomnya masih kosong. SATU konstanta untuk keduanya: kalau
+// placeholder berbunyi "7" sementara tombol + menghasilkan angka lain, tombol
+// itu membantah apa yang baru saja ditawarkan kolomnya sendiri.
+const REPEAT_EVERY_DAYS_SUGGESTED = 7;
 
 export const careScheduleTargetOptions: TargetType[] = [
   'farm',
@@ -205,16 +211,29 @@ export function ManualScheduleForm({
           yang hanya berarti bagi orang yang mengetiknya, pada hari ia
           mengetiknya. Judul tetap diisi, tapi dirakit program dari kategori dan
           target saat simpan. Lihat buildScheduleTitle di careScheduleService. */}
-      <View onLayout={reportLayout('category')}>
-        <FormChipGroup
+      {/* BARIS PENUH, bukan chip (batch 6a). <ChoiceRowGroup> yang sama dengan
+          pilihan kondisi dan fase di layar catat — bukan salinan gayanya.
+
+          Alasannya sama dengan yang tertulis pada ChoiceRow itu sendiri: lima
+          pilihan yang panjang katanya tidak seragam ("Penyiraman" lawan
+          "Pengendalian Gulma") terbungkus jadi dua-tiga baris chip tak
+          beraturan, dan mata harus memindai bentuk yang berbeda-beda untuk
+          menemukan satu kata. Berjajar sebagai lima baris selebar layar,
+          semuanya mulai di garis yang sama.
+
+          Label dirender TERPISAH lewat <FormLabel>, bukan lewat prop `label`
+          milik ChoiceRowGroup: hanya FormLabel yang tahu cara mencetak bintang
+          wajib merah, dan lima field lain di form ini memakainya. */}
+      <View onLayout={reportLayout('category')} style={{ gap: spacing.sm }}>
+        {/* "Jenis perawatan", bukan "Kategori". Kata terakhir itu istilah basis
+            data; yang ditanyakan ke pemilik adalah jenis pekerjaannya. Nama
+            variabel, tipe, dan kolomnya tetap `category`. */}
+        <FormLabel error={Boolean(errors?.category)} text="Jenis perawatan *" />
+        <ChoiceRowGroup
           error={errors?.category}
-          // "Jenis perawatan", bukan "Kategori". Kata terakhir itu istilah
-          // basis data; yang ditanyakan ke pemilik adalah jenis pekerjaannya.
-          // Nama variabel, tipe, dan kolomnya tetap `category`.
-          label="Jenis perawatan *"
           options={careCategoryOptions.map((category) => ({ label: formatCareCategory(category), value: category }))}
-          selectedValue={values.category}
-          onSelect={(value) => updateValue('category', value)}
+          value={values.category}
+          onChange={(value) => updateValue('category', value)}
         />
       </View>
 
@@ -512,6 +531,27 @@ function RepeatScheduleField({
   onChange: (values: ManualScheduleFormValues) => void;
   values: ManualScheduleFormValues;
 }) {
+  // null berarti kolomnya KOSONG atau berisi sesuatu yang bukan angka bulat —
+  // dua keadaan yang sama-sama tidak punya angka untuk ditambah atau dikurangi.
+  // Sengaja tidak dipaksa jadi 0: 0 adalah angka, dan memperlakukan kolom kosong
+  // sebagai nol akan membuat tombol − mati di kolom yang belum diisi siapa pun.
+  const raw = values.repeatEveryDays.trim();
+  const currentDays = /^\d+$/.test(raw) ? Number(raw) : null;
+
+  // Langkah PERTAMA dari kolom kosong tidak menambah apa pun — ia MENETAPKAN
+  // angka yang sudah ditawarkan placeholder. Menambah dari nol akan menghasilkan
+  // "1 hari" untuk ketukan yang oleh pemiliknya dibaca sebagai "mulai dari yang
+  // disarankan"; menambah dari 7 diam-diam akan menghasilkan 8, angka yang tidak
+  // pernah ia lihat ditawarkan.
+  function stepDays(delta: number) {
+    const next =
+      currentDays === null
+        ? REPEAT_EVERY_DAYS_SUGGESTED
+        : Math.min(REPEAT_EVERY_DAYS_MAX, Math.max(REPEAT_EVERY_DAYS_MIN, currentDays + delta));
+
+    onChange({ ...values, repeatEveryDays: `${next}` });
+  }
+
   return (
     <View style={{ gap: spacing.md }}>
       <FormChipGroup
@@ -534,21 +574,39 @@ function RepeatScheduleField({
 
       {values.repeatEnabled ? (
         <View style={{ gap: spacing.sm }}>
-          <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md }}>
+          <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm }}>
             <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
               Tiap
             </Text>
+            <RepeatStepperButton
+              accessibilityLabel="Kurangi satu hari"
+              disabled={currentDays !== null && currentDays <= REPEAT_EVERY_DAYS_MIN}
+              icon="minus"
+              onPress={() => stepDays(-1)}
+            />
+            {/* KOLOM ANGKA DIPERTAHANKAN di antara kedua tombol, dan itu bukan
+                sisa dari bentuk lama. Interval disimpan sebagai JUMLAH HARI —
+                kolomnya integer, bukan enum mingguan/bulanan — jadi kontrolnya
+                harus sanggup menghasilkan angka apa pun sampai 365. Stepper
+                sendiri melangkah satu-satu; mencapai 90 lewat tombol berarti 90
+                ketukan. Yang mengetik angkanya tetap kolom ini. */}
             <TextInput
               keyboardType="number-pad"
               maxLength={3}
               onChangeText={(value) => onChange({ ...values, repeatEveryDays: value })}
-              placeholder="7"
+              placeholder={`${REPEAT_EVERY_DAYS_SUGGESTED}`}
               placeholderTextColor={colors.textSoft}
               style={[
                 formInputStyle(Boolean(error)),
-                { paddingHorizontal: spacing.md, textAlign: 'center' as const, width: 86 },
+                { paddingHorizontal: spacing.sm, textAlign: 'center' as const, width: 72 },
               ]}
               value={values.repeatEveryDays}
+            />
+            <RepeatStepperButton
+              accessibilityLabel="Tambah satu hari"
+              disabled={currentDays !== null && currentDays >= REPEAT_EVERY_DAYS_MAX}
+              icon="plus"
+              onPress={() => stepDays(1)}
             />
             <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
               hari
@@ -562,6 +620,49 @@ function RepeatScheduleField({
         </View>
       ) : null}
     </View>
+  );
+}
+
+// Tombol stepper interval. Target sentuh 48 PERSEGI, latar surfaceSunken.
+//
+// Bidang datar tanpa garis, bukan tombol berbingkai: ia berdiri tepat di
+// samping kolom angka yang PUNYA garis, dan dua bingkai bersebelahan membuat
+// ketiganya terbaca sebagai satu kotak panjang yang terbelah dua.
+//
+// Keadaan mati dibawa opasitas DAN penolakan ketukan sekaligus. Ia hanya pernah
+// menyala di dua ujung rentang (1 dan 365), jadi tombol mati di sini tidak
+// menjanjikan sesuatu yang tidak akan pernah terjadi — ia menyatakan batas.
+function RepeatStepperButton({
+  accessibilityLabel,
+  disabled,
+  icon,
+  onPress,
+}: {
+  accessibilityLabel: string;
+  disabled: boolean;
+  icon: 'minus' | 'plus';
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: 'center',
+        backgroundColor: palette.surfaceSunken,
+        borderCurve: 'continuous',
+        borderRadius: tokens.radius.control,
+        height: touch.min,
+        justifyContent: 'center',
+        opacity: disabled ? 0.4 : pressed ? 0.7 : 1,
+        width: touch.min,
+      })}
+    >
+      <Icon name={icon} size={tokens.icon.md} color={palette.textPrimary} />
+    </Pressable>
   );
 }
 

@@ -27,6 +27,7 @@ import {
   replaceSinglePhotoAttachment,
 } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type {
   GrowthPhase,
@@ -42,6 +43,7 @@ import type {
 import { MAX_ANGKA_DESIMAL, parseDecimalInput, sanitizeDecimalInput } from '../utils/decimalInput';
 import { formatGrowthPhase, formatTreeConditionStatus, formatTreeContextLine } from '../utils/treeFormat';
 import type { TreeRecordRouteType } from './tree-record-detail-screen';
+import { ConfirmDialog } from './bottom-sheet';
 import {
   Button,
   ChoiceRowGroup,
@@ -107,6 +109,40 @@ const RECORD_PHOTO_ENTITY_TYPE: Record<EditableRecordType, PhotoAttachmentEntity
   phase: 'growth_phase_record',
 };
 
+/**
+ * Seluruh isi form yang bisa diubah pengguna, dalam satu objek.
+ *
+ * ADA KARENA layar ini kini dijaga useUnsavedChangesGuard, dan penjaga itu
+ * butuh satu pertanyaan yang bisa dijawab: "apakah yang di layar sekarang
+ * berbeda dari yang barusan dimuat?". Tanpa objek acuan, jawabannya harus
+ * dirakit dari tujuh useState yang tersebar — dan setiap field baru yang kelak
+ * ditambahkan akan lolos dari perbandingan tanpa ada yang menyadarinya.
+ *
+ * Ketiga jenis catatan memakai BENTUK YANG SAMA, dengan ruas yang tidak
+ * berlaku dibiarkan kosong. Bukan tiga tipe terpisah: state di layar ini
+ * memang satu himpunan untuk ketiganya, dan acuan yang bentuknya berbeda dari
+ * state yang diacunya cuma menambah satu pemetaan untuk salah dibaca.
+ */
+type RecordDraft = {
+  beratKg: string;
+  conditionStatus: TreeConditionStatus | '';
+  eventDate: string;
+  fruitCount: string;
+  grade: GradePanen | null;
+  note: string;
+  phase: GrowthPhase | '';
+};
+
+const EMPTY_RECORD_DRAFT: RecordDraft = {
+  beratKg: '',
+  conditionStatus: '',
+  eventDate: '',
+  fruitCount: '',
+  grade: null,
+  note: '',
+  phase: '',
+};
+
 export function TreeRecordEditScreen({
   basePath,
   recordId,
@@ -114,7 +150,12 @@ export function TreeRecordEditScreen({
   treeId,
 }: TreeRecordEditScreenProps) {
   const normalizedType = normalizeRecordType(recordType);
+  // Isi form SAAT DIMUAT, acuan penjaga "perubahan belum disimpan". null =
+  // belum pernah terisi (masih memuat, atau pemuatannya gagal), dan di keadaan
+  // itu tidak ada perubahan yang mungkin ada.
+  const [baseline, setBaseline] = React.useState<RecordDraft | null>(null);
   const [canEdit, setCanEdit] = React.useState(false);
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
   const [conditionStatus, setConditionStatus] = React.useState<TreeConditionStatus | ''>('');
   const [eventDate, setEventDate] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
@@ -134,6 +175,22 @@ export function TreeRecordEditScreen({
   const [farmId, setFarmId] = React.useState<UUID | null>(null);
   const [processingPhoto, setProcessingPhoto] = React.useState(false);
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
+
+  // SATU pintu masuk ke state form, dan ia yang juga menyetel acuannya.
+  // Disatukan supaya keduanya tidak bisa menyimpang: kalau sebuah cabang
+  // mengisi field tapi lupa mengisi acuannya, layar akan mengira dirinya
+  // berubah sejak dibuka dan menahan pengguna dengan dialog buang-perubahan
+  // untuk perubahan yang tidak pernah terjadi.
+  const applyDraft = React.useCallback((draft: RecordDraft) => {
+    setBeratKg(draft.beratKg);
+    setConditionStatus(draft.conditionStatus);
+    setEventDate(draft.eventDate);
+    setFruitCount(draft.fruitCount);
+    setGrade(draft.grade);
+    setNote(draft.note);
+    setPhase(draft.phase);
+    setBaseline(draft);
+  }, []);
 
   const loadRecord = React.useCallback(async () => {
     if (!treeId || !recordId || !normalizedType) {
@@ -182,10 +239,13 @@ export function TreeRecordEditScreen({
       }
 
       setCanEdit(result.data.canEdit === true);
-      setConditionStatus(result.data.conditionStatus);
-      setEventDate(toDateInput(result.data.reportedAt));
       setFarmId(result.data.farmId);
-      setNote(result.data.note ?? '');
+      applyDraft({
+        ...EMPTY_RECORD_DRAFT,
+        conditionStatus: result.data.conditionStatus,
+        eventDate: toDateInput(result.data.reportedAt),
+        note: result.data.note ?? '',
+      });
       await loadExistingPhoto(result.data.farmId);
       return;
     }
@@ -200,10 +260,13 @@ export function TreeRecordEditScreen({
       }
 
       setCanEdit(result.data.canEdit === true);
-      setEventDate(toDateInput(result.data.recordedAt));
       setFarmId(result.data.farmId);
-      setNote(result.data.note ?? '');
-      setPhase(result.data.phase);
+      applyDraft({
+        ...EMPTY_RECORD_DRAFT,
+        eventDate: toDateInput(result.data.recordedAt),
+        note: result.data.note ?? '',
+        phase: result.data.phase,
+      });
       await loadExistingPhoto(result.data.farmId);
       return;
     }
@@ -218,19 +281,66 @@ export function TreeRecordEditScreen({
       }
 
       setCanEdit(result.data.canEdit === true);
-      setEventDate(toDateInput(result.data.harvestedAt));
       setFarmId(result.data.farmId);
-      // Dulu `String(result.data.fruitCount)`. Sejak kolomnya nullable, itu
-      // menghasilkan teks "null" di dalam field — bukan field kosong.
-      setGrade(result.data.fruitCondition);
-      setBeratKg(result.data.harvestWeightKg === null ? '' : String(result.data.harvestWeightKg));
-      setFruitCount(result.data.fruitCount === null ? '' : String(result.data.fruitCount));
-      setNote(result.data.note ?? '');
+      applyDraft({
+        ...EMPTY_RECORD_DRAFT,
+        // Dulu `String(result.data.fruitCount)`. Sejak kolomnya nullable, itu
+        // menghasilkan teks "null" di dalam field — bukan field kosong.
+        beratKg: result.data.harvestWeightKg === null ? '' : String(result.data.harvestWeightKg),
+        eventDate: toDateInput(result.data.harvestedAt),
+        fruitCount: result.data.fruitCount === null ? '' : String(result.data.fruitCount),
+        grade: result.data.fruitCondition,
+        note: result.data.note ?? '',
+      });
       await loadExistingPhoto(result.data.farmId);
       return;
     }
 
-  }, [normalizedType, recordId, treeId]);
+  }, [applyDraft, normalizedType, recordId, treeId]);
+
+  // Foto ikut dihitung: memilih foto baru atau meminta yang lama dihapus adalah
+  // perubahan yang sama tidak bisa dipulihkannya dengan mengetik ulang catatan.
+  // Keduanya cukup diperiksa sebagai "ada/tidak" — begitu salah satunya menyala,
+  // form ini memang sudah berbeda dari keadaan saat dibuka.
+  const hasUnsavedChanges =
+    baseline !== null &&
+    (beratKg !== baseline.beratKg ||
+      conditionStatus !== baseline.conditionStatus ||
+      eventDate !== baseline.eventDate ||
+      fruitCount !== baseline.fruitCount ||
+      grade !== baseline.grade ||
+      note !== baseline.note ||
+      phase !== baseline.phase ||
+      selectedPhoto !== null ||
+      deletePhotoRequested);
+
+  // PENJAGA DIPASANG LEBIH DULU, TOMBOL "BATAL" DICABUT SESUDAHNYA — urutannya
+  // mengikat (batch 6a). Tanpa penjaga, mencabut tombol keluar yang eksplisit
+  // berarti perubahan bisa hilang lewat chevron back tanpa satu pun peringatan.
+  //
+  // Yang dicabut adalah tombol "Batal" di BAR AKSI, bukan jalan keluarnya.
+  // Chevron back di TopAppBar sudah jadi jalan keluar layar ini seperti di
+  // seluruh aplikasi, dan bar aksi berisi dua tombol membuat "Simpan
+  // perubahan" tampil setara dengan membatalkan — padahal orang datang ke layar
+  // Edit untuk menyimpan.
+  const { handleBackPress } = useUnsavedChangesGuard({
+    // Saat penyimpanan berjalan, dialog tidak ditawarkan: tidak ada gunanya
+    // menanyakan "buang perubahan" untuk perubahan yang sedang dikirim ke
+    // server.
+    hasUnsavedChanges: hasUnsavedChanges && !submitting,
+    onBlocked: () => setConfirmDiscard(true),
+    onLeave: () => {
+      // Selama menyimpan, back sengaja tidak melakukan apa-apa. Kalau dibiarkan
+      // keluar, handleSubmit yang selesai belakangan memanggil router.replace()
+      // dan memantul melewati layar yang sudah ditinggalkan. Tombol Simpan
+      // sudah dalam keadaan loading, jadi penantiannya singkat dan terlihat.
+      if (submitting) {
+        return;
+      }
+
+      router.back();
+    },
+  });
 
   React.useEffect(() => {
     setLoading(true);
@@ -536,14 +646,11 @@ export function TreeRecordEditScreen({
     // pilihan utama besar -> isian angka/tanggal -> foto -> catatan -> bar aksi.
     <Screen
       autoScrollOnFocus
-      footer={
-        <>
-          <Button title="Simpan perubahan" loading={submitting} onPress={handleSubmit} />
-          <Button title="Batal" variant="secondary" disabled={submitting} onPress={() => router.back()} />
-        </>
-      }
+      // SATU TOMBOL DI BAR AKSI (batch 6a). "Batal" dicabut — lihat catatan
+      // pada useUnsavedChangesGuard di atas untuk alasan dan syaratnya.
+      footer={<Button title="Simpan perubahan" loading={submitting} onPress={handleSubmit} />}
     >
-      <TopAppBar title={getEditTitle(normalizedType)} onBack={() => router.back()} />
+      <TopAppBar title={getEditTitle(normalizedType)} onBack={handleBackPress} />
       <ErrorBanner message={error} />
 
       {/* Baris yang sama persis dengan layar detail catatan — literal sama,
@@ -716,6 +823,28 @@ export function TreeRecordEditScreen({
         onChangeText={setNote}
         placeholder="Keterangan tambahan tentang catatan ini"
         value={note}
+      />
+
+      {/* Bentuk dan literalnya sepadan dengan dialog yang sama di layar Edit
+          profil — satu-satunya layar yang sudah dijaga sebelum batch ini. Dua
+          layar yang menanyakan hal yang sama tidak boleh menanyakannya dengan
+          dua kalimat yang berbeda.
+
+          "Buang perubahan" adalah tombol BATAL dialog, bukan tombol utamanya:
+          yang keluar dari sini kehilangan pekerjaannya, jadi tombol yang paling
+          mudah ditekan harus yang mengembalikannya ke form. */}
+      <ConfirmDialog
+        cancelLabel="Buang perubahan"
+        cancelTone="danger"
+        confirmLabel="Lanjut isi"
+        message="Perubahan pada catatan ini belum disimpan. Kalau keluar sekarang, perubahan itu hilang."
+        title="Perubahan belum disimpan"
+        visible={confirmDiscard}
+        onCancel={() => {
+          setConfirmDiscard(false);
+          router.back();
+        }}
+        onConfirm={() => setConfirmDiscard(false)}
       />
     </Screen>
   );
