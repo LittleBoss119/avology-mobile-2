@@ -341,7 +341,12 @@ function CarePhotoPicker({
   processing: boolean;
 }) {
   return (
+    // `changeHint` DITAMBAHKAN di batch 5, bersama pencabutan tombol silang
+    // berikon-saja dari <PhotoPickerCard>. Layar ini wilayah batch 6; yang
+    // dikerjakan di sini hanya menjaga "Hapus foto" tetap punya afordans yang
+    // terlihat setelah tombol silangnya pergi.
     <PhotoPickerCard
+      changeHint="Ketuk foto untuk mengganti atau menghapusnya."
       choosePhotoLabel="Pilih galeri"
       description={processing ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan perawatan yang dilakukan.'}
       imageUri={photo?.uri}

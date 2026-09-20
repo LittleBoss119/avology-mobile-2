@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 
 import {
   GRADE_PANEN,
@@ -8,7 +8,7 @@ import {
   MAX_BERAT_PANEN_KG,
   type GradePanen,
 } from '../constants/gradePanen';
-import { tokens } from '../constants/theme';
+import { colors, spacing, typography } from '../constants/theme';
 import { createHarvestRecord } from '../services/harvestService';
 import { uploadHarvestRecordPhoto } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
@@ -16,17 +16,14 @@ import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } f
 import type { Tree } from '../types/domain';
 import type { PickedPhotoAsset } from '../types/media';
 import { MAX_ANGKA_DESIMAL, parseDecimalInput, sanitizeDecimalInput } from '../utils/decimalInput';
-import { formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
+import { formatTreeContextLine } from '../utils/treeFormat';
 import { useSnackbar } from './snackbar';
 import {
   Button,
-  Card,
   DateField,
   ErrorBanner,
   Field,
-  FormSection,
   LoadingState,
-  MetaRow,
   OptionGroup,
   PhotoPickerCard,
   Screen,
@@ -293,88 +290,136 @@ export function TreeHarvestRecordScreen({
   }
 
   return (
+    // URUTAN TETAP, sama di ketiga form catatan — lihat catatan di
+    // tree-condition-report-screen.tsx. Di layar ini pilihan utamanya grade,
+    // lalu isian angkanya, lalu tanggal, foto, catatan, Simpan.
     <Screen
+      autoScrollOnFocus
       header={<TopAppBar title="Catat panen" onBack={() => router.back()} />}
       stickyFooter={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
 
       {tree ? (
-        <Card variant="highlight">
-          <Text selectable style={{ color: tokens.color.text.primary, ...tokens.type.subheading }}>
-            Konteks Pohon
-          </Text>
-          <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
-          <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-          <MetaRow label="Varietas" value={tree.activePlanting?.variety ?? 'Belum diisi'} />
-        </Card>
+        <Text
+          selectable
+          style={{
+            color: colors.textMuted,
+            fontSize: typography.small.fontSize,
+            lineHeight: typography.small.lineHeight,
+          }}
+        >
+          {formatTreeContextLine(tree)}
+        </Text>
       ) : null}
 
-      {/* URUTAN DISENGAJA: berat DI ATAS jumlah buah. Seluruh target pemilik
-          kebun berbasis kilogram (2 kg/m², 13 ton dari 6.500 m²), jadi berat
-          adalah metrik utama dan jumlah buah sekunder. Field yang di atas lebih
-          sering diisi. */}
-      <FormSection title="Hasil panen" description="Isi berat panen, jumlah buah, atau keduanya.">
-        <DateField label="Tanggal panen *" onChangeDate={setEventDate} value={eventDate} />
-        <Field
-          error={fieldErrors.jumlah}
-          keyboardType="decimal-pad"
-          label="Berat panen (kg)"
-          onChangeText={(value) => {
-            setBeratKg(sanitizeDecimalInput(value, MAX_ANGKA_DESIMAL));
-            setFieldErrors((prev) => ({ ...prev, jumlah: undefined }));
-          }}
-          placeholder="Contoh: 12,5"
-          value={beratKg}
-        />
-        <Field
-          keyboardType="number-pad"
-          label="Jumlah buah"
-          onChangeText={(value) => {
-            setFruitCount(value.replace(/[^0-9]/g, ''));
-            setFieldErrors((prev) => ({ ...prev, jumlah: undefined }));
-          }}
-          placeholder="Contoh: 12"
-          value={fruitCount}
-        />
-      </FormSection>
+      {/* GRADE: A1 / A2 / A3, TIGA nilai dan tidak ada yang keempat.
+          Spek redesign menulis "grade (A/B/C/Campur)" dan itu salah pada dua
+          hal sekaligus. Nilainya dikunci check constraint
+          harvest_records_fruit_condition_grade_check (migrasi 045):
+          `fruit_condition is null or fruit_condition in ('A1','A2','A3')`.
+          Dan "Campur" bertentangan dengan aturan satu grade per catatan —
+          panen bergrade campuran dicatat sebagai beberapa catatan terpisah.
+          Mengubahnya butuh migrasi, dan itu di luar lingkup redesign.
 
-      {/* Grade WAJIB dipilih dari daftar, tidak boleh diketik. Kolom ini dulu
-          teks bebas dan sudah terlanjur berisi "Bagus", "Baik", "Good", dan
-          "Good test harvest" — empat nilai untuk satu maksud, dari satu orang.
-          Menekan chip yang sudah aktif membatalkan pilihan, karena grade
-          memang opsional. */}
-      <FormSection title="Grade" description="Opsional. Mutu panen menurut penilaian di lapangan.">
-        <OptionGroup
-          options={GRADE_PANEN.map((option) => ({
-            disabled: submitting,
-            label: GRADE_PANEN_LABELS[option],
-            value: option,
-          }))}
-          value={grade}
-          onChange={(value) => setGrade(grade === value ? null : (value as GradePanen))}
-        />
-      </FormSection>
+          TIGA chip, bukan baris penuh: baris penuh dipakai untuk daftar 4-6
+          pilihan status. Tiga chip pendek muat dalam satu baris dan tidak
+          membungkus.
 
-      <FormSection title="Catatan tambahan">
-        <Field label="" multiline onChangeText={setNote} placeholder="Opsional" value={note} />
-      </FormSection>
+          Menekan chip yang sudah aktif MEMBATALKAN pilihan — grade memang
+          boleh kosong, dan constraint-nya sendiri mengizinkan NULL. */}
+      <OptionGroup
+        label="Grade"
+        options={GRADE_PANEN.map((option) => ({
+          disabled: submitting,
+          label: GRADE_PANEN_LABELS[option],
+          value: option,
+        }))}
+        value={grade}
+        onChange={(value) => setGrade(grade === value ? null : (value as GradePanen))}
+      />
+
+      {/* DUA KOLOM SEJAJAR, berat di KIRI. Seluruh target pemilik kebun
+          berbasis kilogram (2 kg/m², 13 ton dari 6.500 m²), jadi berat adalah
+          metrik utama dan jumlah buah sekunder — dan pada baris yang dibaca
+          dari kiri ke kanan, kiri adalah posisi yang didahulukan.
+
+          SATUAN DI DALAM KOLOM lewat prop `unit`, bukan diimbuhkan ke label.
+          Label "Berat panen (kg)" memaksa mata bolak-balik ke label untuk
+          memastikan angka yang barusan diketik satuannya benar. */}
+      <View style={{ flexDirection: 'row', gap: spacing.md }}>
+        <View style={{ flex: 1 }}>
+          <Field
+            error={fieldErrors.jumlah}
+            keyboardType="decimal-pad"
+            label="Berat panen"
+            onChangeText={(value) => {
+              setBeratKg(sanitizeDecimalInput(value, MAX_ANGKA_DESIMAL));
+              setFieldErrors((prev) => ({ ...prev, jumlah: undefined }));
+            }}
+            placeholder="12,5"
+            unit="kg"
+            value={beratKg}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Field
+            keyboardType="number-pad"
+            label="Jumlah buah"
+            onChangeText={(value) => {
+              setFruitCount(value.replace(/[^0-9]/g, ''));
+              setFieldErrors((prev) => ({ ...prev, jumlah: undefined }));
+            }}
+            placeholder="12"
+            unit="buah"
+            value={fruitCount}
+          />
+        </View>
+      </View>
+
+      {/* KEDUANYA TIDAK DITANDAI `optional`, dan itu bukan kelalaian: masing-
+          masing memang boleh kosong, tapi tidak keduanya sekaligus (constraint
+          harvest_records_amount_present_check). '(boleh kosong)' pada keduanya
+          akan menjanjikan form yang bisa disimpan tanpa angka sama sekali. */}
+      <Text
+        selectable
+        style={{
+          color: colors.textMuted,
+          fontSize: typography.meta.fontSize,
+          lineHeight: typography.meta.lineHeight,
+        }}
+      >
+        Isi berat panen, jumlah buah, atau keduanya — minimal salah satu.
+      </Text>
+
+      <DateField label="Tanggal panen" onChangeDate={setEventDate} value={eventDate} />
 
       {/* `processing` dipisahkan dari `disabled` dengan sengaja: `disabled`
           berarti formulirnya sedang disimpan, `processing` berarti fotonya
           sedang diperkecil. Bagi pengguna keduanya kejadian yang berbeda, dan
           hanya yang kedua yang perlu menerangkan dirinya lewat teks. */}
       <PhotoPickerCard
+        changeHint="Ketuk foto untuk mengganti atau menghapusnya."
         choosePhotoLabel="Pilih galeri"
-        description={processingPhoto ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan hasil panen.'}
+        description={processingPhoto ? PHOTO_PROCESSING_MESSAGE : 'Untuk mendokumentasikan hasil panen.'}
         imageUri={selectedPhoto?.uri}
         loading={submitting || processingPhoto}
+        optional
         removeLabel="Hapus foto"
         takePhotoLabel="Ambil foto"
         title="Foto panen"
         onChoosePhoto={handlePickPhotoFromGallery}
         onRemovePhoto={selectedPhoto ? () => setSelectedPhoto(null) : undefined}
         onTakePhoto={handleTakePhotoFromCamera}
+      />
+
+      <Field
+        label="Catatan"
+        multiline
+        optional
+        onChangeText={setNote}
+        placeholder="Keterangan tambahan tentang panen ini"
+        value={note}
       />
     </Screen>
   );

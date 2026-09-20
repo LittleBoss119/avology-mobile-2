@@ -2111,6 +2111,187 @@ export function OptionGroup({
   );
 }
 
+export type ChoiceRowOption = {
+  value: string;
+  label: string;
+  disabled?: boolean;
+  /**
+   * Penanda BENTUK di kiri baris. Opsional, dan sengaja begitu.
+   *
+   * HANYA untuk pilihan yang menyatakan STATUS — kondisi pohon membacanya dari
+   * CONDITION_BADGE. Fase pertumbuhan TIDAK mendapat penanda: tidak ada tabel
+   * bentuk untuk fase di repo ini, dan aturan yang sudah tertulis pada prop
+   * `marker` di <Badge> menyebut nama fase sebagai contoh chip yang harus tetap
+   * polos. Mengarang bentuk untuk lima fase berarti kosakata visual KEDUA yang
+   * harus dipelajari terpisah dari yang sudah ada.
+   */
+  marker?: { color: string; shape: StatusMarkerShape };
+  /**
+   * Keterangan kecil di kanan baris, mis. 'fase sekarang'.
+   *
+   * `textPrimary`, BUKAN `textMuted`. Ia menyatakan keadaan yang sedang
+   * BERLAKU, bukan saran maupun isian kosong; warna placeholder akan
+   * membuatnya terbaca sebagai sesuatu yang belum ada.
+   */
+  meta?: string;
+  /**
+   * Latar `surfaceSunken`. Menyertai `meta` untuk baris yang sedang berlaku.
+   * Terpisah dari `selected`, dan keduanya bisa menyala bersamaan pada baris
+   * yang sama — karena itu keadaan terpilih TIDAK dibedakan lewat latar.
+   */
+  highlighted?: boolean;
+};
+
+// Baris pilihan selebar layar, dengan penanda bentuk opsional di kiri dan
+// centang di kanan.
+//
+// ADA KARENA daftar 4-6 pilihan status tidak muat sebagai chip: enam kondisi
+// pohon yang dibungkus jadi tiga baris chip tak beraturan lebih sulit dipindai
+// daripada enam baris sejajar, dan chip setinggi 44 tidak menyisakan ruang
+// untuk penanda bentuk di samping labelnya.
+//
+// KEADAAN TERPILIH DIBAWA DUA SALURAN yang keduanya BUKAN latar: garis accent
+// yang menebal, dan ikon centang. Latar sengaja dikosongkan dari tugas itu
+// karena `highlighted` sudah memakainya untuk arti lain (baris yang sedang
+// berlaku), dan satu saluran tidak boleh membawa dua arti di komponen yang sama.
+export function ChoiceRow({
+  disabled = false,
+  highlighted = false,
+  label,
+  marker,
+  meta,
+  onPress,
+  selected,
+}: {
+  disabled?: boolean;
+  highlighted?: boolean;
+  label: string;
+  marker?: { color: string; shape: StatusMarkerShape };
+  meta?: string;
+  onPress: () => void;
+  selected: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled, selected }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: 'center',
+        backgroundColor: highlighted ? palette.surfaceSunken : tokens.color.surface.card,
+        borderColor: selected ? palette.accent : palette.borderStrong,
+        borderCurve: 'continuous',
+        borderRadius: tokens.radius.control,
+        borderWidth: selected ? 2 : 1,
+        flexDirection: 'row',
+        gap: tokens.space.md,
+        // 56 = tokens.layout.controlHeight, angka yang sama dengan tombol
+        // pilihan varietas di layar Tambah pohon. Spek batch ini menyebut
+        // rentang 52-64 untuk pilihan utama; 56 adalah nilai yang sudah dipakai
+        // pilihan utama lain di aplikasi, jadi tidak ada tinggi kedua.
+        minHeight: tokens.layout.controlHeight,
+        opacity: disabled ? 0.55 : pressed ? 0.7 : 1,
+        paddingHorizontal: tokens.space.lg,
+        paddingVertical: tokens.space.sm,
+      })}
+    >
+      {/* Slot berlebar tetap supaya label semua baris punya satu garis rata
+          yang sama, termasuk baris yang penandanya tidak ada. Hanya dirender
+          kalau ADA baris bertanda di kelompoknya — lihat ChoiceRowGroup. */}
+      {marker ? (
+        <View style={{ alignItems: 'center', width: tokens.icon.md }}>
+          <StatusMarker color={marker.color} shape={marker.shape} />
+        </View>
+      ) : null}
+      <Text
+        selectable={false}
+        style={{
+          color: tokens.color.text.primary,
+          flex: 1,
+          fontFamily: selected ? fonts.sansSemiBold : fonts.sans,
+          fontSize: tokens.type.body.fontSize,
+          lineHeight: tokens.type.body.lineHeight,
+        }}
+      >
+        {label}
+      </Text>
+      {meta ? (
+        <Text
+          selectable={false}
+          style={{
+            color: palette.textPrimary,
+            fontFamily: fonts.sans,
+            fontSize: typography.meta.fontSize,
+            lineHeight: typography.meta.lineHeight,
+          }}
+        >
+          {meta}
+        </Text>
+      ) : null}
+      {selected ? <Icon name="check" size={tokens.icon.md} color={palette.accentText} /> : null}
+    </Pressable>
+  );
+}
+
+export function ChoiceRowGroup({
+  error,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  error?: string;
+  label?: string;
+  onChange: (value: string) => void;
+  options: ChoiceRowOption[];
+  value?: string | null;
+}) {
+  // Slot penanda dipasang pada SELURUH baris kalau satu saja punya penanda,
+  // supaya labelnya tidak bergeser antarbaris di kelompok yang sama.
+  const anyMarker = options.some((option) => Boolean(option.marker));
+
+  return (
+    <View style={{ gap: tokens.space.sm }}>
+      {label ? (
+        <Text
+          selectable
+          style={{ color: palette.textPrimary, fontFamily: fonts.sansSemiBold, fontSize: 14 }}
+        >
+          {label}
+        </Text>
+      ) : null}
+      {options.map((option) => (
+        <ChoiceRow
+          key={option.value}
+          disabled={option.disabled}
+          highlighted={option.highlighted}
+          label={option.label}
+          marker={
+            option.marker ??
+            (anyMarker ? { color: 'transparent', shape: 'circle-outline' } : undefined)
+          }
+          meta={option.meta}
+          onPress={() => onChange(option.value)}
+          selected={value === option.value}
+        />
+      ))}
+      {error ? (
+        <Text
+          selectable
+          style={{
+            color: tokens.color.status.danger.text,
+            fontSize: tokens.type.meta.fontSize,
+            lineHeight: tokens.type.meta.lineHeight,
+          }}
+        >
+          {error}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function DateField({
   error,
   label,
@@ -3247,6 +3428,7 @@ export function SearchFilterRow({
 }
 
 export function PhotoPickerCard({
+  changeHint,
   choosePhotoLabel = 'Pilih galeri',
   description,
   emptyLabel = 'Tambah foto',
@@ -3256,11 +3438,21 @@ export function PhotoPickerCard({
   onChoosePhoto,
   onRemovePhoto,
   onTakePhoto,
+  optional = false,
   removeLabel = 'Hapus foto',
   required = false,
   takePhotoLabel = 'Ambil foto',
   title = 'Foto',
 }: {
+  /**
+   * Baris afordans di bawah gambar, mis. 'Ketuk foto untuk mengganti atau
+   * menghapus'. WAJIB diisi di layar tempat ketukan pada gambar adalah
+   * satu-satunya jalan ke sebuah fungsi.
+   *
+   * Tanpa nilai, tidak ada baris yang dirender — keadaan setiap pemanggil
+   * sebelum prop ini ada.
+   */
+  changeHint?: string;
   choosePhotoLabel?: string;
   description?: string;
   emptyLabel?: string;
@@ -3270,6 +3462,12 @@ export function PhotoPickerCard({
   onChoosePhoto?: () => void;
   onRemovePhoto?: () => void;
   onTakePhoto?: () => void;
+  /**
+   * Imbuhan ' (boleh kosong)' pada judul, sepadan dengan prop `optional` pada
+   * <Field>. Menandai yang OPSIONAL, bukan memberi bintang pada yang wajib —
+   * alasannya sama dan tertulis lengkap di FieldBaseProps.
+   */
+  optional?: boolean;
   removeLabel?: string;
   required?: boolean;
   takePhotoLabel?: string;
@@ -3277,18 +3475,26 @@ export function PhotoPickerCard({
 }) {
   const [sourceSheetOpen, setSourceSheetOpen] = React.useState(false);
   const hasImage = Boolean(imageUri);
+  const canRemove = Boolean(onRemovePhoto && hasImage);
   const sourceActions = [
     onTakePhoto ? { label: takePhotoLabel, onPress: onTakePhoto } : null,
     onChoosePhoto ? { label: choosePhotoLabel, onPress: onChoosePhoto } : null,
   ].filter((action): action is { label: string; onPress: () => void } => Boolean(action));
 
   function handleCardPress() {
-    if (loading || sourceActions.length === 0) {
+    if (loading) {
       return;
     }
 
-    if (sourceActions.length === 1) {
+    // Satu sumber DAN tidak ada yang bisa dihapus: sheet berisi satu baris
+    // hanya menambah satu ketukan. Begitu "Hapus foto" ikut masuk, sheet-nya
+    // punya isi dan harus dibuka.
+    if (sourceActions.length === 1 && !canRemove) {
       sourceActions[0].onPress();
+      return;
+    }
+
+    if (sourceActions.length === 0 && !canRemove) {
       return;
     }
 
@@ -3297,17 +3503,32 @@ export function PhotoPickerCard({
 
   return (
     <Card>
+      {/* TOMBOL HAPUS BUNDAR BERIKON-SAJA DICABUT (batch 5).
+          Ia satu-satunya tombol ikon-saja yang tersisa di wilayah form catatan,
+          dan ikon silang di pojok foto tidak menyatakan APA yang dihapus —
+          fotonya, atau seluruh isian di baliknya. Penggantinya baris berteks
+          "Hapus foto" di dalam sheet yang sama yang sudah memuat "Ambil foto"
+          dan "Pilih galeri": tiga hal yang bisa dilakukan pada satu foto, di
+          satu tempat, semuanya bernama.
+
+          `hasPhoto` kini nyata, bukan `false` tetap — itu yang memunculkan
+          baris hapusnya. */}
       <PhotoSourceSheet
         cameraLabel={takePhotoLabel}
+        deleteLabel={removeLabel}
         galleryLabel={choosePhotoLabel}
-        hasPhoto={false}
+        hasPhoto={canRemove}
+        title={title}
         visible={sourceSheetOpen}
         onCameraPress={() => {
           setSourceSheetOpen(false);
           onTakePhoto?.();
         }}
         onClose={() => setSourceSheetOpen(false)}
-        onDeletePhoto={() => setSourceSheetOpen(false)}
+        onDeletePhoto={() => {
+          setSourceSheetOpen(false);
+          onRemovePhoto?.();
+        }}
         onGalleryPress={() => {
           setSourceSheetOpen(false);
           onChoosePhoto?.();
@@ -3317,6 +3538,12 @@ export function PhotoPickerCard({
         <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' }}>
           <Text selectable style={{ color: colors.text, flex: 1, fontSize: 16, fontWeight: '700' }}>
             {title}
+            {optional ? (
+              <Text style={{ color: palette.textMuted, fontFamily: fonts.sans, fontWeight: '400' }}>
+                {' '}
+                (boleh kosong)
+              </Text>
+            ) : null}
           </Text>
           {required ? <Badge label="Wajib" tone="warning" /> : null}
         </View>
@@ -3328,8 +3555,9 @@ export function PhotoPickerCard({
       </View>
 
       <Pressable
+        accessibilityHint={hasImage ? 'Membuka pilihan ganti atau hapus foto' : undefined}
         accessibilityRole="button"
-        disabled={loading || sourceActions.length === 0}
+        disabled={loading || (sourceActions.length === 0 && !canRemove)}
         onPress={handleCardPress}
         style={{
           alignItems: 'center',
@@ -3370,30 +3598,6 @@ export function PhotoPickerCard({
             </Text>
           </View>
         )}
-        {onRemovePhoto && hasImage ? (
-          <Pressable
-            accessibilityLabel={removeLabel}
-            accessibilityRole="button"
-            disabled={loading}
-            onPress={onRemovePhoto}
-            style={({ pressed }) => ({
-              alignItems: 'center',
-              backgroundColor: palette.statusBuruk,
-              borderColor: colors.surface,
-              borderRadius: radius.round,
-              borderWidth: 1,
-              height: 34,
-              justifyContent: 'center',
-              opacity: pressed ? 0.78 : 1,
-              position: 'absolute',
-              right: spacing.sm,
-              top: spacing.sm,
-              width: 34,
-            })}
-          >
-            <Icon name="x" size={16} color={colors.white} />
-          </Pressable>
-        ) : null}
         {loading ? (
           <View
             style={{
@@ -3411,6 +3615,20 @@ export function PhotoPickerCard({
           </View>
         ) : null}
       </Pressable>
+
+      {/* AFORDANS YANG TERLIHAT. Ketukan pada gambar adalah satu-satunya jalan
+          ke sheet ganti/hapus setelah tombol silang dicabut, dan gestur yang
+          menjadi satu-satunya jalan ke sebuah fungsi harus mengumumkan dirinya
+          — bukan menunggu ditemukan. Hanya saat SUDAH ada foto: kotak kosong
+          sudah bertuliskan "Tambah foto" di tengahnya. */}
+      {changeHint && hasImage ? (
+        <Text
+          selectable={false}
+          style={{ color: colors.muted, lineHeight: typography.small.lineHeight }}
+        >
+          {changeHint}
+        </Text>
+      ) : null}
 
       {error ? <ErrorBanner message={error} /> : null}
     </Card>

@@ -1,21 +1,39 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Text } from 'react-native';
 
-import { tokens } from '../constants/theme';
+import { colors, typography } from '../constants/theme';
 import { createGrowthPhaseRecord } from '../services/growthPhaseService';
 import { uploadGrowthPhaseRecordPhoto } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
 import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type { GrowthPhase, Tree } from '../types/domain';
 import type { PickedPhotoAsset } from '../types/media';
-import { formatGrowthPhase, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
-import { GrowthPhaseBadge } from './tree-components';
+import { formatGrowthPhase, formatTreeContextLine } from '../utils/treeFormat';
 import { useSnackbar } from './snackbar';
-import { Button, Card, DateField, ErrorBanner, Field, FormSection, LoadingState, MetaRow, OptionGroup, PhotoPickerCard, Screen, TopAppBar } from './ui';
+import {
+  Button,
+  ChoiceRowGroup,
+  DateField,
+  ErrorBanner,
+  Field,
+  LoadingState,
+  PhotoPickerCard,
+  Screen,
+  TopAppBar,
+} from './ui';
 
 type PhaseFormErrors = { phase?: string };
 
+// URUTAN KANONIK, dan ia MENGIKAT: awal tanam -> vegetatif -> berbunga ->
+// berbuah -> panen. Sama persis dengan urutan anggota enum growth_phase
+// (migrasi 001). Jangan diurut alfabetis maupun menurut frekuensi pemakaian:
+// daftar ini adalah sebuah JALAN, dan jalan yang diacak berhenti menjadi jalan.
+//
+// 'unrecorded' TIDAK ADA di sini dan tidak boleh ditambahkan. Ia bukan anggota
+// enum growth_phase sama sekali — ia nilai SARINGAN di lib/treeBrowseState.ts
+// yang mewakili "fase belum pernah dicatat", yaitu currentGrowthPhase bernilai
+// NULL. Tidak ada yang bisa mencatat pohon sebagai "belum dicatat".
 const phaseOptions: GrowthPhase[] = [
   'initial_planting',
   'vegetative',
@@ -247,72 +265,93 @@ export function TreeGrowthPhaseRecordScreen({
   }
 
   return (
+    // URUTAN TETAP, sama di ketiga form catatan — lihat catatan di
+    // tree-condition-report-screen.tsx.
     <Screen
+      autoScrollOnFocus
       header={<TopAppBar title="Catat fase" onBack={() => router.back()} />}
       stickyFooter={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
 
+      {/* Blok "Fase saat ini" DICABUT dari sini, dan isinya tidak hilang: fase
+          yang sedang berjalan kini ditandai PADA BARIS PILIHANNYA SENDIRI di
+          bawah. Menyebutnya dua kali — sekali di kepala layar, sekali lagi
+          sebagai salah satu dari lima tombol — memaksa pembacanya mencocokkan
+          sendiri mana yang mana.
+
+          Yang ikut pergi: <GrowthPhaseBadge> di layar INI. Badge itu mengambil
+          nadanya dari getGrowthPhaseTone, dan tiga dari lima fase jatuh ke nada
+          'muted' yang teksnya `textMuted` — warna yang sama persis dengan
+          placeholder kolom isian. Fase yang sedang berlaku adalah keadaan
+          nyata, bukan saran dan bukan isian kosong. */}
       {tree ? (
-        <Card variant="highlight">
-          <Text selectable style={{ color: tokens.color.text.primary, ...tokens.type.subheading }}>
-            Konteks Pohon
-          </Text>
-          <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
-          <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-          <View style={{ gap: tokens.space.xs }}>
-            <Text selectable style={{ color: tokens.color.text.tertiary, ...tokens.type.meta }}>
-              Fase saat ini
-            </Text>
-            {tree.currentGrowthPhase ? (
-              <GrowthPhaseBadge phase={tree.currentGrowthPhase} />
-            ) : (
-              <Text selectable style={{ color: tokens.color.text.primary, ...tokens.type.bodyStrong }}>
-                {formatGrowthPhase(tree.currentGrowthPhase)}
-              </Text>
-            )}
-          </View>
-        </Card>
+        <Text
+          selectable
+          style={{
+            color: colors.textMuted,
+            fontSize: typography.small.fontSize,
+            lineHeight: typography.small.lineHeight,
+          }}
+        >
+          {formatTreeContextLine(tree)}
+        </Text>
       ) : null}
 
-      <FormSection title="Fase baru" description="Pilih fase pertumbuhan terbaru yang terlihat di pohon.">
-        <View style={{ gap: tokens.space.sm }}>
-          <DateField label="Tanggal catatan *" onChangeDate={setEventDate} value={eventDate} />
-          <OptionGroup
-            error={fieldErrors.phase}
-            options={phaseOptions.map((option) => ({
-              disabled: submitting,
-              label: formatPhaseOption(option),
-              value: option,
-            }))}
-            value={phase}
-            onChange={(value) => {
-              setFieldErrors((prev) => ({ ...prev, phase: undefined }));
-              setPhase(value as GrowthPhase);
-            }}
-          />
-        </View>
-      </FormSection>
+      {/* PILIHAN UTAMA. Baris penuh setinggi 56, urutan kanonik.
 
-      <FormSection title="Catatan" description="Catat tanda pertumbuhan yang terlihat di pohon.">
-        <Field label="" multiline onChangeText={setNote} placeholder="Opsional" value={note} />
-      </FormSection>
+          TANPA PENANDA BENTUK, dan itu keputusan sadar: tidak ada tabel bentuk
+          untuk fase pertumbuhan di repo ini, dan aturan yang sudah tertulis
+          pada prop `marker` di <Badge> menyebut nama fase sebagai contoh chip
+          yang harus tetap polos — penanda bentuk adalah kosakata STATUS.
+          Mengarang lima bentuk baru di sini berarti kosakata kedua yang harus
+          dipelajari terpisah, untuk daftar yang urutannya sendiri sudah
+          menjelaskan hubungan antaranggotanya. */}
+      <ChoiceRowGroup
+        error={fieldErrors.phase}
+        label="Fase pertumbuhan"
+        options={phaseOptions.map((option) => ({
+          disabled: submitting,
+          highlighted: option === tree?.currentGrowthPhase,
+          label: formatPhaseOption(option),
+          meta: option === tree?.currentGrowthPhase ? 'fase sekarang' : undefined,
+          value: option,
+        }))}
+        value={phase}
+        onChange={(value) => {
+          setFieldErrors((prev) => ({ ...prev, phase: undefined }));
+          setPhase(value as GrowthPhase);
+        }}
+      />
+
+      <DateField label="Tanggal catatan" onChangeDate={setEventDate} value={eventDate} />
 
       {/* `processing` dipisahkan dari `disabled` dengan sengaja: `disabled`
           berarti formulirnya sedang disimpan, `processing` berarti fotonya
           sedang diperkecil. Bagi pengguna keduanya kejadian yang berbeda, dan
           hanya yang kedua yang perlu menerangkan dirinya lewat teks. */}
       <PhotoPickerCard
+        changeHint="Ketuk foto untuk mengganti atau menghapusnya."
         choosePhotoLabel="Pilih galeri"
-        description={processingPhoto ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan fase pertumbuhan pohon.'}
+        description={processingPhoto ? PHOTO_PROCESSING_MESSAGE : 'Untuk mendokumentasikan fase pertumbuhan pohon.'}
         imageUri={selectedPhoto?.uri}
         loading={submitting || processingPhoto}
+        optional
         removeLabel="Hapus foto"
         takePhotoLabel="Ambil foto"
         title="Foto fase"
         onChoosePhoto={handlePickPhotoFromGallery}
         onRemovePhoto={selectedPhoto ? () => setSelectedPhoto(null) : undefined}
         onTakePhoto={handleTakePhotoFromCamera}
+      />
+
+      <Field
+        label="Catatan"
+        multiline
+        optional
+        onChangeText={setNote}
+        placeholder="Tanda pertumbuhan yang terlihat di pohon"
+        value={note}
       />
     </Screen>
   );

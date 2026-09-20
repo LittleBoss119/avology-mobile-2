@@ -22,7 +22,13 @@ export function TaskProofPhotoPicker({
   required: boolean;
 }) {
   return (
+    // `changeHint` DITAMBAHKAN di batch 5, bersama pencabutan tombol silang
+    // berikon-saja dari <PhotoPickerCard>. Layar ini bukan wilayah batch 5,
+    // tapi komponennya bersama: tanpa baris ini, "Hapus bukti foto" jadi
+    // fungsi yang hanya bisa dicapai lewat ketukan yang tidak mengumumkan
+    // dirinya. Selebihnya layar tugas dikerjakan di batch 6.
     <PhotoPickerCard
+      changeHint="Ketuk foto untuk mengganti atau menghapusnya."
       choosePhotoLabel="Galeri"
       description={required ? 'Wajib untuk menyelesaikan tugas.' : 'Opsional untuk bukti kerja.'}
       emptyLabel="Tambah foto"

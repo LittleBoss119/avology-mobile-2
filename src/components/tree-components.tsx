@@ -829,7 +829,11 @@ export function TreeMainPhotoFormSection({
 
   return (
     <View style={{ gap: spacing.md }}>
+      {/* `changeHint` DITAMBAHKAN di batch 5, bersama pencabutan tombol silang
+          berikon-saja dari <PhotoPickerCard>. "Hapus foto" pindah ke dalam
+          sheet, dan baris ini yang memberitahu bahwa sheet itu ada. */}
       <PhotoPickerCard
+        changeHint="Ketuk foto untuk mengganti atau menghapusnya."
         choosePhotoLabel="Pilih galeri"
         description={processing ? PHOTO_PROCESSING_MESSAGE : undefined}
         emptyLabel="Tambah foto pohon"
@@ -1534,38 +1538,25 @@ function PhotoThumbnail({ photoUrl }: { photoUrl: string }) {
   );
 }
 
-// Warna lingkaran ikon per jenis catatan. SELURUHNYA token, tidak ada hex.
+// Warna cakram di belakang penanda baris riwayat. NETRAL untuk SEMUA jenis.
 //
-// Keempat jenis kini memakai keluarga tokens.color.record yang senama:
-// condition, phase, harvest, care. Dua nilai terakhir yang masih hex sudah
-// diselesaikan — masing-masing dengan alasan berbeda, dan yang kedua adalah
-// pergantian warna yang disengaja:
+// Dulu ia bercabang menurut jenis catatan, dan cabang `condition` mengembalikan
+// record.condition.bg — ambar. Sejak penanda kondisi membaca CONDITION_BADGE,
+// baris "Sehat" merender lingkaran kosong netral DI ATAS cakram ambar: penanda
+// berkata "tidak ada masalah", latarnya berkata "perlu perhatian", dan yang
+// kedua lebih besar dan lebih dulu terlihat. Satu baris tidak boleh membawa dua
+// jawaban untuk satu pertanyaan.
 //
-//   * Latar fase dulu '#E7F6EC', beda satu langkah kanal hijau dari
-//     record.phase.bg '#E7F5EC'. Itu salah ketik, bukan keputusan desain, dan
-//     selisihnya tidak terlihat mata.
-//   * Ikon panen dulu status.warning.bg + '#8A5B00', yaitu kuning pucat yang
-//     nyaris kembar dengan dot KONDISI di sebelahnya. Dua jenis catatan yang
-//     berbeda tidak boleh berbagi satu warna. Keduanya kini pindah ke keluarga
-//     record.harvest (oranye), sehingga keempat jenis punya rona sendiri.
+// Netral untuk semua, bukan hanya untuk kondisi: cakram berwarna menurut JENIS
+// catatan melanggar aturan warna yang mengikat — warna hanya muncul bila ada
+// masalah, dan "ini catatan panen" bukan masalah. Pembeda jenisnya tetap utuh
+// di tiga saluran lain: glif di dalam cakram (segitiga, bunga, keranjang,
+// semprot), nama jenis di baris meta, dan judul barisnya sendiri.
 //
-// Warna BUKAN satu-satunya pembeda, dan tidak pernah jadi satu-satunya: tiap
-// jenis punya glif sendiri (segitiga, bunga, keranjang, semprot) dan namanya
-// tertulis di baris meta tiap baris riwayat.
-function getTimelineDotColor(type: TreeHistoryType): string {
-  if (type === 'condition') {
-    return tokens.color.record.condition.bg;
-  }
-
-  if (type === 'phase') {
-    return tokens.color.record.phase.bg;
-  }
-
-  if (type === 'harvest') {
-    return tokens.color.record.harvest.bg;
-  }
-
-  return tokens.color.record.care.bg;
+// PERBAIKAN SEMENTARA. Cakramnya dicabut seluruhnya di batch 7 bersama layar
+// Riwayat Pohon; yang dikerjakan di sini hanya menghentikannya berbohong.
+function getTimelineDotColor(_type: TreeHistoryType): string {
+  return palette.surfaceSunken;
 }
 
 function getTimelineTextColor(type: TreeHistoryType): string {

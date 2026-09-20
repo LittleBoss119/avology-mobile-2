@@ -2,20 +2,36 @@ import { router } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
-import { tokens } from '../constants/theme';
+import { colors, spacing, typography } from '../constants/theme';
 import { createTreeConditionReport } from '../services/conditionReportService';
 import { uploadConditionRecordPhoto } from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
 import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type { Tree, TreeConditionStatus } from '../types/domain';
 import type { PickedPhotoAsset } from '../types/media';
-import { formatTreeConditionStatus, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
+import { formatTreeConditionStatus, formatTreeContextLine } from '../utils/treeFormat';
 import { ConditionStatusBadge } from './tree-components';
 import { useSnackbar } from './snackbar';
-import { Button, Card, DateField, ErrorBanner, Field, FormSection, LoadingState, MetaRow, OptionGroup, PhotoPickerCard, Screen, TopAppBar } from './ui';
+import {
+  Button,
+  ChoiceRowGroup,
+  CONDITION_BADGE,
+  DateField,
+  ErrorBanner,
+  Field,
+  LoadingState,
+  PhotoPickerCard,
+  Screen,
+  TopAppBar,
+} from './ui';
 
 type ConditionFormErrors = { conditionStatus?: string };
 
+// ENAM, bukan lima. Spek redesign mendaftar lima kondisi; aplikasi punya enam
+// (lihat TreeConditionStatus di types/domain.ts, dan enum tree_condition_status
+// di migrasi 001). 'damaged' adalah yang keenam, dan urutannya di sini —
+// sehat, perlu perhatian, hama, sakit, rusak, mati — berjalan dari tidak ada
+// masalah ke keadaan akhir.
 const conditionOptions: TreeConditionStatus[] = [
   'healthy',
   'needs_attention',
@@ -262,50 +278,81 @@ export function TreeConditionReportScreen({
   }
 
   return (
+    // URUTAN TETAP, sama di ketiga form catatan: konteks pohon -> satu pilihan
+    // utama besar -> isian angka/tanggal -> foto -> catatan -> satu tombol
+    // Simpan yang menempel di bar bawah. Form boleh menggulir; tidak ada field
+    // yang dibuang supaya muat.
     <Screen
+      autoScrollOnFocus
       header={<TopAppBar title="Catat kondisi" onBack={() => router.back()} />}
       stickyFooter={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
 
+      {/* Kartu "Konteks Pohon" berjudul dengan tiga MetaRow DICABUT, diganti
+          satu baris yang literalnya sama persis dengan layar detail catatan dan
+          layar edit catatan (formatTreeContextLine). Ketiganya bertetangga
+          dalam satu alur, jadi konteks pohonnya tidak boleh berganti bentuk di
+          tengah jalan. Kondisi terakhir tetap ditampilkan — ia yang sedang
+          dikoreksi oleh catatan ini — tapi sebagai baris, bukan sebagai baris
+          keempat di dalam kartu. */}
       {tree ? (
-        <Card variant="highlight">
-          <Text selectable style={{ color: tokens.color.text.primary, ...tokens.type.subheading }}>
-            Konteks Pohon
+        <View style={{ gap: spacing.sm }}>
+          <Text
+            selectable
+            style={{
+              color: colors.textMuted,
+              fontSize: typography.small.fontSize,
+              lineHeight: typography.small.lineHeight,
+            }}
+          >
+            {formatTreeContextLine(tree)}
           </Text>
-          <MetaRow label="Kode pohon" value={formatTreeDisplayCode(tree)} />
-          <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-          <MetaRow label="Varietas" value={tree.activePlanting?.variety ?? 'Belum diisi'} />
-          <View style={{ gap: tokens.space.xs }}>
-            <Text selectable style={{ color: tokens.color.text.tertiary, ...tokens.type.meta }}>
+          <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm }}>
+            <Text
+              selectable
+              style={{
+                color: colors.textMuted,
+                fontSize: typography.small.fontSize,
+                lineHeight: typography.small.lineHeight,
+              }}
+            >
               Kondisi terakhir
             </Text>
             <ConditionStatusBadge status={tree.currentCondition} />
           </View>
-        </Card>
+        </View>
       ) : null}
 
-      <FormSection title="Kondisi baru" description="Pilih kondisi terbaru yang terlihat pada pohon.">
-        <View style={{ gap: tokens.space.sm }}>
-          <DateField label="Tanggal catatan *" onChangeDate={setEventDate} value={eventDate} />
-          <OptionGroup
-            error={fieldErrors.conditionStatus}
-            options={conditionOptions.map((status) => ({
-              label: formatTreeConditionStatus(status),
-              value: status,
-            }))}
-            value={conditionStatus}
-            onChange={(value) => {
-              setFieldErrors((prev) => ({ ...prev, conditionStatus: undefined }));
-              setConditionStatus(value as TreeConditionStatus);
-            }}
-          />
-        </View>
-      </FormSection>
+      {/* PILIHAN UTAMA. Baris penuh setinggi 56, bukan chip yang membungkus —
+          enam pilihan berbaris ke bawah dipindai sekali lihat, sementara enam
+          chip yang terbungkus jadi tiga baris tak beraturan harus dibaca satu
+          per satu.
 
-      <FormSection title="Catatan" description="Tambahkan gejala, tindakan, atau kondisi visual pohon.">
-        <Field label="" multiline onChangeText={setNote} placeholder="Opsional" value={note} />
-      </FormSection>
+          Penanda bentuk dan warnanya dibaca dari CONDITION_BADGE, tabel yang
+          SAMA yang melayani badge kondisi, sel denah, baris daftar pohon, dan
+          penanda timeline. Tidak ada pemetaan kedua di berkas ini; getConditionTone
+          dihapus di batch 4b justru karena ia pemetaan kedua semacam itu. */}
+      <ChoiceRowGroup
+        error={fieldErrors.conditionStatus}
+        label="Kondisi pohon"
+        options={conditionOptions.map((status) => ({
+          disabled: submitting,
+          label: formatTreeConditionStatus(status),
+          marker: {
+            color: CONDITION_BADGE[status].markerColor,
+            shape: CONDITION_BADGE[status].shape,
+          },
+          value: status,
+        }))}
+        value={conditionStatus}
+        onChange={(value) => {
+          setFieldErrors((prev) => ({ ...prev, conditionStatus: undefined }));
+          setConditionStatus(value as TreeConditionStatus);
+        }}
+      />
+
+      <DateField label="Tanggal catatan" onChangeDate={setEventDate} value={eventDate} />
 
       <ConditionPhotoPicker
         disabled={submitting}
@@ -314,6 +361,18 @@ export function TreeConditionReportScreen({
         onCameraPress={handleTakePhotoFromCamera}
         onGalleryPress={handlePickPhotoFromGallery}
         onRemove={() => setSelectedPhoto(null)}
+      />
+
+      {/* Label kolom, bukan judul bagian berkartu. Imbuhan '(boleh kosong)'
+          ditulis prop `optional`, bukan diketik ke dalam label maupun
+          disembunyikan di placeholder. */}
+      <Field
+        label="Catatan"
+        multiline
+        optional
+        onChangeText={setNote}
+        placeholder="Gejala, tindakan, atau kondisi visual pohon"
+        value={note}
       />
     </Screen>
   );
@@ -340,10 +399,12 @@ function ConditionPhotoPicker({
 }) {
   return (
     <PhotoPickerCard
+      changeHint="Ketuk foto untuk mengganti atau menghapusnya."
       choosePhotoLabel="Pilih galeri"
-      description={processing ? PHOTO_PROCESSING_MESSAGE : 'Opsional, untuk mendokumentasikan kondisi pohon.'}
+      description={processing ? PHOTO_PROCESSING_MESSAGE : 'Untuk mendokumentasikan kondisi pohon.'}
       imageUri={photo?.uri}
       loading={disabled || processing}
+      optional
       removeLabel="Hapus foto"
       takePhotoLabel="Ambil foto"
       title="Foto kondisi"

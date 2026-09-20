@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import {
   GRADE_PANEN,
@@ -8,8 +8,7 @@ import {
   MAX_BERAT_PANEN_KG,
   type GradePanen,
 } from '../constants/gradePanen';
-import { colors, radius, spacing, typography } from '../constants/theme';
-import { colors as palette } from '../theme/tokens';
+import { colors, spacing, typography } from '../constants/theme';
 import {
   getConditionReportDetail,
   updateOwnConditionReport,
@@ -22,26 +21,38 @@ import {
   getHarvestRecordDetail,
   updateOwnHarvestRecord,
 } from '../services/harvestService';
+import {
+  deletePhotoAttachment,
+  listEntityPhotos,
+  replaceSinglePhotoAttachment,
+} from '../services/photoAttachmentService';
 import { getTreeDetail } from '../services/treeService';
+import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } from '../lib/media';
 import type {
   GrowthPhase,
   Tree,
   TreeConditionStatus,
   UUID,
 } from '../types/domain';
+import type {
+  PhotoAttachmentEntityType,
+  PhotoAttachmentWithSignedUrl,
+  PickedPhotoAsset,
+} from '../types/media';
 import { MAX_ANGKA_DESIMAL, parseDecimalInput, sanitizeDecimalInput } from '../utils/decimalInput';
 import { formatGrowthPhase, formatTreeConditionStatus, formatTreeContextLine } from '../utils/treeFormat';
 import type { TreeRecordRouteType } from './tree-record-detail-screen';
 import {
   Button,
-  Card,
+  ChoiceRowGroup,
+  CONDITION_BADGE,
   DateField,
   EmptyState,
   ErrorBanner,
-  FormSection,
+  Field,
   LoadingState,
-  MetaRow,
   OptionGroup,
+  PhotoPickerCard,
   Screen,
   TopAppBar,
 } from './ui';
@@ -53,6 +64,9 @@ type TreeRecordEditScreenProps = {
   treeId?: string;
 };
 
+// Daftar dan urutannya SAMA PERSIS dengan form catat masing-masing. Enam
+// kondisi, lima fase dalam urutan kanonik; alasannya ditulis lengkap di
+// tree-condition-report-screen.tsx dan tree-growth-phase-record-screen.tsx.
 const conditionOptions: TreeConditionStatus[] = [
   'healthy',
   'needs_attention',
@@ -69,6 +83,29 @@ const phaseOptions: GrowthPhase[] = [
   'fruiting',
   'harvesting',
 ];
+
+/**
+ * Jenis catatan yang PUNYA jalur edit. Tiga, bukan empat.
+ *
+ * 'care' bukan anggotanya, dan itu bukan kelupaan: care_activities append-only
+ * dan tidak punya RPC update sama sekali (migrasi 027). Layar ini karena itu
+ * tidak pernah terbuka untuk perawatan, dan §8 adendum — ganti foto pada Edit
+ * catatan — tidak berlaku untuknya.
+ *
+ * Dipersempit dari TreeRecordRouteType, bukan mengabaikannya: tipe rute tetap
+ * berempat karena layar DETAIL memang melayani keempatnya.
+ */
+type EditableRecordType = Extract<TreeRecordRouteType, 'condition' | 'phase' | 'harvest'>;
+
+// Jenis entity foto per jenis catatan. Ketiga nilai di kanan adalah entity_type
+// yang policy-nya dipasang migrasi 061 — masing-masing dengan fungsi
+// can_upload_* sendiri yang mensyaratkan pengunggahnya adalah pencatat baris
+// itu, yaitu orang yang sama yang canEdit-nya true di layar ini.
+const RECORD_PHOTO_ENTITY_TYPE: Record<EditableRecordType, PhotoAttachmentEntityType> = {
+  condition: 'condition_record',
+  harvest: 'harvest_record',
+  phase: 'growth_phase_record',
+};
 
 export function TreeRecordEditScreen({
   basePath,
@@ -89,6 +126,14 @@ export function TreeRecordEditScreen({
   const [phase, setPhase] = React.useState<GrowthPhase | ''>('');
   const [submitting, setSubmitting] = React.useState(false);
   const [tree, setTree] = React.useState<Tree | null>(null);
+  // ——— Foto catatan (adendum §4.2). farmId ikut disimpan karena setiap
+  // panggilan foto memintanya, dan satu-satunya sumbernya adalah detail
+  // catatan yang baru saja dimuat. ———
+  const [currentPhoto, setCurrentPhoto] = React.useState<PhotoAttachmentWithSignedUrl | null>(null);
+  const [deletePhotoRequested, setDeletePhotoRequested] = React.useState(false);
+  const [farmId, setFarmId] = React.useState<UUID | null>(null);
+  const [processingPhoto, setProcessingPhoto] = React.useState(false);
+  const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
 
   const loadRecord = React.useCallback(async () => {
     if (!treeId || !recordId || !normalizedType) {
@@ -108,6 +153,25 @@ export function TreeRecordEditScreen({
       setTree(treeResult.data);
     }
 
+    // Foto yang sudah tersimpan. Kegagalan memuatnya TIDAK menghentikan layar
+    // dan tidak menulis ke `error`: catatannya sendiri sudah terbaca, dan
+    // menolak menampilkan form yang bisa diedit karena pratinjau fotonya gagal
+    // adalah hukuman yang tidak sepadan. Kotak fotonya tampil kosong, dan
+    // pemakainya masih bisa memilih foto baru.
+    async function loadExistingPhoto(recordFarmId: UUID) {
+      if (!recordId || !normalizedType) {
+        return;
+      }
+
+      const photosResult = await listEntityPhotos({
+        entityId: recordId,
+        entityType: RECORD_PHOTO_ENTITY_TYPE[normalizedType],
+        farmId: recordFarmId,
+      });
+
+      setCurrentPhoto(photosResult.data?.[0] ?? null);
+    }
+
     if (normalizedType === 'condition') {
       const result = await getConditionReportDetail({ reportId: recordId });
 
@@ -120,7 +184,9 @@ export function TreeRecordEditScreen({
       setCanEdit(result.data.canEdit === true);
       setConditionStatus(result.data.conditionStatus);
       setEventDate(toDateInput(result.data.reportedAt));
+      setFarmId(result.data.farmId);
       setNote(result.data.note ?? '');
+      await loadExistingPhoto(result.data.farmId);
       return;
     }
 
@@ -135,8 +201,10 @@ export function TreeRecordEditScreen({
 
       setCanEdit(result.data.canEdit === true);
       setEventDate(toDateInput(result.data.recordedAt));
+      setFarmId(result.data.farmId);
       setNote(result.data.note ?? '');
       setPhase(result.data.phase);
+      await loadExistingPhoto(result.data.farmId);
       return;
     }
 
@@ -151,12 +219,14 @@ export function TreeRecordEditScreen({
 
       setCanEdit(result.data.canEdit === true);
       setEventDate(toDateInput(result.data.harvestedAt));
+      setFarmId(result.data.farmId);
       // Dulu `String(result.data.fruitCount)`. Sejak kolomnya nullable, itu
       // menghasilkan teks "null" di dalam field — bukan field kosong.
       setGrade(result.data.fruitCondition);
       setBeratKg(result.data.harvestWeightKg === null ? '' : String(result.data.harvestWeightKg));
       setFruitCount(result.data.fruitCount === null ? '' : String(result.data.fruitCount));
       setNote(result.data.note ?? '');
+      await loadExistingPhoto(result.data.farmId);
       return;
     }
 
@@ -189,7 +259,30 @@ export function TreeRecordEditScreen({
       return;
     }
 
+    // FOTO DIURUS SETELAH catatannya tersimpan, bukan sebelum. Urutannya
+    // penting: kalau fotonya lebih dulu dan penyimpanan catatannya kemudian
+    // gagal, foto lama sudah terlanjur hilang untuk catatan yang isinya tidak
+    // jadi berubah — kerugian yang tidak bisa dibatalkan demi perubahan yang
+    // tidak terjadi.
+    const photoMessage = await submitPhotoChange(normalizedType, recordId);
+
     setSubmitting(false);
+
+    if (photoMessage) {
+      // Catatannya SUDAH tersimpan. Dialognya karena itu berjudul "tersimpan",
+      // bukan galat — bentuk yang sama dengan kegagalan foto di layar Ubah
+      // pohon, dan karena alasan yang sama: menampilkannya sebagai kegagalan
+      // akan membuat pemakainya menekan Simpan lagi untuk perubahan yang sudah
+      // masuk.
+      Alert.alert('Perubahan tersimpan', photoMessage, [
+        {
+          text: 'OK',
+          onPress: () => router.replace(`${basePath}/${treeId}/records/${normalizedType}/${recordId}`),
+        },
+      ]);
+      return;
+    }
+
     Alert.alert('Catatan berhasil diperbarui.', '', [
       {
         text: 'OK',
@@ -198,7 +291,126 @@ export function TreeRecordEditScreen({
     ]);
   }
 
-  async function submitRecordUpdate(type: TreeRecordRouteType, id: UUID): Promise<string | null> {
+  /**
+   * Menerapkan perubahan foto. Mengembalikan pesan kalau gagal, null kalau
+   * tidak ada yang perlu dilakukan ATAU berhasil.
+   *
+   * TIGA KEADAAN, dan hanya satu yang bisa aktif pada satu waktu:
+   *
+   *   - ada foto baru dipilih -> replaceSinglePhotoAttachment: unggah dulu,
+   *     baru hapus yang lama. Urutan itu milik fungsinya dan memang yang benar
+   *     — kalau unggahannya gagal, foto lama masih di tempatnya.
+   *   - hapus diminta dan ada foto lama -> deletePhotoAttachment.
+   *   - selebihnya -> tidak ada yang dikerjakan.
+   *
+   * Memilih foto baru MEMBATALKAN permintaan hapus (lihat kedua handler
+   * pemilih di bawah), jadi kedua cabang pertama tidak pernah menyala bersama.
+   */
+  async function submitPhotoChange(
+    type: EditableRecordType,
+    id: UUID
+  ): Promise<string | null> {
+    if (!farmId) {
+      return null;
+    }
+
+    if (selectedPhoto) {
+      const replaceResult = await replaceSinglePhotoAttachment({
+        base64: selectedPhoto.base64,
+        entityId: id,
+        entityType: RECORD_PHOTO_ENTITY_TYPE[type],
+        farmId,
+        fileName: selectedPhoto.fileName,
+        // false, sama dengan jalur unggah di form catat. Bendera `isPrimary`
+        // hanya dibaca foto utama pohon; menyalakannya di sini akan membuat
+        // foto catatan berbeda bentuk dari saudaranya yang dibuat lewat form
+        // catat tanpa ada yang memintanya.
+        isPrimary: false,
+        localUri: selectedPhoto.uri,
+        mimeType: selectedPhoto.mimeType,
+      });
+
+      return replaceResult.error
+        ? 'Isi catatan tersimpan, tetapi foto gagal diganti. Buka Edit lagi untuk mencoba ulang.'
+        : null;
+    }
+
+    if (deletePhotoRequested && currentPhoto) {
+      const deleteResult = await deletePhotoAttachment({ photoId: currentPhoto.attachment.id });
+
+      return deleteResult.error
+        ? 'Isi catatan tersimpan, tetapi foto gagal dihapus. Buka Edit lagi untuk mencoba ulang.'
+        : null;
+    }
+
+    return null;
+  }
+
+  async function handlePickPhotoFromGallery() {
+    setProcessingPhoto(true);
+
+    try {
+      const result = await pickImageFromGallery();
+
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        // Memilih foto baru membatalkan permintaan hapus: yang diminta jelas
+        // "ganti", bukan "hapus lalu tambah".
+        setDeletePhotoRequested(false);
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
+    }
+  }
+
+  async function handleTakePhotoFromCamera() {
+    setProcessingPhoto(true);
+
+    try {
+      const result = await takePhotoFromCamera();
+
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.data) {
+        setDeletePhotoRequested(false);
+        setError(null);
+        setSelectedPhoto(result.data);
+      }
+    } finally {
+      setProcessingPhoto(false);
+    }
+  }
+
+  // Ketukan "Hapus foto" di dalam sheet. DUA ARTI menurut apa yang sedang
+  // ditampilkan, dan keduanya sama-sama belum menyentuh server:
+  //
+  //   - kalau yang tampil foto yang BARU DIPILIH -> buang pilihannya saja.
+  //     Tidak ada apa pun yang terunggah, jadi tidak ada yang perlu dihapus.
+  //   - kalau yang tampil foto TERSIMPAN -> catat permintaannya. Berkasnya
+  //     masih utuh di storage dan barisnya masih ada di photo_attachments;
+  //     penghapusan baru berjalan di submitPhotoChange, setelah Simpan ditekan.
+  //     Sampai saat itu "Batalkan hapus foto" mengembalikannya tanpa biaya.
+  function handleRemovePhoto() {
+    if (selectedPhoto) {
+      setSelectedPhoto(null);
+      return;
+    }
+
+    if (currentPhoto) {
+      setDeletePhotoRequested(true);
+    }
+  }
+
+  async function submitRecordUpdate(type: EditableRecordType, id: UUID): Promise<string | null> {
     if (type === 'condition') {
       if (!conditionStatus) {
         return 'Status kondisi wajib dipilih.';
@@ -269,6 +481,9 @@ export function TreeRecordEditScreen({
       return result.error?.message ?? null;
     }
 
+    // `type` sudah dipersempit ke never di titik ini. Cabang ini hanya
+    // tercapai kalau EditableRecordType bertambah anggota tanpa fungsi ini
+    // ikut disesuaikan — dan compiler yang menagihnya lebih dulu.
     return 'Jenis catatan tidak dikenal.';
   }
 
@@ -310,8 +525,17 @@ export function TreeRecordEditScreen({
     );
   }
 
+  // Yang DITAMPILKAN di kotak foto, menurut tiga keadaan yang saling
+  // mendahului: foto baru yang dipilih, lalu "sedang diminta dihapus"
+  // (kosong), lalu foto tersimpan.
+  const previewPhotoUri = selectedPhoto?.uri ?? (deletePhotoRequested ? null : currentPhoto?.signedUrl);
+  const canRemovePhoto = Boolean(selectedPhoto || (currentPhoto && !deletePhotoRequested));
+
   return (
+    // URUTAN TETAP, sama dengan form catat pasangannya: konteks pohon -> satu
+    // pilihan utama besar -> isian angka/tanggal -> foto -> catatan -> bar aksi.
     <Screen
+      autoScrollOnFocus
       footer={
         <>
           <Button title="Simpan perubahan" loading={submitting} onPress={handleSubmit} />
@@ -339,51 +563,50 @@ export function TreeRecordEditScreen({
         </Text>
       ) : null}
 
+      {/* PILIHAN UTAMA. <ChoiceRowGroup> bersama, bukan OptionList/OptionChip
+          lokal yang dulu berdiri di dasar berkas ini. Keduanya dicabut: mereka
+          pemetaan kedua dari "pilihan" ke rupanya, di layar yang bersebelahan
+          dengan form catat yang memakai yang pertama — dan dua bentuk untuk satu
+          pekerjaan selalu berakhir menyimpang. Penanda kondisinya pun dibaca
+          dari CONDITION_BADGE, sumber yang sama dengan form catat kondisi. */}
       {normalizedType === 'condition' ? (
-        <FormSection title="Status kondisi">
-          <DateField label="Tanggal catatan *" onChangeDate={setEventDate} value={eventDate} />
-          <OptionList
-            options={conditionOptions}
-            selected={conditionStatus}
-            formatLabel={formatTreeConditionStatus}
-            onSelect={(value) => setConditionStatus(value)}
-          />
-          <TextArea label="Catatan" onChangeText={setNote} value={note} />
-        </FormSection>
+        <ChoiceRowGroup
+          label="Kondisi pohon"
+          options={conditionOptions.map((status) => ({
+            disabled: submitting,
+            label: formatTreeConditionStatus(status),
+            marker: {
+              color: CONDITION_BADGE[status].markerColor,
+              shape: CONDITION_BADGE[status].shape,
+            },
+            value: status,
+          }))}
+          value={conditionStatus}
+          onChange={(value) => setConditionStatus(value as TreeConditionStatus)}
+        />
       ) : null}
 
       {normalizedType === 'phase' ? (
-        <FormSection title="Fase pertumbuhan">
-          <DateField label="Tanggal catatan *" onChangeDate={setEventDate} value={eventDate} />
-          <OptionList
-            options={phaseOptions}
-            selected={phase}
-            formatLabel={formatGrowthPhase}
-            onSelect={(value) => setPhase(value)}
-          />
-          <TextArea label="Catatan" onChangeText={setNote} value={note} />
-        </FormSection>
+        <ChoiceRowGroup
+          label="Fase pertumbuhan"
+          options={phaseOptions.map((option) => ({
+            disabled: submitting,
+            highlighted: option === tree?.currentGrowthPhase,
+            label: formatGrowthPhase(option),
+            meta: option === tree?.currentGrowthPhase ? 'fase sekarang' : undefined,
+            value: option,
+          }))}
+          value={phase}
+          onChange={(value) => setPhase(value as GrowthPhase)}
+        />
       ) : null}
 
       {normalizedType === 'harvest' ? (
-        <FormSection title="Hasil panen">
-          <DateField label="Tanggal panen *" onChangeDate={setEventDate} value={eventDate} />
-          {/* Berat di atas jumlah buah, sama dengan form catat panen. */}
-          <InputField
-            keyboardType="decimal-pad"
-            label="Berat panen (kg)"
-            onChangeText={(value) => setBeratKg(sanitizeDecimalInput(value, MAX_ANGKA_DESIMAL))}
-            value={beratKg}
-          />
-          <InputField
-            keyboardType="number-pad"
-            label="Jumlah buah"
-            onChangeText={(value) => setFruitCount(value.replace(/[^0-9]/g, ''))}
-            value={fruitCount}
-          />
+        <>
           {/* Grade memakai OptionGroup yang sama dengan form catat panen supaya
               field ini terlihat identik di kedua layar. Menekan chip yang sudah
-              aktif membatalkan pilihan — grade memang opsional. */}
+              aktif membatalkan pilihan — grade memang opsional, dan constraint
+              harvest_records_fruit_condition_grade_check mengizinkan NULL. */}
           <OptionGroup
             label="Grade"
             options={GRADE_PANEN.map((option) => ({
@@ -394,22 +617,121 @@ export function TreeRecordEditScreen({
             value={grade}
             onChange={(value) => setGrade(grade === value ? null : (value as GradePanen))}
           />
-          <TextArea label="Catatan" onChangeText={setNote} value={note} />
-        </FormSection>
+
+          {/* Dua kolom sejajar dengan satuan di dalam kolom, sama dengan form
+              catat panen. */}
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            <View style={{ flex: 1 }}>
+              <Field
+                keyboardType="decimal-pad"
+                label="Berat panen"
+                onChangeText={(value) => setBeratKg(sanitizeDecimalInput(value, MAX_ANGKA_DESIMAL))}
+                placeholder="12,5"
+                unit="kg"
+                value={beratKg}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Field
+                keyboardType="number-pad"
+                label="Jumlah buah"
+                onChangeText={(value) => setFruitCount(value.replace(/[^0-9]/g, ''))}
+                placeholder="12"
+                unit="buah"
+                value={fruitCount}
+              />
+            </View>
+          </View>
+
+          <Text
+            selectable
+            style={{
+              color: colors.textMuted,
+              fontSize: typography.meta.fontSize,
+              lineHeight: typography.meta.lineHeight,
+            }}
+          >
+            Isi berat panen, jumlah buah, atau keduanya — minimal salah satu.
+          </Text>
+        </>
       ) : null}
 
+      <DateField
+        label={normalizedType === 'harvest' ? 'Tanggal panen' : 'Tanggal catatan'}
+        onChangeDate={setEventDate}
+        value={eventDate}
+      />
 
-      <Card variant="info">
-        <Text selectable style={{ color: colors.textMuted, lineHeight: 21 }}>
-          Foto yang sudah tersimpan tetap dipertahankan. Penggantian foto catatan tidak termasuk dalam batch ini.
-        </Text>
-      </Card>
+      {/* GANTI FOTO CATATAN (adendum §4.2). Kartu "Penggantian foto catatan
+          tidak termasuk dalam batch ini" yang dulu berdiri di sini DICABUT
+          bersama keterbatasannya.
+
+          Polanya mengikuti foto utama pohon di layar Ubah pohon: ketukan pada
+          gambar membuka sheet berisi Ambil foto / Pilih galeri / Hapus foto,
+          dan penghapusan baru terjadi setelah Simpan ditekan.
+
+          KETUK-UNTUK-MEMBUKA-SHEET DIBENARKAN DI SINI, berbeda dari layar
+          Detail Pohon tempat tombol kameranya dicabut: ini layar Edit,
+          satu-satunya tempat foto catatan bisa diganti, dan pemakainya sudah
+          datang untuk mengubah sesuatu. `changeHint` memasang afordans yang
+          terlihat di bawah gambar supaya jalurnya tidak hanya bergantung pada
+          ketukan yang harus ditemukan sendiri. */}
+      <PhotoPickerCard
+        changeHint="Ketuk foto untuk mengganti atau menghapusnya."
+        choosePhotoLabel="Pilih galeri"
+        description={processingPhoto ? PHOTO_PROCESSING_MESSAGE : undefined}
+        emptyLabel="Tambah foto"
+        imageUri={previewPhotoUri}
+        loading={submitting || processingPhoto}
+        optional
+        removeLabel="Hapus foto"
+        takePhotoLabel="Ambil foto"
+        title="Foto catatan"
+        onChoosePhoto={handlePickPhotoFromGallery}
+        onRemovePhoto={canRemovePhoto ? handleRemovePhoto : undefined}
+        onTakePhoto={handleTakePhotoFromCamera}
+      />
+
+      {/* Penghapusan yang BELUM TERJADI harus mengatakan dirinya, dan harus
+          bisa dibatalkan tanpa biaya. Literal dan bentuknya sepadan dengan
+          TreeMainPhotoFormSection; bedanya hanya kata "catatan". */}
+      {deletePhotoRequested && !selectedPhoto ? (
+        <View style={{ gap: spacing.md }}>
+          <Text selectable style={{ color: colors.textMuted, lineHeight: typography.small.lineHeight }}>
+            Foto catatan ini akan dihapus setelah perubahan disimpan.
+          </Text>
+          <Button
+            disabled={submitting}
+            title="Batalkan hapus foto"
+            variant="secondary"
+            onPress={() => setDeletePhotoRequested(false)}
+          />
+        </View>
+      ) : null}
+
+      <Field
+        label="Catatan"
+        multiline
+        optional
+        onChangeText={setNote}
+        placeholder="Keterangan tambahan tentang catatan ini"
+        value={note}
+      />
     </Screen>
   );
 
 }
 
-function normalizeRecordType(value?: string): TreeRecordRouteType | null {
+// Nilai balik DIPERSEMPIT ke tiga jenis yang punya jalur edit, bukan
+// TreeRecordRouteType lengkap yang berempat.
+//
+// Badannya sudah hanya menerima ketiganya sejak dulu — 'care' TIDAK BISA
+// diedit siapa pun karena care_activities append-only dan tidak punya RPC
+// update (migrasi 027) — tapi tipenya masih menjanjikan 'care' juga. Selisih
+// itu berhenti jadi soal gaya begitu foto catatan masuk: RECORD_PHOTO_ENTITY_TYPE
+// tidak punya baris 'care', dan janji tipe yang lebih lebar daripada kenyataan
+// memaksa penjaga runtime untuk cabang yang tidak akan pernah tercapai.
+function normalizeRecordType(value?: string): EditableRecordType | null {
   if (value === 'condition' || value === 'phase' || value === 'harvest') {
     return value;
   }
@@ -417,20 +739,18 @@ function normalizeRecordType(value?: string): TreeRecordRouteType | null {
   return null;
 }
 
-function getEditTitle(recordType: TreeRecordRouteType): string {
-  if (recordType === 'condition') {
-    return 'Edit catatan kondisi';
-  }
+// Penjaga eksahustifnya bekerja lewat Record, bukan rantai if: anggota baru di
+// EditableRecordType gagal saat kompilasi di sini, bukan diam-diam jatuh ke
+// cadangan yang keliru. Cadangan 'Edit catatan perawatan' yang dulu berdiri di
+// ujung fungsi ini DICABUT — ia judul untuk layar yang tidak pernah ada.
+function getEditTitle(recordType: EditableRecordType): string {
+  const titles: Record<EditableRecordType, string> = {
+    condition: 'Edit catatan kondisi',
+    harvest: 'Edit catatan panen',
+    phase: 'Edit catatan fase',
+  };
 
-  if (recordType === 'phase') {
-    return 'Edit catatan fase';
-  }
-
-  if (recordType === 'harvest') {
-    return 'Edit catatan panen';
-  }
-
-  return 'Edit catatan perawatan';
+  return titles[recordType];
 }
 
 function toDateInput(value: string): string {
@@ -446,134 +766,15 @@ function toDateInput(value: string): string {
   return `${year}-${month}-${day}`;
 }
 
-function OptionList<T extends string>({
-  formatLabel,
-  onSelect,
-  options,
-  selected,
-}: {
-  formatLabel: (value: T) => string;
-  onSelect: (value: T) => void;
-  options: T[];
-  selected: T | '';
-}) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      {options.map((option) => (
-        <OptionChip
-          key={option}
-          active={selected === option}
-          label={formatLabel(option)}
-          onPress={() => onSelect(option)}
-        />
-      ))}
-    </View>
-  );
-}
-
-function OptionChip({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        backgroundColor: active ? palette.accent : colors.surface,
-        borderColor: active ? palette.accent : colors.border,
-        borderCurve: 'continuous',
-        borderRadius: radius.md,
-        borderWidth: 1,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
-      }}
-    >
-      <Text selectable style={{ color: active ? colors.white : colors.text, fontSize: 14, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function InputField({
-  keyboardType,
-  label,
-  onChangeText,
-  value,
-}: {
-  // 'decimal-pad' ditambahkan untuk field berat panen: pemisah desimal harus
-  // ada di papan tombol, dan 'number-pad' tidak menyediakannya.
-  keyboardType?: 'default' | 'decimal-pad' | 'number-pad';
-  label: string;
-  onChangeText: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-        {label}
-      </Text>
-      <TextInput
-        keyboardType={keyboardType}
-        onChangeText={onChangeText}
-        placeholder="Opsional"
-        placeholderTextColor={colors.textSoft}
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderCurve: 'continuous',
-          borderRadius: radius.md,
-          borderWidth: 1,
-          color: colors.text,
-          fontSize: 16,
-          minHeight: 54,
-          paddingHorizontal: spacing.lg,
-        }}
-        value={value}
-      />
-    </View>
-  );
-}
-
-function TextArea({
-  label,
-  onChangeText,
-  value,
-}: {
-  label: string;
-  onChangeText: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <Text selectable style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>
-        {label}
-      </Text>
-      <TextInput
-        multiline
-        onChangeText={onChangeText}
-        placeholder="Opsional"
-        placeholderTextColor={colors.textSoft}
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderCurve: 'continuous',
-          borderRadius: radius.md,
-          borderWidth: 1,
-          color: colors.text,
-          fontSize: 16,
-          minHeight: 96,
-          paddingHorizontal: spacing.lg,
-          paddingTop: spacing.md,
-          textAlignVertical: 'top',
-        }}
-        value={value}
-      />
-    </View>
-  );
-}
+// OptionList, OptionChip, InputField, dan TextArea DICABUT di batch 5.
+//
+// Keempatnya menggambar sendiri apa yang <ChoiceRowGroup> dan <Field> sudah
+// gambar untuk seluruh aplikasi — tinggi, radius, warna garis, warna teks
+// terpilih, perilaku tekan — dan hasilnya layar Edit catatan terlihat berbeda
+// dari form catat yang persis di sebelahnya dalam satu alur.
+//
+// Yang ikut hilang bersamanya bukan cuma kemiripan: OptionChip lokal tidak
+// pernah menerima `disabled`, jadi pilihannya masih bisa ditekan saat form
+// sedang menyimpan, dan InputField selalu menulis placeholder 'Opsional' —
+// termasuk pada kolom berat panen, yang tidak opsional kalau jumlah buahnya
+// kosong.

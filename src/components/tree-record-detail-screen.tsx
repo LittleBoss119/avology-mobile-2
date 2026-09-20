@@ -4,6 +4,7 @@ import { Image, Pressable, Text, View } from 'react-native';
 
 import { GRADE_PANEN_LABELS } from '../constants/gradePanen';
 import { colors, radius, spacing, typography } from '../constants/theme';
+import { colors as palette, text as typeScale } from '../theme/tokens';
 import {
   getCareActivityDetail,
   softDeleteCareActivity,
@@ -30,6 +31,7 @@ import {
 import { getTreeDetail } from '../services/treeService';
 import { useAuth } from '../context/auth-context';
 import type {
+  CareCategory,
   HarvestRecord,
   MemberRole,
   ServiceResult,
@@ -44,19 +46,18 @@ import {
   formatProdukDenganTakaran,
   sanitizeDisplayValue,
 } from '../utils/displayFormat';
-import { formatGrowthPhase, formatTreeConditionStatus, formatTreeContextLine } from '../utils/treeFormat';
+import { formatGrowthPhase, formatTreeConditionStatus, formatTreeDisplayCode } from '../utils/treeFormat';
 import { setPendingFeedback } from '../lib/pendingFeedback';
 import { ConfirmDialog } from './bottom-sheet';
-import { PhotoAttachmentPreviewList, PhotoViewerModal } from './media';
+import { PhotoViewerModal } from './media';
 import {
-  Badge,
   Button,
-  Card,
   EmptyState,
   ErrorBanner,
   LoadingState,
   MetaRow,
   Screen,
+  SectionLabel,
   TopAppBar,
 } from './ui';
 
@@ -88,9 +89,21 @@ type DetailState = {
   eventAt: string;
   eventLabel: string;
   farmId: UUID;
+  /**
+   * NILAI UTAMA catatan ini, dan judul layarnya: 'Sehat', 'Berbunga', '12 kg',
+   * 'Penyemprotan'. Dirender `fonts.serif` 36.
+   *
+   * MENGGANTIKAN `title`, yang dulu berbunyi 'Detail catatan kondisi' —
+   * kalimat yang mengulang jenis catatan (sudah tertulis sebagai label di
+   * atasnya) dan kata 'Detail' (sudah dinyatakan oleh fakta bahwa layar ini
+   * terbuka). Nilainya sendiri dulu duduk sebagai MetaRow berlabel di tengah
+   * layar, yaitu tempat terakhir yang dilihat pembacanya.
+   */
+  headline: string;
   note: string | null;
   recordLabel: string;
-  // Badge sekunder (mis. asal perawatan Terjadwal/Inisiatif), tone muted. Opsional.
+  // Ruas kedua label jenis (mis. asal perawatan Terjadwal/Inisiatif). Digabung
+  // ke label yang sama dengan titik tengah, bukan berdiri sebagai badge kedua.
   originLabel?: string | null;
   // Jenis foto yang dimiliki catatan INI, bukan jenis catatannya.
   //
@@ -113,7 +126,6 @@ type DetailState = {
   // false untuk record read-only-by-design (perawatan): sembunyikan hint
   // "hanya bisa diubah oleh pelapor" yang tidak relevan. Default (undefined) = tampil.
   supportsEdit?: boolean;
-  title: string;
   updatedAt?: string | null;
 };
 
@@ -255,8 +267,12 @@ export function TreeRecordDetailScreen({
         detail.canEdit || detail.canDelete ? (
           <>
             {detail.canEdit ? (
+              /* 'Edit', bukan 'Ubah' dan bukan 'Edit catatan'. Satu kata: bar
+                 aksi berdiri di bawah layar yang seluruhnya membahas satu
+                 catatan, jadi kata 'catatan' di dalam labelnya mengulang
+                 konteks yang tidak pernah ambigu. */
               <Button
-                title="Edit catatan"
+                title="Edit"
                 onPress={() => router.push(`${basePath}/${treeId}/records/${normalizedType}/${recordId}/edit`)}
               />
             ) : null}
@@ -293,57 +309,68 @@ export function TreeRecordDetailScreen({
         visible={confirmDeleteOpen}
       />
 
-      {/* HERO. Foto naik ke puncak layar, mendahului judul catatan.
-          Syaratnya tetap detail.photoEntityType — jenis foto yang dimiliki
-          catatan INI, bukan jenis catatannya (lihat catatan pada DetailState) —
-          dan kini ditambah "memang ada fotonya". Tanpa foto, di posisi ini
-          tidak dirender apa pun: kartu berjudul "Foto catatan" yang dulu berdiri
-          di dasar layar dengan tulisan "Tidak ada foto pada catatan ini" sudah
-          dicabut. Kalimat itu memberi tahu pembacanya ketiadaan, yang sudah
-          terlihat dari tidak adanya foto. */}
-      {detail.photoEntityType && photos.length > 0 ? <RecordPhotoHero photos={photos} /> : null}
+      {/* SUSUNAN TETAP untuk ketiga jenis catatan (batch 5):
+            1. label jenis   2. nilai utama   3. baris meta
+            4. catatan       5. foto          6. tombol Edit (di bar aksi)
 
-      {/* Kepala: judul catatan, lalu tag, lalu dua baris keterangan.
-          Satu blok ber-gap rapat, bukan kartu — seluruh layar ini kini satu
-          aliran menurun dan tidak ada lagi kartu bertumpuk di dalamnya. */}
+          FOTO TURUN dari puncak layar ke bawah catatan. Sebagai hero setinggi
+          220 ia mendorong nilai catatan — satu-satunya hal yang dicari
+          pembacanya — keluar dari layar pertama, dan foto catatan adalah bukti
+          pendukung, bukan isinya. Syaratnya tidak berubah: detail.photoEntityType
+          (jenis foto yang dimiliki catatan INI, bukan jenis catatannya) DAN
+          memang ada fotonya. */}
+
+      {/* 1. LABEL JENIS. 12/600 huruf besar, letterSpacing 1,2, textMuted —
+             lebih ringan daripada nilai yang dinamainya. Menggantikan dua
+             <Badge> yang dulu berdiri di sini: chip berbingkai untuk sebuah
+             kata yang tidak bisa ditekan dan tidak menyatakan status apa pun.
+             Asal perawatan ('Terjadwal'/'Inisiatif') masuk sebagai ruas kedua
+             label yang sama, bukan sebagai chip kedua. */}
       <View style={{ gap: spacing.sm }}>
+        <SectionLabel
+          title={
+            detail.originLabel ? `${detail.recordLabel} · ${detail.originLabel}` : detail.recordLabel
+          }
+        />
+
+        {/* 2. NILAI UTAMA, serif 36. Keluarga serif dipakai di seluruh redesign
+               untuk angka dan nilai yang DIBACA sebagai nilai, bukan sebagai
+               kalimat — idiom yang sama dengan kode pohon serif 40 di layar
+               detail pohon, satu tingkat lebih kecil karena layar ini anaknya. */}
         <Text
+          accessibilityRole="header"
           selectable
-          style={{
-            color: colors.text,
-            fontSize: typography.h2.fontSize,
-            fontWeight: '700',
-            lineHeight: typography.h2.lineHeight,
-          }}
+          style={{ ...typeScale.stat36, color: palette.textPrimary }}
         >
-          {detail.title}
+          {detail.headline}
         </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          <Badge label={detail.recordLabel} tone="info" />
-          {detail.originLabel ? <Badge label={detail.originLabel} tone="muted" /> : null}
-        </View>
-        {/* Waktu dan pencatat jadi SATU baris. Sebagai dua MetaRow berlabel
-            ("Tanggal catatan", "Dicatat oleh") keduanya memakan empat baris
-            untuk dua fakta pendek yang selalu dibaca bersamaan. Label tanggalnya
-            ikut hilang karena judul di atas sudah menyatakan ini catatan apa. */}
+
+        {/* 3. BARIS META: pohon · tanggal · oleh. SATU baris, bukan dua.
+               Pohonnya disebut lewat kode saja ('Pohon 12-C'), bukan lewat
+               formatTreeContextLine yang berisi empat ruas — di layar ini
+               pertanyaannya cuma "catatan pohon yang mana", dan satu-satunya
+               jalan masuk ke sini adalah riwayat pohon itu sendiri. */}
         <Text selectable style={secondaryLineStyle}>
-          {`${formatEventDate(detail.eventAt)} · ${
-            detail.authorVerb === 'harvested' ? 'Dipanen oleh' : 'Dicatat oleh'
-          } ${formatActorDisplayName({
-            actorId: detail.authorId,
-            actorName: detail.authorName,
-            actorRole: detail.authorRole,
-            currentUserId: profile?.id,
-          })}`}
+          {[
+            tree ? `Pohon ${formatTreeDisplayCode(tree)}` : null,
+            formatEventDate(detail.eventAt),
+            `${detail.authorVerb === 'harvested' ? 'dipanen oleh' : 'dicatat oleh'} ${formatActorDisplayName(
+              {
+                actorId: detail.authorId,
+                actorName: detail.authorName,
+                actorRole: detail.authorRole,
+                currentUserId: profile?.id,
+              }
+            )}`,
+          ]
+            .filter((part): part is string => Boolean(part))
+            .join(' · ')}
         </Text>
-        {/* Pengganti kartu "Konteks Pohon". Tiga fakta yang sama, satu baris. */}
-        {tree ? (
-          <Text selectable style={secondaryLineStyle}>
-            {formatTreeContextLine(tree)}
-          </Text>
-        ) : null}
       </View>
 
+      {/* Fakta SISA, yang tidak terangkat jadi nilai utama: jumlah buah dan
+          grade pada panen, bahan dan status pada perawatan. Baris bernilai null
+          tidak pernah ditambahkan — lihat buildHarvestRows. */}
       {detail.rows.length > 0 ? (
         <View style={{ gap: spacing.md }}>
           {detail.rows.map((row) => (
@@ -352,9 +379,9 @@ export function TreeRecordDetailScreen({
         </View>
       ) : null}
 
-      {/* Catatan sebagai PARAGRAF, dan hanya kalau ada isinya. Dulu ia MetaRow
-          yang mencetak tanda hubung saat kosong — sebuah baris yang hadir hanya
-          untuk mengumumkan bahwa tidak ada yang perlu dibaca. */}
+      {/* 4. CATATAN sebagai PARAGRAF, dan hanya kalau ada isinya. Dulu ia MetaRow
+             yang mencetak tanda hubung saat kosong — sebuah baris yang hadir hanya
+             untuk mengumumkan bahwa tidak ada yang perlu dibaca. */}
       {noteText ? (
         <View style={{ gap: spacing.xs }}>
           {/* colors.textMuted, BUKAN colors.muted: alias `muted` hanya hidup di
@@ -367,6 +394,13 @@ export function TreeRecordDetailScreen({
           </Text>
         </View>
       ) : null}
+
+      {/* 5. FOTO. Tanpa foto, di posisi ini tidak dirender apa pun: kartu
+             berjudul "Foto catatan" yang dulu berdiri di sini dengan tulisan
+             "Tidak ada foto pada catatan ini" sudah dicabut di B3d. Kalimat itu
+             memberi tahu pembacanya ketiadaan, yang sudah terlihat dari tidak
+             adanya foto. */}
+      {detail.photoEntityType && photos.length > 0 ? <RecordPhotoSection photos={photos} /> : null}
 
       {/* Jejak audit dan keterangan izin duduk paling bawah: keduanya tentang
           catatannya, bukan isinya. */}
@@ -397,22 +431,32 @@ const secondaryLineStyle = {
   lineHeight: typography.small.lineHeight,
 } as const;
 
-// Foto catatan sebagai HERO: gambar besar di puncak layar, sebelum judulnya.
+// Foto catatan. Gambar lebar setinggi 220, di bawah catatan.
 //
-// Bentuknya sepadan dengan foto pohon di layar detail pohon — tinggi 220, sudut
-// kartu, dan ketukan membuka PhotoViewerModal yang sama. Dua layar yang
+// NAMANYA BUKAN LAGI 'Hero', dan itu bukan kosmetik: di batch 5 fotonya turun
+// dari puncak layar ke posisi kelima dalam susunan tetap. Nama yang menyatakan
+// posisi yang sudah tidak ditempatinya akan menyesatkan pembaca berikutnya
+// lebih daripada tidak ada nama sama sekali.
+//
+// Bentuknya tetap sepadan dengan foto pohon di layar detail pohon — tinggi 220,
+// sudut kartu, dan ketukan membuka PhotoViewerModal yang sama. Dua layar yang
 // bersebelahan dalam satu alur tidak boleh memperlakukan foto dengan dua cara.
+//
+// KETUKAN DI SINI HANYA MEMBESARKAN, tidak membuka jalur ganti atau hapus.
+// Layar ini BACA SAJA; mengganti foto catatan ada di layar Edit, dan hanya di
+// sana. Larangan gestur tersembunyi tidak berlaku untuk pembesaran: ia tidak
+// mengubah apa pun, dan tidak ada fungsi yang hilang bila ketukannya tidak
+// pernah ditemukan.
 //
 // SENGAJA BUKAN PhotoAttachmentPreviewList. Komponen itu adalah DAFTAR yang bisa
 // disunting: tiap foto duduk di dalam kotak berbingkai berpadding dengan tombol
 // hapus opsional, gambarnya setinggi 156. Itu bentuk yang benar untuk layar yang
-// MENGELOLA foto, dan bentuk yang salah untuk satu gambar yang seharusnya jadi
-// hal pertama yang dilihat pembaca.
+// MENGELOLA foto, dan bentuk yang salah untuk satu gambar yang hanya dibaca.
 //
 // Kegagalan muat ditangani per foto, sama seperti di PhotoAttachmentPreviewList
 // dan dengan alasan yang sama: signed URL foto hanya berumur 10 menit, jadi
 // layar yang dibiarkan terbuka akan menemui gambar yang sudah kedaluwarsa.
-function RecordPhotoHero({ photos }: { photos: PhotoAttachmentPreviewItem[] }) {
+function RecordPhotoSection({ photos }: { photos: PhotoAttachmentPreviewItem[] }) {
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [failedUrls, setFailedUrls] = React.useState<string[]>([]);
 
@@ -540,11 +584,14 @@ async function loadRecordDetail(
         eventAt: result.data.reportedAt,
         eventLabel: 'Tanggal catatan',
         farmId: result.data.farmId,
+        // Statusnya NAIK jadi nilai utama; barisnya ikut pergi. Ia tidak
+        // ditulis dua kali — sebagai judul serif dan lagi sebagai MetaRow
+        // berlabel 'Status kondisi' di bawahnya.
+        headline: formatTreeConditionStatus(result.data.conditionStatus),
         note: result.data.note,
         photoEntityType: 'condition_record',
         recordLabel: 'Kondisi',
-        rows: [{ label: 'Status kondisi', value: formatTreeConditionStatus(result.data.conditionStatus) }],
-        title: 'Detail catatan kondisi',
+        rows: [],
         updatedAt: result.data.updatedAt,
       },
       error: null,
@@ -572,11 +619,13 @@ async function loadRecordDetail(
         eventAt: result.data.recordedAt,
         eventLabel: 'Tanggal catatan',
         farmId: result.data.farmId,
+        // Fasenya NAIK jadi nilai utama; barisnya ikut pergi, alasan yang sama
+        // dengan cabang kondisi di atas.
+        headline: formatGrowthPhase(result.data.phase),
         note: result.data.note,
         photoEntityType: 'growth_phase_record',
         recordLabel: 'Fase',
-        rows: [{ label: 'Fase pertumbuhan', value: formatGrowthPhase(result.data.phase) }],
-        title: 'Detail catatan fase',
+        rows: [],
         updatedAt: result.data.updatedAt,
       },
       error: null,
@@ -604,6 +653,7 @@ async function loadRecordDetail(
         eventAt: result.data.harvestedAt,
         eventLabel: 'Tanggal panen',
         farmId: result.data.farmId,
+        headline: buildHarvestHeadline(result.data),
         note: result.data.note,
         photoEntityType: 'harvest_record',
         recordLabel: 'Panen',
@@ -614,7 +664,6 @@ async function loadRecordDetail(
         // String(result.data.fruitCount) yang lama menghasilkan teks "null"
         // begitu kolomnya nullable — itu yang diperbaiki di sini.
         rows: buildHarvestRows(result.data),
-        title: 'Detail catatan panen',
         updatedAt: result.data.updatedAt,
       },
       error: null,
@@ -638,9 +687,9 @@ async function loadRecordDetail(
       rows.push({ label: 'Dari tugas', value: care.taskTitle });
     }
 
-    if (care.category) {
-      rows.push({ label: 'Kategori', value: formatCareCategory(care.category) });
-    }
+    // Kategori TIDAK lagi jadi baris: ia naik ke nilai utama (lihat
+    // buildCareHeadline). Baris 'Kategori' yang tetap berdiri berarti kata yang
+    // sama dicetak dua kali dalam satu layar sependek ini.
 
     // Utang dari Tahap D: baris ini dulu teks polos tanpa takaran, padahal tiga
     // layar hasil kerja lain sudah memakai formatter yang sama.
@@ -667,6 +716,7 @@ async function loadRecordDetail(
         eventAt: care.performedAt,
         eventLabel: 'Tanggal perawatan',
         farmId: care.farmId,
+        headline: buildCareHeadline(care.category),
         note: care.note,
         originLabel: care.asal === 'terjadwal' ? 'Terjadwal' : 'Inisiatif',
         // Hanya yang inisiatif. Foto perawatan terjadwal adalah 'task_proof'
@@ -675,7 +725,6 @@ async function loadRecordDetail(
         recordLabel: 'Perawatan',
         rows,
         supportsEdit: false,
-        title: 'Detail catatan perawatan',
         updatedAt: null,
       },
       error: null,
@@ -706,6 +755,49 @@ async function resolveRecordAuthor(
     fullName: null,
     role: null,
   };
+}
+
+// SATU nilai panen untuk judul serif. Berat kalau ada, kalau tidak jumlah buah.
+// TIDAK PERNAH keduanya.
+//
+// Aturannya SAMA PERSIS dengan formatHarvestFactValue di tree-components.tsx,
+// yang melayani baris "Panen terakhir" di layar detail pohon — dan sengaja
+// begitu: kedua layar itu bersebelahan dalam satu alur, jadi panen yang sama
+// tidak boleh disebut dengan dua angka berbeda. Yang berbeda hanya sumbernya:
+// di sana teks deskripsi rakitan view, di sini kolom HarvestRecord langsung.
+//
+// Berat didahulukan karena ia yang dipakai menjual, dan karena ia satu-satunya
+// dari keduanya yang bisa dijumlahkan antarpanen tanpa berbohong (berat alpukat
+// terlalu bervariasi untuk dikonversi dari jumlah buah).
+//
+// Cabang terakhir tidak pernah tercapai selama constraint
+// harvest_records_amount_present_check masih berlaku — ia menjamin setidaknya
+// satu dari keduanya terisi. Ia ada supaya layar tidak berjudul kosong kalau
+// constraint itu suatu hari dilonggarkan.
+function buildHarvestHeadline(record: HarvestRecord): string {
+  if (record.harvestWeightKg !== null) {
+    const berat = record.harvestWeightKg.toLocaleString('id-ID', {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+    });
+
+    return `${berat} kg`;
+  }
+
+  if (record.fruitCount !== null) {
+    return `${record.fruitCount} buah`;
+  }
+
+  return 'Panen';
+}
+
+// Judul catatan perawatan: nama kategorinya.
+//
+// care_activities.category NULLABLE (migrasi 025) dan baris lama memang ada
+// yang kosong, jadi cadangannya kata 'Perawatan' — bukan string kosong, yang
+// akan menyisakan lubang di tempat judul.
+function buildCareHeadline(category: CareCategory | null | undefined): string {
+  return category ? formatCareCategory(category) : 'Perawatan';
 }
 
 // Dinilai dari JENIS FOTO yang dipegang catatan itu, bukan dari recordType --
@@ -755,17 +847,12 @@ async function loadRecordPhotos(
 function buildHarvestRows(record: HarvestRecord): Array<{ label: string; value: string | null }> {
   const rows: Array<{ label: string; value: string | null }> = [];
 
-  if (record.harvestWeightKg !== null) {
-    const berat = record.harvestWeightKg.toLocaleString('id-ID', {
-      maximumFractionDigits: 2,
-      minimumFractionDigits: 0,
-    });
-
-    rows.push({ label: 'Berat panen', value: `${berat} kg` });
-  }
-
-  if (record.fruitCount !== null) {
-    rows.push({ label: 'Jumlah buah', value: String(record.fruitCount) });
+  // Nilai yang SUDAH naik jadi judul serif tidak diulang sebagai baris. Berat
+  // yang ada selalu menang jadi judul (lihat buildHarvestHeadline), jadi baris
+  // 'Berat panen' hanya muncul kalau judulnya ternyata jumlah buah — dan itu
+  // berarti beratnya null dan barisnya memang tidak akan dirender.
+  if (record.harvestWeightKg !== null && record.fruitCount !== null) {
+    rows.push({ label: 'Jumlah buah', value: `${record.fruitCount} buah` });
   }
 
   // Grade lama yang belum dibersihkan sudah dipetakan jadi null oleh mapper di
