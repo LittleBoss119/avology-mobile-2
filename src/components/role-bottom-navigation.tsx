@@ -51,8 +51,22 @@ export function RoleBottomNavigation({ role }: { role: MemberRole }) {
     // bar aksi bawah di <Screen>.
     <View
       style={{
-        backgroundColor: palette.surfaceRaised,
-        borderTopColor: palette.border,
+        // LATAR HALAMAN, bukan surfaceRaised (batch 3) — perubahan yang sama
+        // dan dengan alasan yang sama seperti bar aksi di <Screen>.
+        //
+        // Yang memaksanya: tab Pohon punya bar aksi "Tambah pohon" DAN bar ini
+        // sekaligus, bertumpuk di tepi bawah layar yang sama. Selama keduanya
+        // memakai putih yang berbeda, batas bawah aplikasi terbaca sebagai dua
+        // pita berlainan warna yang saling menempel — dan tak satu pun dari
+        // keduanya menandai apa pun dengan perbedaan itu.
+        //
+        // Pil surfaceSunken di balik tab aktif TIDAK ikut berubah: ia kini
+        // satu-satunya bidang di dalam bar, dan justru lebih terbaca di atas
+        // surface daripada di atas surfaceRaised.
+        backgroundColor: palette.surface,
+        // borderStrong, sejalan dengan bar aksi: sejak latar bar sama dengan
+        // latar halaman, garis ini satu-satunya yang menyatakan batasnya.
+        borderTopColor: palette.borderStrong,
         borderTopWidth: 1,
         paddingBottom: Math.max(insets.bottom, spacing.sm),
         paddingHorizontal: spacing.sm,
@@ -129,20 +143,28 @@ export function RoleBottomNavigation({ role }: { role: MemberRole }) {
   );
 }
 
-// Empat item. Kebun dicabut dari bar dan pindah ke baris tujuan di dashboard
-// (app/(owner)/owner/index.tsx) — layar yang dibuka sesekali, bukan tempat yang
-// ditinggali sepanjang hari. Laporan dulu diperlakukan sama; modulnya dibuang
-// seluruhnya di migrasi 053.
+// Empat item. Kebun dicabut dari bar sejak putaran sebelumnya — layar yang
+// dibuka sesekali, bukan tempat yang ditinggali sepanjang hari. Laporan dulu
+// diperlakukan sama; modulnya dibuang seluruhnya di migrasi 053.
 //
-// Kebun kini hanya dicapai dari Beranda, jadi ia diperlakukan sebagai TURUNAN
-// Beranda: path-nya masuk ke `match` item Beranda supaya ikon Beranda tetap
-// tersorot selama user berada di cabang itu. `href`-nya tidak ikut berubah —
-// menekan Beranda tetap membawa ke '/owner', bukan ke tempat terakhir di
-// cabangnya.
+// KETIGA CABANG KEBUN PINDAH DARI 'Beranda' KE 'Profil' (batch 3), mengikuti
+// pintu masuknya. '/owner/farm', '/owner/farm-profile', dan '/owner/workers'
+// kini dicapai lewat seksi KEBUN di tab Profil, bukan lagi dari baris navigasi
+// di Beranda. Kalau ketiganya dibiarkan di `match` Beranda, pemilik yang
+// menekan Profil lalu "Data kebun" akan melihat sorotan melompat kembali ke
+// Beranda — tab yang justru tidak pernah ia sentuh.
+//
+// `href` tidak ikut berubah: menekan Profil tetap membawa ke '/owner/profile',
+// bukan ke tempat terakhir di cabangnya.
 //
 // '/owner/farm-profile' dan '/owner/workers' harus disebut sendiri-sendiri:
 // keduanya cabang dari layar Kebun tapi bukan subpath '/owner/farm/', sehingga
 // aturan startsWith di isActivePath() tidak menjangkaunya.
+//
+// '/owner/farm-grid' ikut pindah bersama ketiganya: ia cabang dari Data kebun
+// (pengaturan ukuran denah). Ia tidak ada di ownerTopLevelPaths, jadi barnya
+// memang tidak dirender di sana — entri ini menjaga agar aturannya tetap benar
+// kalau kelak ia dimasukkan.
 //
 // Daftar path tempat bar DITAMPILKAN (ownerTopLevelPaths di bawah) dibiarkan
 // utuh.
@@ -151,7 +173,7 @@ const ownerNavigationItems: NavigationItem[] = [
     href: '/owner',
     icon: 'home',
     label: 'Beranda',
-    match: ['/owner', '/owner/farm', '/owner/farm-grid', '/owner/farm-profile', '/owner/workers'],
+    match: ['/owner'],
   },
   {
     href: '/owner/trees',
@@ -169,7 +191,13 @@ const ownerNavigationItems: NavigationItem[] = [
     href: '/owner/profile',
     icon: 'user',
     label: 'Profil',
-    match: ['/owner/profile'],
+    match: [
+      '/owner/profile',
+      '/owner/farm',
+      '/owner/farm-grid',
+      '/owner/farm-profile',
+      '/owner/workers',
+    ],
   },
 ];
 
@@ -203,7 +231,7 @@ const workerNavigationItems: NavigationItem[] = [
     href: '/worker',
     icon: 'home',
     label: 'Beranda',
-    match: ['/worker', '/worker/farm'],
+    match: ['/worker'],
   },
   {
     href: '/worker/trees',
@@ -221,7 +249,9 @@ const workerNavigationItems: NavigationItem[] = [
     href: '/worker/profile',
     icon: 'user',
     label: 'Profil',
-    match: ['/worker/profile'],
+    // '/worker/farm' ikut pindah ke sini bersama baris "Anggota" yang dicabut
+    // dari Beranda pekerja — alasannya sama persis dengan sisi pemilik.
+    match: ['/worker/profile', '/worker/farm'],
   },
 ];
 

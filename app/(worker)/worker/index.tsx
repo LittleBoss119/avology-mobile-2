@@ -1,82 +1,81 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { tokens } from '../../../src/constants/theme';
+import { formatCareTarget } from '../../../src/components/care-schedule-components';
 import {
+  Button,
   Card,
+  EmptyState,
   ErrorBanner,
   LoadingState,
+  MenuRow,
   MenuRowGroup,
+  RootTabTitle,
   Screen,
-  SectionHeader,
 } from '../../../src/components/ui';
-import {
-  FarmIdentityBlock,
-  StatColumn,
-  TreeStatRow,
-} from '../../../src/components/farm-overview';
-import { Icon, type IconName } from '../../../src/components/icons';
 import { useAuth } from '../../../src/context/auth-context';
-import { getWorkerDashboardSummary } from '../../../src/services/dashboardService';
-import { getTrees } from '../../../src/services/treeService';
-import type { Tree, WorkerDashboardSummary } from '../../../src/types/domain';
-
-type TreeConditionCounts = {
-  healthyTrees: number;
-  problemTrees: number;
-  totalTrees: number;
-};
+import { getWorkerTasks } from '../../../src/services/careTaskService';
+import { colors as palette, text as typeScale } from '../../../src/theme/tokens';
+import type { CareTask } from '../../../src/types/domain';
+import { formatCareCategory, formatPersonDisplayName } from '../../../src/utils/displayFormat';
+import { getTodayIsoDate, taskTimeBucket } from '../../../src/utils/taskDueDate';
 
 export default function WorkerDashboardScreen() {
-  const { currentFarm } = useAuth();
+  const { currentFarm, profile } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [summary, setSummary] = React.useState<WorkerDashboardSummary | null>(null);
-  const [treeCounts, setTreeCounts] = React.useState<TreeConditionCounts | null>(null);
+  const [todayTasks, setTodayTasks] = React.useState<CareTask[] | null>(null);
 
   const farmId = currentFarm?.farmId;
-  const userId = currentFarm?.userId;
 
   const loadDashboard = React.useCallback(async () => {
-    if (!farmId || !userId) {
+    if (!farmId) {
       setError('Data pekerja aktif tidak ditemukan.');
-      setSummary(null);
-      setTreeCounts(null);
+      setTodayTasks(null);
       return;
     }
 
     setError(null);
 
-    // Kondisi kebun dihitung DI KLIEN dari daftar pohon yang sudah dipakai layar
-    // Pohon pekerja — getTrees dengan argumen yang sama persis (farmId + non
-    // arsip). Tidak ada service, RPC, maupun penghitung agregat baru: pekerja
-    // memang sudah berhak membaca daftar ini, dan ringkasan tiga angka tidak
-    // pantas menambah satu jalur data sendiri.
-    const [summaryResult, treesResult] = await Promise.all([
-      getWorkerDashboardSummary({ farmId, userId }),
-      getTrees({ archived: false, farmId }),
-    ]);
+    // getWorkerTasks, BUKAN getWorkerDashboardSummary — dan itu MENGURANGI
+    // jumlah permintaan, bukan menambah.
+    //
+    // Layar ini sekarang menampilkan kartu tugas, bukan sekadar hitungannya,
+    // jadi ia butuh barisnya. Begitu barisnya ada, angka serif 80 di atasnya
+    // bisa dihitung dari panjang daftar yang sama — dan ringkasan yang dulu
+    // memasok angka itu jadi permintaan ketiga yang tidak dirender apa pun.
+    //
+    // Ini JUGA bukan query baru: getWorkerTasks sudah dipakai layar Tugas
+    // pekerja dengan argumen yang sama persis, dan filter "hari ini" di bawah
+    // memakai taskTimeBucket yang juga sudah dipakai di sana. Tidak ada
+    // service, RPC, maupun penghitung agregat yang ditambahkan.
+    //
+    // getTrees ikut dicabut bersama kartu Pohon: susunan Beranda pekerja yang
+    // baru tidak punya blok kondisi kebun sama sekali.
+    const result = await getWorkerTasks({ farmId });
 
-    if (summaryResult.error) {
+    if (result.error) {
       setError('Data beranda belum bisa dimuat.');
-      setSummary(null);
-      setTreeCounts(null);
+      setTodayTasks(null);
       return;
     }
 
-    setSummary(summaryResult.data);
+    const todayIso = getTodayIsoDate();
 
-    // Gagalnya daftar pohon TIDAK menjatuhkan seluruh Beranda: kartu tugas hari
-    // ini tetap berdiri, dan seksi kondisi kebun yang hilang sendirian.
-    if (treesResult.error) {
-      setError('Kondisi kebun belum bisa dimuat.');
-      setTreeCounts(null);
-      return;
-    }
-
-    setTreeCounts(countTreeConditions(treesResult.data));
-  }, [farmId, userId]);
+    // Definisi "hari ini" dipatok ke taskTimeBucket, pemetaan yang SAMA yang
+    // membangun section "Hari ini" di layar Tugas. Angka di Beranda dan isi
+    // section di layar Tugas karena itu tidak bisa berselisih — dan dulu
+    // mereka bisa: countWorkerTasksDueToday di dashboardService menyaring
+    // status di SQL, sedangkan layar Tugas menyaringnya di klien.
+    //
+    // scheduleIsCancelled false: getWorkerTasks sudah membuang tugas dari
+    // jadwal yang dibatalkan sebelum datanya sampai ke sini.
+    setTodayTasks(
+      result.data.filter((task) => taskTimeBucket(task, todayIso, false) === 'today')
+    );
+  }, [farmId]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -89,292 +88,148 @@ export default function WorkerDashboardScreen() {
     return <LoadingState message="Memuat dashboard pekerja..." />;
   }
 
-  const farm = currentFarm?.farm;
+  const greeting = `Halo, ${formatPersonDisplayName(profile?.fullName, 'Pekerja')}`;
 
-  // Tanpa prop `header`: judul layar dibuang karena tab bar di bawah sudah
-  // menamai layar ini dan menyalakannya. `applyTopInset` WAJIB ikut — inset
-  // atas selama ini datang dari TopAppBar di dalam MainTabHeader (ui.tsx),
-  // bukan dari Screen, jadi tanpa prop ini isi layar menempel ke status bar.
   return (
     <Screen applyTopInset>
-      {/* Tanpa chip "Ubah data kebun": hanya pemilik yang boleh mengubah data
-          kebun, jadi di sini blok identitas murni penanda tempat. */}
-      {farm ? <FarmIdentityBlock farm={farm} /> : null}
+      {/* Judul layar root tab, 26 rata kiri — penundaan dari batch 1b.
+          Alasannya sama dengan Beranda pemilik: sapaan ADALAH judul halaman
+          ini, dan baris kedua bertuliskan "Beranda" hanya akan menamai tab yang
+          ikonnya sudah menyala di bawah.
+
+          Blok identitas kebun yang dulu berdiri di sini dicabut, sejalan dengan
+          Beranda pemilik. Nama kebun tetap terbaca di tab Profil. */}
+      <RootTabTitle title={greeting} />
+
       <ErrorBanner message={error} />
 
-      {summary === null ? null : (
-        <View style={styles.sections}>
-          <TaskCard summary={summary} />
+      {todayTasks === null ? null : (
+        <>
+          {todayTasks.length === 0 ? (
+            /* Ikon centang, judul, satu kalimat — bentuk <EmptyState> yang
+               sudah ada, bukan blok baru.
 
-          {/* HILANG SELURUHNYA saat daftar pohon gagal dimuat — treeCounts null
-              berarti angkanya tidak diketahui, bukan nol, dan kartu berisi tiga
-              nol adalah angka bohong. Galatnya sudah dikabarkan ErrorBanner di
-              atas. */}
-          {treeCounts ? <TreesCard treeCounts={treeCounts} /> : null}
+               Kalimatnya "Belum ada pekerjaan yang dijadwalkan.", BUKAN bunyi
+               spek "Abah belum menjadwalkan pekerjaan". Menyebut nama pemilik
+               secara harfiah salah di dua tingkat: nama itu diketik saat kebun
+               dibuat dan bisa apa saja, dan kalimat yang menunjuk seseorang
+               membuat layar kosong terbaca sebagai keluhan tentang orang itu.
+               Yang perlu diketahui pekerja hanya bahwa hari ini memang belum
+               ada pekerjaannya. */
+            <EmptyState
+              icon="check"
+              subtitle="Belum ada pekerjaan yang dijadwalkan."
+              title="Tidak ada tugas hari ini"
+              variant="plain"
+            />
+          ) : (
+            <>
+              {/* Angka serif 80: jumlah kartu yang dirender persis di bawahnya.
+                  Dihitung dari panjang daftar yang sama, bukan dari penghitung
+                  kedua — aturan yang sama dengan angka 72 di Beranda pemilik. */}
+              <View>
+                <Text accessibilityRole="header" selectable style={styles.bigNumber}>
+                  {todayTasks.length}
+                </Text>
+                <Text selectable style={styles.bigNumberCaption}>
+                  tugas hari ini
+                </Text>
+              </View>
 
-          {/* Jalan masuk ke Kebun setelah ia dicabut dari bottom nav. Tanpa
-              label sampingan: WorkerDashboardSummary tidak menghitung anggota,
-              dan menambah hitungan berarti menambah request — bukan menata
-              navigasi.
+              <View style={styles.taskList}>
+                {todayTasks.map((task) => (
+                  <TaskCard key={task.id} task={task} />
+                ))}
+              </View>
+            </>
+          )}
 
-              Baris kedua ("Laporan") ikut dibuang bersama modul laporan
-              operasional di migrasi 053. */}
-          <Card padding={tokens.layout.cardPadding}>
-            <MenuRowGroup>
-              <NavRow icon="user" title="Anggota" onPress={() => router.push('/worker/farm')} />
-            </MenuRowGroup>
-          </Card>
-        </View>
+          {/* Satu baris, selalu ada — juga saat tidak ada tugas. Kondisi pohon
+              dicatat ketika pekerja MELIHAT sesuatu di kebun, bukan ketika ia
+              diberi tugas, jadi ia justru paling dibutuhkan di hari yang
+              kosong.
+
+              Tujuannya /worker/trees, daftar pohon. Layar pencatatan kondisi
+              menuntut satu pohon tertentu (/worker/trees/[treeId]/report), dan
+              tidak ada rute yang menerima "catat kondisi" tanpa pohon — jadi
+              pohonnya dipilih dulu. `meta` mengatakan itu di muka; tanpa baris
+              itu, tombol berjudul "Catat kondisi pohon" yang membuka daftar
+              terbaca sebagai salah tujuan. */}
+          <MenuRowGroup>
+            <MenuRow
+              icon="tree"
+              label="Catat kondisi pohon"
+              meta="Pilih pohonnya dulu di daftar"
+              onPress={() => router.push('/worker/trees')}
+            />
+          </MenuRowGroup>
+        </>
       )}
     </Screen>
   );
 }
 
-function TodayTaskCard({ summary }: { summary: WorkerDashboardSummary }) {
-  const aktif = summary.todayTasks > 0;
-  const caption =
-    summary.todayTasks > 0
-      ? 'Ketuk untuk mulai mengerjakan.'
-      : summary.unfinishedTasks > 0
-        ? `Masih ada ${summary.unfinishedTasks} tugas terbuka dari hari lain.`
-        : 'Belum ada tugas yang perlu dikerjakan.';
+// Kartu tugas dengan tombol "Catat hasil" DI DALAM kartunya.
+//
+// Konsekuensinya hanya 2-3 kartu yang muat per layar, dan itu memang harganya:
+// tanpa tombol ini, mencatat satu hasil kerja menuntut buka detail, gulung ke
+// bawah, tekan tombol — tiga langkah untuk pekerjaan yang paling sering
+// dilakukan di aplikasi ini. Jangan dipadatkan.
+//
+// Kartunya SENDIRI tetap bisa ditekan dan membuka detail. Dua tujuan dalam satu
+// kartu, dan keduanya perlu: tombol untuk yang sudah tahu apa yang dikerjakan,
+// kartunya untuk yang perlu membaca instruksi dulu.
+function TaskCard({ task }: { task: CareTask }) {
+  // Kategori, bukan judul yang diketik pemilik — alasan yang sama dengan baris
+  // di layar Tugas: judul bebas berbunyi "Test" atau "awas", sedangkan
+  // "Penyemprotan" memberi tahu apa yang harus dibawa. 'Tugas perawatan' adalah
+  // teks jatuh-balik yang sudah dipakai di sana, dipertahankan apa adanya.
+  const title = task.category ? formatCareCategory(task.category) : 'Tugas perawatan';
 
   return (
-    <Pressable onPress={() => router.push('/worker/tasks')}>
-      <Card variant={aktif ? 'softGreen' : 'default'} style={styles.taskCard}>
-        <View style={styles.cardHeader}>
-          <Text selectable style={aktif ? styles.cardTitleActive : styles.cardTitleIdle}>
-            Tugas hari ini
-          </Text>
-          <Icon
-            name="chevron-right"
-            size={tokens.icon.sm}
-            color={aktif ? tokens.color.brand.base : tokens.color.text.tertiary}
-          />
-        </View>
-        <Text selectable style={aktif ? styles.cardNumberActive : styles.cardNumberIdle}>
-          {summary.todayTasks}
+    <Card padding={tokens.layout.cardPadding}>
+      <View style={styles.taskHead}>
+        <Text selectable style={styles.taskTitle}>
+          {title}
         </Text>
-        <Text selectable style={styles.cardCaption}>
-          {caption}
+        {/* Target saja. Tanggalnya tidak ditulis: seluruh daftar ini hari ini,
+            dan angka 80 di atasnya sudah menyatakannya. */}
+        <Text selectable style={styles.taskMeta}>
+          {formatCareTarget(task)}
         </Text>
-      </Card>
-    </Pressable>
+      </View>
+
+      <Button
+        title="Catat hasil"
+        onPress={() => router.push(`/worker/tasks/${task.id}/record?mode=create`)}
+      />
+
+      {/* Jalan ke detail sebagai tombol sekunder, bukan kartu yang bisa
+          ditekan. Kartu yang bisa ditekan DAN berisi tombol punya dua target
+          sentuh yang bertumpuk, dan yang lebih besar selalu menang saat jari
+          meleset — di sini yang lebih besar adalah kartunya, sehingga tekanan
+          yang meleset sedikit dari "Catat hasil" mendarat di layar yang salah.
+          Dua tombol berdampingan tidak punya masalah itu. */}
+      <Button
+        title="Lihat detail"
+        variant="secondary"
+        onPress={() => router.push(`/worker/tasks/${task.id}`)}
+      />
+    </Card>
   );
-}
-
-// Kartu Tugas. SATU angka: unfinishedTasks, berlabel "Belum selesai".
-//
-// WorkerDashboardSummary punya tiga angka (dashboardService), dan dua di
-// antaranya sengaja TIDAK dipakai di sini:
-//
-//   unfinishedTasks -- TANPA batas tanggal, status pending/postponed. DIPAKAI.
-//
-//   completedTasks  -- TANPA batas tanggal, status completed. DIBUANG. Ia
-//     akumulasi seumur keanggotaan: hanya naik, tidak pernah turun, dan
-//     setelah beberapa bulan jadi angka besar yang artinya tidak berubah dari
-//     hari ke hari. Angka semacam itu bukan informasi, dan berdampingan dengan
-//     angka yang menuntut tindakan ia mengundang salah baca.
-//
-//   todayTasks      -- due_date = HARI INI, status pending/postponed. DIBUANG,
-//     dan BUKAN sebagai pengganti kolom yang hilang: ia HIMPUNAN BAGIAN dari
-//     unfinishedTasks (penyaring status dan pengecualiannya sama persis, hanya
-//     ditambah batas due_date). Menaruh keduanya berdampingan berarti memajang
-//     dua angka yang tumpang tindih, dan orang akan menjumlahkannya.
-//
-// Judulnya "Tugas", bukan "Tugas hari ini": angkanya memang bukan angka hari
-// ini, dan pembaca layar ini akan membaca labelnya apa adanya.
-function TaskCard({ summary }: { summary: WorkerDashboardSummary }) {
-  return (
-    <Pressable onPress={() => router.push('/worker/tasks')}>
-      <Card padding={tokens.layout.cardPadding}>
-        <View style={styles.cardHeader}>
-          <Text selectable style={styles.cardTitle}>
-            Tugas
-          </Text>
-          <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
-        </View>
-        {/* Pembungkus barisnya TETAP ada walau isinya tinggal satu kolom:
-            StatColumn ber-`flex: 1` dan butuh induk berarah baris untuk
-            memenuhi lebar penuh lalu memusatkan isinya. Dengan begitu angka di
-            kartu ini persis seukuran angka di kartu Pohon di bawahnya — sama
-            komponennya, sama gayanya, bukan sekadar mirip. */}
-        <View style={styles.statRow}>
-          {/* Warna hanya menyala saat masih ada yang menunggu dikerjakan; nol
-              tetap netral. Labelnya yang membawa pesan, warnanya penegas. */}
-          <StatColumn
-            color={
-              summary.unfinishedTasks > 0 ? tokens.color.brand.base : tokens.color.text.primary
-            }
-            label="Belum selesai"
-            value={summary.unfinishedTasks}
-          />
-        </View>
-      </Card>
-    </Pressable>
-  );
-}
-
-// Kartu Pohon. Bentuknya sama persis dengan kartu Pohon di Beranda pemilik —
-// TreeStatRow yang sama, dari berkas yang sama.
-//
-// Rute dan cabang tampilannya TIDAK diubah: '/worker/trees' membuka Daftar atau
-// Denah menurut treeBrowseState, yaitu tampilan yang terakhir dipakai. Sudah
-// diputuskan tidak dipaksa ke salah satunya.
-function TreesCard({ treeCounts }: { treeCounts: TreeConditionCounts }) {
-  // Kebun tanpa pohon: satu kalimat, TANPA tombol dan tanpa bisa diketuk.
-  // Pekerja tidak boleh menambah pohon, jadi menawarkan jalan masuk ke sana cuma
-  // memberi tugas yang bukan miliknya — dan mengantar ke daftar yang pasti
-  // kosong hanya memberi jalan buntu. Yang perlu dia tahu hanya kenapa angkanya
-  // tidak ada.
-  if (treeCounts.totalTrees === 0) {
-    return (
-      <Card padding={tokens.layout.cardPadding}>
-        <Text selectable style={styles.emptyConditionText}>
-          Kebun ini belum punya data pohon.
-        </Text>
-      </Card>
-    );
-  }
-
-  return (
-    <Pressable onPress={() => router.push('/worker/trees')}>
-      <Card padding={tokens.layout.cardPadding}>
-        <View style={styles.cardHeader}>
-          <Text selectable style={styles.cardTitle}>
-            Pohon
-          </Text>
-          <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
-        </View>
-        <TreeStatRow
-          healthyTrees={treeCounts.healthyTrees}
-          problemTrees={treeCounts.problemTrees}
-          totalTrees={treeCounts.totalTrees}
-        />
-      </Card>
-    </Pressable>
-  );
-}
-
-// TODO(batch 3 — Beranda): ganti dengan <MenuRow> dari src/components/ui.tsx.
-// Baris ini adalah himpunan bagian paling sederhana dari MenuRow — `title` ->
-// `label`, sisanya sama namanya — jadi penggantiannya lurus tanpa kehilangan
-// apa pun. Pembungkus <Card> di sekitar <MenuRowGroup> ikut dilepas saat itu.
-function NavRow({ icon, onPress, title }: { icon: IconName; onPress: () => void; title: string }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.navRow}>
-      <Icon name={icon} size={tokens.icon.md} color={tokens.color.brand.base} />
-      <Text selectable style={styles.rowTitle}>
-        {title}
-      </Text>
-      <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
-    </Pressable>
-  );
-}
-
-// Baris polos dengan divider, tanpa Card — sejajar dengan seksi "Pantauan" di
-// Beranda pemilik.
-function WorkSummaryList({ summary }: { summary: WorkerDashboardSummary }) {
-  const items = [
-    { key: 'unfinished', label: 'Belum selesai', value: summary.unfinishedTasks },
-    { key: 'completed', label: 'Sudah selesai', value: summary.completedTasks },
-  ];
-
-  return (
-    <View>
-      {items.map((item, index) => (
-        <React.Fragment key={item.key}>
-          {index > 0 ? <View style={styles.divider} /> : null}
-          <View style={styles.row}>
-            <Text selectable style={styles.rowLabel}>
-              {item.label}
-            </Text>
-            <Text selectable style={styles.rowValue}>
-              {item.value}
-            </Text>
-          </View>
-        </React.Fragment>
-      ))}
-    </View>
-  );
-}
-
-// Dua ember, sama dengan yang dipakai ringkasan pemilik di server
-// (dashboardService.countHealthyTrees / countProblemTrees): sehat = 'healthy',
-// perhatian = SELAIN 'healthy'. Disamakan supaya angka yang dilihat pekerja dan
-// pemilik untuk kebun yang sama tidak pernah berbeda.
-function countTreeConditions(trees: Tree[]): TreeConditionCounts {
-  const healthyTrees = trees.filter((tree) => tree.currentCondition === 'healthy').length;
-
-  return {
-    healthyTrees,
-    problemTrees: trees.length - healthyTrees,
-    totalTrees: trees.length,
-  };
 }
 
 const styles = StyleSheet.create({
-  sections: { gap: tokens.layout.sectionGap },
-  section: { gap: tokens.space.md },
+  // Serif 80, satu tingkat di atas angka 72 Beranda pemilik. Pemilik membaca
+  // layarnya sambil duduk; pekerja membacanya sambil berdiri di kebun, sering
+  // dengan matahari di layar.
+  bigNumber: { ...typeScale.stat80, color: palette.textPrimary },
+  bigNumberCaption: { ...typeScale.meta, color: palette.textMuted },
 
-  taskCard: { gap: 0 },
-  // `marginBottom` DICABUT. Ia dulu mengganti jarak yang dimatikan
-  // `taskCard: { gap: 0 }` pada kartu lama. Kartu-kartu baru memakai Card
-  // apa adanya, yang sudah punya `gap` sendiri — membiarkan marginBottom di
-  // sini membuat kartu Beranda pekerja 8px lebih longgar daripada kartu
-  // Beranda pemilik yang bentuknya seharusnya sama persis.
-  cardHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cardTitleActive: { ...tokens.type.label, color: tokens.color.brand.base },
-  cardTitleIdle: { ...tokens.type.label, color: tokens.color.text.secondary },
-  cardNumberActive: { ...tokens.type.display, color: tokens.color.brand.base },
-  cardNumberIdle: { ...tokens.type.display, color: tokens.color.text.tertiary },
-  cardCaption: { ...tokens.type.bodySmall, color: tokens.color.text.secondary, marginTop: tokens.space.xs },
-
-  // Judul kartu, sama persis dengan Beranda pemilik — kedua Beranda kini satu
-  // gaya, jadi tidak ada lagi varian aktif/idle yang membedakan bobotnya.
-  cardTitle: { ...tokens.type.label, color: tokens.color.text.secondary },
-
-  // Kolomnya sendiri (statCol/statValue/statLabel) hidup di farm-overview.tsx
-  // bersama StatColumn. Yang tinggal di sini hanya PEMBUNGKUS barisnya, karena
-  // kartu Tugas memakai dua kolom sedangkan TreeStatRow memakai tiga — dan
-  // nilainya sengaja identik dengan statRow di sana supaya kedua kartu di layar
-  // yang sama punya jarak antarkolom yang sama.
-  statRow: { flexDirection: 'row', gap: tokens.space.md },
-
-  // Baris navigasi di dalam kartu. minHeight mengikuti controlHeight seperti
-  // MenuRow di ui.tsx dan NavRow di Beranda pemilik.
-  navRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: tokens.space.md,
-    minHeight: tokens.layout.controlHeight,
-  },
-
-  destinations: { gap: 0 },
-  divider: {
-    backgroundColor: tokens.color.line.hairline,
-    height: StyleSheet.hairlineWidth,
-  },
-  row: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: tokens.space.md,
-    justifyContent: 'space-between',
-    minHeight: tokens.layout.rowMinHeight,
-    paddingVertical: tokens.space.md,
-  },
-  // Rata tengah: keadaan kosong salah satu dari empat hal yang boleh rata
-  // tengah menurut aturan desain yang berlaku.
-  emptyConditionText: {
-    ...tokens.type.body,
-    color: tokens.color.text.secondary,
-    textAlign: 'center',
-  },
-  rowLabel: { ...tokens.type.body, color: tokens.color.text.secondary },
-  rowTitle: { ...tokens.type.body, color: tokens.color.text.primary, flex: 1 },
-  rowValue: { ...tokens.type.bodyStrong, color: tokens.color.text.primary },
+  // listGap, bukan sectionGap: kartu-kartu ini satu daftar, bukan beberapa
+  // seksi yang berdiri sendiri.
+  taskList: { gap: tokens.layout.listGap },
+  taskHead: { gap: tokens.space.xs },
+  taskTitle: { ...tokens.type.subheading, color: palette.textPrimary },
+  taskMeta: { ...tokens.type.bodySmall, color: palette.textMuted },
 });

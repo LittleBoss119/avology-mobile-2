@@ -5,7 +5,7 @@ import { Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'rea
 import Svg, { Path } from 'react-native-svg';
 
 import { BottomSheet } from '../../../src/components/bottom-sheet';
-import { Icon, type IconName } from '../../../src/components/icons';
+import { Icon } from '../../../src/components/icons';
 import { Avatar, MemberRow } from '../../../src/components/member-row';
 import { useSnackbar } from '../../../src/components/snackbar';
 import {
@@ -326,12 +326,17 @@ export default function OwnerFarmHubScreen() {
         ))}
       </RowGroup>
 
-      {/* Tanpa angka. Penghitung lamanya dihitung dari farm_members berstatus
-          rejected/removed, sementara layar tujuannya membaca farm_access_events
-          sejak Fase 2 — dan baris stale mulai terhapus sejak Fase 3, jadi
-          angkanya makin jauh dari isi layarnya. Pemilik tidak mengambil keputusan
-          apa pun dari angka itu. */}
-      <NavRow icon="clock" title="Riwayat akses" onPress={() => router.push('/owner/workers')} />
+      {/* Baris "Riwayat akses" PINDAH ke seksi KEBUN di tab Profil (batch 3),
+          bersama "Anggota" dan "Data kebun" yang dicabut dari Beranda.
+
+          Ia satu-satunya dari ketiganya yang TIDAK pernah tinggal di Beranda —
+          ia hidup di sini, di kaki layar Anggota. Tetap ikut pindah karena
+          ketiganya adalah setelan kebun yang sekarang berkumpul di satu tempat,
+          dan meninggalkan satu baris di layar lain berarti pemilik harus ingat
+          bahwa yang satu ini ada di tempat yang berbeda dari dua saudaranya.
+
+          Jalan masuknya TIDAK hilang di antara kedua batch: sisi Profil dipasang
+          di batch yang sama dengan pencabutan ini. */}
 
       <BottomSheet
         onClose={closeSheet}
@@ -551,77 +556,11 @@ function RowGroup({ children }: { children: React.ReactNode }) {
   );
 }
 
-// TODO(batch 7 — Data kebun): ganti dengan <MenuRow> dari src/components/ui.tsx.
-// `title` -> `label`, `subtitle` -> `meta`, `icon` dan `onPress` sama namanya.
-//
-// SATU kemampuan yang TIDAK ikut pindah, dan itu disengaja: lingkaran 38px
-// berlatar surfaceSunken di belakang ikon. MenuRow merender ikon polos. Bidang
-// warna di belakang ikon adalah hiasan — ia tidak membedakan satu baris dari
-// baris lain, karena semua baris punya lingkaran yang sama — dan spek membentuk
-// hierarki dari garis, beda bidang, dan ruang kosong, bukan dari bentuk
-// berlatar. Kalau lingkaran itu ternyata dipertahankan, itu keputusan yang
-// diambil di batch 7, bukan sesuatu yang diselundupkan lewat MenuRow.
-function NavRow({
-  icon,
-  onPress,
-  subtitle,
-  title,
-}: {
-  icon: IconName;
-  onPress: () => void;
-  subtitle?: string;
-  title: string;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => ({
-        alignItems: 'center',
-        flexDirection: 'row',
-        gap: tokens.space.md,
-        opacity: pressed ? 0.6 : 1,
-        paddingVertical: tokens.space.md,
-      })}
-    >
-      <View
-        style={{
-          alignItems: 'center',
-          backgroundColor: tokens.color.surface.subtle,
-          borderRadius: tokens.radius.pill,
-          height: 38,
-          justifyContent: 'center',
-          width: 38,
-        }}
-      >
-        <Icon name={icon} size={20} color={tokens.color.brand.base} />
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text
-          style={{
-            color: tokens.color.text.primary,
-            fontSize: tokens.type.bodyStrong.fontSize,
-            fontWeight: '700',
-          }}
-        >
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text
-            style={{
-              color: tokens.color.text.secondary,
-              fontSize: tokens.type.meta.fontSize,
-              lineHeight: tokens.type.meta.lineHeight,
-            }}
-          >
-            {subtitle}
-          </Text>
-        ) : null}
-      </View>
-      <Icon name="chevron-right" size={20} color={tokens.color.text.tertiary} />
-    </Pressable>
-  );
-}
+// NavRow DIHAPUS di batch 3. Ia hanya pernah punya satu pemanggil — baris
+// "Riwayat akses" di atas — dan baris itu pindah ke tab Profil, tempat ia
+// dirender oleh <MenuRow> bersama. TODO batch 7 yang dulu menempel di sini
+// (mengganti NavRow dengan MenuRow) karena itu sudah terbayar lunas: tidak ada
+// lagi varian baris navigasi lokal di layar ini.
 
 function IconActionButton({
   icon,

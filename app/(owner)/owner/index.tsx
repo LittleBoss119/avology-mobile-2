@@ -1,45 +1,49 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { tokens } from '../../../src/constants/theme';
 import {
-  Button,
-  Card,
   ErrorBanner,
   LoadingState,
+  MenuRow,
   MenuRowGroup,
+  RootTabTitle,
   Screen,
-  SectionHeader,
+  SectionLabel,
+  type StatusMarkerShape,
 } from '../../../src/components/ui';
-import { FarmIdentityBlock, TreeStatRow } from '../../../src/components/farm-overview';
-import { Icon, type IconName } from '../../../src/components/icons';
+import { StatColumn } from '../../../src/components/farm-overview';
+import { Icon } from '../../../src/components/icons';
 import { useAuth } from '../../../src/context/auth-context';
-import { getRecentFarmCareActivities } from '../../../src/services/careActivityService';
 import { getOwnerDashboardSummary } from '../../../src/services/dashboardService';
-import type { OwnerDashboardSummary, RecentFarmCareActivity } from '../../../src/types/domain';
-import { daysSinceLocal } from '../../../src/utils/dateDiff';
-import { formatCareCategory } from '../../../src/utils/displayFormat';
-import { toWibIsoDate } from '../../../src/utils/taskDueDate';
+import { colors as palette, text as typeScale } from '../../../src/theme/tokens';
+import type { OwnerDashboardSummary } from '../../../src/types/domain';
+import { formatPersonDisplayName } from '../../../src/utils/displayFormat';
+import { formatFullDate, getTodayIsoDate } from '../../../src/utils/taskDueDate';
 
-type ActionRowItem = {
+// Baris masalah: satu hal yang butuh keputusan pemilik, satu angka, satu tujuan.
+//
+// `value` WAJIB ikut ke dalam tipe ini, bukan dibaca ulang dari summary di
+// tempat render. Itulah yang membuat aturan angka besar bisa ditegakkan di satu
+// tempat: daftar ini dibangun sekali, angka serif 72 dijumlahkan DARI daftar
+// yang sama, lalu daftar yang sama itu yang dirender. Tidak ada jalan untuk
+// menambah baris tanpa angkanya ikut terjumlah, dan tidak ada jalan untuk
+// menjumlahkan sesuatu yang tidak muncul sebagai baris.
+type ProblemRow = {
   key: string;
-  title: string;
-  subtitle?: string;
-  value: number;
+  label: string;
+  markerColor: string;
+  markerShape: StatusMarkerShape;
   route: string;
+  value: number;
 };
 
 export default function OwnerDashboardScreen() {
-  const { currentFarm } = useAuth();
+  const { currentFarm, profile } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [summary, setSummary] = React.useState<OwnerDashboardSummary | null>(null);
-  // KEADAAN TERPISAH dari `summary`, dan itu inti pemisahan kegagalannya.
-  // Array kosong berarti "tidak ada aktivitas ATAU pengambilannya gagal" —
-  // kedua keadaan itu menghasilkan hal yang sama di layar, yaitu kartunya tidak
-  // dirender sama sekali. Kartu ini tambahan, bukan isi utama.
-  const [recentActivities, setRecentActivities] = React.useState<RecentFarmCareActivity[]>([]);
 
   const farmId = currentFarm?.farmId;
 
@@ -47,29 +51,17 @@ export default function OwnerDashboardScreen() {
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
       setSummary(null);
-      setRecentActivities([]);
       return;
     }
 
     setError(null);
 
-    // BERDAMPINGAN, bukan berurutan dan bukan di dalam getOwnerDashboardSummary.
-    // Keduanya berangkat bersama, dan kegagalan salah satunya tidak menyentuh
-    // yang lain — lihat penanganan masing-masing di bawah.
-    const [result, recentResult] = await Promise.all([
-      getOwnerDashboardSummary({ farmId }),
-      getRecentFarmCareActivities({ farmId }),
-    ]);
-
-    // Kartu "Terakhir dikerjakan" DILEPAS DIAM-DIAM saat gagal: tidak ada
-    // ErrorBanner, tidak ada perubahan pada `error`, dan sisa Beranda tidak
-    // tahu-menahu. Satu kartu yang tidak muncul jauh lebih baik daripada
-    // Beranda yang tidak bisa dibuka — dan pemilik tidak bisa berbuat apa pun
-    // dengan kabar bahwa satu kartu tambahan gagal dimuat.
-    //
-    // Ditangani LEBIH DULU dari cabang galat summary di bawah, supaya ia tetap
-    // dibereskan walau summary-nya yang jatuh.
-    setRecentActivities(recentResult.error ? [] : recentResult.data);
+    // SATU pengambilan, turun dari dua. getRecentFarmCareActivities ikut
+    // dicabut bersama kartu "Terakhir dikerjakan": kartu itu tidak ada di
+    // susunan Beranda yang baru, dan membiarkan permintaannya berjalan untuk
+    // data yang tidak dirender berarti membayar ongkos muat tanpa hasil.
+    // Layar ini menargetkan muat di bawah 3 detik.
+    const result = await getOwnerDashboardSummary({ farmId });
 
     if (result.error) {
       setError('Data beranda belum bisa dimuat.');
@@ -91,487 +83,257 @@ export default function OwnerDashboardScreen() {
     return <LoadingState message="Memuat dashboard pemilik..." />;
   }
 
-  const farm = currentFarm?.farm;
+  const greeting = `Halo, ${formatPersonDisplayName(profile?.fullName, 'Pemilik')}`;
+  const today = formatFullDate(getTodayIsoDate());
 
-  // Tanpa prop `header`: judul layar dibuang karena tab bar di bawah sudah
-  // menamai layar ini dan menyalakannya. `applyTopInset` WAJIB ikut — inset
-  // atas selama ini datang dari TopAppBar di dalam MainTabHeader (ui.tsx),
-  // bukan dari Screen, jadi tanpa prop ini isi layar menempel ke status bar.
   return (
     <Screen applyTopInset>
-      {/* Hero. Sapaan "Halo, {nama}" dulu berdiri di sini dan sudah lama
-          dihapus: ia memakai baris paling atas layar untuk menyebut nama orang
-          yang sedang memegang HP-nya sendiri, sementara tempat itu milik
-          identitas kebun — satu-satunya hal di layar ini yang menjawab "aku
-          sedang melihat apa".
+      {/* Judul layar root tab, 26 rata kiri — penundaan dari batch 1b yang
+          dipasang di sini.
 
-          Kini juga TANPA chip "Ubah data kebun". Jalan ke /owner/farm-profile
-          lewat baris "Data kebun" di kelompok navigasi paling bawah, supaya
-          setelan kebun berkumpul di satu tempat alih-alih menggantung sebagai
-          chip di bawah namanya sendiri. */}
-      {farm ? <FarmIdentityBlock farm={farm} /> : null}
+          Judulnya SAPAAN, bukan kata "Beranda". Dua baris teratas yang berbunyi
+          "Beranda" lalu "Halo, Abah" adalah satu baris yang menamai tab yang
+          ikonnya sudah menyala di bawah, ditimpa satu baris lagi yang
+          benar-benar menyapa. Susunan layar ini menaruh sapaan di urutan
+          pertama, dan sapaan itulah heading halamannya.
+
+          Blok identitas kebun yang dulu berdiri di sini DICABUT. Nama kebun
+          tidak berubah dari hari ke hari, sedangkan seluruh sisa layar ini
+          berubah tiap pagi — tempat paling atas layar tidak pantas ditempati
+          hal yang tidak pernah berubah. Namanya tetap terbaca di tab Profil
+          (baris "Kebun") dan di layar Data kebun. */}
+      <RootTabTitle title={greeting} meta={today} />
+
       <ErrorBanner message={error} />
 
-      {summary === null ? null : (
-        <View style={styles.sections}>
-          {/* KEBUN TANPA POHON mengganti kartu ini, BUKAN menghilangkannya:
-              tiga angka nol tidak mengabarkan apa-apa, sedangkan satu kalimat
-              plus jalan masuk mengabarkan apa yang harus dilakukan berikutnya.
-              Kartu Perawatan di bawah memang hilang total dalam keadaan itu —
-              kebun tanpa pohon tidak bisa punya tugas perawatan. */}
-          {summary.totalTrees === 0 ? <EmptyTreesCard /> : <TreeCard summary={summary} />}
-
-          {summary.totalTrees === 0 ? null : <CareCard summary={summary} />}
-
-          {/* HILANG SELURUHNYA saat tidak ada aktivitas — bukan kartu berisi
-              kalimat "belum ada apa-apa", yang menempati ruang sebesar
-              pekerjaan sungguhan untuk mengabarkan bahwa tidak ada kabar.
-              Array kosong juga keadaan yang sama saat pengambilannya gagal. */}
-          {recentActivities.length === 0 ? null : (
-            <RecentWorkCard activities={recentActivities} />
-          )}
-
-          <Card padding={tokens.layout.cardPadding}>
-            <MenuRowGroup>
-              {/* Baris fase HILANG saat kebun belum punya pohon — layar
-                  tujuannya pasti kosong, dan mengantar ke sana hanya memberi
-                  jalan buntu. Dua baris sisanya tetap: keduanya berguna justru
-                  pada kebun yang baru dibuat. */}
-              {summary.totalTrees === 0 ? null : (
-                <NavRow
-                  icon="flower"
-                  title="Fase pohon"
-                  meta={buildPhaseMeta(summary)}
-                  onPress={() => router.push('/owner/growth-monitoring')}
-                />
-              )}
-              <NavRow
-                icon="user"
-                title="Anggota"
-                meta={buildPendingMeta(summary)}
-                onPress={() => router.push('/owner/farm')}
-              />
-              <NavRow
-                icon="building-warehouse"
-                title="Data kebun"
-                onPress={() => router.push('/owner/farm-profile')}
-              />
-            </MenuRowGroup>
-          </Card>
-        </View>
-      )}
+      {summary === null ? null : <DashboardBody summary={summary} />}
     </Screen>
   );
 }
 
-// Kartu Pohon. TANPA bar proporsi — tiga angka saja.
-//
-// Barnya dicabut karena ia hanya bisa membedakan sehat dari "selain sehat", dan
-// dua ruas berwarna yang selalu memenuhi lebar penuh menjanjikan pembacaan yang
-// lebih teliti daripada yang datanya sanggup berikan. Angkanya sendiri sudah
-// mengatakan hal yang sama tanpa janji itu.
-//
-// "Perlu dicek" masih mencakup pohon MATI — definisi problemTrees tidak
-// disentuh di putaran ini (dashboardService.countProblemTrees: current_condition
-// <> 'healthy'). Memisahkannya menyentuh angka yang dipakai bersama Beranda
-// pekerja, dan itu ditunda ke setelah UAT.
-function TreeCard({ summary }: { summary: OwnerDashboardSummary }) {
-  return (
-    <Pressable onPress={() => router.push('/owner/trees')}>
-      <Card padding={tokens.layout.cardPadding}>
-        <View style={styles.cardHeader}>
-          <Text selectable style={styles.cardTitle}>
-            Pohon
-          </Text>
-          <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
-        </View>
-        <TreeStatRow
-          healthyTrees={summary.healthyTrees}
-          problemTrees={summary.problemTrees}
-          totalTrees={summary.totalTrees}
-        />
-      </Card>
-    </Pressable>
-  );
-}
-
-// Kartu Perawatan. Dua baris, bukan satu angka gabungan: "telat" dan "hari ini"
-// menuntut dua tindakan yang berbeda mendesaknya, dan menjumlahkannya
-// menyembunyikan perbedaan itu.
-//
-// Keduanya sudah ada di OwnerDashboardSummary sejak sebelum putaran ini
-// (overdueTasks dan todayTasks) — tidak ada query yang ditambahkan.
-function CareCard({ summary }: { summary: OwnerDashboardSummary }) {
-  return (
-    <Pressable onPress={() => router.push('/owner/schedules')}>
-      <Card padding={tokens.layout.cardPadding}>
-        <View style={styles.cardHeader}>
-          <Text selectable style={styles.cardTitle}>
-            Perawatan
-          </Text>
-          <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
-        </View>
-        <View>
-          <CareRow
-            color={
-              summary.overdueTasks > 0 ? tokens.color.status.danger.text : tokens.color.text.primary
-            }
-            label="Telat"
-            value={summary.overdueTasks}
-          />
-          <View style={styles.divider} />
-          <CareRow color={tokens.color.text.primary} label="Hari ini" value={summary.todayTasks} />
-        </View>
-      </Card>
-    </Pressable>
-  );
-}
-
-// Kartu "Terakhir dikerjakan". Menjawab pertanyaan ketiga pemilik — apakah
-// pekerjaannya benar-benar dikerjakan — yang sebelumnya tidak dijawab di mana
-// pun di aplikasi ini.
-//
-// TIDAK BISA DIKETUK, dan itu keputusan, bukan kelalaian. Ia kartu yang DIBACA,
-// bukan pintu: tanpa chevron, tanpa Pressable, tanpa tombol. Rute detail
-// aktivitas memang ada —
-// /owner/trees/[treeId]/records/care/[recordId] (tree-record-detail-screen) —
-// tapi ia menuntut treeId, sedangkan satu aktivitas di sini bisa mencakup
-// ratusan pohon dan tidak ada satu pun yang benar untuk dituju. Sengaja tidak
-// disambungkan.
-//
-// SUBJEK TIAP BARIS ADALAH PEKERJAAN PADA POHON, bukan orangnya. Baris atas
-// menyebut jenis pekerjaan dan berapa pohon; nama pencatat turun ke baris kedua
-// sebagai atribusi, bersama waktunya. Bentuk yang membalik ini — "Om Ari
-// mengerjakan…" — akan membuat kartunya terbaca sebagai daftar absensi, dan
-// aplikasi ini sistem manajemen kebun, bukan manajemen pekerja.
-function RecentWorkCard({ activities }: { activities: RecentFarmCareActivity[] }) {
-  return (
-    <Card padding={tokens.layout.cardPadding}>
-      {/* Tanpa cardHeader ber-chevron seperti dua kartu di atasnya: judul saja,
-          karena tidak ada tujuan yang bisa dituju dari sini. */}
-      <Text selectable style={styles.cardTitle}>
-        Terakhir dikerjakan
-      </Text>
-      <View>
-        {activities.map((activity, index) => (
-          <React.Fragment key={activity.id}>
-            {index > 0 ? <View style={styles.divider} /> : null}
-            <RecentWorkRow activity={activity} />
-          </React.Fragment>
-        ))}
-      </View>
-    </Card>
-  );
-}
-
-function RecentWorkRow({ activity }: { activity: RecentFarmCareActivity }) {
-  const attribution = buildAttribution(activity);
+function DashboardBody({ summary }: { summary: OwnerDashboardSummary }) {
+  const problems = buildProblemRows(summary);
 
   return (
-    <View style={styles.recentRow}>
-      <Text selectable numberOfLines={1} style={styles.recentTitle}>
-        {`${buildWorkLabel(activity)} · ${activity.treeCount} pohon`}
-      </Text>
-      {/* Baris kedua HILANG seluruhnya kalau tidak ada satu pun yang bisa
-          dikatakan — waktu tidak terbaca DAN nama tidak terbaca. Baris kosong
-          yang menyisakan tingginya lebih buruk daripada baris yang tidak ada. */}
-      {attribution ? (
-        <Text selectable numberOfLines={1} style={styles.recentMeta}>
-          {attribution}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-// Jenis pekerjaan. formatCareCategory (displayFormat.ts) adalah pemformat yang
-// SUDAH ADA dan dipakai layar tugas, jadwal, dan riwayat pohon — dipakai apa
-// adanya supaya kata yang sama muncul di semua tempat.
-//
-// Judul tugas hanya cadangan TERAKHIR, dan hanya bisa terpakai kalau baris
-// terjadwal punya category kosong DAN tugasnya terbaca. Ia diketik pemilik dan
-// panjangnya tidak terkendali — numberOfLines={1} di pemanggil yang menahannya
-// supaya tidak membungkus, dan bagian "· N pohon" tetap ikut terpotong bersama
-// baris itu, bukan terdorong keluar.
-//
-// 'Perawatan' adalah jalur terakhir: baris terjadwal tanpa category di kedua
-// sisi dan tanpa judul. Kata generik lebih jujur daripada tanda hubung, yang
-// menyuruh pembacanya menebak apakah datanya kosong atau gagal dimuat.
-function buildWorkLabel(activity: RecentFarmCareActivity): string {
-  if (activity.category) {
-    return formatCareCategory(activity.category);
-  }
-
-  return activity.taskTitle ?? 'Perawatan';
-}
-
-// Baris kedua: '<waktu> · <nama pencatat>'. Keduanya opsional dan pemisahnya
-// ikut hilang bersama bagian yang kosong — bukan '· ' yang menggantung.
-function buildAttribution(activity: RecentFarmCareActivity): string | null {
-  return [buildRelativeDay(activity.performedAt), activity.performerName]
-    .filter(Boolean)
-    .join(' · ') || null;
-}
-
-// 'Hari ini' / 'Kemarin' / '<n> hari lalu'. FRASA BARU — tidak ada padanannya
-// di repo. Yang terdekat, formatAgendaSectionTitle (taskDueDate.ts), mengenal
-// 'Hari ini' tapi hanya sebagai bagian dari 'Hari ini · 27 Jun 2026' dan
-// pasangannya menatap ke DEPAN ('Besok'), sedangkan kartu ini seluruhnya ke
-// belakang.
-//
-// TIDAK ADA aritmetika tanggal yang ditulis di sini. performed_at adalah
-// timestamptz; toWibIsoDate satu-satunya jembatan resmi ke tanggal murni di
-// basis kode ini, dan daysSinceLocal yang menghitung selisihnya.
-//
-// null kalau tanggalnya tidak terbaca — BUKAN '0 hari lalu', yang akan terbaca
-// sebagai "baru saja" padahal artinya "tidak tahu". Nol sendiri angka yang
-// benar untuk hari ini, dan itulah kenapa nol punya katanya sendiri.
-function buildRelativeDay(performedAt: string): string | null {
-  const iso = toWibIsoDate(performedAt);
-
-  if (!iso) {
-    return null;
-  }
-
-  const days = daysSinceLocal(iso);
-
-  if (days === null) {
-    return null;
-  }
-
-  if (days === 0) {
-    return 'Hari ini';
-  }
-
-  return days === 1 ? 'Kemarin' : `${days} hari lalu`;
-}
-
-// Kebun tanpa pohon. Kalimat dan label tombol dipertahankan PERSIS dari bentuk
-// sebelumnya — keduanya sudah ada di kode dan sudah benar, jadi tidak ada teks
-// baru yang dikarang di sini.
-function EmptyTreesCard() {
-  return (
-    <Card padding={tokens.layout.cardPadding}>
-      <Text selectable style={styles.emptyCardText}>
-        Belum ada pohon yang dicatat di kebun ini.
-      </Text>
-      <Button title="Tambah pohon" variant="secondary" onPress={() => router.push('/owner/trees/create')} />
-    </Card>
-  );
-}
-
-// Baris di dalam kartu Perawatan: label rata KIRI, angka di kanan. Rata tengah
-// dipakai untuk blok angka statistik (kartu Pohon di atas), bukan untuk baris
-// berlabel seperti ini.
-function CareRow({ color, label, value }: { color: string; label: string; value: number }) {
-  return (
-    <View style={styles.careRow}>
-      <Text selectable style={styles.careLabel}>
-        {label}
-      </Text>
-      <Text selectable style={[styles.careValue, { color }]}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-// Label sampingan fase. HILANG seluruhnya saat kedua angkanya nol — barisnya
-// tetap ada, tapi "0 berbunga · 0 berbuah" adalah kabar bahwa tidak ada kabar.
-//
-// Kedua angka ditulis bersama walau salah satunya nol: keduanya menjawab
-// pertanyaan yang sama ("fase apa yang sedang berjalan"), dan menampilkan hanya
-// yang tidak nol membuat pembacanya menebak apakah yang satunya nol atau tidak
-// dihitung sama sekali.
-function buildPhaseMeta(summary: OwnerDashboardSummary): string | undefined {
-  if (summary.floweringTrees === 0 && summary.fruitingTrees === 0) {
-    return undefined;
-  }
-
-  return `${summary.floweringTrees} berbunga · ${summary.fruitingTrees} berbuah`;
-}
-
-// Label sampingan Anggota adalah PENGAJUAN YANG MENUNGGU, bukan jumlah anggota.
-// Pengajuan menuntut keputusan pemilik; jumlah anggota tidak menuntut apa pun,
-// dan angka yang tidak menuntut apa-apa di baris navigasi hanya melatih mata
-// untuk mengabaikan tempat itu.
-function buildPendingMeta(summary: OwnerDashboardSummary): string | undefined {
-  return summary.pendingWorkers > 0 ? `${summary.pendingWorkers} menunggu` : undefined;
-}
-
-// Border danger, bukan Card putih. Yang membedakan seksi ini dari sisa layar
-// bukan lagi elevasi permukaan melainkan warnanya — dan karena seksinya hilang
-// saat kosong, warna itu tidak pernah jadi latar tetap yang mati rasa.
-function ActionRow({ row }: { row: ActionRowItem }) {
-  return (
-    <Pressable onPress={() => router.push(row.route)} style={styles.actionRow}>
-      <View style={styles.rowMain}>
-        <Text selectable style={styles.rowTitle}>
-          {row.title}
-        </Text>
-        {row.subtitle ? (
-          <Text selectable style={styles.rowSubtitle}>
-            {row.subtitle}
-          </Text>
-        ) : null}
-      </View>
-      {row.value > 0 ? (
-        <Text selectable style={styles.actionValue}>
-          {row.value}
-        </Text>
-      ) : null}
-      <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
-    </Pressable>
-  );
-}
-
-// `meta` menggantikan `value?: number` yang lama. Alasannya: dua dari tiga baris
-// kini membawa keterangan yang BUKAN satu angka telanjang — "3 berbunga · 5
-// berbuah" dan "2 menunggu". Angka tanpa kata di ujung baris menuntut pembacanya
-// menebak angka apa itu, dan tebakannya berbeda untuk tiap baris.
-//
-// Undefined berarti baris ini memang tidak punya keterangan; bagian itu tidak
-// dirender sama sekali, bukan dirender sebagai teks kosong atau "-".
-// TODO(batch 3 — Beranda): ganti dengan <MenuRow> dari src/components/ui.tsx.
-// MenuRow sudah dibentuk ulang di batch 1a dan sanggup menyerap baris ini apa
-// adanya: `title` -> `label`, `meta` -> `meta`, `icon` dan `onPress` sama
-// namanya. SATU perbedaan yang disengaja: MenuRow menaruh meta di BAWAH judul,
-// bukan di ujung kanan baris — itu susunan yang dikunci spek.
-//
-// Pembungkus <Card> di sekitar <MenuRowGroup> di atas ikut dilepas saat itu.
-// Tidak dikerjakan sekarang karena layar ini dirombak total di batch 3, dan
-// mengeditnya dua kali berarti membuang yang pertama.
-function NavRow({
-  icon,
-  meta,
-  onPress,
-  title,
-}: {
-  icon: IconName;
-  meta?: string;
-  onPress: () => void;
-  title: string;
-}) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.navRow}>
-      <Icon name={icon} size={tokens.icon.md} color={tokens.color.brand.base} />
-      <Text selectable style={[styles.rowTitle, styles.rowMain]}>
-        {title}
-      </Text>
-      {meta ? (
-        <Text selectable numberOfLines={1} style={styles.navMeta}>
-          {meta}
-        </Text>
-      ) : null}
-      <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
-    </Pressable>
-  );
-}
-
-// Baris polos dengan divider tipis, tanpa Card. Isinya angka yang dipantau
-// sesekali, bukan ditindaklanjuti.
-//
-// DUA DARI TIGA BARIS BISA DITEKAN, dan yang ketiga sengaja tidak.
-//
-// 'Pohon berbunga' dan 'Pohon berbuah' menuju /owner/growth-monitoring — layar
-// itu isinya PERSIS kedua daftar tersebut, satu bagian untuk masing-masing, jadi
-// tidak ada yang perlu ditebak. Sebelum ini layar tersebut tidak punya satu pun
-// jalan masuk dan hanya bisa dicapai lewat deep link.
-//
-// 'Tugas hari ini' DIBIARKAN sebagai baris biasa. Ia bukan tentang fase pohon,
-// dan tujuannya tidak jelas dari sini — /owner/tasks dan /owner/schedules
-// sama-sama masuk akal, dan keduanya menyaring hal yang berbeda dari "hari ini".
-// Menebak salah satunya berarti memasang jalan masuk yang mungkin membawa
-// pemiliknya ke daftar yang bukan angka yang barusan ia tekan. Keputusan itu
-// belum diambil, jadi barisnya tetap seperti sekarang.
-//
-// Perbedaannya TERLIHAT tanpa harus menyentuh: baris yang bisa ditekan punya
-// chevron, yang tidak, tidak. Warna tidak dipakai untuk membedakan keduanya.
-type MonitorItem = {
-  key: string;
-  label: string;
-  route?: string;
-  value: number;
-};
-
-function MonitorList({ summary }: { summary: OwnerDashboardSummary }) {
-  const items: MonitorItem[] = [
-    {
-      key: 'flowering',
-      label: 'Pohon berbunga',
-      route: '/owner/growth-monitoring',
-      value: summary.floweringTrees,
-    },
-    {
-      key: 'fruiting',
-      label: 'Pohon berbuah',
-      route: '/owner/growth-monitoring',
-      value: summary.fruitingTrees,
-    },
-    { key: 'today', label: 'Tugas hari ini', value: summary.todayTasks },
-  ];
-
-  return (
-    <View>
-      {items.map((item, index) => (
-        <React.Fragment key={item.key}>
-          {index > 0 ? <View style={styles.divider} /> : null}
-          <MonitorRow item={item} />
-        </React.Fragment>
-      ))}
-    </View>
-  );
-}
-
-function MonitorRow({ item }: { item: MonitorItem }) {
-  // Disalin ke const lebih dulu supaya penyempitan tipenya ikut masuk ke dalam
-  // closure onPress. Membaca item.route langsung di sana menuntut `as string`,
-  // dan penegasan tipe untuk hal yang sudah dijaga tiga baris di atasnya hanya
-  // memindahkan tanggung jawab dari compiler ke pembaca.
-  const route = item.route;
-  const content = (
     <>
-      <Text selectable style={styles.monitorLabel}>
-        {item.label}
-      </Text>
-      <Text selectable style={styles.monitorValue}>
-        {item.value}
-      </Text>
-      {route ? (
-        <Icon name="chevron-right" size={tokens.icon.sm} color={tokens.color.text.tertiary} />
-      ) : null}
+      {problems.length === 0 ? <CalmBlock summary={summary} /> : <ProblemBlock rows={problems} />}
+
+      {/* HILANG saat kebun belum punya pohon: layar tujuannya pasti kosong, dan
+          dua baris nol tidak mengabarkan apa-apa. */}
+      {summary.totalTrees === 0 ? null : <PhaseBlock summary={summary} />}
+
+      <TaskBlock summary={summary} />
     </>
   );
+}
 
-  if (!route) {
-    return <View style={styles.row}>{content}</View>;
-  }
+// Angka serif 72 + daftar masalah.
+//
+// ATURAN YANG MENGIKAT: angkanya dijumlahkan dari `rows`, array yang sama yang
+// dirender persis di bawahnya. Bukan dari summary, bukan dari penghitung kedua.
+// Pemilik harus bisa menjumlahkan baris-baris di bawah angka itu dengan jarinya
+// dan sampai di angka yang sama, tanpa berpikir — dan satu-satunya cara
+// menjamin itu adalah tidak punya dua sumber untuk dijumlahkan.
+//
+// Baris bernilai nol tidak pernah masuk ke `rows` (lihat buildProblemRows),
+// jadi ia tidak dirender DAN tidak ikut terjumlah. "0 tugas telat" tidak pernah
+// muncul di layar ini.
+function ProblemBlock({ rows }: { rows: ProblemRow[] }) {
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
 
-  // Bentuknya mengikuti NavRow di berkas yang sama: Pressable ber-styles.row
-  // dengan chevron di ujung kanan. Sengaja bukan komponen baru — dua baris
-  // sejenis di satu layar tidak boleh punya dua cara ditekan.
   return (
-    <Pressable
-      accessibilityHint="Buka monitoring fase"
-      accessibilityRole="button"
-      onPress={() => router.push(route)}
-      style={styles.row}
-    >
-      {content}
-    </Pressable>
+    <View style={styles.block}>
+      {/* RATA KIRI, bukan rata tengah. Aturan desain memang mengizinkan blok
+          angka statistik rata tengah, tapi angka ini bukan statistik yang
+          berdiri sendiri — ia judul daftar tepat di bawahnya. Satu tepi baca
+          yang sama antara angka dan daftar itulah yang membuat keduanya bisa
+          dicocokkan sekali lihat. */}
+      <View>
+        <Text accessibilityRole="header" selectable style={styles.bigNumber}>
+          {total}
+        </Text>
+        {/* Angka telanjang tidak mengatakan apa-apa. Baris ini yang menyebutkan
+            satuannya, dan ia sengaja di BAWAH angka: yang dilihat duluan
+            angkanya, keterangannya menyusul. */}
+        <Text selectable style={styles.bigNumberCaption}>
+          perlu perhatian
+        </Text>
+      </View>
+
+      <MenuRowGroup>
+        {rows.map((row) => (
+          <MenuRow
+            key={row.key}
+            label={row.label}
+            marker={{ color: row.markerColor, shape: row.markerShape }}
+            onPress={() => router.push(row.route)}
+            trailing={<RowCount value={row.value} />}
+          />
+        ))}
+      </MenuRowGroup>
+    </View>
   );
 }
 
-function buildActionRows(summary: OwnerDashboardSummary): ActionRowItem[] {
-  const rows: ActionRowItem[] = [];
+// Keadaan beres. Angka 72 DIGANTI judul serif — bukan angka 0 yang dipajang
+// sebesar itu, dan bukan daftar masalah yang dirender kosong. Seluruh blok
+// masalah tidak ada di pohon render sama sekali.
+function CalmBlock({ summary }: { summary: OwnerDashboardSummary }) {
+  return (
+    <View style={styles.calm}>
+      <Text accessibilityRole="header" selectable style={styles.calmTitle}>
+        Kebun aman hari ini
+      </Text>
+      {/* Kalimatnya bercabang pada KEBUN TANPA POHON, dan cabang itu wajib.
+          "Tidak ada yang perlu ditangani" memang benar untuk kebun yang belum
+          punya satu pohon pun — tapi ia benar karena tidak ada apa pun untuk
+          ditangani, bukan karena semuanya beres, dan pemilik yang baru membuat
+          kebunnya akan membaca yang kedua. Kalimatnya dipertahankan persis dari
+          kartu kebun-kosong yang dilepas di batch ini. */}
+      <Text selectable style={styles.calmBody}>
+        {summary.totalTrees === 0
+          ? 'Belum ada pohon yang dicatat di kebun ini.'
+          : 'Tidak ada pohon yang perlu dicek, tugas yang telat, atau pengajuan yang menunggu.'}
+      </Text>
+    </View>
+  );
+}
 
-  if (summary.unfinishedTasks > 0) {
+// Dua baris fase, BUKAN bar lima segmen.
+//
+// Spek meminta sebaran lima fase; dashboardService hanya menghitung dua —
+// countTreesByGrowthPhase dipanggil untuk 'flowering' dan 'fruiting' saja.
+// Tiga fase sisanya berarti tiga query baru, dan itu dilarang di batch ini.
+// Yang ditampilkan di sini persis yang diketahui, tidak lebih.
+//
+// Penandanya BENTUK berwarna netral, bukan warna status: fase bukan masalah,
+// dan aturan warna yang mengikat menyimpan warna untuk hal yang bermasalah.
+// Yang membedakan berbunga dari berbuah adalah lingkaran versus kotak — dan itu
+// tetap terbaca oleh mata yang tidak membedakan rona sama sekali.
+function PhaseBlock({ summary }: { summary: OwnerDashboardSummary }) {
+  return (
+    <View style={styles.block}>
+      <SectionLabel title="Fase" />
+      <MenuRowGroup>
+        <MenuRow
+          label="Pohon berbunga"
+          marker={{ color: palette.neutralCell, shape: 'circle-outline' }}
+          onPress={() => router.push('/owner/growth-monitoring')}
+          trailing={<RowCount value={summary.floweringTrees} />}
+        />
+        <MenuRow
+          label="Pohon berbuah"
+          marker={{ color: palette.neutralCell, shape: 'square' }}
+          onPress={() => router.push('/owner/growth-monitoring')}
+          trailing={<RowCount value={summary.fruitingTrees} />}
+        />
+      </MenuRowGroup>
+    </View>
+  );
+}
+
+// Tiga angka tugas yang SUDAH ADA di OwnerDashboardSummary: overdueTasks,
+// todayTasks, unfinishedTasks.
+//
+// Spek meminta agregat "minggu ini" — tugas selesai minggu ini, panen minggu
+// ini. Tidak satu pun dari keduanya dihitung di mana pun, dan keduanya menuntut
+// query berjendela tanggal yang belum ada. Ketiga angka ini menggantikannya.
+//
+// TIDAK BISA DITEKAN, dan itu disengaja. "Telat" sudah punya jalan masuknya
+// sendiri sebagai baris masalah di atas; dua angka sisanya tidak punya tujuan
+// yang jelas — /owner/tasks dan /owner/schedules sama-sama masuk akal dan
+// menyaring hal yang berbeda dari "hari ini". Tanpa chevron dan tanpa
+// Pressable, perbedaannya terlihat tanpa harus dicoba.
+function TaskBlock({ summary }: { summary: OwnerDashboardSummary }) {
+  return (
+    <View style={styles.block}>
+      <SectionLabel title="Tugas" />
+      <View style={styles.statRow}>
+        {/* Warna hanya menyala saat ada isinya; nol tetap netral. */}
+        <StatColumn
+          color={
+            summary.overdueTasks > 0 ? tokens.color.status.danger.text : tokens.color.text.primary
+          }
+          label="Telat"
+          value={summary.overdueTasks}
+        />
+        <StatColumn color={tokens.color.text.primary} label="Hari ini" value={summary.todayTasks} />
+        <StatColumn
+          color={tokens.color.text.primary}
+          label="Belum selesai"
+          value={summary.unfinishedTasks}
+        />
+      </View>
+    </View>
+  );
+}
+
+// Angka + chevron di slot `trailing` MenuRow.
+//
+// MenuRow menjatuhkan chevronnya sendiri begitu `trailing` diisi — aturannya
+// sendiri, dan benar: keduanya berebut tempat yang sama. Tapi baris ini
+// BENAR-BENAR membuka layar lain, dan angka tanpa chevron mengajarkan bahwa
+// baris di sini tidak bisa ditekan. Keduanya dirender bersama di dalam satu
+// slot, jadi janji dan angkanya berjalan beriringan.
+function RowCount({ value }: { value: number }) {
+  return (
+    <View style={styles.rowCount}>
+      <Text selectable style={styles.rowCountValue}>
+        {value}
+      </Text>
+      <Icon name="chevron-right" size={tokens.icon.md} color={palette.textMuted} />
+    </View>
+  );
+}
+
+// Tiga sumber masalah, semuanya sudah ada di OwnerDashboardSummary — tidak satu
+// pun query ditambahkan untuk membangun daftar ini.
+//
+// Baris bernilai nol tidak masuk. Itu bukan penyaringan tampilan melainkan
+// aturan isi: pemilik membuka Beranda untuk tahu apa yang harus dikerjakan, dan
+// "0 tugas telat" adalah kabar bahwa tidak ada kabar — yang menempati baris
+// sebesar pekerjaan sungguhan.
+//
+// Urutannya TETAP, tidak diurut menurut besarnya angka: pohon dulu (ia bisa
+// mati kalau didiamkan), tugas kedua, orang terakhir. Daftar yang berubah
+// urutan tiap hari harus dibaca ulang dari awal tiap hari.
+function buildProblemRows(summary: OwnerDashboardSummary): ProblemRow[] {
+  const rows: ProblemRow[] = [];
+
+  if (summary.problemTrees > 0) {
     rows.push({
-      key: 'unfinished',
-      title: 'Tugas belum selesai',
-      subtitle: summary.overdueTasks > 0 ? `${summary.overdueTasks} sudah lewat tenggat` : undefined,
-      value: summary.unfinishedTasks,
+      key: 'problem-trees',
+      label: 'Pohon perlu dicek',
+      markerColor: palette.statusPerhatian,
+      markerShape: 'triangle-up',
+      route: '/owner/trees',
+      value: summary.problemTrees,
+    });
+  }
+
+  if (summary.overdueTasks > 0) {
+    rows.push({
+      key: 'overdue-tasks',
+      label: 'Tugas telat',
+      markerColor: palette.statusBuruk,
+      markerShape: 'triangle-up',
       route: '/owner/schedules',
+      value: summary.overdueTasks,
+    });
+  }
+
+  // Tujuannya /owner/farm, layar Anggota — tempat pengajuan disetujui atau
+  // ditolak. Baris "Anggota" yang mengantar ke sana pindah ke tab Profil di
+  // batch ini; baris masalah ini sengaja menuju layarnya LANGSUNG, bukan ke
+  // tab Profil, karena ia muncul justru saat ada keputusan yang menunggu.
+  if (summary.pendingWorkers > 0) {
+    rows.push({
+      key: 'pending-workers',
+      label: 'Pengajuan bergabung',
+      markerColor: palette.statusPerhatian,
+      markerShape: 'circle-filled',
+      route: '/owner/farm',
+      value: summary.pendingWorkers,
     });
   }
 
@@ -579,85 +341,27 @@ function buildActionRows(summary: OwnerDashboardSummary): ActionRowItem[] {
 }
 
 const styles = StyleSheet.create({
-  sections: { gap: tokens.layout.sectionGap },
-  section: { gap: tokens.space.md },
+  // Jarak antarblok datang dari `gap: sectionGap` milik <Screen>; yang di sini
+  // hanya jarak di DALAM satu blok, antara labelnya dan isinya.
+  block: { gap: tokens.space.sm },
 
-  cardHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cardTitle: { ...tokens.type.label, color: tokens.color.text.secondary },
-  emptyCardBody: { gap: tokens.space.md },
-  // Rata tengah: keadaan kosong salah satu dari empat hal yang boleh rata
-  // tengah menurut aturan desain yang berlaku.
-  emptyCardText: { ...tokens.type.body, color: tokens.color.text.secondary, textAlign: 'center' },
+  // Serif 72. Ia satu-satunya angka sebesar ini di seluruh aplikasi, dan itu
+  // memang tugasnya: dari jarak lengan, inilah satu hal yang terbaca lebih dulu
+  // daripada apa pun di layar.
+  bigNumber: { ...typeScale.stat72, color: palette.textPrimary },
+  bigNumberCaption: { ...typeScale.meta, color: palette.textMuted },
 
-  // Gaya blok angka statistik PINDAH ke farm-overview.tsx bersama TreeStatRow —
-  // kedua Beranda memakainya, jadi ia tidak lagi milik layar ini.
+  // Keadaan beres. Judul SERIF, sama keluarga huruf dengan angka yang
+  // digantikannya — ia menempati tempat yang sama dan memikul peran yang sama.
+  calm: { gap: tokens.space.sm },
+  calmTitle: { ...typeScale.stat36, color: palette.textPrimary },
+  calmBody: { ...typeScale.body, color: palette.textMuted },
 
-  // Baris di kartu Perawatan: label kiri, angka kanan.
-  careRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: tokens.layout.rowMinHeight,
-    paddingVertical: tokens.space.sm,
-  },
-  careLabel: { ...tokens.type.body, color: tokens.color.text.secondary },
-  careValue: { ...tokens.type.subheading },
+  rowCount: { alignItems: 'center', flexDirection: 'row', gap: tokens.space.sm },
+  rowCountValue: { ...tokens.type.subheading, color: palette.textPrimary },
 
-  // Baris kartu "Terakhir dikerjakan": dua baris teks, RATA KIRI. Tanpa
-  // justifyContent 'space-between' seperti careRow — di sini tidak ada angka
-  // yang berdiri sendiri di kanan; jumlah pohon menyatu ke dalam kalimatnya.
-  recentRow: { gap: 2, paddingVertical: tokens.space.md },
-  recentTitle: { ...tokens.type.body, color: tokens.color.text.primary },
-  // Lebih kecil DAN lebih redup daripada baris di atasnya — dua saluran, bukan
-  // hanya warna. Atribusi memang lapisan kedua: yang dicari pemilik lebih dulu
-  // adalah pekerjaan apa atas berapa pohon.
-  recentMeta: { ...tokens.type.meta, color: tokens.color.text.tertiary },
-
-  // Baris navigasi di dalam kartu. minHeight mengikuti controlHeight seperti
-  // MenuRow di ui.tsx, supaya tiga baris ini setinggi baris menu di layar lain.
-  navRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: tokens.space.md,
-    minHeight: tokens.layout.controlHeight,
-  },
-  navMeta: { ...tokens.type.meta, color: tokens.color.text.secondary, flexShrink: 1 },
-
-  actionGroup: { gap: tokens.space.sm },
-  actionRow: {
-    alignItems: 'center',
-    borderColor: tokens.color.status.danger.border,
-    borderCurve: 'continuous',
-    borderRadius: tokens.radius.cardInner,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: tokens.space.md,
-    minHeight: tokens.layout.rowMinHeight,
-    paddingHorizontal: tokens.space.lg,
-    paddingVertical: tokens.space.md,
-  },
-  actionValue: { ...tokens.type.subheading, color: tokens.color.status.danger.text },
-
-  destinations: { gap: 0 },
-  divider: {
-    backgroundColor: tokens.color.line.hairline,
-    height: StyleSheet.hairlineWidth,
-  },
-  row: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: tokens.space.md,
-    minHeight: tokens.layout.rowMinHeight,
-    paddingVertical: tokens.space.md,
-  },
-  rowMain: { flex: 1 },
-  rowTitle: { ...tokens.type.body, color: tokens.color.text.primary },
-  rowSubtitle: { ...tokens.type.meta, color: tokens.color.status.danger.text },
-  rowValue: { ...tokens.type.subheading, color: tokens.color.text.primary },
-  monitorLabel: { ...tokens.type.body, color: tokens.color.text.secondary, flex: 1 },
-  monitorValue: { ...tokens.type.bodyStrong, color: tokens.color.text.primary },
+  // Nilainya sengaja identik dengan statRow di farm-overview.tsx: StatColumn
+  // yang dipakai di sini berasal dari sana, dan jarak antarkolom yang berbeda
+  // akan membuat blok yang sama tampil beda lebar di dua layar.
+  statRow: { flexDirection: 'row', gap: tokens.space.md },
 });

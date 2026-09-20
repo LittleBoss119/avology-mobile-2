@@ -12,6 +12,18 @@ import { ChipButton } from './ui';
 // lagi punya halaman sendiri, dan kondisi kebun kini muncul di dua tempat dengan
 // bobot visual yang berbeda. Ditaruh di satu file karena keduanya hanya hidup di
 // dua layar itu, dan selalu berdampingan.
+//
+// KEADAAN SETELAH BATCH 3: dari empat yang diekspor berkas ini, hanya
+// <StatColumn> yang masih punya pemanggil (tiga angka tugas di Beranda
+// pemilik). FarmIdentityBlock, TreeStatRow, dan TreeConditionSummary kehilangan
+// pemanggilnya saat kedua Beranda dibentuk ulang.
+//
+// Ketiganya DIBIARKAN UTUH, tidak dihapus, dengan alasan yang sama seperti
+// TreeConditionSummary sebelumnya: masing-masing menyimpan keputusan tentang
+// bagaimana satu hal digambarkan, dan pembersihannya adalah keputusan
+// tersendiri yang pantas ditinjau terpisah dari perubahan tata letak dua layar
+// yang paling sering dilihat. Kalau setelah UAT tidak satu pun dipakai lagi,
+// berkas ini tinggal berisi StatColumn dan bisa dilebur ke ui.tsx.
 
 // Judul halaman yang sebenarnya. Ukurannya sengaja sebesar kode pohon di layar
 // detail pohon (tokens.type.display) dan warnanya hijau primer: begitu Beranda
@@ -207,14 +219,27 @@ export function TreeConditionSummary({
 // hilang: bentuknya tetap terbaca sebagai takaran yang belum terisi, dan tinggi
 // bloknya tidak melompat begitu pohon pertama ditambahkan.
 //
-// TODO(batch 3, bersama Beranda Pemilik): sisipkan celah 2px berlatar surface di
-// antara kedua segmen. neutralCell (#8F8676) dan statusPerhatian (#B07A16)
-// berluminansi hampir sama — rasio antarsegmen 1,04 — sehingga bersebelahan
-// langsung keduanya terbaca sebagai satu bilah utuh, dan bagi pengguna buta
-// warna menyatu sepenuhnya. Perbaikannya JARAK, bukan warna: dengan celah, batas
-// segmen tidak lagi bergantung pada luminansi sama sekali. Menaikkan kontras
-// antarsegmen bukan jalan keluarnya — itu akan memaksa salah satu keluar dari
-// peran warnanya.
+// CELAH 2px berlatar surface di antara kedua segmen (batch 3, penundaan dari
+// batch 0). neutralCell (#8F8676) dan statusPerhatian (#B07A16) berluminansi
+// hampir sama — rasio antarsegmen 1,04 — sehingga bersebelahan langsung
+// keduanya terbaca sebagai satu bilah utuh, dan bagi pengguna buta warna
+// menyatu sepenuhnya.
+//
+// Perbaikannya JARAK, bukan warna: dengan celah, batas segmen tidak lagi
+// bergantung pada luminansi sama sekali. Menaikkan kontras antarsegmen bukan
+// jalan keluarnya — itu akan memaksa salah satu warna keluar dari perannya
+// (neutralCell BUKAN warna status, statusPerhatian BUKAN warna netral).
+//
+// Celahnya berlatar `surface`, bukan latar alur bar (`line.hairline`). Alur
+// itu adalah bagian bar yang BELUM TERISI; memakai warnanya sebagai celah
+// membuat pemisah antarsegmen terbaca sebagai sepotong bar yang kosong.
+// surface adalah latar halaman: celah yang menembus bar, bukan isi bar.
+//
+// Dirender HANYA saat kedua segmen ada. Satu segmen sendirian tidak punya
+// tetangga untuk dipisahkan, dan celah di ujungnya akan terbaca sebagai bar
+// yang kurang penuh.
+const CONDITION_BAR_GAP = 2;
+
 function ConditionBar({ healthyTrees, problemTrees }: { healthyTrees: number; problemTrees: number }) {
   const measured = healthyTrees + problemTrees;
 
@@ -224,6 +249,9 @@ function ConditionBar({ healthyTrees, problemTrees }: { healthyTrees: number; pr
         <>
           {healthyTrees > 0 ? (
             <View style={{ backgroundColor: palette.neutralCell, flex: healthyTrees }} />
+          ) : null}
+          {healthyTrees > 0 && problemTrees > 0 ? (
+            <View style={{ backgroundColor: palette.surface, width: CONDITION_BAR_GAP }} />
           ) : null}
           {problemTrees > 0 ? (
             <View style={{ backgroundColor: tokens.color.status.warning.border, flex: problemTrees }} />

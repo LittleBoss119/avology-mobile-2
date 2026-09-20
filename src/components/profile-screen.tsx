@@ -8,11 +8,21 @@ import { useAuth } from '../context/auth-context';
 import { consumePendingFeedback } from '../lib/pendingFeedback';
 import type { CurrentUserFarm } from '../types/domain';
 import { formatPersonDisplayName, sanitizeDisplayValue } from '../utils/displayFormat';
+import { getPendingWorkers } from '../services/memberService';
 import { isOwnerActive, isWorkerActive } from '../utils/routeGuard';
 import { ConfirmDialog } from './bottom-sheet';
 import { Avatar } from './member-row';
 import { useSnackbar } from './snackbar';
-import { Button, EmptyState, ErrorBanner, Screen, TopAppBar } from './ui';
+import {
+  Button,
+  EmptyState,
+  ErrorBanner,
+  MenuRow,
+  MenuRowGroup,
+  Screen,
+  SectionLabel,
+  TopAppBar,
+} from './ui';
 
 const PENDING_FEEDBACK_MESSAGES: Record<string, string | undefined> = {
   password_updated: 'Password diperbarui',
@@ -25,6 +35,43 @@ export function ProfileScreen() {
   const [confirmLogout, setConfirmLogout] = React.useState(false);
   const [loggingOut, setLoggingOut] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
+  // Jumlah pengajuan yang menunggu, HANYA untuk label sampingan baris Anggota
+  // milik pemilik. 0 berarti "tidak ada ATAU belum/gagal terbaca" — ketiganya
+  // menghasilkan hal yang sama di layar, yaitu labelnya tidak dirender.
+  const [pendingCount, setPendingCount] = React.useState(0);
+
+  const ownerFarmId = isOwnerActive(currentFarm) ? currentFarm?.farmId : undefined;
+
+  // getPendingWorkers adalah RPC yang SUDAH ADA dan sudah dipakai layar
+  // Anggota; tidak ada query, service, maupun agregat baru yang ditambahkan di
+  // sini. Dipanggil hanya untuk pemilik aktif — pekerja tidak punya baris yang
+  // memakainya, dan RPC-nya memang hanya melayani pemilik kebunnya.
+  //
+  // GAGAL DIAM-DIAM: tanpa ErrorBanner dan tanpa menyentuh formError. Yang
+  // hilang saat gagal cuma label "N menunggu"; barisnya sendiri tetap berdiri
+  // dan tetap mengantar ke layar yang menampilkan pengajuannya. Memunculkan
+  // galat untuk itu berarti menakut-nakuti orang tentang hal yang tidak bisa ia
+  // perbaiki.
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!ownerFarmId) {
+        setPendingCount(0);
+        return;
+      }
+
+      let active = true;
+
+      void getPendingWorkers(ownerFarmId).then((result) => {
+        if (active) {
+          setPendingCount(result.error ? 0 : result.data.length);
+        }
+      });
+
+      return () => {
+        active = false;
+      };
+    }, [ownerFarmId])
+  );
 
   useFocusEffect(
     React.useCallback(() => {
@@ -176,6 +223,77 @@ export function ProfileScreen() {
               )
             ) : null}
           </View>
+
+          {/* Seksi KEBUN. Ketiga barisnya PINDAH dari Beranda dan dari layar
+              Anggota, bukan disalin: jalan lamanya dicabut di batch yang sama,
+              jadi tidak ada satu pun dari ketiga layar itu yang kini punya dua
+              pintu masuk.
+
+              Kenapa pindah ke sini: ketiganya SETELAN kebun — dibuka sesekali,
+              bukan ditengok tiap pagi — sementara Beranda adalah layar yang
+              dilihat paling sering, dan ruang teratasnya milik hal yang berubah
+              tiap hari.
+
+              Isinya bercabang menurut PERAN, dan cabangnya soal rute, bukan
+              soal tampilan: /owner/farm-profile dan /owner/workers hanya ada di
+              sisi pemilik dan tidak punya padanan di sisi pekerja. Pekerja
+              karena itu hanya punya baris Anggota.
+
+              Seluruh seksi tidak dirender untuk orang yang keanggotaannya belum
+              aktif (menunggu, ditolak, dinonaktifkan) — ketiga layarnya menuntut
+              keanggotaan aktif, dan layar ini memang juga dibuka lewat jalur
+              onboarding.
+
+              SISA LAYAR PROFIL TIDAK DISENTUH. Perombakannya batch 7. */}
+          {isFarmMember ? (
+            <View style={{ gap: tokens.space.sm }}>
+              <SectionLabel title="Kebun" />
+              <MenuRowGroup>
+                <MenuRow
+                  icon="user"
+                  label="Anggota"
+                  onPress={() =>
+                    router.push(isOwnerActive(currentFarm) ? '/owner/farm' : '/worker/farm')
+                  }
+                  // "N menunggu", bukan jumlah anggota. Pengajuan menuntut
+                  // keputusan pemilik; jumlah anggota tidak menuntut apa pun,
+                  // dan angka yang tidak menuntut apa-apa di baris navigasi
+                  // hanya melatih mata untuk mengabaikan tempat itu.
+                  //
+                  // `trailing`, bukan `meta`: ia keadaan yang berubah dari hari
+                  // ke hari, bukan keterangan tetap tentang barisnya.
+                  trailing={
+                    pendingCount > 0 ? (
+                      <Text
+                        selectable={false}
+                        style={{
+                          color: tokens.color.status.warning.text,
+                          fontSize: tokens.type.label.fontSize,
+                          lineHeight: tokens.type.label.lineHeight,
+                        }}
+                      >
+                        {`${pendingCount} menunggu`}
+                      </Text>
+                    ) : undefined
+                  }
+                />
+                {isOwnerActive(currentFarm) ? (
+                  <MenuRow
+                    icon="building-warehouse"
+                    label="Data kebun"
+                    onPress={() => router.push('/owner/farm-profile')}
+                  />
+                ) : null}
+                {isOwnerActive(currentFarm) ? (
+                  <MenuRow
+                    icon="clock"
+                    label="Riwayat akses"
+                    onPress={() => router.push('/owner/workers')}
+                  />
+                ) : null}
+              </MenuRowGroup>
+            </View>
+          ) : null}
 
           {/* Ruang kosong fleksibel: mendorong ketiga tombol ke dasar layar saat
               isinya pendek, tapi tetap boleh menyusut jadi nol saat font sistem

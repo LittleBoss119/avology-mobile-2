@@ -39,6 +39,7 @@ import {
   colors as palette,
   fonts,
   radius as shapeRadius,
+  text as typeScale,
   touch,
 } from '../theme/tokens';
 import { sanitizeDisplayValue, sanitizeUserFacingMessage } from '../utils/displayFormat';
@@ -403,7 +404,19 @@ export function Screen({
             //
             // Sejak latarnya sama dengan latar halaman, garis ini adalah
             // SATU-SATUNYA yang menyatakan batas bar. Jangan dicabut.
-            borderTopColor: palette.border,
+            //
+            // borderStrong, BUKAN border (batch 3). `border` (#E2DCD2) di atas
+            // surface (#F7F4EF) berkontras 1,15:1 — secara praktis tidak
+            // terlihat. Selama masih ada selisih bidang antara bar dan halaman,
+            // selisih itu yang memikul batasnya; sejak latar bar disamakan
+            // dengan latar halaman, garis inilah satu-satunya pemisah yang
+            // tersisa dan ia harus benar-benar terlihat.
+            //
+            // HANYA garis bar aksi. Pemisah antarbaris daftar (MenuRowGroup,
+            // AccountRow, divider di dalam kartu) TETAP `border`: di sana garis
+            // memisah dua baris sejenis di dalam satu blok, bukan dua bidang
+            // yang berbeda perannya.
+            borderTopColor: palette.borderStrong,
             borderTopWidth: 1,
             bottom: keyboardLift,
             // Jarak antartombol bertumpuk. Sebelumnya tidak ada sama sekali:
@@ -2764,14 +2777,30 @@ export function MenuRow({
   danger = false,
   icon,
   label,
+  marker,
   meta,
   navigates,
   onPress,
   trailing,
 }: {
   danger?: boolean;
-  icon: IconName;
+  /**
+   * Penanda kiri baris. Wajib salah satu dari `icon` atau `marker`; keduanya
+   * menempati slot yang sama, jadi mengirim dua-duanya tidak punya arti dan
+   * `marker` yang menang.
+   */
+  icon?: IconName;
   label: string;
+  /**
+   * Penanda BENTUK (batch 3), menggantikan ikon di slot kiri.
+   *
+   * Baris yang membawa MASALAH atau KEADAAN dibedakan bentuk, bukan ikon:
+   * ikon Tabler bergaya stroke menamai BENDA ("pohon", "orang"), sedangkan
+   * baris masalah menamai KEADAAN benda itu. Bentuk penuh 11px juga bertahan
+   * di layar yang kena silau, tempat goresan 2px pada ikon 20px hilang —
+   * alasan yang sama yang melahirkan StatusMarker di batch 1a.
+   */
+  marker?: { color: string; shape: StatusMarkerShape };
   /**
    * Keterangan di BAWAH judul, 14px, textMuted. Bukan di ujung kanan baris.
    *
@@ -2802,6 +2831,17 @@ export function MenuRow({
   const contentColor = danger ? palette.statusBurukInk : palette.textPrimary;
   const iconColor = danger ? palette.statusBurukInk : tokens.color.brand.base;
   const showChevron = (navigates ?? !danger) && !trailing;
+  // Slot kiri berlebar TETAP walau isinya penanda 11px, bukan ikon 20px.
+  // Tanpa ini, satu daftar yang mencampur baris berikon dan baris berpenanda
+  // punya dua garis rata teks yang berbeda, dan matanya tersandung di tiap
+  // peralihan. Penandanya dipusatkan di dalam slot itu.
+  const leading = marker ? (
+    <View style={{ alignItems: 'center', width: tokens.icon.md }}>
+      <StatusMarker color={marker.color} shape={marker.shape} />
+    </View>
+  ) : icon ? (
+    <Icon name={icon} size={tokens.icon.md} color={iconColor} />
+  ) : null;
 
   return (
     <Pressable
@@ -2820,7 +2860,7 @@ export function MenuRow({
         paddingVertical: tokens.space.md,
       })}
     >
-      <Icon name={icon} size={tokens.icon.md} color={iconColor} />
+      {leading}
       <View style={{ flex: 1, gap: 2 }}>
         <Text
           selectable={false}
@@ -2862,6 +2902,56 @@ export function MenuRow({
 // supaya aturan "tidak ada pemisah di baris terakhir" tidak bergantung pada
 // kedisiplinan pemanggil. Pola yang sama dipakai member-row.tsx (baris tidak
 // menggambar border sendiri). Dipakai sebagai anak tunggal <Card>.
+// Judul layar ROOT TAB: 26, rata kiri, satu-satunya heading halaman.
+//
+// Penundaan dari batch 1b, dipasang di batch 3. Di 1b judul keempat tab root
+// DIBUANG dari MainTabHeader — bukan karena layar tab tidak butuh judul, tapi
+// karena judul 17 rata tengah di dalam pita header membuatnya terbaca sebagai
+// chrome yang berdiri di atas halaman. Bentuk penggantinya ada di sini: teks
+// 26 rata kiri yang jadi ELEMEN PERTAMA halaman, menggulir bersama isinya,
+// tanpa pita dan tanpa garis.
+//
+// `meta` adalah baris keterangan di bawah judul — tanggal hari ini di kedua
+// Beranda. Ia tidak dirender kalau tidak dikirim, bukan dirender kosong.
+//
+// accessibilityRole="header" ada di sini, dan itulah kenapa komponen ini harus
+// dipakai alih-alih <Text> lokal: layar tab root tidak punya TopAppBar, jadi
+// kalau baris ini tidak menyatakan dirinya heading, seluruh layar jadi layar
+// tanpa satu pun titik lompat TalkBack.
+export function RootTabTitle({ meta, title }: { meta?: string; title: string }) {
+  return (
+    <View style={{ gap: tokens.space.xs }}>
+      <Text accessibilityRole="header" selectable style={{ ...typeScale.screenTitle, color: palette.textPrimary }}>
+        {title}
+      </Text>
+      {meta ? (
+        <Text selectable style={{ ...typeScale.meta, color: palette.textMuted }}>
+          {meta}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+// Label seksi: 12 kapital berspasi, textMuted.
+//
+// SENGAJA BERBEDA dari <SectionHeader> di atas, yang memakai h3 (20/700) dan
+// membawa slot aksi, subjudul, dan anak. Label ini tidak menamai sebuah bagian
+// yang berdiri sendiri — ia menamai SEKELOMPOK BARIS tepat di bawahnya, dan
+// karena itu harus lebih ringan daripada isi yang dinamainya. Judul 20 di atas
+// deretan baris 17 membuat labelnya lebih berat daripada isinya.
+//
+// Teksnya ditulis apa adanya oleh pemanggil; textTransform yang mengapitalkan,
+// bukan pemanggil yang mengetik huruf besar — supaya pembaca layar tetap
+// menerima kata yang normal, bukan dieja huruf per huruf.
+export function SectionLabel({ title }: { title: string }) {
+  return (
+    <Text selectable style={{ ...typeScale.sectionLabel, color: palette.textMuted }}>
+      {title}
+    </Text>
+  );
+}
+
 export function MenuRowGroup({ children }: { children: React.ReactNode }) {
   const rows = React.Children.toArray(children);
 

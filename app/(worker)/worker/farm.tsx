@@ -136,7 +136,16 @@ export default function WorkerFarmHubScreen() {
       // menyediakan ruang bawah sebesar tinggi footer ini (stickyFooterReserve
       // di ui.tsx), jadi baris terakhir daftar tidak pernah tertutup.
       stickyFooter={
-        <Button title="Keluar kebun" variant="danger" onPress={() => setConfirmLeave(true)} />
+        // "Keluar DARI kebun" (batch 3), bukan "Keluar kebun". Tanpa kata
+        // depan itu, labelnya sejajar bentuknya dengan "Keluar akun" di layar
+        // Profil — dan kedua layar itu memang berdampingan di tab yang sama —
+        // sementara artinya jauh berbeda: yang satu mengakhiri sesi, yang ini
+        // mengakhiri KEANGGOTAAN. Judul dialog konfirmasinya sudah berbunyi
+        // "Keluar dari kebun?" sejak awal; pemicunya yang belum mengikutinya.
+        //
+        // Varian 'danger' DIPERTAHANKAN. Ini satu-satunya tombol di aplikasi
+        // yang benar-benar mencabut akses orang atas kebunnya sendiri.
+        <Button title="Keluar dari kebun" variant="danger" onPress={() => setConfirmLeave(true)} />
       }
     >
       <ErrorBanner message={error} />
@@ -166,7 +175,7 @@ export default function WorkerFarmHubScreen() {
         </View>
       </Card>
 
-      {/* Tombol "Keluar kebun" PINDAH ke stickyFooter Screen di atas. Ia dulu
+      {/* Tombol "Keluar dari kebun" PINDAH ke stickyFooter Screen di atas. Ia dulu
           berdiri di sini sebagai teks merah yang bisa diketuk — tanpa bentuk
           tombol, dan ikut menggulung bersama daftar anggota. */}
 
