@@ -108,10 +108,29 @@ export const text = {
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  stat36: { fontFamily: fonts.serif, fontSize: 36 },
-  stat40: { fontFamily: fonts.serif, fontSize: 40 },
-  stat72: { fontFamily: fonts.serif, fontSize: 72 },
-  stat80: { fontFamily: fonts.serif, fontSize: 80 },
+  // lineHeight EKSPLISIT, sekitar 1,1x ukuran huruf. Keempatnya sebelumnya
+  // tanpa lineHeight sama sekali, dan itu bukan pilihan melainkan kelalaian
+  // yang tidak terlihat di satu perangkat.
+  //
+  // Tanpa lineHeight, Android memakai metrik font apa adanya. Source Serif 4
+  // pada 72 dan 80 punya ascender yang melewati kotak baris bawaan, dan
+  // akibatnya angka di Beranda TERPOTONG di bagian atas — pada sebagian
+  // perangkat saja, tergantung bagaimana pabrikannya menangani font padding.
+  // Bug semacam ini tidak akan ketahuan dari satu HP uji.
+  //
+  // 1,1x, bukan 1,2x seperti teks tubuh: ini angka SATU BARIS yang tidak
+  // pernah membungkus, jadi yang dibutuhkan hanya ruang untuk glifnya sendiri,
+  // bukan jarak antarbaris. Nilai yang lebih besar akan menambah ruang kosong
+  // di atas dan di bawah angka, dan pada 80px ruang itu terlihat sebagai
+  // sapaan yang menggantung jauh dari angkanya.
+  //
+  // includeFontPadding SENGAJA tidak disentuh: ia prop <Text> per titik pakai,
+  // bukan bagian dari skala tipografi, dan mematikannya di sini berarti
+  // mengubah perilaku yang tidak bisa dilihat dari berkas token.
+  stat36: { fontFamily: fonts.serif, fontSize: 36, lineHeight: 40 },
+  stat40: { fontFamily: fonts.serif, fontSize: 40, lineHeight: 44 },
+  stat72: { fontFamily: fonts.serif, fontSize: 72, lineHeight: 79 },
+  stat80: { fontFamily: fonts.serif, fontSize: 80, lineHeight: 88 },
 } as const satisfies Record<string, TextStyle>;
 
 // Skala jarak. Enam langkah pertama — 4, 8, 12, 18, 22, 26 — adalah skala spek
@@ -130,7 +149,13 @@ export const text = {
 // adalah 1,23. Ia langkah ketujuh yang wajar, bukan angka yang diselundupkan.
 export const space = { xs: 4, sm: 8, md: 12, lg: 18, xl: 22, xxl: 26, xxxl: 32 } as const;
 export const screenPadding = 20;
-export const radius = { control: 10, pill: 999, cell: 8, sheet: 18 } as const;
+// `cellFar` adalah radius sel denah pada ZOOM JAUH (16px), dan ia berdiri
+// sendiri dari `cell` (8, radius sel pada zoom dekat). Bukan dua nama untuk
+// satu hal: radius 8 pada kotak 16px memakan separuh sisinya dan mengubah sel
+// jadi bulatan, sehingga petak 234 sel terbaca sebagai hamparan titik alih-alih
+// kisi berpetak. 3 adalah lengkung terkecil yang masih membedakan sel berisi
+// (membulat) dari posisi kosong (bersudut tajam) pada ukuran itu.
+export const radius = { control: 10, pill: 999, cell: 8, cellFar: 3, sheet: 18 } as const;
 export const touch = {
   min: 48,
   primaryButton: 56,

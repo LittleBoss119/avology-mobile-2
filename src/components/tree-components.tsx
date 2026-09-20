@@ -34,10 +34,10 @@ import {
   formatTreeConditionStatus,
   formatTreeDisplayCode,
 } from '../utils/treeFormat';
+import { fonts } from '../theme/tokens';
 import { PhotoViewerModal } from './media';
 import {
   Badge,
-  badgeColors,
   Button,
   Card,
   CONDITION_BADGE,
@@ -195,20 +195,32 @@ export type TreeHistoryRouteRecordType = 'condition' | 'phase' | 'harvest' | 'ca
 //
 // Umur ikut di baris meta dalam bentuk pendek ("3 th"): di daftar ia hanya perlu
 // dikenali sekilas, sedangkan bentuk panjangnya tetap ada di layar detail.
-const TREE_ROW_THUMBNAIL = 72;
-const TREE_ROW_MIN_HEIGHT = 96;
+// 56, turun dari 72 (batch 4a). Yang dibeli dengan 16px itu bukan kerapatan
+// demi kerapatan: pada 72 sebuah layar 812 memuat sekitar enam baris, pada 56
+// delapan — dan daftar pohon dipindai, bukan dibaca. Foto pohon durian pada 56
+// masih mengenali pohonnya; yang hilang cuma detail daun, yang memang tidak
+// dipakai siapa pun untuk memutuskan apa pun dari baris daftar.
+const TREE_ROW_THUMBNAIL = 56;
+// 56 + 12 + 12 = 80, mengikuti thumbnail-nya turun dari 96. Padding vertikalnya
+// TIDAK ikut berubah: yang menentukan tinggi baris tetap thumbnail, dan ruang
+// napas di atas-bawahnya sudah pas pada space.md.
+const TREE_ROW_MIN_HEIGHT = 80;
 
-// Record atas SELURUH nilai enum, bukan objek biasa — kalau tree_condition_status
-// bertambah nilai, berkas ini gagal typecheck alih-alih diam-diam merender baris
-// tanpa ikon.
-const CONDITION_ICONS: Record<TreeConditionStatus, IconName> = {
-  healthy: 'check',
-  needs_attention: 'alert-triangle',
-  pest_attacked: 'alert-triangle',
-  disease_indicated: 'alert-triangle',
-  damaged: 'alert-triangle',
-  dead: 'x',
-};
+// 18/600 untuk kode pohon, naik dari subheading (17). Tidak ada token 18 di
+// skala tipografi, dan menambahkannya untuk satu titik pakai akan melahirkan
+// langkah baru di skala yang dipakai 53 berkas. Ditulis sebagai konstanta
+// bernama di sini, bukan angka telanjang di dalam JSX.
+//
+// Kode pohon adalah satu-satunya hal di baris ini yang dicari mata lebih dulu —
+// orang membuka daftar untuk menemukan "12-C", bukan untuk membaca varietasnya.
+// Satu langkah di atas judul baris biasa itulah yang membuatnya jadi jangkar.
+const TREE_ROW_CODE_SIZE = 18;
+const TREE_ROW_CODE_LINE_HEIGHT = 24;
+
+// CONDITION_ICONS DIHAPUS di batch 4a. Ia memetakan pest_attacked,
+// disease_indicated, dan damaged ke satu 'alert-triangle' yang sama, dan satu-
+// satunya pemanggilnya — baris daftar pohon — sekarang memakai
+// <ConditionStatusBadge>, yang membedakan ketiganya lewat CONDITION_BADGE.
 
 // Teks yang berdiri saat varietasnya memang belum diisi. Kalimat, bukan tanda
 // hubung: "—" menyuruh pembaca menebak apakah datanya kosong, gagal dimuat, atau
@@ -238,7 +250,6 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
   const metaText = [varietyText, phaseText, shortTreeAge(tree.activePlanting?.plantedAt)]
     .filter(Boolean)
     .join(' · ');
-  const conditionColor = badgeColors[getConditionTone(tree.currentCondition)].text;
 
   const content = (
     <View
@@ -278,41 +289,45 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
         <Text
           selectable
           numberOfLines={1}
-          style={{ ...tokens.type.subheading, color: tokens.color.text.primary }}
+          style={{
+            color: tokens.color.text.primary,
+            // Berat dibawa keluarga huruf; Android tidak mensintesis berat
+            // untuk font kustom.
+            fontFamily: fonts.sansSemiBold,
+            fontSize: TREE_ROW_CODE_SIZE,
+            lineHeight: TREE_ROW_CODE_LINE_HEIGHT,
+          }}
         >
           {displayCode}
         </Text>
+        {/* 14, naik dari meta (13). Baris ini dibaca di kebun, sambil berdiri,
+            dan 13px adalah ukuran terkecil di seluruh aplikasi ini — ia tidak
+            pantas dipakai untuk baris yang menyebut varietas dan fase, dua hal
+            yang memang dibaca dan bukan sekadar dikenali. */}
         <Text
           selectable
           numberOfLines={1}
-          style={{ ...tokens.type.meta, color: tokens.color.text.secondary }}
+          style={{ ...tokens.type.bodySmall, color: tokens.color.text.secondary }}
         >
           {metaText}
         </Text>
         {children}
       </View>
 
-      {/* flexShrink 0: kondisi adalah alasan utama baris ini dipindai, jadi teks
-          di kolom tengah yang terpotong duluan saat ruang sempit. maxWidth
-          menahannya tetap satu kolom sempit — label terpanjang ('Perhatian')
-          muat, dan tidak ada kondisi yang bisa melebar melewatinya. */}
-      <View
-        style={{
-          alignItems: 'center',
-          flexDirection: 'row',
-          flexShrink: 0,
-          gap: tokens.space.xs,
-          maxWidth: 110,
-        }}
-      >
-        <Icon name={CONDITION_ICONS[tree.currentCondition]} size={tokens.icon.sm} color={conditionColor} />
-        <Text
-          selectable={false}
-          numberOfLines={1}
-          style={{ ...tokens.type.caption, color: conditionColor }}
-        >
-          {formatTreeConditionStatus(tree.currentCondition)}
-        </Text>
+      {/* BADGE, bukan lagi ikon + teks telanjang (batch 4a).
+          <ConditionStatusBadge> sudah ada di berkas ini dan sudah dipakai layar
+          detail pohon; ia membawa penanda BENTUK dari CONDITION_BADGE, jadi
+          Hama, Sakit, dan Rusak akhirnya bisa dibedakan di baris daftar tanpa
+          bergantung pada rona.
+
+          Sebelum ini ketiganya memakai CONDITION_ICONS, yang memetakan ketiga-
+          tiganya ke satu 'alert-triangle' yang sama — persis penggabungan yang
+          sudah diperbaiki di badge dan di sel denah, tapi belum di sini.
+
+          flexShrink 0: kondisi adalah alasan utama baris ini dipindai, jadi
+          teks di kolom tengah yang terpotong duluan saat ruang sempit. */}
+      <View style={{ flexShrink: 0 }}>
+        <ConditionStatusBadge status={tree.currentCondition} />
       </View>
     </View>
   );

@@ -464,13 +464,25 @@ export function FarmAddTreesScreen() {
                 Syaratnya panjang DAFTAR, bukan berapa yang sedang tersembunyi.
                 Kalau diukur dari yang tersembunyi, tombolnya tetap tampil
                 setelah pemilik memangkas daftar di bawah batas sambil terbuka —
-                tombol yang menjanjikan melipat sesuatu yang sudah tidak ada. */}
+                tombol yang menjanjikan melipat sesuatu yang sudah tidak ada.
+
+                VARIANNYA 'secondary', bukan 'quiet' (batch 4a). 'quiet' salah
+                satu dari tiga varian yang ditandai usang di batch 1a — spek
+                hanya mengenal utama, sekunder, nonaktif, dan merusak — dan
+                titik pakai ini ditugaskan ke batch ini untuk diputuskan.
+
+                Yang dipilih 'secondary' berukuran small: bentuknya sama dengan
+                "Keterangan" dan "Pilih" di bar atas denah, dan perannya juga
+                sama — tombol kecil yang mengubah TAMPILAN tanpa menulis apa
+                pun. 'quiet' merendernya nyaris tanpa bentuk, dan tombol tanpa
+                bentuk di tengah formulir tidak terbaca sebagai tombol oleh
+                orang yang belum tahu ia ada di sana. */}
             {codes.length > VISIBLE_CODE_LIMIT ? (
               <Button
                 onPress={() => setExpanded((current) => !current)}
                 size="small"
                 title={expanded ? 'Sembunyikan sebagian' : `Lihat semua (${codes.length})`}
-                variant="quiet"
+                variant="secondary"
               />
             ) : null}
           </View>

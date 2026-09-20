@@ -2,25 +2,31 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
-import { ConfirmDialog } from '../../../src/components/bottom-sheet';
 import { MemberRow } from '../../../src/components/member-row';
-import { useSnackbar } from '../../../src/components/snackbar';
 import { Button, Card, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../src/components/ui';
 import { colors, spacing, typography } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
 import { getFarmDetail } from '../../../src/services/farmService';
-import { getFarmActorDisplayProfiles, leaveCurrentFarm } from '../../../src/services/memberService';
+import { getFarmActorDisplayProfiles } from '../../../src/services/memberService';
 import type { Farm, FarmActorDisplayProfile } from '../../../src/types/domain';
 
+// "Keluar dari kebun" TIDAK ADA LAGI DI LAYAR INI (batch 4a).
+//
+// Ia pindah ke tab Profil pekerja, berdampingan dengan "Keluar dari akun".
+// Adendum sebelumnya menaruhnya di sini; briefing menaruhnya di Profil, dan
+// briefing yang berlaku. Alasannya bukan selera: dua jalan keluar yang
+// berbeda-akibatnya — satu mengakhiri sesi, satu mengakhiri keanggotaan —
+// harus bisa dibandingkan berdampingan sebelum ditekan. Terpisah di dua layar,
+// orang menekan yang pertama ditemukannya.
+//
+// Konsekuensinya layar ini murni BACA. Tidak ada lagi aksi tulis, tidak ada
+// ConfirmDialog, tidak ada snackbar, dan tidak ada stickyFooter.
 export default function WorkerFarmHubScreen() {
-  const { currentFarm, refresh } = useAuth();
-  const showSnackbar = useSnackbar();
+  const { currentFarm } = useAuth();
   const [farm, setFarm] = React.useState<Farm | null>(currentFarm?.farm ?? null);
   const [actors, setActors] = React.useState<FarmActorDisplayProfile[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-  const [confirmLeave, setConfirmLeave] = React.useState(false);
 
   const farmId = currentFarm?.farmId;
   const currentUserId = currentFarm?.userId;
@@ -74,26 +80,6 @@ export default function WorkerFarmHubScreen() {
     load().finally(() => setLoading(false));
   }
 
-  async function handleLeaveFarm() {
-    if (!farmId) {
-      return;
-    }
-
-    setBusy(true);
-    const result = await leaveCurrentFarm({ farmId });
-    setBusy(false);
-
-    if (result.error) {
-      setConfirmLeave(false);
-      showSnackbar(result.error.message);
-      return;
-    }
-
-    setConfirmLeave(false);
-    await refresh();
-    router.replace('/removed-access');
-  }
-
   // TopAppBar ber-onBack, BUKAN MainTabHeader. Layar ini bukan tab root: ia
   // dibuka lewat push dari baris "Anggota" di Beranda, dan MainTabHeader tidak
   // pernah merender tombol kembali (TopAppBar hanya merendernya kalau `onBack`
@@ -121,38 +107,13 @@ export default function WorkerFarmHubScreen() {
   }
 
   return (
-    <Screen
-      header={header}
-      // stickyFooter, BUKAN tombol yang menempel di bawah daftar. Aksi ini
-      // MENCABUT AKSES pekerja atas kebunnya sendiri, dan tombol yang ikut
-      // menggulung bisa berada persis di bawah jempol saat daftar anggota
-      // berhenti bergulir. Di sini ia selalu di tempat yang sama, di atas
-      // navigasi bawah, dan tidak pernah lewat di bawah jari yang sedang
-      // menggulung.
-      //
-      // Ini juga menjawab kekhawatiran "layarnya bisa lebih panjang dari satu
-      // layar penuh": stickyFooter dipatok ke tepi bawah, jadi panjang daftar
-      // anggota tidak mengubah letaknya sama sekali. Screen sendiri yang
-      // menyediakan ruang bawah sebesar tinggi footer ini (stickyFooterReserve
-      // di ui.tsx), jadi baris terakhir daftar tidak pernah tertutup.
-      stickyFooter={
-        // "Keluar DARI kebun" (batch 3), bukan "Keluar kebun". Tanpa kata
-        // depan itu, labelnya sejajar bentuknya dengan "Keluar akun" di layar
-        // Profil — dan kedua layar itu memang berdampingan di tab yang sama —
-        // sementara artinya jauh berbeda: yang satu mengakhiri sesi, yang ini
-        // mengakhiri KEANGGOTAAN. Judul dialog konfirmasinya sudah berbunyi
-        // "Keluar dari kebun?" sejak awal; pemicunya yang belum mengikutinya.
-        //
-        // Varian 'danger' DIPERTAHANKAN. Ini satu-satunya tombol di aplikasi
-        // yang benar-benar mencabut akses orang atas kebunnya sendiri.
-        <Button title="Keluar dari kebun" variant="danger" onPress={() => setConfirmLeave(true)} />
-      }
-    >
+    <Screen header={header}>
       <ErrorBanner message={error} />
 
-      {/* Kartu identitas kebun — nama, lokasi, luas — PINDAH ke Beranda, tempat
-          ia jadi judul halaman. Yang tersisa di sini orangnya: siapa saja yang
-          ada di kebun ini, dan jalan keluar darinya. */}
+      {/* Kartu identitas kebun — nama, lokasi, luas — sudah lama pindah ke
+          Beranda, lalu ke tab Profil. Yang tersisa di sini orangnya saja:
+          siapa yang ada di kebun ini. Jalan keluarnya pindah ke Profil di
+          batch 4a. */}
 
       <SectionLabel
         title="Anggota"
@@ -174,36 +135,6 @@ export default function WorkerFarmHubScreen() {
           ))}
         </View>
       </Card>
-
-      {/* Tombol "Keluar dari kebun" PINDAH ke stickyFooter Screen di atas. Ia dulu
-          berdiri di sini sebagai teks merah yang bisa diketuk — tanpa bentuk
-          tombol, dan ikut menggulung bersama daftar anggota. */}
-
-      <ConfirmDialog
-        cancelLabel="Batal"
-        confirmLabel="Keluar"
-        loading={busy}
-        // DUA kata diganti, bukan kalimatnya ditulis ulang.
-        //
-        // "kode bergabung" -> "kode kebun": benda yang sama dinamai "kode kebun"
-        // di delapan tempat lain, termasuk kartu yang memajangnya di layar
-        // pemilik dan layar /removed-access yang dilihat pekerja ini PERSIS
-        // sesudah keluar. Berkas inilah satu-satunya yang menyebutnya lain.
-        //
-        // "masuk lagi" -> "bergabung lagi": "masuk" sudah dipakai dialog Keluar
-        // akun untuk arti LOGIN. Dua dialog keluar yang berdampingan tidak boleh
-        // memakai satu kata untuk dua hal yang berbeda.
-        message="Kamu perlu kode kebun untuk bergabung lagi."
-        onCancel={() => {
-          if (!busy) {
-            setConfirmLeave(false);
-          }
-        }}
-        onConfirm={() => void handleLeaveFarm()}
-        title="Keluar dari kebun?"
-        tone="danger"
-        visible={confirmLeave}
-      />
     </Screen>
   );
 }

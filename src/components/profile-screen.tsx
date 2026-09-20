@@ -8,7 +8,7 @@ import { useAuth } from '../context/auth-context';
 import { consumePendingFeedback } from '../lib/pendingFeedback';
 import type { CurrentUserFarm } from '../types/domain';
 import { formatPersonDisplayName, sanitizeDisplayValue } from '../utils/displayFormat';
-import { getPendingWorkers } from '../services/memberService';
+import { getPendingWorkers, leaveCurrentFarm } from '../services/memberService';
 import { isOwnerActive, isWorkerActive } from '../utils/routeGuard';
 import { ConfirmDialog } from './bottom-sheet';
 import { Avatar } from './member-row';
@@ -30,7 +30,7 @@ const PENDING_FEEDBACK_MESSAGES: Record<string, string | undefined> = {
 };
 
 export function ProfileScreen() {
-  const { currentFarm, error, profile, signOut } = useAuth();
+  const { currentFarm, error, profile, refresh, signOut } = useAuth();
   const showSnackbar = useSnackbar();
   const [confirmLogout, setConfirmLogout] = React.useState(false);
   const [loggingOut, setLoggingOut] = React.useState(false);
@@ -39,6 +39,8 @@ export function ProfileScreen() {
   // milik pemilik. 0 berarti "tidak ada ATAU belum/gagal terbaca" — ketiganya
   // menghasilkan hal yang sama di layar, yaitu labelnya tidak dirender.
   const [pendingCount, setPendingCount] = React.useState(0);
+  const [confirmLeave, setConfirmLeave] = React.useState(false);
+  const [leaving, setLeaving] = React.useState(false);
 
   const ownerFarmId = isOwnerActive(currentFarm) ? currentFarm?.farmId : undefined;
 
@@ -86,6 +88,38 @@ export function ProfileScreen() {
       }
     }, [showSnackbar])
   );
+
+  // Kembar handleLogout, dan keduanya sengaja TIDAK dilebur jadi satu fungsi
+  // berparameter. Yang sama cuma bentuknya; akibatnya berbeda jauh — yang satu
+  // mengakhiri sesi dan mendarat di layar masuk, yang ini mencabut keanggotaan
+  // dan mendarat di layar pemberitahuan akses. Satu fungsi bercabang untuk dua
+  // hal sepenting ini adalah tempat yang tepat untuk salah cabang.
+  async function handleLeaveFarm() {
+    const farmId = currentFarm?.farmId;
+
+    if (!farmId) {
+      return;
+    }
+
+    setLeaving(true);
+
+    const result = await leaveCurrentFarm({ farmId });
+
+    if (result.error) {
+      setLeaving(false);
+      setConfirmLeave(false);
+      showSnackbar(result.error.message);
+      return;
+    }
+
+    // refresh() WAJIB mendahului navigasi: /removed-access membaca keanggotaan
+    // dari auth-context, dan tanpa penyegaran ini ia masih melihat pekerja yang
+    // baru saja keluar sebagai anggota aktif lalu memantulkannya kembali.
+    await refresh();
+    setLeaving(false);
+    setConfirmLeave(false);
+    router.replace('/removed-access');
+  }
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -339,6 +373,28 @@ export function ProfileScreen() {
             variant="neutral"
             onPress={() => setConfirmLogout(true)}
           />
+
+          {/* "Keluar dari kebun" PINDAH KE SINI dari kaki layar Anggota
+              pekerja (batch 4a). Hanya pekerja aktif: pemilik tidak bisa
+              keluar dari kebunnya sendiri — leaveCurrentFarm menolaknya di
+              database — jadi tombolnya tidak dirender sama sekali untuknya,
+              bukan dirender lalu dinonaktifkan.
+
+              DI BAWAH "Keluar dari akun", bukan di atasnya. Urutannya bukan
+              soal kerapian: yang di atas mengakhiri SESI dan bisa dibatalkan
+              dengan masuk lagi; yang di bawah mengakhiri KEANGGOTAAN dan
+              menuntut kode kebun untuk dipulihkan. Yang paling sulit ditarik
+              kembali duduk paling jauh dari ibu jari.
+
+              'danger', satu-satunya merah di layar ini — dan itu yang membuat
+              perbedaan keduanya terbaca tanpa harus dibaca. */}
+          {isWorkerActive(currentFarm) ? (
+            <Button
+              title="Keluar dari kebun"
+              variant="danger"
+              onPress={() => setConfirmLeave(true)}
+            />
+          ) : null}
         </>
       )}
 
@@ -364,6 +420,28 @@ export function ProfileScreen() {
         title="Keluar dari akun?"
         tone="danger"
         visible={confirmLogout}
+      />
+
+      {/* Dialog KEDUA, terpisah, dan kata-katanya dipindah APA ADANYA dari
+          layar Anggota pekerja — termasuk "kode kebun" (bukan "kode
+          bergabung") dan "bergabung lagi" (bukan "masuk lagi"), dua pilihan
+          kata yang sudah diperbaiki di sana dan tidak boleh hilang dalam
+          pemindahan ini. "masuk" sudah berarti LOGIN di dialog tepat di
+          atasnya, dan kini keduanya benar-benar hidup di satu layar. */}
+      <ConfirmDialog
+        cancelLabel="Batal"
+        confirmLabel="Keluar"
+        loading={leaving}
+        message="Kamu perlu kode kebun untuk bergabung lagi."
+        onCancel={() => {
+          if (!leaving) {
+            setConfirmLeave(false);
+          }
+        }}
+        onConfirm={() => void handleLeaveFarm()}
+        title="Keluar dari kebun?"
+        tone="danger"
+        visible={confirmLeave}
       />
     </Screen>
   );

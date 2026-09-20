@@ -279,7 +279,9 @@ export const tokens = {
   // sel yang diperbesar), bukan radius ubin generik — namanya menyesatkan,
   // perannya tidak. cardInner dan card TIDAK disentuh; lihat catatan pada
   // `radius` di atas.
-  radius: { control: 10, tile: 8, cardInner: 16, card: 20, sheet: 18, pill: 999 },
+  // `tileFar` menyertai `tile`: keduanya radius sel denah, satu untuk tiap
+  // tingkat perbesaran. Lihat catatan `cellFar` di src/theme/tokens.ts.
+  radius: { control: 10, tile: 8, tileFar: 3, cardInner: 16, card: 20, sheet: 18, pill: 999 },
   type: {
     display:    { fontSize: 32, fontWeight: '700', lineHeight: 38 },
     title:      { fontSize: 24, fontWeight: '700', lineHeight: 30 },

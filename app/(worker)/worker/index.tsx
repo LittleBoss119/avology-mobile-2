@@ -20,7 +20,7 @@ import { getWorkerTasks } from '../../../src/services/careTaskService';
 import { colors as palette, text as typeScale } from '../../../src/theme/tokens';
 import type { CareTask } from '../../../src/types/domain';
 import { formatCareCategory, formatPersonDisplayName } from '../../../src/utils/displayFormat';
-import { getTodayIsoDate, taskTimeBucket } from '../../../src/utils/taskDueDate';
+import { formatFullDate, getTodayIsoDate, taskTimeBucket } from '../../../src/utils/taskDueDate';
 
 export default function WorkerDashboardScreen() {
   const { currentFarm, profile } = useAuth();
@@ -89,6 +89,11 @@ export default function WorkerDashboardScreen() {
   }
 
   const greeting = `Halo, ${formatPersonDisplayName(profile?.fullName, 'Pekerja')}`;
+  // Tanggal hari ini, sama seperti Beranda pemilik (batch 4a). Sebelumnya
+  // hanya sisi pemilik yang membawanya, dan itu selisih yang tidak punya
+  // alasan: justru DI SINILAH tanggal paling berguna, karena seluruh isi layar
+  // ini adalah "hari ini" dan pekerja membukanya di kebun, jauh dari kalender.
+  const today = formatFullDate(getTodayIsoDate());
 
   return (
     <Screen applyTopInset>
@@ -99,7 +104,7 @@ export default function WorkerDashboardScreen() {
 
           Blok identitas kebun yang dulu berdiri di sini dicabut, sejalan dengan
           Beranda pemilik. Nama kebun tetap terbaca di tab Profil. */}
-      <RootTabTitle title={greeting} />
+      <RootTabTitle title={greeting} meta={today} />
 
       <ErrorBanner message={error} />
 
@@ -169,22 +174,31 @@ export default function WorkerDashboardScreen() {
   );
 }
 
-// Kartu tugas dengan tombol "Catat hasil" DI DALAM kartunya.
+// Kartu tugas dengan SATU tombol: "Catat hasil".
 //
 // Konsekuensinya hanya 2-3 kartu yang muat per layar, dan itu memang harganya:
 // tanpa tombol ini, mencatat satu hasil kerja menuntut buka detail, gulung ke
 // bawah, tekan tombol — tiga langkah untuk pekerjaan yang paling sering
 // dilakukan di aplikasi ini. Jangan dipadatkan.
 //
-// Kartunya SENDIRI tetap bisa ditekan dan membuka detail. Dua tujuan dalam satu
-// kartu, dan keduanya perlu: tombol untuk yang sudah tahu apa yang dikerjakan,
-// kartunya untuk yang perlu membaca instruksi dulu.
+// TOMBOL "LIHAT DETAIL" DICABUT (batch 4a), dan penggantinya bukan tombol lain
+// melainkan INSTRUKSINYA SENDIRI, dicetak di kartu.
+//
+// Alasannya: satu-satunya hal di layar detail yang benar-benar dibutuhkan
+// sebelum mengerjakan adalah instruksi dari pemilik. Menyembunyikannya di balik
+// tombol kedua berarti menukar satu baris teks dengan satu perjalanan layar —
+// dan menaruh dua tombol berdampingan memaksa orang menimbang mana yang benar
+// tiap kali, di layar yang seharusnya tidak menuntut pertimbangan apa pun.
+//
+// Informasi ditaruh di tempat aksinya. Detail tugas tetap terjangkau lewat tab
+// Tugas, yang barisnya memang mengantar ke sana.
 function TaskCard({ task }: { task: CareTask }) {
   // Kategori, bukan judul yang diketik pemilik — alasan yang sama dengan baris
   // di layar Tugas: judul bebas berbunyi "Test" atau "awas", sedangkan
   // "Penyemprotan" memberi tahu apa yang harus dibawa. 'Tugas perawatan' adalah
   // teks jatuh-balik yang sudah dipakai di sana, dipertahankan apa adanya.
   const title = task.category ? formatCareCategory(task.category) : 'Tugas perawatan';
+  const instruction = task.instruction?.trim();
 
   return (
     <Card padding={tokens.layout.cardPadding}>
@@ -199,21 +213,23 @@ function TaskCard({ task }: { task: CareTask }) {
         </Text>
       </View>
 
+      {/* Instruksi pemilik, DI KARTU. Dibatasi tiga baris: instruksi yang
+          lebih panjang dari itu bukan lagi "apa yang harus dikerjakan"
+          melainkan catatan, dan kartu yang tumbuh sesuai panjang ketikan
+          pemilik akan mendorong tugas kedua keluar layar.
+
+          Tidak dirender sama sekali kalau kosong — bukan dirender sebagai
+          baris kosong yang menyisakan tingginya. Kolom care_tasks.instruction
+          memang nullable, dan sebagian besar tugas berulang tidak mengisinya. */}
+      {instruction ? (
+        <Text selectable numberOfLines={3} style={styles.taskInstruction}>
+          {instruction}
+        </Text>
+      ) : null}
+
       <Button
         title="Catat hasil"
         onPress={() => router.push(`/worker/tasks/${task.id}/record?mode=create`)}
-      />
-
-      {/* Jalan ke detail sebagai tombol sekunder, bukan kartu yang bisa
-          ditekan. Kartu yang bisa ditekan DAN berisi tombol punya dua target
-          sentuh yang bertumpuk, dan yang lebih besar selalu menang saat jari
-          meleset — di sini yang lebih besar adalah kartunya, sehingga tekanan
-          yang meleset sedikit dari "Catat hasil" mendarat di layar yang salah.
-          Dua tombol berdampingan tidak punya masalah itu. */}
-      <Button
-        title="Lihat detail"
-        variant="secondary"
-        onPress={() => router.push(`/worker/tasks/${task.id}`)}
       />
     </Card>
   );
@@ -232,4 +248,9 @@ const styles = StyleSheet.create({
   taskHead: { gap: tokens.space.xs },
   taskTitle: { ...tokens.type.subheading, color: palette.textPrimary },
   taskMeta: { ...tokens.type.bodySmall, color: palette.textMuted },
+  // textPrimary, bukan textMuted seperti baris target di atasnya. Instruksi
+  // adalah hal yang harus DIKERJAKAN; target hanya menyebutkan di mana.
+  // Meredupkannya bersama meta akan menaruh satu-satunya kalimat yang berisi
+  // perintah di lapisan yang sama dengan keterangan.
+  taskInstruction: { ...tokens.type.body, color: palette.textPrimary },
 });
