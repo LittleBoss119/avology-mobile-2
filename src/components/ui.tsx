@@ -1630,6 +1630,15 @@ type FieldBaseProps = {
 // onChangeText ditegakkan tipe, bukan konvensi: hanya field terkunci yang boleh
 // tidak punya handler (nilainya memang tidak bisa berubah). Field biasa yang
 // lupa mengoper handler gagal saat kompilasi, tidak diam-diam jadi read-only.
+//
+// `locked` membawa TIGA penanda sekaligus, dan ketiganya milik komponen ini,
+// bukan milik layar pemanggil: permukaan `surfaceSunken`, teks `textMuted`, dan
+// imbuhan ' (tetap)' pada labelnya. Imbuhan itu ditambahkan di batch 7a untuk
+// §37 -- sebelumnya satu-satunya kolom terkunci di aplikasi menerangkan dirinya
+// lewat helperText, yaitu kalimat yang harus ditulis ulang di tiap layar yang
+// mengunci sesuatu. Bentuknya sengaja sama persis dengan imbuhan `optional`:
+// kata biasa, warna muted, di dalam <Text> yang sama supaya ia ikut membungkus
+// bersama labelnya saat font sistem dibesarkan.
 export type FieldProps =
   | (FieldBaseProps & { locked: true; onChangeText?: (value: string) => void })
   | (FieldBaseProps & { locked?: false; onChangeText: (value: string) => void });
@@ -1706,6 +1715,14 @@ export function Field({
           // ini harus ikut membungkus bersama labelnya saat font sistem
           // dibesarkan, bukan terpisah ke barisnya sendiri.
           <Text style={{ color: palette.textMuted, fontFamily: fonts.sans }}> (boleh kosong)</Text>
+        ) : null}
+        {locked ? (
+          // Sama bentuknya dengan imbuhan `optional` di atas, dan sama
+          // alasannya berada di dalam <Text> yang sama. 'tetap', bukan 'tidak
+          // bisa diubah': yang kedua menerangkan larangan, yang pertama
+          // menerangkan sifat nilainya -- dan sifat itu yang benar, karena email
+          // memang penanda akun, bukan data yang kebetulan dikunci.
+          <Text style={{ color: palette.textMuted, fontFamily: fonts.sans }}> (tetap)</Text>
         ) : null}
       </Text>
       {useRowLayout ? (

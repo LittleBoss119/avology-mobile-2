@@ -123,7 +123,7 @@ export default function WorkerLayout() {
             name="worker/profile-edit"
             options={{ gestureEnabled: false, headerShown: false, title: 'Edit Profil' }}
           />
-          <Stack.Screen name="worker/profile-password" options={{ headerShown: false, title: 'Edit Password' }} />
+          <Stack.Screen name="worker/profile-password" options={{ headerShown: false, title: 'Ganti Password' }} />
         </Stack>
       </View>
       <RoleBottomNavigation role="worker" />

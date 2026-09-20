@@ -8,6 +8,7 @@ import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { setPendingFeedback } from '../lib/pendingFeedback';
 import { updateCurrentProfile } from '../services/authService';
 import { ConfirmDialog } from './bottom-sheet';
+import { Avatar } from './member-row';
 import { Button, EmptyState, ErrorBanner, Field, Screen, TopAppBar } from './ui';
 
 type ProfileFieldErrors = {
@@ -118,6 +119,23 @@ export function ProfileEditScreen() {
         // diketik" — dan kartu di sekelilingnya menambah satu kotak lagi yang
         // tidak berarti apa-apa. Jarak antar kolom sudah cukup memisahkan.
         <View style={{ gap: tokens.space.xl }}>
+          {/* AVATAR HURUF, TANPA JALUR UNGGAH FOTO. Tidak ada tombol, tidak ada
+              pemilih berkas, dan tidak ada yang bisa ditekan di sini — ia
+              tampilan, bukan kontrol.
+
+              Alasannya bukan kekurangan waktu: data pengguna di aplikasi ini
+              hanya nama dan nomor telepon, jadi menambah unggah foto berarti
+              menambah kolom, penyimpanan, dan seluruh penanganan gagal-unggah
+              untuk hiasan. Inisial dari nama sudah membedakan satu orang dari
+              yang lain di daftar anggota, dan itu satu-satunya pekerjaan yang
+              memang dibutuhkan avatar di sini.
+
+              Ia ikut berubah saat nama diketik — sumbernya `fullName` dari
+              state form, bukan `profile.fullName` — jadi hubungan antara huruf
+              di lingkaran dan nama di kolom terlihat sendiri tanpa dijelaskan. */}
+          <View style={{ alignItems: 'center' }}>
+            <Avatar name={fullName} size="lg" tone="accent" />
+          </View>
           <Field
             error={fieldErrors.fullName}
             label="Nama lengkap"
@@ -138,12 +156,18 @@ export function ProfileEditScreen() {
               profil. Field abu-abu kosong berikut helper text-nya tidak memberi
               informasi apa pun, cuma menambah baris yang harus dibaca. */}
           {profile.email ? (
-            <Field
-              helperText="Email dipakai untuk masuk dan tidak bisa diubah."
-              label="Email login"
-              locked
-              value={profile.email}
-            />
+            // Label "Email", bukan "Email login". Kata "login" dulu memikul
+            // penjelasan bahwa kolom ini beda dari kolom lain; pekerjaan itu
+            // sekarang dipikul imbuhan "(tetap)" yang dirender <Field> sendiri
+            // saat `locked` menyala, bersama permukaan surfaceSunken, teks
+            // textMuted, dan gembok. Empat penanda untuk satu sifat sudah cukup
+            // tanpa menyelipkan istilah teknis ke dalam namanya.
+            //
+            // helperText DIPERSINGKAT dari "Email dipakai untuk masuk dan tidak
+            // bisa diubah." Separuh kedua kalimat itu kini sudah dikatakan
+            // imbuhan labelnya, dan mengulanginya sebaris di bawah membuat satu
+            // fakta dibaca dua kali.
+            <Field helperText="Dipakai untuk masuk." label="Email" locked value={profile.email} />
           ) : null}
         </View>
       )}
@@ -174,10 +198,24 @@ function computeFieldErrors(fullName: string, phone: string): ProfileFieldErrors
 
   const normalizedPhone = normalizePhone(phone);
 
-  // Nomor HP opsional. Yang ditolak hanya isian yang jelas bukan nomor — format
-  // lama yang sudah tersimpan (berspasi, bertanda hubung, berawalan +62) tetap
-  // lolos karena dinormalisasi dulu, bukan divalidasi mentah-mentah.
-  if (normalizedPhone && !isValidPhone(normalizedPhone)) {
+  // NOMOR HP WAJIB, bukan opsional. §37 menulis "(opsional)" dan itu keliru
+  // terhadap alurnya sendiri: layar Daftar Akun sudah menolak pendaftaran tanpa
+  // nomor HP, jadi setiap akun yang sampai ke layar ini PASTI punya nomor. Kalau
+  // layar ini membolehkannya dikosongkan, satu-satunya yang bisa terjadi adalah
+  // data yang tadinya lengkap jadi kosong — bukan kelonggaran, melainkan jalan
+  // mundur. Koreksi ini ditetapkan di batch 2 dan ditegakkan di sini.
+  //
+  // Prop `optional` pada <Field> karena itu TIDAK dipakai di layar ini.
+  //
+  // Aturan bentuknya TIDAK ikut diperketat jadi pola 08/+628 milik layar Daftar
+  // Akun. Yang lolos di sini adalah 9-15 digit setelah dinormalisasi, dan itu
+  // disengaja: nomor lama yang sudah telanjur tersimpan dengan bentuk lain masih
+  // harus bisa disimpan ulang saat pemiliknya cuma mengganti namanya. Menolak
+  // nomor yang sudah ada di database berarti mengunci orang di luar formulirnya
+  // sendiri.
+  if (!normalizedPhone) {
+    errors.phone = 'Nomor HP wajib diisi.';
+  } else if (!isValidPhone(normalizedPhone)) {
     errors.phone = `Nomor HP harus ${MIN_PHONE_DIGITS}-${MAX_PHONE_DIGITS} digit.`;
   }
 

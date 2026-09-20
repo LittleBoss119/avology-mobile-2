@@ -11,7 +11,6 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
-  PageIntro,
   Screen,
 } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
@@ -104,7 +103,16 @@ export default function OwnerTaskListScreen() {
   // atas sendiri, jadi applyTopInset di sini menghitungnya untuk kedua kali.
   return (
     <Screen>
-      <PageIntro title="Tugas Lapangan" subtitle="Lihat semua tugas perawatan dalam kebun aktif." />
+      {/* TANPA <PageIntro>. Judul layar ini satu, dan ia hidup di header native
+          milik Stack.Screen "owner/tasks/index" (app/(owner)/_layout.tsx) yang
+          sejak batch 7a berbunyi "Tugas Lapangan". Sebelum ini judulnya ada dua:
+          "Tugas Pekerja" di header dan "Tugas Lapangan" di sini.
+
+          Subjudul "Lihat semua tugas perawatan dalam kebun aktif." ikut dicabut
+          bersama PageIntro-nya. Ia menerangkan hal yang sudah diterangkan isi
+          layar tepat di bawahnya — ringkasan jumlah tugas, lalu penyaring
+          status, lalu daftarnya — dan tidak ada satu keputusan pun yang berubah
+          karena membacanya. */}
       <ErrorBanner message={error} />
 
       <TaskSummary tasks={tasks} />

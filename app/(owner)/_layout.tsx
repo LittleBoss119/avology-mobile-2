@@ -122,21 +122,22 @@ export default function OwnerLayout() {
             name="owner/schedules/[scheduleId]/edit"
             options={{ gestureEnabled: false, headerShown: false, title: 'Edit Jadwal' }}
           />
-          {/* Judul SENGAJA dikosongkan, bukan dihapus prop-nya.
-              Layar ini merender judulnya sendiri lewat <PageIntro> di badan
-              layar, jadi header bawaan yang juga berjudul membuat dua judul
-              bertumpuk — dan sebelum batch 1b keduanya bahkan berbunyi berbeda:
-              'Tugas Pekerja' di header, 'Tugas Lapangan' di isi.
+          {/* "Tugas Lapangan", dan judulnya kini HIDUP DI SINI saja.
+              Layar ini punya dua nama sejak batch 1b — 'Tugas Pekerja' di header
+              bawaan dan 'Tugas Lapangan' di <PageIntro> badan layar — dan batch
+              7a memutuskan yang kedua. Alasannya bukan selera: aplikasi ini
+              mengelola KEBUN, bukan mengawasi orang. 'Tugas Pekerja' membingkai
+              layar ini sebagai manajemen pekerja, dan framing itu bertentangan
+              dengan posisi yang dipegang naskah skripsinya.
+
+              Judul kosong sementara di batch 1b dicabut bersama PageIntro-nya,
+              jadi tinggal satu judul: 17 rata tengah di header, sesuai aturan
+              "layar lain".
 
               Header tetap MENYALA karena ia satu-satunya sumber tombol kembali
               di layar ini; layar ini tidak punya <TopAppBar>. Mematikannya akan
-              mengurung pengguna.
-
-              PERBAIKAN SEMENTARA. Bentuk akhirnya: judul 17 rata tengah di
-              header dan tanpa PageIntro, sesuai aturan "layar lain". Itu
-              menuntut edit berkas layar, jadi dikerjakan di batch 6 bersama
-              keputusan penamaannya. */}
-          <Stack.Screen name="owner/tasks/index" options={{ title: '' }} />
+              mengurung pengguna. */}
+          <Stack.Screen name="owner/tasks/index" options={{ title: 'Tugas Lapangan' }} />
           <Stack.Screen name="owner/tasks/[taskId]" options={{ headerShown: false, title: 'Detail Tugas' }} />
           <Stack.Screen name="owner/farm" options={{ headerShown: false, title: 'Anggota' }} />
           <Stack.Screen name="owner/workers" options={{ title: 'Riwayat Akses' }} />
@@ -148,9 +149,28 @@ export default function OwnerLayout() {
             name="owner/profile-edit"
             options={{ gestureEnabled: false, headerShown: false, title: 'Edit Profil' }}
           />
-          <Stack.Screen name="owner/profile-password" options={{ headerShown: false, title: 'Edit Password' }} />
-          <Stack.Screen name="owner/farm-profile" options={{ headerShown: false, title: 'Data Kebun' }} />
-          <Stack.Screen name="owner/farm-grid" options={{ headerShown: false, title: 'Ukuran Denah Kebun' }} />
+          <Stack.Screen name="owner/profile-password" options={{ headerShown: false, title: 'Ganti Password' }} />
+          {/* gestureEnabled:false pada KEDUANYA — pasangan wajib
+              useUnsavedChangesGuard yang dipasang di dalam kedua layar itu di
+              batch 7a, alasan yang sama persis dengan owner/profile-edit dan
+              owner/schedules/[scheduleId]/edit di atas: swipe-back iOS tidak
+              bisa dicegat lewat API publik expo-router, jadi ia dimatikan supaya
+              perubahan yang belum disimpan tidak bisa hilang lewat gestur. Back
+              tetap ada di chevron, dan chevron itulah yang menanyakan
+              konfirmasinya.
+
+              Data kebun tidak selalu sedang dalam mode isian, dan gesturnya
+              tetap dimatikan tanpa syarat: gestureEnabled adalah pilihan per
+              rute, bukan per keadaan, dan menyalakannya kembali saat mode bacaan
+              berarti menggantungkan keselamatan perubahan pada urutan render. */}
+          <Stack.Screen
+            name="owner/farm-profile"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Data Kebun' }}
+          />
+          <Stack.Screen
+            name="owner/farm-grid"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Ukuran Denah' }}
+          />
         </Stack>
       </View>
       <RoleBottomNavigation role="owner" />
