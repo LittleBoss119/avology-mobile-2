@@ -17,7 +17,7 @@ import { Button, ErrorBanner, Screen, TopAppBar } from '../../../../src/componen
 import { useAuth } from '../../../../src/context/auth-context';
 import { pickImageFromGallery, takePhotoFromCamera } from '../../../../src/lib/media';
 import { uploadTreeMainPhoto } from '../../../../src/services/photoAttachmentService';
-import { createTree } from '../../../../src/services/treeService';
+import { createTree, getTrees } from '../../../../src/services/treeService';
 import type { PickedPhotoAsset } from '../../../../src/types/media';
 import { buildTreeDisplayCode } from '../../../../src/utils/treeFormat';
 
@@ -40,6 +40,70 @@ export default function OwnerCreateTreeScreen() {
     ...initialValues,
     plantedAt: new Date(),
   }));
+  // Kode posisi yang SUDAH TERISI di kebun ini.
+  //
+  // getTrees adalah service yang SUDAH ADA dan sudah dipakai daftar pohon serta
+  // denah dengan argumen yang sama persis — tidak ada query, RPC, maupun
+  // penghitung baru. Dimuat sekali saat layar dibuka, disaring di klien.
+  //
+  // null berarti belum selesai dimuat ATAU gagal dimuat, dan keduanya
+  // menghasilkan hal yang sama: baris konfirmasi tidak dirender. GAGAL DIAM-
+  // DIAM, tanpa ErrorBanner — yang hilang cuma satu baris keterangan, dan
+  // penjaga yang sebenarnya tetap berdiri di database (trees_position_unique).
+  // Memerahkan layar untuk keterangan yang tidak wajib akan menghalangi pemilik
+  // menambah pohon karena hal yang tidak menghalanginya sama sekali.
+  const [takenCodes, setTakenCodes] = React.useState<Set<string> | null>(null);
+
+  const farmId = currentFarm?.farmId;
+
+  React.useEffect(() => {
+    if (!farmId) {
+      return;
+    }
+
+    let active = true;
+
+    void getTrees({ archived: false, farmId }).then((result) => {
+      if (!active) {
+        return;
+      }
+
+      if (result.error) {
+        setTakenCodes(null);
+        return;
+      }
+
+      setTakenCodes(
+        new Set(
+          result.data.map((tree) => `${tree.rowPosition}-${tree.columnPosition}`.toUpperCase())
+        )
+      );
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [farmId]);
+
+  // Baris konfirmasi hanya bisa berbicara kalau KEDUA kolom sudah terisi dan
+  // daftar posisi sudah terbaca. Selama salah satunya belum, ia null dan
+  // barisnya tidak dirender — bukan dirender sebagai "memeriksa...".
+  //
+  // Kuncinya dirakit dengan cara yang sama persis dengan peta denah
+  // (farm-map-screen: `${rowPosition}-${columnPosition}`), supaya kedua sisi
+  // pencocokan tidak bisa berbeda bentuk.
+  const positionStatus = React.useMemo(() => {
+    const row = values.rowPosition.trim();
+    const column = values.columnPosition.trim().toUpperCase();
+
+    if (!row || !column || takenCodes === null) {
+      return null;
+    }
+
+    const code = `${row}-${column}`;
+
+    return { code, occupied: takenCodes.has(code) };
+  }, [takenCodes, values.columnPosition, values.rowPosition]);
 
   function handleValuesChange(next: TreeFormValues) {
     setValues(next);
@@ -158,7 +222,13 @@ export default function OwnerCreateTreeScreen() {
         header={<TopAppBar title="Tambah pohon" onBack={() => router.back()} />}
       >
         <ErrorBanner message={error} />
-        <TreeForm errors={errors} values={values} onChange={handleValuesChange} />
+        <TreeForm
+          errors={errors}
+          mode="create"
+          positionStatus={positionStatus}
+          values={values}
+          onChange={handleValuesChange}
+        />
         <TreeMainPhotoFormSection
           disabled={submitting}
           photo={selectedPhoto}

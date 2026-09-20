@@ -23,6 +23,7 @@ import {
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MenuRow,
   Screen,
   TopAppBar,
 } from '../../../../../src/components/ui';
@@ -383,7 +384,7 @@ export default function OwnerEditTreeScreen() {
         header={<TopAppBar title="Edit pohon" onBack={() => router.back()} />}
       >
         <ErrorBanner message={error} />
-        <TreeForm errors={errors} values={values} onChange={handleValuesChange} />
+        <TreeForm errors={errors} mode="edit" values={values} onChange={handleValuesChange} />
         <TreeMainPhotoFormSection
           currentPhotoUrl={currentPhoto?.signedUrl}
           deleteRequested={deletePhotoRequested}
@@ -400,21 +401,37 @@ export default function OwnerEditTreeScreen() {
           onRestoreExisting={() => setDeletePhotoRequested(false)}
         />
 
-        {/* Aksi merusak duduk DI BAWAH form, di atas footer — bukan di footer
-            bersama "Simpan perubahan".
-            Footer adalah tempat aksi utama layar ini, dan menaruh dua tombol
-            yang artinya berlawanan berdampingan di sana membuat keduanya
-            sama-sama terlihat seperti "selesai". Di badan layar, ia harus
-            digulung untuk ditemukan — sepadan dengan seberapa jarang ia dipakai:
-            mungkin sekali seumur pohon.
+        {/* BARIS TERPISAH, bukan tombol lebar (batch 4b).
+ 
+            Aksi merusak duduk DI BAWAH form, di atas footer — bukan di footer
+            bersama "Simpan perubahan". Footer adalah tempat aksi utama layar
+            ini, dan menaruh dua tombol yang artinya berlawanan berdampingan di
+            sana membuat keduanya sama-sama terlihat seperti "selesai". Di badan
+            layar, ia harus digulung untuk ditemukan — sepadan dengan seberapa
+            jarang ia dipakai: mungkin sekali seumur pohon.
 
-            Nada 'danger' di sini merah LEMBUT (latar status.danger.bg, teks
-            status.danger.text), bukan tombol merah pekat. */}
-        <Button
-          title="Pohon sudah tidak ada"
-          variant="danger"
-          disabled={submitting}
+            Kenapa BARIS dan bukan tombol merah lebar: tombol lebar berlatar
+            merah di ujung form terbaca sebagai aksi utama kedua, dan mata yang
+            memindai dari atas ke bawah sampai padanya persis saat mencari
+            "simpan". Sebagai baris menu berpenanda — bentuk yang sama dengan
+            baris navigasi di seluruh aplikasi — ia menuntut dibaca dulu sebelum
+            ditekan.
+
+            navigates={false}: ia membuka lembar di tempat, bukan berpindah
+            layar, jadi chevron yang menjanjikan halaman berikutnya akan
+            berbohong. <MenuRow> memang sudah menjatuhkan chevron untuk baris
+            danger secara bawaan; ditulis eksplisit supaya alasannya terbaca. */}
+        <MenuRow
+          danger
+          icon="x"
+          label="Pohon sudah tidak ada"
+          meta="Tutup siklus tanam. Posisi tetap tercatat."
+          navigates={false}
           onPress={() => {
+            if (submitting) {
+              return;
+            }
+
             setCycleError(null);
             setEndSheetOpen(true);
           }}

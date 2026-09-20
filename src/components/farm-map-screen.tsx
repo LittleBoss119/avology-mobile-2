@@ -4,7 +4,7 @@ import { Animated, BackHandler, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { tokens } from '../constants/theme';
-import { colors as palette } from '../theme/tokens';
+import { colors as palette, touch } from '../theme/tokens';
 import { useAuth } from '../context/auth-context';
 import { setPendingCareTrees } from '../lib/pendingCareTrees';
 import { setPendingNewTreePositions } from '../lib/pendingNewTreePositions';
@@ -19,11 +19,10 @@ import {
 } from '../lib/treeBrowseState';
 import { getFarmDetail } from '../services/farmService';
 import { getTrees } from '../services/treeService';
-import type { Farm, GrowthPhase, Tree, TreeConditionStatus } from '../types/domain';
-import { formatGrowthPhase, formatTreeCondition } from '../utils/displayFormat';
+import type { Farm, Tree, TreeConditionStatus } from '../types/domain';
+import { formatTreeCondition } from '../utils/displayFormat';
 import { formatTreeDisplayCode } from '../utils/treeFormat';
 import { fonts } from '../theme/tokens';
-import { BottomSheet } from './bottom-sheet';
 import { Icon, type IconName } from './icons';
 import { Button, ErrorBanner, SkeletonBlock } from './ui';
 
@@ -31,7 +30,8 @@ import { Button, ErrorBanner, SkeletonBlock } from './ui';
 //
 // BUKAN LAYAR, melainkan salah satu dari dua TAMPILAN di dalam route pohon.
 // Induknya — app/(owner)/owner/trees/index.tsx dan kembarannya di sisi pekerja —
-// yang memiliki header, segmented, dan keputusan tampilan mana yang dirender.
+// yang memiliki header, tab Daftar/Denah, dan keputusan tampilan mana yang
+// dirender.
 // Komponen ini mulai langsung dari baris kontrolnya.
 //
 // KENAPA IA TIDAK BOLEH DIBUNGKUS <Screen>: Screen membungkus children-nya dalam
@@ -98,39 +98,55 @@ import { Button, ErrorBanner, SkeletonBlock } from './ui';
 // lewat perbesar dulu.
 //
 // ARITMETIKA "MUAT SATU LAYAR", kebun acuan 26 baris x 9 kolom. DIHITUNG,
-// BUKAN DIUJI DI PERANGKAT — angka-angka di bawah berasal dari nilai token dan
-// tinggi komponen yang dibaca dari kodenya, dan belum satu pun diukur di HP.
+// BUKAN DIUKUR DI PERANGKAT — angka di bawah berasal dari nilai token dan
+// tinggi komponen yang dibaca dari kodenya, dan belum satu pun diuji di HP.
 //
-//   lebar petak  = 9 x 16 + 8 x 2 (celah) + 32 (gutter)  = 192
-//   tinggi petak = 26 x 16 + 25 x 2 (celah) + 8 (ruang bawah) = 474
+//   lebar  petak = 9 x 16 + 8 x 2 (celah) + 32 (gutter) + 40 (tepi layar) = 232
+//   tinggi petak = 26 x 16 + 25 x 2 (celah) + 8 (ruang bawah)             = 474
 //
 //   chrome di atas petak:
 //     paddingTop layar (22) + inset status bar (24)        =  46
-//     judul "Pohon" 26 + baris jumlah 14 + jarak           =  56
+//     judul "Pohon" 26, jumlah pohon rata kanan sebaris    =  30
 //     jarak headerWrap                                     =  12
-//     SegmentedControl (tapTarget 44 - 8, + padding 8)     =  44
-//     paddingBottom segmented                              =  12
-//     baris kontrol peta (48) + paddingBottom (12)         =  60
+//     tab bergaris bawah (20 + 8 + garis 2)                =  30
+//     paddingBottom tab                                    =   8
+//     bar atas peta (48) + paddingBottom (12)              =  60
 //     kepala kolom                                         =  24
 //   chrome di bawah petak:
 //     strip legenda, 2 baris item                          =  61
 //     bottom tab                                           =  64
 //                                                          -----
-//                                                            379
+//                                                            335
 //
-// Tinggi layar yang dibutuhkan = 379 + 474 = 853.
+// Tinggi layar yang dibutuhkan = 335 + 474 = 809.
+//
+// LEBARNYA TIDAK PERNAH JADI SYARAT: 232 muat di layar tersempit mana pun.
+//
+// PERJALANAN ANGKA INI. Sebelum tiga perbaikan lanjutan batch 4a, chrome-nya
+// 379 dan ambangnya 853. Yang dikembalikan:
+//
+//   SegmentedControl berpil (46) -> tab bergaris bawah (30)   -16
+//   paddingBottom pengalih 12 -> 8                             -4
+//   tombol "Keterangan" dicabut                                 0  (bar tetap 48)
+//   tombol zoom pindah ke bar atas                              0  (ia melayang)
+//   judul + jumlah dilebur jadi satu baris (batch 4b)          -26
+//                                                            ----
+//                                                             -44
+//
+// Dua yang terakhir TIDAK mengembalikan tinggi sama sekali, dan itu memang
+// bukan gunanya: yang pertama menghapus keterangan kedua atas satu gambar,
+// yang kedua menghapus tombol yang menimpa sudut petak sekaligus tombol
+// ikon-saja terakhir di aplikasi ini.
 //
 // ARTINYA: pada kebun acuan, 234 sel muat tanpa gulir di perangkat bertinggi
-// logis sekitar 853 ke atas (Pixel 7 ~892, iPhone 14 Pro ~852 di ambang), dan
-// TIDAK muat di perangkat 800-812 — di sana petaknya bisa digulung sedikit.
-// Kalau kondisi pohon di kebun itu beragam sehingga strip legenda tumbuh jadi
-// empat baris, ambangnya naik sekitar 60 lagi.
+// logis 809 ke atas. Itu mencakup hampir seluruh HP yang beredar — Pixel 7
+// (~892), iPhone 14 Pro (~852), dan iPhone SE generasi ketiga (~667) adalah
+// pengecualiannya. Perangkat 800-812 KINI MUAT; yang masih perlu digulir
+// tinggal layar di bawah 809, dan di sana gulirnya sekitar satu baris sel.
 //
-// Ini SELISIH YANG DIKETAHUI dari spek, bukan yang disembunyikan. Dua angka
-// yang dikunci spek — sel 16px dan "muat satu layar" — tidak bisa dua-duanya
-// benar di layar pendek begitu judul layar, pengalih tab, baris kontrol,
-// legenda, dan bottom tab semuanya juga dikunci. Yang bisa dipangkas sudah
-// dipangkas (tombol kedua di strip legenda, ruang bawah penggulung).
+// GULIR ITU DITERIMA, dan selnya TIDAK dikecilkan di bawah 16. Pengguna yang
+// jadi alasan seluruh aturan ini ada tidak bisa membaca sel yang lebih kecil,
+// dan peta yang tidak terbaca jauh lebih mahal daripada gulir satu baris.
 //
 // KALAU SALAH SATU ANGKA DI ATAS DINAIKKAN, hitung ulang penjumlahannya —
 // bukan "kira-kira masih muat".
@@ -151,10 +167,6 @@ const CELL_GAP_FAR = 2;
 const CELL_GAP_NEAR = tokens.space.xs;
 const ROW_HEADER_WIDTH = 32;
 const COLUMN_HEADER_HEIGHT = 24;
-
-// Ukuran sel contoh di lembar keterangan. Ia TIDAK mengikuti salah satu tingkat
-// perbesaran: pada 16 swatch-nya tidak terbaca, pada 74 ia mendominasi barisnya.
-const LEGEND_CELL_SIZE = 34;
 
 // Lebar penyeimbang di sisi kanan bar mode pilih. Ia TIDAK punya isi dan itu
 // memang tugasnya: ia satu-satunya yang membuat "N dipilih" duduk di tengah
@@ -219,10 +231,9 @@ function columnNumberOf(columnPosition: string | null | undefined): number {
   return columnNumber >= 1 && columnNumber <= 26 ? columnNumber : 0;
 }
 
-// Urutan tampil kanonis, dipakai keterangan dan strip legenda supaya keduanya
-// tidak pernah menyebut hal yang sama dalam urutan berbeda. Ini daftar NILAI,
-// bukan daftar label — labelnya tetap milik formatTreeCondition dan
-// formatGrowthPhase di utils/displayFormat.ts.
+// Urutan tampil kanonis strip legenda. Ini daftar NILAI, bukan daftar label —
+// labelnya tetap milik formatTreeCondition di utils/displayFormat.ts, dan peta
+// tidak boleh jadi daftar label keenam di repo ini.
 const CONDITION_ORDER = [
   'healthy',
   'needs_attention',
@@ -231,14 +242,6 @@ const CONDITION_ORDER = [
   'damaged',
   'dead',
 ] as const satisfies readonly TreeConditionStatus[];
-
-const PHASE_ORDER = [
-  'initial_planting',
-  'vegetative',
-  'flowering',
-  'fruiting',
-  'harvesting',
-] as const satisfies readonly GrowthPhase[];
 
 // ---------------------------------------------------------------------------
 // Rupa sel menurut kondisi
@@ -364,45 +367,28 @@ const CONDITION_VISUALS: Record<TreeConditionStatus, ConditionVisual> = {
 };
 
 // ---------------------------------------------------------------------------
-// Rupa tanda fase
+// TANDA FASE DICABUT SELURUHNYA DARI SEL DENAH.
 //
-// Hanya tiga fase yang ditandai. initial_planting dan vegetative adalah keadaan
-// tenang — menandainya berarti hampir setiap sel punya tanda, dan tanda yang
-// ada di mana-mana berhenti menjadi tanda.
+// Aturan spek berbunyi: warna sel mewakili kondisi pohon, SATU HAL SAJA. Tanda
+// fase di pojok kanan atas memang memakai saluran yang berbeda dari warna isian
+// — glif, bukan rona — tapi ia tetap menambahkan dimensi kedua pada benda yang
+// sama. Sel yang menjawab dua pertanyaan sekaligus memaksa pembacanya memilih
+// pertanyaan mana yang sedang ia tanyakan, tiap kali, untuk 234 sel.
 //
-// Tempatnya POJOK KANAN ATAS, terpisah dari kondisi di pojok kiri atas, supaya
-// keduanya tidak pernah berebut ruang di sel yang sama.
+// Denah menjawab satu pertanyaan: POHON MANA YANG BERMASALAH. Fase punya
+// layarnya sendiri (#17, batch 7), dan sampai layar itu ada, fase tetap terbaca
+// di baris daftar pohon dan di detail tiap pohon.
 //
-// GLIF yang menanggung beban pembeda: bunga, buah, buah berbiji. Warna adalah
-// saluran kedua, dan ia dipakai untuk mengelompokkan, bukan untuk menamai satu
-// per satu — hijau record.phase berarti "masih tumbuh" (berbunga dan berbuah),
-// oranye record.harvest berarti "sudah bisa dipanen" (panen saja). Fase yang
-// paling layak ditindaklanjuti pantas mendapat warna yang tidak dibagi dengan
-// siapa pun.
+// Yang ikut terbawa pergi: PHASE_ORDER, PhaseVisual, NO_PHASE_MARK,
+// PHASE_VISUALS, PHASE_LEGEND_DESCRIPTIONS, dan sebutan fase di label pembaca
+// layar tiap sel. Tidak ada satu pun yang disisakan "untuk berjaga-jaga" —
+// tabel rupa yang tidak dirender siapa pun adalah tabel yang akan menyimpang
+// dari kenyataan tanpa ada yang tahu.
 //
-// Berbunga dan berbuah kini dibedakan glifnya, bukan lagi bulat lawan belah
-// ketupat. Buah berbiji dan buah polos berbagi siluet dengan sengaja — keduanya
-// memang buah — dan bedanya biji di tengah; lihat catatan di icons.tsx.
+// Ketiga glif fase di icons.tsx (cell-flower, cell-fruit, cell-fruit-seed)
+// TIDAK dihapus: menghapus entri dari IconName adalah pencabutan API bersama,
+// dan layar fase di batch 7 kemungkinan besar memakainya lagi.
 // ---------------------------------------------------------------------------
-
-type PhaseVisual = {
-  color: string;
-  // null berarti fase ini tidak ditandai di peta.
-  icon: IconName | null;
-};
-
-const NO_PHASE_MARK: PhaseVisual = {
-  color: tokens.color.text.tertiary,
-  icon: null,
-};
-
-const PHASE_VISUALS: Record<GrowthPhase, PhaseVisual> = {
-  initial_planting: NO_PHASE_MARK,
-  vegetative: NO_PHASE_MARK,
-  flowering: { color: tokens.color.record.phase.text, icon: 'cell-flower' },
-  fruiting: { color: tokens.color.record.phase.text, icon: 'cell-fruit' },
-  harvesting: { color: tokens.color.record.harvest.text, icon: 'cell-fruit-seed' },
-};
 
 // ---------------------------------------------------------------------------
 // Glif sudut
@@ -637,7 +623,6 @@ function FilledMapCell({
   tree: Tree;
 }) {
   const visual = CONDITION_VISUALS[tree.currentCondition];
-  const phase = tree.currentGrowthPhase ? PHASE_VISUALS[tree.currentGrowthPhase] : NO_PHASE_MARK;
   const markSize = Math.round(cellSize * MARK_SIZE_RATIO);
   const markInset = Math.round(cellSize * 0.09);
   // Panjang diagonal sebuah bujur sangkar adalah sisinya dikali akar dua. Tanpa
@@ -707,19 +692,17 @@ function FilledMapCell({
       ) : null}
 
       {/* Pembungkus posisi hanya dibuat kalau memang ada tanda yang dipasang.
-          Bukan penghematan spekulatif: sehat-tanpa-fase-bertanda adalah KEADAAN
-          MAYORITAS menurut desain layar ini, dan tanpa penjaga ini setiap sel
-          polos tetap menyeret dua View kosong yang tidak menggambar apa pun.
-          Sejak tandanya jadi <Icon>, penjaga ini juga yang menahan jumlah
-          simpul <Svg> tetap nol untuk kebun yang sehat. */}
+          Bukan penghematan spekulatif: sel SEHAT adalah keadaan MAYORITAS
+          menurut desain layar ini, dan tanpa penjaga ini setiap sel polos tetap
+          menyeret satu View kosong yang tidak menggambar apa pun. Sejak
+          tandanya jadi <Icon>, penjaga ini juga yang menahan jumlah simpul
+          <Svg> tetap nol untuk kebun yang sehat.
+
+          SATU pojok yang tersisa, turun dari dua: tanda fase di pojok kanan
+          atas dicabut seluruhnya. Lihat catatan di atas. */}
       {!detailed || visual.markIcon === null ? null : (
         <View pointerEvents="none" style={{ left: markInset, position: 'absolute', top: markInset }}>
           <CellGlyph color={visual.markColor} name={visual.markIcon} size={markSize} />
-        </View>
-      )}
-      {!detailed || phase.icon === null ? null : (
-        <View pointerEvents="none" style={{ position: 'absolute', right: markInset, top: markInset }}>
-          <CellGlyph color={phase.color} name={phase.icon} size={markSize} />
         </View>
       )}
 
@@ -743,17 +726,12 @@ function cellCodeFontSize(cellSize: number): number {
 
 // Kalimat untuk pembaca layar. Dirangkai dari formatter yang sudah ada, bukan
 // dari daftar label baru.
+// FASE TIDAK DISEBUT, sejalan dengan selnya yang tidak lagi menggambarkannya.
+// Label pembaca layar yang menyebutkan hal yang tidak ada di layar membuat dua
+// orang yang memandang sel yang sama menerima keterangan yang berbeda — dan
+// yang memakai pembaca layar tidak punya cara memeriksa mana yang benar.
 function describeCell(tree: Tree): string {
-  const parts = [
-    `Posisi ${formatTreeDisplayCode(tree)}`,
-    formatTreeCondition(tree.currentCondition),
-  ];
-
-  if (tree.currentGrowthPhase) {
-    parts.push(formatGrowthPhase(tree.currentGrowthPhase));
-  }
-
-  return parts.join(', ');
+  return `Posisi ${formatTreeDisplayCode(tree)}, ${formatTreeCondition(tree.currentCondition)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -811,203 +789,29 @@ function AxisLabel({ height, label, width }: { height: number; label: string; wi
 }
 
 // ---------------------------------------------------------------------------
-// Keterangan
+// KETERANGAN: SATU BENTUK, bukan dua.
 //
-// DUA BENTUK, dan keduanya perlu:
+// Lembar "Keterangan peta" DICABUT SELURUHNYA, beserta tombol yang membukanya,
+// LegendRow, LegendSwatch, LegendGroupTitle, LegendCell, dan kedua tabel
+// deskripsinya.
 //
-//   LEMBAR    dibuka lewat tombol "Keterangan". Lengkap: setiap tanda yang bisa
-//             muncul, termasuk yang tidak sedang ada di kebun ini. Ia jawaban
-//             atas "apa saja yang mungkin".
-//   STRIP     melekat di dasar layar, tanpa dibuka. Hanya tanda yang BENAR-BENAR
-//             sedang tampil. Ia jawaban atas "yang di layar saya ini apa" — dan
-//             itu pertanyaan yang jauh lebih sering, tapi selama ini menuntut
-//             membuka lembar penuh untuk dijawab.
+// Alasannya bukan penghematan tinggi — lembar itu melayang di atas peta dan
+// tidak menempati satu piksel pun tata letak. Alasannya DUA TEMPAT UNTUK SATU
+// INFORMASI: strip di bawah peta sudah memajang petak warna, nama kondisi, dan
+// jumlahnya per kondisi, yaitu persis isi yang akan dibacakan lembar itu. Dua
+// keterangan atas satu gambar adalah dua keterangan yang akan menyimpang —
+// dan yang satunya, karena harus dibuka dulu, adalah yang paling jarang
+// diperiksa saat rupa selnya berubah.
 //
-// Strip tidak menggantikan lembar: ia tidak muat memuat keterangan, hanya nama.
-// Lembar tidak menggantikan strip: ia menutupi peta yang sedang dibaca.
+// Yang HILANG bersamanya, dan itu diterima dengan sadar: kalimat penjelas tiap
+// tanda ("Serangga di pojok kiri atas, latar merah muda"), dan daftar kondisi
+// yang TIDAK sedang ada di kebun ini. Yang pertama menjelaskan gambar yang
+// sudah ada di depan mata; yang kedua menjawab "apa saja yang mungkin", dan
+// itu pertanyaan yang tidak dibawa siapa pun ke layar ini.
+//
+// Adendum §4.1 menyebut "tombol Pilih di samping Keterangan". Itu deskripsi
+// tata letak saat itu ditulis, bukan keharusan bahwa Keterangan ada.
 // ---------------------------------------------------------------------------
-
-function LegendSwatch({ children }: { children: React.ReactNode }) {
-  return <View style={{ alignItems: 'center', justifyContent: 'center', width: LEGEND_CELL_SIZE }}>{children}</View>;
-}
-
-function LegendRow({ description, label, swatch }: { description: string; label: string; swatch: React.ReactNode }) {
-  return (
-    <View
-      style={{
-        alignItems: 'center',
-        flexDirection: 'row',
-        gap: tokens.space.md,
-        paddingVertical: tokens.space.sm,
-      }}
-    >
-      <LegendSwatch>{swatch}</LegendSwatch>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text
-          selectable
-          style={{ color: tokens.color.text.primary, ...tokens.type.bodyStrong }}
-        >
-          {label}
-        </Text>
-        <Text selectable style={{ color: tokens.color.text.secondary, ...tokens.type.meta }}>
-          {description}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function LegendGroupTitle({ title }: { title: string }) {
-  return (
-    <Text
-      selectable
-      style={{
-        color: tokens.color.text.secondary,
-        ...tokens.type.label,
-        paddingBottom: tokens.space.xs,
-        paddingTop: tokens.space.md,
-      }}
-    >
-      {title}
-    </Text>
-  );
-}
-
-// Sel contoh seukuran sel terkecil, dipakai sebagai swatch keterangan supaya
-// yang dilihat di lembar ini sama persis dengan yang dilihat di peta.
-function LegendCell({ condition }: { condition: TreeConditionStatus }) {
-  const visual = CONDITION_VISUALS[condition];
-  const size = LEGEND_CELL_SIZE;
-  const markSize = Math.round(size * MARK_SIZE_RATIO * 1.3);
-  const markInset = Math.round(size * 0.1);
-
-  return (
-    <View
-      style={{
-        // alignItems/justifyContent center, PERSIS seperti sel di peta: garis
-        // coret di bawah tidak punya inset sendiri, jadi yang menengahkannya
-        // adalah perataan induknya. Tanpa keduanya ia menempel ke kiri-atas dan
-        // diagonalnya meleset dari sudut ke sudut.
-        alignItems: 'center',
-        backgroundColor: visual.background,
-        borderColor: visual.border,
-        borderCurve: 'continuous',
-        borderRadius: tokens.radius.tile,
-        borderWidth: 1,
-        height: size,
-        justifyContent: 'center',
-        overflow: 'hidden',
-        width: size,
-      }}
-    >
-      {visual.struckThrough ? (
-        <View
-          style={{
-            backgroundColor: visual.markColor,
-            height: 1,
-            position: 'absolute',
-            transform: [{ rotate: '-45deg' }],
-            width: Math.round(size * 1.42),
-          }}
-        />
-      ) : null}
-      {visual.markIcon === null ? null : (
-        <View style={{ left: markInset, position: 'absolute', top: markInset }}>
-          <CellGlyph color={visual.markColor} name={visual.markIcon} size={markSize} />
-        </View>
-      )}
-    </View>
-  );
-}
-
-const CONDITION_LEGEND_DESCRIPTIONS: Record<TreeConditionStatus, string> = {
-  healthy: 'Tidak diberi tanda apa pun. Latar abu netral polos.',
-  needs_attention: 'Segitiga seru di pojok kiri atas, latar kuning.',
-  pest_attacked: 'Serangga di pojok kiri atas, latar merah muda.',
-  disease_indicated: 'Daun berbercak di pojok kiri atas, latar merah muda.',
-  damaged: 'Ranting patah di pojok kiri atas, latar merah muda.',
-  dead: 'Silang di pojok kiri atas, dan satu garis melintasi sel.',
-};
-
-const PHASE_LEGEND_DESCRIPTIONS: Record<GrowthPhase, string> = {
-  initial_planting: 'Tidak ditandai di peta.',
-  vegetative: 'Tidak ditandai di peta.',
-  flowering: 'Bunga hijau di pojok kanan atas. Hijau berarti pohon masih tumbuh.',
-  fruiting: 'Buah hijau di pojok kanan atas. Hijau berarti pohon masih tumbuh.',
-  harvesting: 'Buah berbiji, oranye. Hanya fase ini yang oranye — pohonnya sudah bisa dipanen.',
-};
-
-function LegendSheet({ onClose, visible }: { onClose: () => void; visible: boolean }) {
-  const size = LEGEND_CELL_SIZE;
-  const phaseMarkSize = Math.round(size * MARK_SIZE_RATIO * 1.3);
-
-  return (
-    <BottomSheet
-      onClose={onClose}
-      subtitle="Kondisi ditandai di pojok kiri atas, fase pertumbuhan di pojok kanan atas."
-      title="Keterangan peta"
-      visible={visible}
-    >
-      <View>
-        {/* Label kondisi dan fase diambil dari formatTreeCondition dan
-            formatGrowthPhase, bukan ditulis ulang di sini. Peta tidak boleh
-            menjadi daftar label keenam di repo ini. */}
-        <LegendGroupTitle title="Kondisi" />
-        {CONDITION_ORDER.map((condition) => (
-          <LegendRow
-            key={condition}
-            description={CONDITION_LEGEND_DESCRIPTIONS[condition]}
-            label={formatTreeCondition(condition)}
-            swatch={<LegendCell condition={condition} />}
-          />
-        ))}
-
-        <LegendGroupTitle title="Fase pertumbuhan" />
-        {PHASE_ORDER.map((phase) => {
-          const visual = PHASE_VISUALS[phase];
-
-          return (
-            <LegendRow
-              key={phase}
-              description={PHASE_LEGEND_DESCRIPTIONS[phase]}
-              label={formatGrowthPhase(phase)}
-              swatch={
-                visual.icon === null ? null : (
-                  <CellGlyph color={visual.color} name={visual.icon} size={phaseMarkSize} />
-                )
-              }
-            />
-          );
-        })}
-
-        <LegendGroupTitle title="Lainnya" />
-        <LegendRow
-          description="Belum pernah ditanami. Tanpa isian, sudut tajam, garis putus-putus."
-          label="Posisi kosong"
-          swatch={<EmptyMapCell cellSize={size} code="—" />}
-        />
-        <LegendRow
-          description="Cocok dengan filter yang sedang aktif, atau sedang terpilih. Filternya disetel di tab Daftar."
-          // "hijau" adalah sisa palet lama. Tepi penegasnya palette.accent,
-          // yang jingga-bata sejak batch 0 — dan keterangan yang menyebut warna
-          // yang tidak ada di layar lebih buruk daripada keterangan yang tidak
-          // menyebut warna sama sekali. Disebut sifatnya, bukan ronanya.
-          label="Tepi tebal berwarna"
-          swatch={<LegendCell condition="healthy" />}
-        />
-        <LegendRow
-          description="Tidak cocok dengan filter yang sedang aktif. Tetap bisa ditekan."
-          label="Sel yang diredupkan"
-          swatch={
-            <View style={{ opacity: DIMMED_OPACITY }}>
-              <LegendCell condition="healthy" />
-            </View>
-          }
-        />
-      </View>
-    </BottomSheet>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Strip legenda yang MELEKAT di bawah peta
@@ -1207,62 +1011,25 @@ function NoMatchNotice() {
 }
 
 // ---------------------------------------------------------------------------
-// Tombol perbesaran melayang
+// TOMBOL PERBESARAN MELAYANG DICABUT.
 //
-// IKON SAJA, dan itu PENGECUALIAN SADAR atas aturan "tidak ada tombol ikon-saja"
-// yang berlaku di seluruh repo ini. Dua hal yang membuatnya bisa dipertanggung-
-// jawabkan, dan keduanya harus tetap benar kalau tombol ini diubah:
+// Ia diganti tombol berlabel teks di bar atas — "Perbesar" saat sedang jauh,
+// "Perkecil" saat sedang dekat. Dua masalah selesai sekaligus:
 //
-//   1. SALAH TEKAN TIDAK MERUSAK APA PUN. Ia mengubah ukuran gambar, sekali
-//      ketuk lagi kembali. Bandingkan dengan "Catat perawatan", yang menulis
-//      baris care_activity_trees tanpa jalur hapus.
-//   2. IKONNYA KONVENSIONAL. Kaca pembesar berplus/berminus adalah salah satu
-//      dari sedikit glif yang artinya tidak perlu dipelajari.
+//   1. Ia MENIMPA SUDUT PETAK. Melayang di pojok kiri bawah dengan latar solid,
+//      ia menutupi sel-sel di baris terakhir kolom pertama — dan pada zoom jauh,
+//      tempat seluruh kebun justru sedang dipandang sekaligus, yang tertutup
+//      itu sudut kebun yang nyata.
+//   2. Ia SATU-SATUNYA TOMBOL IKON-SAJA yang tersisa di aplikasi ini. Catatan
+//      lama di tempat ini membelanya sebagai "pengecualian sadar" dengan dua
+//      alasan yang masih benar — salah tekan tidak merusak apa pun, dan kaca
+//      pembesar adalah glif konvensional. Tapi pembelaan itu berdiri di atas
+//      anggapan bahwa tidak ada tempat untuk teksnya. Begitu tombol
+//      "Keterangan" dicabut, tempat itu ada.
 //
-// JANGAN JADIKAN PRESEDEN. Tombol lain di aplikasi ini tetap wajib berteks.
-//
-// Yang menggantikan teksnya adalah accessibilityLabel yang BERGANTI mengikuti
-// keadaan — pembaca layar tetap mendengar kalimat penuh, dan kalimatnya
-// menyebut apa yang AKAN terjadi, bukan sedang di tingkat mana.
-//
-// Latar solid plus bayangan, bukan transparan: tombol ini melayang di atas sel
-// yang latarnya berubah-ubah (putih, kuning, merah muda, abu), dan tanpa alas
-// sendiri ia hilang di salah satu dari empat itu.
+// Labelnya menyebut APA YANG AKAN TERJADI, bukan tingkat yang sedang berlaku —
+// sama dengan accessibilityLabel yang dulu dibawa tombol ikon itu.
 // ---------------------------------------------------------------------------
-
-const ZOOM_BUTTON_SIZE = tokens.layout.rowMinHeight;
-
-function MapZoomButton({ onPress, zoomedIn }: { onPress: () => void; zoomedIn: boolean }) {
-  return (
-    <Pressable
-      accessibilityLabel={zoomedIn ? 'Perkecil denah' : 'Perbesar denah'}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => ({
-        alignItems: 'center',
-        backgroundColor: tokens.color.surface.card,
-        borderColor: tokens.color.line.card,
-        borderCurve: 'continuous',
-        borderRadius: tokens.radius.cardInner,
-        borderWidth: 1,
-        bottom: tokens.space.md,
-        height: ZOOM_BUTTON_SIZE,
-        justifyContent: 'center',
-        left: tokens.space.md,
-        opacity: pressed ? 0.82 : 1,
-        position: 'absolute',
-        width: ZOOM_BUTTON_SIZE,
-        ...tokens.elevation.overlay,
-      })}
-    >
-      <Icon
-        color={tokens.color.brand.base}
-        name={zoomedIn ? 'zoom-out' : 'zoom-in'}
-        size={tokens.icon.lg}
-      />
-    </Pressable>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Himpunan pilihan
@@ -1381,6 +1148,26 @@ function toggleSelectionMember(
 // tombol "Buat jadwal perawatan" muncul di atas himpunan kode posisi.
 // ---------------------------------------------------------------------------
 
+// TINGGINYA DICADANGKAN BEGITU MODE PILIH MENYALA, bukan saat sel pertama
+// ditekan. Ini mengembalikan keputusan yang sempat dibuang di batch 4a, dan
+// catatan lama yang membelanya memang benar.
+//
+// Bedanya halus tapi menentukan kapan petak bergeser:
+//
+//   PERGESERAN SAAT MASUK MODE PILIH  wajar. Pengguna baru saja menekan
+//   "Pilih"; seluruh layar memang sedang berubah peran, dan bar yang muncul
+//   adalah bagian dari perubahan yang ia minta.
+//
+//   PERGESERAN SAAT MENYENTUH SEL PERTAMA  tidak wajar. Petak bergerak tepat
+//   ketika jari sedang menunjuk sesuatu di atasnya, dan sel yang dibidik
+//   berikutnya sudah pindah sebelum jari turun.
+//
+// Karena itu tinggi isinya DIPATOK, tidak mengikuti jumlah tombol yang sedang
+// dirender. Nilainya sebesar susunan TERTINGGI — dua tombol untuk himpunan
+// pohon — supaya panel juga tidak berubah tinggi saat pemilik membatalkan
+// pilihan pohonnya lalu memilih posisi kosong.
+const SELECTION_PANEL_CONTENT_HEIGHT = touch.primaryButton + tokens.space.sm + touch.secondaryButton;
+
 function SelectionActionPanel({
   onAddTrees,
   onCreateSchedule,
@@ -1390,9 +1177,9 @@ function SelectionActionPanel({
   onAddTrees: () => void;
   onCreateSchedule: () => void;
   onRecordCare: () => void;
-  // SELALU 'tree' atau 'position' di sini, tidak pernah 'none': pemanggil tidak
-  // merender panel ini sama sekali selama belum ada satu pun sel terpilih.
-  selection: Exclude<MapSelection, { kind: 'none' }>;
+  // 'none' IKUT diterima sekarang: panel dirender sejak mode pilih menyala,
+  // dan keadaan itulah yang tingginya sedang dicadangkan.
+  selection: MapSelection;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -1406,42 +1193,48 @@ function SelectionActionPanel({
         backgroundColor: tokens.color.surface.canvas,
         borderTopColor: palette.borderStrong,
         borderTopWidth: 1,
-        gap: tokens.space.sm,
         paddingBottom: Math.max(insets.bottom, tokens.space.md),
         paddingHorizontal: tokens.layout.screenX,
         paddingTop: tokens.space.md,
       }}
     >
-      {/* TOMBOLNYA MENGIKUTI JENIS HIMPUNAN, dibaca dari selection.kind dan
-          bukan dari flag terpisah — dengan begitu tidak ada keadaan di mana
-          "Buat jadwal" muncul di atas himpunan kode posisi.
-
-          "Batal" TIDAK ADA LAGI DI SINI (batch 4a): ia naik ke bar atas, di
-          tempat yang sama yang ditempati "Pilih" sebelum mode ini menyala.
-          Membatalkan adalah kebalikan dari mengaktifkan, dan keduanya pantas
-          duduk di satu tempat. Itu juga yang mengosongkan satu-satunya titik
-          pakai <Button variant="ghost"> di berkas ini.
-
-          Panel ini juga tidak lagi muncul dalam keadaan NOL TERPILIH dengan
-          tombol mati. Tombol mati yang menunggu syarat tidak mengajari
-          syaratnya; baris "0 dipilih" di bar atas yang mengatakannya. Harganya
-          jujur: petak menyusut sekali, saat sel pertama ditekan. Sekali,
-          bukan tiap kali. */}
-      {selection.kind === 'position' ? (
-        // Label spek: "Tambah pohon di sini". Lebih pendek dari "...di posisi
-        // terpilih" yang lama, dan "di sini" benar — sel yang dimaksud sedang
-        // bertanda centang di layar yang sama.
-        <Button onPress={onAddTrees} title="Tambah pohon di sini" variant="primary" />
-      ) : (
-        <>
-          <Button onPress={onCreateSchedule} title="Buat jadwal" variant="primary" />
-          {/* Menjadwalkan lebih dulu, mencatat di bawahnya. Urutannya
-              disengaja: menjadwalkan bisa dibatalkan, mencatat tidak — dan
-              tindakan yang tidak bisa ditarik kembali tidak pantas jadi tombol
-              pertama yang disenggol ibu jari. */}
-          <Button onPress={onRecordCare} title="Catat perawatan" variant="secondary" />
-        </>
-      )}
+      {/* Kotak setinggi TETAP. Isinya yang berganti, bukan tingginya. */}
+      <View style={{ gap: tokens.space.sm, height: SELECTION_PANEL_CONTENT_HEIGHT }}>
+        {selection.kind === 'none' ? (
+          // Ruang yang dicadangkan TIDAK dibiarkan kosong melompong. Kalimat
+          // ini mengisi tempat yang memang sudah dipesan, dan ia satu-satunya
+          // yang memberi tahu bahwa PADA KEADAAN INI kedua jenis sel boleh
+          // ditekan — begitu sel pertama dipilih, jenis yang berlawanan
+          // diredupkan dan tidak bisa ditekan lagi.
+          //
+          // justifyContent center, bukan menempel ke atas: satu baris teks di
+          // dalam kotak setinggi dua tombol yang menggantung di tepi atas
+          // terbaca sebagai sesuatu yang belum selesai dimuat.
+          <View style={{ flex: 1, justifyContent: 'center' }}>
+            <Text selectable style={{ color: tokens.color.text.secondary, ...tokens.type.bodySmall }}>
+              Pilih pohon, atau pilih posisi kosong.
+            </Text>
+          </View>
+        ) : selection.kind === 'position' ? (
+          // Label spek: "Tambah pohon di sini". "Di sini" benar — sel yang
+          // dimaksud sedang bertanda centang di layar yang sama.
+          //
+          // SATU tombol di dalam kotak setinggi dua. Sisanya sengaja dibiarkan
+          // kosong di bawah: menengahkan tombolnya secara vertikal akan
+          // membuatnya melompat begitu pemilik beralih ke himpunan pohon, yaitu
+          // pergeseran yang seluruh kotak ini ada untuk mencegahnya.
+          <Button onPress={onAddTrees} title="Tambah pohon di sini" variant="primary" />
+        ) : (
+          <>
+            <Button onPress={onCreateSchedule} title="Buat jadwal" variant="primary" />
+            {/* Menjadwalkan lebih dulu, mencatat di bawahnya. Urutannya
+                disengaja: menjadwalkan bisa dibatalkan, mencatat tidak — dan
+                tindakan yang tidak bisa ditarik kembali tidak pantas jadi
+                tombol pertama yang disenggol ibu jari. */}
+            <Button onPress={onRecordCare} title="Catat perawatan" variant="secondary" />
+          </>
+        )}
+      </View>
     </View>
   );
 }
@@ -1557,7 +1350,6 @@ export function FarmMapScreen({
   const [criteria, setCriteria] = React.useState<TreeFilterCriteria>(peekTreeBrowseCriteria);
   const [error, setError] = React.useState<string | null>(null);
   const [farm, setFarm] = React.useState<Farm | null>(null);
-  const [legendOpen, setLegendOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [selectMode, setSelectMode] = React.useState(false);
   const [selection, setSelection] = React.useState<MapSelection>(NO_SELECTION);
@@ -1875,7 +1667,7 @@ export function FarmMapScreen({
 
   return (
     <View style={{ backgroundColor: tokens.color.surface.canvas, flex: 1 }}>
-      {/* TANPA TopAppBar dan tanpa segmented. Keduanya kini milik route induk
+      {/* TANPA TopAppBar dan tanpa tab Daftar/Denah. Keduanya milik route induk
           (app/(owner)/owner/trees/index.tsx dan kembarannya di sisi pekerja),
           yang merender header sekali di luar percabangan tampilan — jadi
           bertukar Daftar/Denah tidak lagi mengganti judul, memunculkan tombol
@@ -1887,8 +1679,12 @@ export function FarmMapScreen({
       <View style={{ gap: tokens.space.sm, paddingBottom: tokens.space.md }}>
         {/* BAR ATAS BERGANTI TOTAL SAAT MODE PILIH MENYALA.
 
-            Di luar mode pilih: "Keterangan" di kiri, "Pilih" di kanan.
+            Di luar mode pilih: "Perbesar"/"Perkecil" di kiri, "Pilih" di kanan.
             Di dalam mode pilih: "Batal" di kiri, "N dipilih" di tengah.
+
+            Tombol "Keterangan" DICABUT: strip di bawah peta sudah memajang
+            petak warna, nama, dan jumlah per kondisi. Lihat catatan panjang di
+            tempat lembar keterangan dulu berdiri.
 
             Kenapa berganti, bukan menambah: mode pilih adalah MODE — sebuah
             keadaan yang mengubah arti setiap ketukan di layar ini, dan
@@ -1937,7 +1733,17 @@ export function FarmMapScreen({
             </>
           ) : (
             <>
-              <Button onPress={() => setLegendOpen(true)} size="small" title="Keterangan" variant="secondary" />
+              {/* Zoom, BERLABEL TEKS. Labelnya menyebut apa yang AKAN terjadi
+                  — "Perbesar" saat sedang di tingkat jauh — bukan tingkat yang
+                  sedang berlaku. Tombol yang menamai keadaan sekarang menuntut
+                  pembacanya menebak apakah menekannya akan mempertahankan
+                  keadaan itu atau membalikkannya. */}
+              <Button
+                onPress={toggleZoom}
+                size="small"
+                title={zoomedIn ? 'Perkecil' : 'Perbesar'}
+                variant="secondary"
+              />
 
               {/* HANYA pemilik. Peta pekerja tetap baca-saja — keputusan yang
                   sudah diambil, jadi tombolnya tidak dirender sama sekali
@@ -2229,9 +2035,6 @@ export function FarmMapScreen({
             </Animated.ScrollView>
           </View>
         </View>
-        {/* Dipadamkan selama mode pilih: panel tindakan naik dari dasar layar
-            dan tombol ini akan melayang tepat di atasnya. */}
-        {selectMode ? null : <MapZoomButton onPress={toggleZoom} zoomedIn={zoomedIn} />}
       </View>
 
       {/* Strip legenda, MELEKAT di bawah peta. Dipadamkan selama mode pilih:
@@ -2242,12 +2045,10 @@ export function FarmMapScreen({
         <MapLegendStrip counts={legend.counts} emptyCount={legend.emptyCount} />
       )}
 
-      {/* Bar bawah HANYA saat minimal satu sel terpilih. selection.kind !==
-          'none' adalah penyempitan yang sama yang dibutuhkan panel di dalamnya,
-          jadi satu penjaga melayani keduanya: compiler membuktikan di sini
-          bahwa yang dioper bukan himpunan kosong, dan panel tidak perlu punya
-          cabang untuk keadaan yang tidak bisa sampai kepadanya. */}
-      {selectMode && selection.kind !== 'none' ? (
+      {/* Dirender SEJAK mode pilih menyala, bukan sejak ada yang terpilih —
+          itu seluruh sebab tingginya bisa dicadangkan. Lihat catatan di
+          SelectionActionPanel. */}
+      {selectMode ? (
         <SelectionActionPanel
           // Ketiga penyerahan menerima himpunan yang SUDAH tersempitkan di
           // sini, di satu-satunya tempat compiler bisa membuktikan jenisnya.
@@ -2271,8 +2072,6 @@ export function FarmMapScreen({
           selection={selection}
         />
       ) : null}
-
-      <LegendSheet onClose={() => setLegendOpen(false)} visible={legendOpen} />
     </View>
   );
 }

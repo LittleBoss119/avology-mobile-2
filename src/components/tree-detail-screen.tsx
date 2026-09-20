@@ -3,7 +3,7 @@ import React from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
 
 import { colors, spacing, tokens, typography } from '../constants/theme';
-import { colors as palette } from '../theme/tokens';
+import { colors as palette, text as typeScale } from '../theme/tokens';
 import { getTreeConditionReports } from '../services/conditionReportService';
 import { getTreeHistory } from '../services/historyService';
 import {
@@ -37,12 +37,14 @@ import { daysSinceLocal } from '../utils/dateDiff';
 // sudah digantikan kolom trees.current_growth_phase_since. Keduanya tetap
 // diekspor treeCycle.ts — lihat catatan di sana.
 import { findLastEndedPlanting, formatPlantingEndSummary } from '../utils/treeCycle';
-import { formatTreeAge, formatTreeDisplayCode, formatTreeLocation } from '../utils/treeFormat';
+import { formatGrowthPhase } from '../utils/displayFormat';
+import { formatTreeAge, formatTreeDisplayCode } from '../utils/treeFormat';
 import { PhotoViewerModal } from './media';
 import {
   ConditionReportList,
   ConditionStatusBadge,
-  GrowthPhaseBadge,
+  formatHistoryRowDate,
+  formatHistoryRowTitle,
   TreeHistoryTimeline,
   type TreeHistoryRouteRecordType,
 } from './tree-components';
@@ -140,7 +142,12 @@ export function TreeDetailScreen({
     }
 
     if (mode === 'worker' && treeResult.data.isArchived) {
-      setError('Pohon yang diarsipkan tidak tersedia untuk pekerja.');
+      // TANPA kata "arsip" (batch 4b). is_archived tidak punya satu pun jalur
+      // di antarmuka ini — tidak ada tombol, tidak ada menu, tidak ada sheet —
+      // jadi pekerja yang membaca "diarsipkan" diberi nama untuk keadaan yang
+      // tidak bisa ia lihat, sebabkan, maupun perbaiki. Yang perlu ia tahu
+      // hanya bahwa pohonnya tidak tersedia baginya.
+      setError('Pohon ini tidak tersedia untuk pekerja.');
       setTree(null);
       setTreeMainPhoto(null);
       setConditionPhotoMap({});
@@ -466,8 +473,54 @@ export function TreeDetailScreen({
     ? daysSinceLocal(tree.currentGrowthPhaseSince)
     : null;
 
+  // Panen TERAKHIR, dihitung dari `history` yang SUDAH dimuat — tidak ada
+  // permintaan tambahan. Daftarnya terurut menurun (terbaru dulu, lihat
+  // getTreeHistory), jadi yang pertama cocok adalah yang terakhir terjadi.
+  //
+  // "TOTAL PANEN" TIDAK ADA DI SINI, DAN ITU DISENGAJA. Adendum mencoretnya:
+  // agregat jumlah panen per pohon tidak dihitung di mana pun, dan menjumlahkan
+  // sendiri dari `history` akan menghasilkan angka yang BOHONG — deskripsi
+  // panen menyimpan jumlah sebagai teks berformat bebas ('12 kg', '3 buah'),
+  // satuannya bisa berbeda antarbaris, dan riwayatnya sendiri tidak dijamin
+  // lengkap. Angka total yang salah lebih buruk daripada tidak ada angka total.
+  const lastHarvest = history.find((item) => item.historyType === 'harvest') ?? null;
+
   return (
-    <Screen header={<TreeDetailTopBar />}>
+    <Screen
+      header={
+        <TreeDetailTopBar
+          onEditPress={
+            mode === 'owner' && activePlanting
+              ? () => router.push(`${basePath}/${tree.id}/edit`)
+              : undefined
+          }
+        />
+      }
+      // SATU tombol di bar aksi, dan isinya bercabang menurut keadaan posisi.
+      //
+      // Empat tombol catatan terpisah tidak muat di bar aksi dan melanggar
+      // aturannya; satu pintu bernama "Tambah catatan" dengan empat pilihan
+      // yang masing-masing bernama jelas lebih mudah dibaca daripada empat
+      // pintu yang bersaing.
+      //
+      // Posisi kosong tidak bisa dicatat apa pun — tidak ada pohon yang
+      // kondisinya bisa dilaporkan — jadi di sana bar aksinya berisi "Tanam",
+      // satu-satunya hal yang masuk akal dilakukan pada posisi kosong. Pekerja
+      // tidak boleh menanam, jadi baginya bar aksinya tidak ada sama sekali.
+      stickyFooter={
+        activePlanting ? (
+          <Button title="Tambah catatan" onPress={() => setRecordSheetOpen(true)} />
+        ) : mode === 'owner' ? (
+          <Button
+            title="Tanam"
+            onPress={() => {
+              setCycleError(null);
+              setStartSheetOpen(true);
+            }}
+          />
+        ) : undefined
+      }
+    >
       <ErrorBanner message={error} />
 
       {/* Foto disembunyikan saat posisinya kosong: foto itu milik pohon yang
@@ -478,7 +531,6 @@ export function TreeDetailScreen({
           displayCode={displayCode}
           mode={mode}
           onPhotoPress={handleOpenPhotoSource}
-          phaseAgeDays={currentPhaseAgeDays}
           photoLoading={photoActionLoading}
           photoLoadingLabel={photoActionLabel}
           photoUrl={treeMainPhoto?.signedUrl}
@@ -486,7 +538,7 @@ export function TreeDetailScreen({
           tree={tree}
         />
       ) : (
-        <EmptyPositionHeader displayCode={displayCode} tree={tree} />
+        <EmptyPositionHeader displayCode={displayCode} />
       )}
       <PhotoSourceSheet
         hasPhoto={Boolean(treeMainPhoto)}
@@ -501,40 +553,13 @@ export function TreeDetailScreen({
       />
 
       {activePlanting ? (
-        /* DUA tombol, bukan tiga.
-           "Tandai pohon sudah tidak ada" pindah ke layar Edit, dan pemindahannya
-           bukan sekadar perapian: aksi itu MEMBATALKAN kemampuan layar Edit
-           menyimpan apa pun (update_tree_with_planting menolak posisi tanpa
-           siklus aktif), jadi tempatnya memang di layar yang ia matikan, bukan
-           di layar yang cuma menampilkan.
-           Labelnya juga dipendekkan jadi satu kata. Keduanya berdiri
-           berdampingan tanpa kata lain di sekitarnya, dan "Catat aktivitas"
-           lawan "Edit data pohon" mengulang kata yang sudah jelas dari
-           layarnya. */
-        <View style={{ gap: spacing.md }}>
-          <Button title="Catat" onPress={() => setRecordSheetOpen(true)} />
-          {mode === 'owner' ? (
-            <Button
-              title="Edit"
-              variant="secondary"
-              onPress={() => router.push(`${basePath}/${tree.id}/edit`)}
-            />
-          ) : null}
-        </View>
+        <TreeFactRows
+          lastHarvest={lastHarvest}
+          phaseAgeDays={currentPhaseAgeDays}
+          tree={tree}
+        />
       ) : (
-        <>
-          <EmptyPositionNotice planting={lastEndedPlanting} />
-
-          {mode === 'owner' ? (
-            <Button
-              title="Tanam"
-              onPress={() => {
-                setCycleError(null);
-                setStartSheetOpen(true);
-              }}
-            />
-          ) : null}
-        </>
+        <EmptyPositionNotice planting={lastEndedPlanting} />
       )}
 
       <RecordActivitySheet
@@ -555,8 +580,15 @@ export function TreeDetailScreen({
         visible={startSheetOpen}
       />
 
-      <SectionTitle subtitle="Riwayat kondisi, fase tumbuh, hasil panen, perawatan, dan aktivitas yang tercatat." title="Riwayat pohon" />
-      <TreeHistoryTimeline
+      {/* DUA baris riwayat terakhir, lalu satu baris "Lihat semua" yang
+          membentangkan sisanya DI TEMPAT.
+          Bukan route baru: riwayat pohon tidak punya layarnya sendiri, dan
+          membuatkannya berarti menambah route — dilarang di batch ini. Yang
+          lebih penting, membentangkan di tempat memang lebih benar untuk daftar
+          sepanjang ini: pemilik yang membuka riwayat hampir selalu mencari satu
+          kejadian yang baru saja terjadi, dan dua baris teratas sudah
+          menjawabnya tanpa perpindahan layar sama sekali. */}
+      <TreeHistorySection
         currentUserId={profile?.id}
         history={history}
         onRecordPress={handleOpenHistoryRecord}
@@ -579,26 +611,57 @@ export function TreeDetailScreen({
   );
 }
 
-// Bar ini kini HANYA tombol back — tanpa judul, tanpa slot kanan.
+// Bar atas: tombol back di kiri, "Edit" di kanan.
 //
-// Slot kanan dulu berisi tombol titik-tiga milik pemilik, dan menu di baliknya
-// cuma punya satu baris: arsip. Begitu arsip dicabut, menunya tidak punya isi,
-// jadi tombolnya ikut pergi. Prop `mode` hilang bersamanya.
+// SLOT KANAN KEMBALI, tapi bukan tombol titik-tiga yang dulu ada di sini. Yang
+// dulu membuka menu berisi satu baris arsip; yang sekarang adalah tombol
+// BERLABEL TEKS yang langsung membuka layar Edit.
 //
-// Judulnya menyusul pergi karena kode pohon berukuran 32pt di badan layar sudah
-// menjadi judul yang sesungguhnya, dan mengulanginya sebagai "Detail Pohon" di
-// bar hanya menambah baris yang tidak memberi tahu pembacanya hal baru.
-// TopAppBar menerima `title` sebagai opsional dan tingginya tidak bergantung
-// padanya (minHeight 56 eksplisit), jadi bar tidak menyusut tanpa judul.
-function TreeDetailTopBar() {
-  return <TopAppBar onBack={() => router.back()} />;
+// Kenapa Edit naik ke bar dan tidak tinggal di badan layar: bar aksi bawah kini
+// dipegang satu tombol "Tambah catatan", dan menaruh tombol Edit kedua tepat di
+// bawahnya membuat dua aksi yang bobotnya jauh berbeda tampil setara. Mengedit
+// data pohon adalah tindakan atas CATATAN yang sedang dibaca, bukan langkah
+// berikutnya dari membacanya — dan di seluruh aplikasi ini, tindakan atas layar
+// yang sedang dibuka memang tinggal di bar atas.
+//
+// `onEditPress` opsional, dan tanpa nilai slot kanannya tidak dirender sama
+// sekali: pekerja tidak boleh mengedit, dan posisi tanpa siklus tanam aktif
+// tidak bisa disimpan (update_tree_with_planting menolaknya). Tidak dirender,
+// bukan dirender lalu dinonaktifkan.
+//
+// Judul bar tetap tidak ada: kode pohon serif 40 di badan layar adalah judul
+// yang sesungguhnya. TopAppBar menerima `title` sebagai opsional dan tingginya
+// tidak bergantung padanya (minHeight 56 eksplisit).
+function TreeDetailTopBar({ onEditPress }: { onEditPress?: () => void }) {
+  return (
+    <TopAppBar
+      onBack={() => router.back()}
+      right={
+        onEditPress ? (
+          <Button onPress={onEditPress} size="small" title="Edit" variant="secondary" />
+        ) : undefined
+      }
+    />
+  );
 }
+
+// Ukuran foto detail pohon. 140, TURUN DARI 220 penuh-lebar.
+//
+// Foto lama membentang selebar layar dan setinggi 220 — hampir sepertiga layar
+// pertama untuk satu gambar yang jarang jadi alasan seseorang membuka detail
+// pohon. Yang dicari orang di sini adalah kode, kondisi, dan apa yang terakhir
+// terjadi; fotonya penegas, bukan isi utama. Pada 140 ia masih mengenali
+// pohonnya dan tidak lagi mendorong seluruh fakta turun di bawah lipatan.
+//
+// PERSEGI, bukan lebar penuh: foto pohon diambil tegak dan melintang bergantian,
+// dan kotak persegi memperlakukan keduanya sama. resizeMode 'cover' memotong
+// sisi terpanjangnya.
+const DETAIL_PHOTO_SIZE = 140;
 
 function TreeDetailHero({
   displayCode,
   mode,
   onPhotoPress,
-  phaseAgeDays,
   photoLoading,
   photoLoadingLabel,
   photoUrl,
@@ -608,7 +671,6 @@ function TreeDetailHero({
   displayCode: string;
   mode: TreeDetailMode;
   onPhotoPress: () => void;
-  phaseAgeDays: number | null;
   photoLoading?: boolean;
   photoLoadingLabel?: string | null;
   photoUrl?: string | null;
@@ -618,19 +680,26 @@ function TreeDetailHero({
   planting: TreePlanting;
   tree: Tree;
 }) {
-  // Pembungkus foto TIDAK dirender sama sekali kalau tidak ada yang bisa
-  // ditaruh di dalamnya. Ia menetapkan minHeight 220, jadi membiarkannya berdiri
-  // dengan TreePhotoArea yang mengembalikan null akan menyisakan kotak kosong
-  // setinggi 220 — persis ruang menganggur yang seharusnya hilang.
-  //
   // Pemilik selalu punya isi: fotonya, atau pemicu "Tambah foto". Pekerja hanya
-  // punya isi kalau fotonya memang ada.
-  const showPhotoArea = Boolean(photoUrl) || mode === 'owner';
+  // punya isi kalau fotonya memang ada — dan kalau tidak, kotaknya tidak
+  // dirender sama sekali alih-alih berdiri kosong setinggi 140.
+  const showPhoto = Boolean(photoUrl) || mode === 'owner';
 
   return (
     <View style={{ gap: spacing.md }}>
-      {showPhotoArea ? (
-        <View style={{ borderRadius: tokens.radius.card, minHeight: 220, overflow: 'hidden' }}>
+      {showPhoto ? (
+        <View
+          style={{
+            borderCurve: 'continuous',
+            // radius 10 = tokens.radius.control, ukuran yang sama dengan kolom
+            // isian dan tombol. Kotak 140 dengan radius kartu (20) terbaca
+            // sebagai pil; 10 menahannya tetap kotak.
+            borderRadius: tokens.radius.control,
+            height: DETAIL_PHOTO_SIZE,
+            overflow: 'hidden',
+            width: DETAIL_PHOTO_SIZE,
+          }}
+        >
           <TreePhotoArea mode={mode} onPhotoPress={onPhotoPress} photoUrl={photoUrl} />
           {photoLoading ? (
             <View
@@ -641,7 +710,7 @@ function TreeDetailHero({
                 gap: spacing.sm,
                 justifyContent: 'center',
                 left: 0,
-                padding: spacing.lg,
+                padding: spacing.sm,
                 position: 'absolute',
                 right: 0,
                 top: 0,
@@ -651,10 +720,11 @@ function TreeDetailHero({
               {photoLoadingLabel ? (
                 <Text
                   selectable={false}
+                  numberOfLines={2}
                   style={{
                     color: tokens.color.text.onBrand,
                     textAlign: 'center',
-                    ...tokens.type.bodySmall,
+                    ...tokens.type.meta,
                   }}
                 >
                   {photoLoadingLabel}
@@ -664,72 +734,223 @@ function TreeDetailHero({
           ) : null}
         </View>
       ) : null}
-      <View style={{ gap: spacing.md }}>
-        <View style={{ gap: spacing.xs }}>
-          <Text selectable style={{ color: colors.primary, fontSize: 32, fontWeight: '700', lineHeight: 38 }}>
-            {displayCode}
-          </Text>
-          <Text selectable style={{ color: colors.textMuted, fontSize: 15, lineHeight: 21 }}>
-            {formatTreeLocation(tree)}
-          </Text>
-        </View>
-        {/* Chip berdampingan di BAWAH kode, bukan di sebelahnya. Berdampingan
-            dengan kode, semuanya harus berbagi lebar dengan teks 32pt dan salah
-            satunya pasti terpotong; sebaris sendiri, semuanya muat utuh.
-            flexWrap membiarkan chip ketiga turun sendiri saat tidak muat. */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          <ConditionStatusBadge status={tree.currentCondition} />
-          {tree.currentGrowthPhase ? (
-            <GrowthPhaseBadge ageDays={phaseAgeDays} phase={tree.currentGrowthPhase} />
-          ) : (
-            /* Fase belum pernah dicatat. Chip netral, BUKAN chip yang hilang:
-               ketiadaan fase adalah keadaan yang perlu diketahui pemilik — ia
-               yang memberi tahu bahwa pohon ini belum pernah dicatat sama
-               sekali — dan chip yang absen tidak memberi tahu apa pun. */
-            <Badge label="Belum ada fase" maxWidth={220} tone="muted" />
-          )}
-          {/* Penanaman ke berapa. HANYA kalau lebih dari satu, dan itu justru
-              alasan chip ini ada: pada posisi yang baru sekali ditanami — hampir
-              semua pohon — angkanya selalu 1 dan tidak memberi tahu apa pun.
-              Pada posisi yang pernah ditanami ulang, ia satu-satunya isyarat di
-              bagian atas layar bahwa pohon SEBELUMNYA pernah ada di sini.
-              Pembatas siklus di riwayat membawa kabar yang sama, tapi ia jauh
-              di bawah lipatan. */}
-          {planting.cycleNo > 1 ? (
-            <Badge label={`Tanam ke-${planting.cycleNo}`} maxWidth={140} tone="neutral" />
-          ) : null}
-        </View>
-        {/* Pengganti kartu "Pohon yang ditanam sekarang".
-            Kartu itu memberi judul, bingkai, dan empat sel InfoGrid kepada empat
-            fakta yang masing-masing cuma beberapa kata — hampir sepertiga layar
-            pertama untuk keterangan yang jarang jadi alasan seseorang membuka
-            detail pohon. Sebagai satu baris di bawah chip, keempatnya tetap ada
-            (penanaman ke-berapa naik jadi chip di atas) dan ruangnya kembali ke
-            foto, chip, dan riwayat. */}
-        <Text selectable style={{ color: colors.textMuted, fontSize: 14, lineHeight: 20 }}>
+
+      <View style={{ gap: spacing.xs }}>
+        {/* KODE POHON, serif 40. Ia judul layar ini — tidak ada judul lain di
+            mana pun, termasuk di bar atas. Serif, bukan sans: di seluruh
+            redesign, keluarga serif dipakai untuk angka dan kode yang DIBACA
+            sebagai nilai, bukan sebagai kalimat. */}
+        <Text accessibilityRole="header" selectable style={{ ...typeScale.stat40, color: palette.textPrimary }}>
+          {displayCode}
+        </Text>
+        {/* SATU baris: 'Miki · ditanam 25 Agu 2026 · 6 hari'.
+ 
+            Baris lokasi ('Baris 12, kolom C') yang dulu berdiri di sini
+            DICABUT — kode di atasnya sudah berbunyi '12-C', dan mengeja ulang
+            ketiga karakternya dengan kata adalah baris yang tidak memberi tahu
+            pembacanya hal baru.
+
+            UMUR TETAP IKUT, satu ruas lebih panjang dari bunyi spek
+            ("varietas · ditanam [tanggal]"). Ia sudah ada di baris ini sebelum
+            batch 4b, dan membuangnya berarti menyuruh pemilik menghitung
+            sendiri berapa umur pohonnya dari sebuah tanggal — pekerjaan yang
+            justru paling berat bagi pengguna yang jadi alasan seluruh aturan
+            ini ada. formatPlantingMetaLine melewati ruas yang kosong beserta
+            pemisahnya, jadi baris ini tidak pernah menggantung. */}
+        <Text selectable style={{ ...tokens.type.bodySmall, color: tokens.color.text.secondary }}>
           {formatPlantingMetaLine(planting)}
         </Text>
+      </View>
+
+      {/* Badge kondisi berpenanda bentuk, SENDIRIAN.
+          Chip fase dan chip 'Tanam ke-N' yang dulu berdampingan di sini pindah
+          ke baris fakta di bawah, tempat keduanya punya label yang menyebutkan
+          apa yang sedang diukur. Deret chip tanpa label menuntut pembacanya
+          mengenali tiap chip dari isinya sendiri — dan 'Tanam ke-2' hanya bisa
+          dikenali oleh orang yang sudah tahu apa artinya. */}
+      <View style={{ flexDirection: 'row' }}>
+        <ConditionStatusBadge size="md" status={tree.currentCondition} />
       </View>
     </View>
   );
 }
 
-// Kepala Keadaan B. Sepadan dengan kepala pohon aktif — kode besar, keterangan
-// posisi, lalu tagnya — supaya berpindah keadaan tidak terasa seperti berpindah
-// layar. Yang hilang cuma fotonya, dan tagnya tinggal satu.
-function EmptyPositionHeader({ displayCode, tree }: { displayCode: string; tree: Tree }) {
+// Baris fakta: fase aktif dan panen terakhir.
+//
+// BARIS BERLABEL, bukan chip. Keduanya menjawab pertanyaan yang diajukan
+// pemilik dengan kata-kata ("fasenya apa sekarang", "terakhir panen kapan"),
+// dan baris berlabel menjawab dengan bentuk yang sama — label di kiri, jawaban
+// di kanan. Chip menuntut pembacanya mengenali jenis chip lebih dulu.
+//
+// Dipisah garis rambut, tanpa kartu. Hierarki dari garis dan ruang.
+function TreeFactRows({
+  lastHarvest,
+  phaseAgeDays,
+  tree,
+}: {
+  lastHarvest: TreeHistoryItem | null;
+  phaseAgeDays: number | null;
+  tree: Tree;
+}) {
+  return (
+    <View>
+      <TreeFactRow
+        label="Fase aktif"
+        value={
+          tree.currentGrowthPhase
+            ? [
+                formatGrowthPhase(tree.currentGrowthPhase),
+                // Umur fase HANYA kalau tanggalnya diketahui. Lihat catatan
+                // panjang pada currentPhaseAgeDays: null berarti tidak tahu,
+                // dan '0 hari' berarti hari ini — dua hal yang berbeda.
+                //
+                // NON-PREDIKTIF: angka ini menyatakan sudah berapa lama fasenya
+                // berjalan, dan tidak pernah kapan buahnya siap dipetik.
+                typeof phaseAgeDays === 'number' ? `${phaseAgeDays} hari` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : null
+        }
+        // Belum pernah dicatat adalah keadaan yang PERLU diketahui pemilik — ia
+        // yang memberi tahu bahwa pohon ini belum pernah disentuh sama sekali —
+        // jadi barisnya tetap berdiri dengan kalimatnya sendiri.
+        emptyText="Belum dicatat"
+      />
+      <TreeFactRow
+        label="Panen terakhir"
+        value={
+          lastHarvest
+            ? `${formatHistoryRowTitle(lastHarvest)} · ${formatHistoryRowDate(lastHarvest.happenedAt)}`
+            : null
+        }
+        emptyText="Belum ada panen"
+      />
+    </View>
+  );
+}
+
+function TreeFactRow({
+  emptyText,
+  label,
+  value,
+}: {
+  emptyText: string;
+  label: string;
+  value: string | null;
+}) {
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        borderTopColor: tokens.color.line.hairline,
+        borderTopWidth: 1,
+        flexDirection: 'row',
+        gap: spacing.md,
+        justifyContent: 'space-between',
+        minHeight: tokens.layout.rowMinHeight,
+        paddingVertical: spacing.md,
+      }}
+    >
+      <Text selectable style={{ ...tokens.type.body, color: tokens.color.text.secondary }}>
+        {label}
+      </Text>
+      <Text
+        selectable
+        style={{
+          // Nilai kosong tetap dicetak, dengan warna yang lebih redup — bukan
+          // '-', yang menyuruh pembacanya menebak apakah datanya kosong, gagal
+          // dimuat, atau tidak berlaku.
+          color: value ? tokens.color.text.primary : tokens.color.text.tertiary,
+          flexShrink: 1,
+          textAlign: 'right',
+          ...tokens.type.bodyStrong,
+        }}
+      >
+        {value ?? emptyText}
+      </Text>
+    </View>
+  );
+}
+
+// Riwayat: DUA baris terbaru, lalu satu baris "Lihat semua" yang membentangkan
+// sisanya di tempat.
+//
+// Ambang dua baris bukan angka yang dikarang: riwayat pohon yang aktif tumbuh
+// bisa memuat puluhan kejadian, dan seluruhnya dirender mentah di layar detail
+// membuat satu-satunya hal yang dicari orang — kejadian paling baru — terkubur
+// di antara kejadian tahun lalu. Dua baris cukup untuk menjawab "apa yang baru
+// saja terjadi"; sisanya tersedia satu ketukan kemudian.
+//
+// TIDAK ADA ROUTE BARU. "Lihat semua" menyalakan state di komponen ini dan
+// menyerahkan seluruh `history` ke <TreeHistoryTimeline> yang sama — komponen
+// yang sama persis, dengan daftar yang lebih panjang.
+//
+// PEMBATAS SIKLUS ikut hanya pada tampilan penuh. Pada dua baris teratas,
+// pembatas hampir pasti tidak punya apa pun untuk dipisahkan, dan
+// TreeHistoryTimeline sendiri sudah menahannya (pembatas cuma muncul kalau
+// plantings lebih dari satu) — `plantings` sengaja tidak dioper saat terlipat
+// supaya aturannya tidak bergantung pada kebetulan itu.
+function TreeHistorySection({
+  currentUserId,
+  history,
+  onRecordPress,
+  plantings,
+  viewerMode,
+}: {
+  currentUserId?: string;
+  history: TreeHistoryItem[];
+  onRecordPress: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
+  plantings: TreePlanting[];
+  viewerMode: TreeDetailMode;
+}) {
+  const [expanded, setExpanded] = React.useState(false);
+  const visibleHistory = expanded ? history : history.slice(0, HISTORY_PREVIEW_COUNT);
+  const hiddenCount = history.length - visibleHistory.length;
+
   return (
     <View style={{ gap: spacing.md }}>
-      <View style={{ gap: spacing.xs }}>
-        <Text selectable style={{ color: colors.primary, fontSize: 32, fontWeight: '700', lineHeight: 38 }}>
-          {displayCode}
-        </Text>
-        <Text selectable style={{ color: colors.textMuted, fontSize: 15, lineHeight: 21 }}>
-          {formatTreeLocation(tree)}
-        </Text>
-      </View>
+      <SectionTitle title="Riwayat pohon" />
+      <TreeHistoryTimeline
+        currentUserId={currentUserId}
+        history={visibleHistory}
+        onRecordPress={onRecordPress}
+        plantings={expanded ? plantings : undefined}
+        viewerMode={viewerMode}
+      />
+      {/* Barisnya tidak dirender kalau tidak ada yang disembunyikan, dan
+          berganti jadi "Sembunyikan" setelah dibentangkan — bukan menghilang,
+          yang akan mengurung pemilik di daftar panjang tanpa jalan kembali.
+          Jumlahnya disebutkan supaya ketukan itu bisa diperkirakan akibatnya. */}
+      {hiddenCount > 0 || expanded ? (
+        <Button
+          onPress={() => setExpanded((current) => !current)}
+          title={expanded ? 'Sembunyikan sebagian' : `Lihat semua (${history.length})`}
+          variant="secondary"
+        />
+      ) : null}
+    </View>
+  );
+}
+
+const HISTORY_PREVIEW_COUNT = 2;
+
+// Kepala Keadaan B. Sepadan dengan kepala pohon aktif — kode serif 40 lalu satu
+// badge — supaya berpindah keadaan tidak terasa seperti berpindah layar. Yang
+// hilang cuma fotonya dan baris varietasnya, dan keduanya memang tidak ada.
+//
+// `tree` TIDAK LAGI DIPAKAI: baris lokasi ('Baris 12, kolom C') dicabut di
+// batch 4b dengan alasan yang sama seperti di kepala pohon aktif — kode di
+// atasnya sudah berbunyi '12-C', dan mengeja ulang ketiga karakternya dengan
+// kata adalah baris yang tidak memberi tahu pembacanya hal baru.
+function EmptyPositionHeader({ displayCode }: { displayCode: string }) {
+  return (
+    <View style={{ gap: spacing.md }}>
+      <Text accessibilityRole="header" selectable style={{ ...typeScale.stat40, color: palette.textPrimary }}>
+        {displayCode}
+      </Text>
       <View style={{ flexDirection: 'row' }}>
-        <Badge label="Belum ditanami" maxWidth={200} tone="neutral" />
+        <Badge label="Belum ditanami" maxWidth={200} size="md" tone="neutral" />
       </View>
     </View>
   );
@@ -769,12 +990,26 @@ function TreePhotoArea({
   photoUrl?: string | null;
 }) {
   const [previewOpen, setPreviewOpen] = React.useState(false);
+  // KEADAAN MUAT DAN GAGAL MUAT, keduanya wajib ada (batch 4b).
+  //
+  // Sebelum ini <Image> berdiri sendirian: selama gambarnya diunduh, kotaknya
+  // kosong tanpa penjelasan, dan kalau unduhannya gagal ia tetap kosong —
+  // selamanya, tanpa satu pun isyarat bahwa ada yang salah. Dua keadaan yang
+  // tampak identik untuk sebab yang jauh berbeda tidak bisa ditindaklanjuti
+  // siapa pun.
+  //
+  // 'loading' adalah keadaan AWAL tiap kali URL-nya berganti, bukan hanya pada
+  // pemasangan pertama: foto yang baru diunggah mengganti URL-nya, dan tanpa
+  // penyetelan ulang di bawah, kotaknya melompat dari foto lama ke foto baru
+  // tanpa jeda yang terlihat.
+  const [photoState, setPhotoState] = React.useState<'loading' | 'ready' | 'failed'>('loading');
 
   // Foto utama bisa diganti atau dihapus tanpa meninggalkan layar ini. Kalau
   // fotonya berganti selagi viewer terbuka, viewer harus ikut tutup -- bukan
   // diam-diam memperlihatkan foto yang sudah tidak ada lagi.
   React.useEffect(() => {
     setPreviewOpen(false);
+    setPhotoState('loading');
   }, [photoUrl]);
 
   if (photoUrl) {
@@ -795,33 +1030,86 @@ function TreePhotoArea({
         <Pressable
           accessibilityLabel="Lihat foto pohon ukuran penuh"
           accessibilityRole="imagebutton"
+          // Gagal muat TIDAK bisa ditekan: tidak ada foto untuk dibesarkan, dan
+          // viewer yang terbuka kosong cuma memindahkan kebingungan satu layar
+          // lebih dalam.
+          disabled={photoState === 'failed'}
           onPress={() => setPreviewOpen(true)}
           style={{ bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 }}
         >
           <Image
+            onError={() => setPhotoState('failed')}
+            onLoad={() => setPhotoState('ready')}
             resizeMode="cover"
             source={{ uri: photoUrl }}
             style={{ height: '100%', width: '100%' }}
           />
+          {photoState === 'ready' ? null : (
+            <View
+              style={{
+                alignItems: 'center',
+                backgroundColor: tokens.color.surface.subtle,
+                bottom: 0,
+                gap: tokens.space.xs,
+                justifyContent: 'center',
+                left: 0,
+                padding: tokens.space.sm,
+                position: 'absolute',
+                right: 0,
+                top: 0,
+              }}
+            >
+              {photoState === 'loading' ? (
+                <ActivityIndicator color={tokens.color.text.tertiary} />
+              ) : (
+                <>
+                  {/* Gagal muat dikatakan dengan BENTUK dan KATA, bukan kotak
+                      abu polos: kotak polos tidak bisa dibedakan dari foto yang
+                      kebetulan rata warnanya. */}
+                  <Icon
+                    name="alert-triangle"
+                    size={tokens.icon.md}
+                    color={tokens.color.text.tertiary}
+                  />
+                  <Text
+                    selectable={false}
+                    numberOfLines={2}
+                    style={{
+                      color: tokens.color.text.tertiary,
+                      textAlign: 'center',
+                      ...tokens.type.meta,
+                    }}
+                  >
+                    Foto gagal dimuat
+                  </Text>
+                </>
+              )}
+            </View>
+          )}
         </Pressable>
         {mode === 'owner' ? (
+          // 32, turun dari 40, dan insetnya dari space.md ke space.sm: kotaknya
+          // sendiri turun dari 220 ke 140, dan tombol seukuran lama akan
+          // menutupi hampir seperempat fotonya. hitSlop mengembalikan target
+          // sentuhnya tanpa menambah apa yang tergambar di atas foto.
           <Pressable
             accessibilityLabel="Edit foto pohon"
             accessibilityRole="button"
+            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
             onPress={onPhotoPress}
             style={{
               alignItems: 'center',
               backgroundColor: palette.accent,
               borderRadius: tokens.radius.pill,
-              bottom: tokens.space.md,
-              height: 40,
+              bottom: tokens.space.sm,
+              height: 32,
               justifyContent: 'center',
               position: 'absolute',
-              right: tokens.space.md,
-              width: 40,
+              right: tokens.space.sm,
+              width: 32,
             }}
           >
-            <Icon name="camera" size={tokens.icon.md} color={tokens.color.brand.on} />
+            <Icon name="camera" size={tokens.icon.sm} color={tokens.color.brand.on} />
           </Pressable>
         ) : null}
         <PhotoViewerModal
@@ -842,28 +1130,24 @@ function TreePhotoArea({
         style={{
           alignItems: 'center',
           backgroundColor: tokens.color.surface.subtle,
-          borderColor: tokens.color.line.card,
+          borderColor: palette.emptyCellBorder,
           borderStyle: 'dashed',
           borderWidth: 1,
+          flex: 1,
+          gap: tokens.space.xs,
           justifyContent: 'center',
-          minHeight: 220,
+          padding: tokens.space.sm,
         }}
       >
-        <View
-          style={{
-            alignItems: 'center',
-            backgroundColor: tokens.color.brand.soft,
-            borderRadius: tokens.radius.pill,
-            height: 48,
-            justifyContent: 'center',
-            width: 48,
-          }}
-        >
-          <Icon name="camera" size={24} color={tokens.color.brand.base} />
-        </View>
+        {/* Lingkaran berlatar di belakang ikon DICABUT: pada kotak 140 ia
+            bidang berwarna yang menghabiskan ruang tanpa membedakan apa pun,
+            dan arah visual yang berlaku membentuk hierarki dari garis dan ruang
+            kosong, bukan dari bentuk berlatar. */}
+        <Icon name="camera" size={tokens.icon.lg} color={tokens.color.brand.base} />
         <Text
           selectable
-          style={{ ...tokens.type.bodyStrong, color: tokens.color.text.secondary, marginTop: tokens.space.sm }}
+          numberOfLines={1}
+          style={{ ...tokens.type.bodySmall, color: tokens.color.text.secondary }}
         >
           Tambah foto
         </Text>
@@ -940,32 +1224,54 @@ function RecordActivitySheet({
   }
 
   return (
-    <BottomSheet onClose={onClose} title="Catat aktivitas" visible={visible}>
+    <BottomSheet onClose={onClose} title="Tambah catatan" visible={visible}>
       <View style={{ gap: tokens.space.sm }}>
+        {/* JUDUL SATU KATA + SUBJUDUL SATU FRASA, menggantikan "Catat kondisi",
+            "Catat fase", dan seterusnya.
+ 
+            Kata "Catat" diulang empat kali di lembar yang JUDULNYA sudah
+            berbunyi "Tambah catatan" tidak membedakan satu baris dari baris
+            lain — ia cuma memakai empat kali kata pertama tiap baris, yaitu
+            tempat yang paling dulu dibaca mata. Yang membedakan keempatnya
+            justru kata kedua, dan sekarang kata itu berdiri sendirian.
+
+            Subjudulnya menjelaskan APA yang dicatat dengan kata sehari-hari,
+            bukan mengulang istilahnya. "Fase" saja bisa berarti apa pun bagi
+            orang yang belum pernah memakai aplikasi ini; "tahap pertumbuhan"
+            tidak. */}
         <SheetActionRow
+          description="Keadaan pohon hari ini"
           icon="alert-triangle"
           iconTone="condition"
-          title="Catat kondisi"
+          title="Kondisi"
           onPress={() => goTo(`${basePath}/${treeId}/report`)}
         />
         <SheetActionRow
+          description="Tahap pertumbuhan"
           icon="flower"
           iconTone="phase"
-          title="Catat fase"
+          title="Fase"
           onPress={() => goTo(`${basePath}/${treeId}/phase`)}
         />
         <SheetActionRow
+          description="Hasil yang dipetik"
           icon="basket"
           iconTone="harvest"
-          title="Catat panen"
+          title="Panen"
           onPress={() => goTo(`${basePath}/${treeId}/harvest`)}
         />
         <SheetActionRow
+          description="Pekerjaan yang dilakukan"
           icon="spray"
           iconTone="care"
-          title="Catat perawatan"
+          title="Perawatan"
           onPress={() => goTo(`${basePath}/${treeId}/care`)}
         />
+        {/* Batal EKSPLISIT, di samping backdrop dan gestur tutup yang sudah
+            ada. Keduanya harus dipelajari dulu; tombol berlabel tidak. Lembar
+            ini dibuka dari bar aksi, jadi ia bisa terbuka karena salah tekan —
+            dan orang yang salah tekan mencari jalan keluar yang terlihat. */}
+        <Button onPress={onClose} title="Batal" variant="secondary" />
       </View>
     </BottomSheet>
   );

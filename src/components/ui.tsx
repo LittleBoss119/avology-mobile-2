@@ -1383,6 +1383,93 @@ export type SegmentedControlOption = {
   label: string;
 };
 
+// Tab teks bergaris bawah: DUA TAMPILAN ATAS SATU ISI, sama dengan
+// <SegmentedControl> di bawah, tapi tanpa satu pun bidang.
+//
+// KENAPA ADA DI SAMPING SegmentedControl, BUKAN MENGGANTIKANNYA. Keduanya
+// menjawab pertanyaan yang sama dengan bobot yang berbeda, dan bobot itulah
+// yang membedakan tempat pakainya:
+//
+//   SEGMENTED  dipakai di tengah isi layar, tempat ia harus terbaca sebagai
+//              KONTROL yang berdiri sendiri di antara isi lain — segmen
+//              Agenda/Arsip di layar tugas pekerja, misalnya.
+//   TAB GARIS  dipakai tepat di bawah judul layar, tempat ia adalah KERANGKA
+//              halaman, bukan benda di dalamnya. Di sana slab berbidang
+//              menumpuk permukaan kedua tepat di bawah judul, dan arah visual
+//              yang berlaku menolak bidang bertumpuk.
+//
+// TINGGI TATA LETAK ~30, TARGET SENTUH 48, dan selisihnya dijembatani hitSlop
+// — bukan padding. Bedanya nyata: padding menambah tinggi yang DITEMPATI,
+// hitSlop menambah area yang MENANGGAPI tanpa menempati apa pun. Di layar
+// Pohon, 18px yang dikembalikan hitSlop adalah 18px yang dipakai petak denah,
+// dan petak itu sedang diperebutkan sampai piksel terakhir.
+//
+// KEADAAN AKTIF DIBAWA TIGA SALURAN, seperti SegmentedControl — aturan proyek
+// melarang warna jadi satu-satunya penanda:
+//
+//   BENTUK  — garis bawah 2px, ada atau tidak ada sama sekali.
+//   TEBAL   — sansSemiBold lawan sans. Terbaca saat layar kena silau.
+//   WARNA   — accentText lawan textMuted, sebagai penegas.
+//
+// RATA KIRI, bukan melebar penuh. Ia duduk di bawah judul layar yang juga rata
+// kiri, dan tab selebar setengah layar masing-masing akan menariknya kembali
+// jadi kontrol berbidang — kali ini bidangnya ruang kosong.
+export function UnderlineTabs({
+  onChange,
+  options,
+  value,
+}: {
+  onChange: (key: string) => void;
+  options: SegmentedControlOption[];
+  value: string;
+}) {
+  return (
+    <View style={{ flexDirection: 'row', gap: tokens.space.xl }}>
+      {options.map((option) => {
+        const active = option.key === value;
+
+        return (
+          <Pressable
+            key={option.key}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            // 9 atas-bawah menjembatani tinggi 30 ke target 48. Kiri-kanan
+            // space.sm supaya dua tab bersebelahan tidak punya celah mati di
+            // antaranya, tapi TIDAK setengah dari gap (11) — area tanggap yang
+            // bersinggungan membuat ketukan di batas jatuh ke tab yang salah.
+            hitSlop={{ bottom: 9, left: tokens.space.sm, right: tokens.space.sm, top: 9 }}
+            onPress={() => onChange(option.key)}
+            style={({ pressed }) => ({
+              // 'transparent' bukan warna literal yang menghindari token — ia
+              // ketiadaan warna. Garisnya tetap DIRENDER saat nonaktif supaya
+              // label tidak bergeser 2px setiap kali tab berpindah.
+              borderBottomColor: active ? palette.accent : 'transparent',
+              borderBottomWidth: 2,
+              opacity: pressed ? 0.6 : 1,
+              paddingBottom: tokens.space.sm,
+            })}
+          >
+            <Text
+              selectable={false}
+              numberOfLines={1}
+              style={{
+                color: active ? palette.accentText : palette.textMuted,
+                // Berat dibawa keluarga huruf; Android tidak mensintesis berat
+                // untuk font kustom.
+                fontFamily: active ? fonts.sansSemiBold : fonts.sans,
+                fontSize: typeScale.body.fontSize,
+                lineHeight: 20,
+              }}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 // Dua sampai tiga tampilan atas SATU isi — bukan navigasi, bukan filter.
 //
 // KEADAAN AKTIF DIBAWA TIGA SALURAN, bukan hanya latar. Aturan proyek melarang
@@ -2911,8 +2998,25 @@ export function MenuRow({
 // 26 rata kiri yang jadi ELEMEN PERTAMA halaman, menggulir bersama isinya,
 // tanpa pita dan tanpa garis.
 //
-// `meta` adalah baris keterangan di bawah judul — tanggal hari ini di kedua
-// Beranda. Ia tidak dirender kalau tidak dikirim, bukan dirender kosong.
+// `meta` duduk di BARIS YANG SAMA, rata kanan — bukan baris kedua di bawah
+// judul (batch 4b).
+//
+// Bentuk lamanya menumpuk: judul 26 di satu baris, "107 pohon" 14 di baris
+// berikutnya. Itu memakai 56px tinggi untuk dua hal yang panjangnya jauh dari
+// memenuhi satu baris, dan keduanya memang dibaca bersama — "Pohon" menjawab
+// "ini layar apa", angkanya menjawab "seberapa besar". Berdampingan, keduanya
+// terbaca dalam satu gerakan mata dan tingginya turun jadi 30.
+//
+// Di layar Pohon, 26px yang dikembalikan itu langsung dinikmati petak denah
+// zoom jauh, yang sedang diperebutkan sampai piksel terakhir.
+//
+// RATA KANAN, bukan menempel di belakang judul. Menempel, ia terbaca sebagai
+// bagian dari judul ("Pohon 107 pohon"); di ujung kanan ia jelas keterangan
+// tersendiri, dan tempatnya tidak bergeser saat judulnya berganti panjang.
+//
+// `flexShrink: 0` pada meta dan `flex: 1` pada judul: kalau keduanya berebut
+// ruang, judul yang dipotong ellipsis — angkanya pendek dan tetap, dan angka
+// yang terpotong separuh tidak bisa dibaca sama sekali.
 //
 // accessibilityRole="header" ada di sini, dan itulah kenapa komponen ini harus
 // dipakai alih-alih <Text> lokal: layar tab root tidak punya TopAppBar, jadi
@@ -2920,12 +3024,24 @@ export function MenuRow({
 // tanpa satu pun titik lompat TalkBack.
 export function RootTabTitle({ meta, title }: { meta?: string; title: string }) {
   return (
-    <View style={{ gap: tokens.space.xs }}>
-      <Text accessibilityRole="header" selectable style={{ ...typeScale.screenTitle, color: palette.textPrimary }}>
+    <View
+      style={{
+        alignItems: 'baseline',
+        flexDirection: 'row',
+        gap: tokens.space.md,
+        justifyContent: 'space-between',
+      }}
+    >
+      <Text
+        accessibilityRole="header"
+        selectable
+        numberOfLines={1}
+        style={{ ...typeScale.screenTitle, color: palette.textPrimary, flex: 1 }}
+      >
         {title}
       </Text>
       {meta ? (
-        <Text selectable style={{ ...typeScale.meta, color: palette.textMuted }}>
+        <Text selectable style={{ ...typeScale.meta, color: palette.textMuted, flexShrink: 0 }}>
           {meta}
         </Text>
       ) : null}

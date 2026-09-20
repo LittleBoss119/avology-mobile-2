@@ -349,6 +349,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: tokens.space.md,
+    // 60 EKSPLISIT (batch 4b), bukan tinggi yang kebetulan jatuh di sekitar
+    // situ dari padding 12 + lingkaran ikon 38. Baris sheet yang membawa
+    // SUBJUDUL memuat dua baris teks, dan tanpa lantai tegas tingginya berubah
+    // menurut ada-tidaknya subjudul — sehingga satu lembar berisi empat baris
+    // bercampur punya empat tinggi yang sedikit berbeda.
+    minHeight: 60,
     padding: tokens.space.md,
   },
   iconCircle: {

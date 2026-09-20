@@ -16,9 +16,9 @@ import {
   RootTabTitle,
   SearchFilterRow,
   Screen,
-  SegmentedControl,
   SkeletonBlock,
   SkeletonList,
+  UnderlineTabs,
 } from './ui';
 import { colors, spacing, tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
@@ -97,7 +97,7 @@ const SEGMENT_OPTIONS = [
 // Route induk. Ia memiliki DUA hal: tampilan mana yang sedang dipandang, dan
 // jumlah pohon yang dipajang di judul.
 //
-// Header, judul, dan segmented dirender DI SINI, di luar percabangan, jadi
+// Header, judul, dan tab Daftar/Denah dirender DI SINI, di luar percabangan, jadi
 // ketiganya tidak ikut bertukar — judul tidak berganti, tidak ada tombol back
 // yang muncul, dan kepala layar tidak dirender ulang saat pengguna berpindah
 // Daftar/Denah. Itu seluruh sebab kedua tampilan disatukan jadi satu route.
@@ -115,7 +115,7 @@ export function TreeBrowseScreen({ basePath }: { basePath: '/owner/trees' | '/wo
   // Inset atas diterapkan DI SINI, bukan lewat prop `applyTopInset` pada Screen
   // seperti keempat tab root lain. Alasannya bentuk layar ini: `headerWrap`
   // adalah elemen teratas yang nyata untuk KEDUA cabang, sementara Screen hanya
-  // ada di dalam cabang daftar — di bawah segmented, dan sama sekali tidak ada
+  // ada di dalam cabang daftar — di bawah tab, dan sama sekali tidak ada
   // di cabang denah.
   const insets = useSafeAreaInsets();
 
@@ -190,8 +190,20 @@ export function TreeBrowseScreen({ basePath }: { basePath: '/owner/trees' | '/wo
           title="Pohon"
           meta={treeCount === null ? undefined : `${treeCount} pohon`}
         />
-        <View style={styles.segmentedWrap}>
-          <SegmentedControl onChange={changeView} options={SEGMENT_OPTIONS} value={view} />
+        {/* TAB BERGARIS BAWAH, menggantikan SegmentedControl berpil.
+ 
+            Pil lama adalah slab surfaceSunken berisi pil surfaceRaised: dua
+            bidang bertumpuk tepat di bawah judul layar, dan arah visual yang
+            berlaku menolak bidang bertumpuk. Ia juga menempati 46px untuk
+            pekerjaan yang butuh 30 — dan di layar inilah 16px itu berarti,
+            karena petak denah di bawahnya sedang diperebutkan sampai piksel
+            terakhir.
+
+            paddingBottom TURUN dari space.md (12) ke space.sm (8): garis bawah
+            tab sudah memisahkan kepala layar dari isinya, jadi jarak tidak
+            perlu mengerjakan pekerjaan yang sudah dikerjakan garis. */}
+        <View style={styles.tabsWrap}>
+          <UnderlineTabs onChange={changeView} options={SEGMENT_OPTIONS} value={view} />
         </View>
       </View>
 
@@ -205,7 +217,7 @@ export function TreeBrowseScreen({ basePath }: { basePath: '/owner/trees' | '/wo
 }
 
 // Cabang daftar. Ia memiliki SELURUH keadaan daftar — pohon, foto, filter,
-// sheet — dan tidak tahu apa pun tentang judul maupun segmented di atasnya.
+// sheet — dan tidak tahu apa pun tentang judul maupun tab di atasnya.
 //
 // <Screen> dipakai DI SINI, tanpa prop `header`: headernya sudah dirender induk
 // di luar percabangan. Screen tetap yang paling benar untuk cabang ini — ia yang
@@ -677,7 +689,7 @@ function toggleArrayValue<T>(values: T[], value: T): T[] {
 const styles = StyleSheet.create({
   root: { backgroundColor: colors.background, flex: 1 },
   headerWrap: { gap: tokens.space.md, paddingHorizontal: spacing.screenHorizontal },
-  segmentedWrap: { paddingBottom: tokens.space.md },
+  tabsWrap: { paddingBottom: tokens.space.sm },
   rowDivider: {
     backgroundColor: tokens.color.line.hairline,
     height: StyleSheet.hairlineWidth,

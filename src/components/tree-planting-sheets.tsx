@@ -17,7 +17,14 @@ import type { TreePlantingEndReason } from '../types/domain';
 import { getTodayIsoDate } from '../utils/taskDueDate';
 import { BottomSheet } from './bottom-sheet';
 import { Icon } from './icons';
-import { Button, DateField, ErrorBanner, Field } from './ui';
+import {
+  Button,
+  DateField,
+  ErrorBanner,
+  Field,
+  StatusMarker,
+  type StatusMarkerShape,
+} from './ui';
 
 export type EndTreePlantingFormValues = {
   endReason: TreePlantingEndReason;
@@ -29,24 +36,55 @@ export type StartTreePlantingFormValues = {
   plantedAt: string;
 };
 
+// KETIGA ALASAN, dan penanda bentuknya.
+//
+// PENANDANYA BERWARNA NETRAL, DAN ITU PEMBEDA YANG PALING PENTING DI BERKAS
+// INI. Badge kondisi pohon memakai penanda bentuk BERWARNA STATUS — silang
+// statusMati untuk kondisi 'Mati', segitiga statusPerhatian untuk 'Perhatian',
+// dan seterusnya. Penanda di sini memakai bentuk yang sama sekali tidak
+// berwarna status, karena ketiganya BUKAN keadaan pohon melainkan SEBAB
+// siklusnya ditutup.
+//
+// Kenapa itu penting: aplikasi ini punya dua hal bernama "Mati" yang artinya
+// jauh berbeda, dan keduanya hanya berjarak dua ketukan.
+//
+//   KONDISI 'Mati' (Catat kondisi)   pohonnya MASIH BERDIRI di posisinya. Sel
+//                                    denah tetap terisi, riwayatnya berjalan
+//                                    terus, dan ia masih dapat jadwal
+//                                    perawatan. Ia laporan keadaan.
+//   ALASAN 'Mati' (lembar ini)       siklus tanamnya DITUTUP. Sel denah jadi
+//                                    kosong, kondisinya direset, fasenya
+//                                    dikosongkan. Ia penutupan.
+//
+// Selain warna penanda, yang membedakan keduanya di layar adalah KALIMAT
+// deskripsi di bawah tiap judul — lihat teks 'mati' di bawah, yang menyebut
+// "sudah tidak berdiri" secara harfiah.
 const END_REASON_OPTIONS: Array<{
   description: string;
+  markerShape: StatusMarkerShape;
   title: string;
   value: TreePlantingEndReason;
 }> = [
   {
-    description: 'Pohon mati karena hama, penyakit, atau sebab lain.',
+    // Kalimat ini SENGAJA menyebut "sudah tidak berdiri", bukan sekadar
+    // "pohon mati". Pemilik yang baru saja mencatat kondisi 'Mati' di layar
+    // lain harus bisa membaca baris ini dan tahu bahwa yang ini berbeda —
+    // yang satu mencatat keadaan, yang ini mengosongkan posisinya.
+    description: 'Pohonnya sudah tidak berdiri lagi di posisi ini.',
+    markerShape: 'cross',
     title: 'Mati',
     value: 'mati',
   },
   {
     description: 'Sengaja dicabut, misalnya karena tidak produktif.',
+    markerShape: 'square',
     title: 'Dibongkar',
     value: 'dibongkar',
   },
   {
     description: 'Batangnya disambung varietas lain.',
-    title: 'Diganti varietas',
+    markerShape: 'circle-outline',
+    title: 'Diganti',
     value: 'diganti',
   },
 ];
@@ -66,7 +104,6 @@ export function EndTreePlantingSheet({
 }) {
   const [endReason, setEndReason] = React.useState<TreePlantingEndReason | null>(null);
   const [endedAt, setEndedAt] = React.useState(getTodayIsoDate());
-  const [reasonError, setReasonError] = React.useState<string | undefined>(undefined);
 
   // Isian dikosongkan tiap sheet DIBUKA, bukan tiap ditutup. Sheet yang gagal
   // menyimpan tetap terbuka dengan pilihan pemilik masih utuh; yang berikutnya
@@ -75,13 +112,15 @@ export function EndTreePlantingSheet({
     if (visible) {
       setEndReason(null);
       setEndedAt(getTodayIsoDate());
-      setReasonError(undefined);
     }
   }, [visible]);
 
   function handleSubmit() {
+    // Penjaga terakhir. Tombolnya sudah nonaktif tanpa alasan terpilih, jadi
+    // baris ini tidak seharusnya pernah tercapai — tapi kalau ia tercapai,
+    // mendiamkannya jauh lebih baik daripada mengirim alasan kosong ke RPC
+    // yang menutup siklus tanam.
     if (!endReason) {
-      setReasonError('Pilih alasan terlebih dahulu.');
       return;
     }
 
@@ -91,7 +130,12 @@ export function EndTreePlantingSheet({
   return (
     <BottomSheet
       onClose={onClose}
-      subtitle="Posisi ini akan menjadi kosong. Riwayat pohon ini tetap tersimpan."
+      // "Posisi tetap tercatat", BUKAN "posisi akan menjadi kosong". Keduanya
+      // benar, tapi yang pertama menjawab kekhawatiran yang sebenarnya dibawa
+      // pemilik ke lembar ini: apakah saya kehilangan sesuatu. Tidak — yang
+      // hilang hanya pohonnya, dan itu memang sudah terjadi di kebun sebelum
+      // ia membuka lembar ini.
+      subtitle="Posisi tetap tercatat. Riwayat pohon ini tersimpan."
       title="Tandai pohon sudah tidak ada"
       visible={visible}
     >
@@ -106,38 +150,46 @@ export function EndTreePlantingSheet({
             <SheetChoiceRow
               key={option.value}
               description={option.description}
-              onPress={() => {
-                setEndReason(option.value);
-                setReasonError(undefined);
-              }}
+              markerShape={option.markerShape}
+              onPress={() => setEndReason(option.value)}
               selected={endReason === option.value}
               title={option.title}
             />
           ))}
-          {reasonError ? (
-            <Text
-              selectable
-              style={{
-                color: tokens.color.status.danger.text,
-                fontSize: tokens.type.meta.fontSize,
-                lineHeight: tokens.type.meta.lineHeight,
-              }}
-            >
-              {reasonError}
-            </Text>
-          ) : null}
         </View>
 
         <DateField label="Tanggal" onChangeDate={setEndedAt} value={endedAt} />
 
         {/* Klaim soal jadwal perawatan berlaku sejak migrasi 057 — lihat
-            catatan lengkapnya di EmptyPositionNotice (tree-detail-screen). */}
+            catatan lengkapnya di EmptyPositionNotice (tree-detail-screen).
+
+            Kalimatnya TIDAK memakai kata "hapus" maupun "arsip", dan itu
+            bukan kehati-hatian berlebihan: tidak satu pun baris data dihapus
+            oleh aksi ini, dan tidak ada jalur arsip di antarmuka ini sama
+            sekali. Memakai salah satu kata itu akan membuat pemilik percaya
+            ia sedang membuang riwayat pohonnya. */}
         <SheetNoticeBox
-          text="Setelah ditandai, posisi ini tidak mendapat jadwal perawatan sampai ditanami lagi. Catatan yang sudah ada tidak terhapus."
+          text="Setelah ditandai, posisi ini tidak mendapat jadwal perawatan sampai ditanami lagi. Catatan yang sudah ada tetap tersimpan."
         />
 
         <View style={{ gap: tokens.space.sm }}>
-          <Button loading={loading} onPress={handleSubmit} title="Tandai" variant="danger" />
+          {/* NONAKTIF SAMPAI SATU ALASAN DIPILIH, bukan aktif lalu menolak.
+              Bedanya: tombol yang menolak baru mengajarkan syaratnya SETELAH
+              pemilik menekan tombol merah — dan detik di antara tekanan dan
+              penolakan itu adalah detik ia mengira siklus tanamnya baru saja
+              ditutup. Tombol yang nonaktif mengajarkan syaratnya sebelum ada
+              yang bisa salah.
+
+              Itu juga yang mencabut reasonError beserta barisnya: pesan galat
+              untuk keadaan yang tidak bisa lagi terjadi hanya kode yang tidak
+              pernah dibaca siapa pun. */}
+          <Button
+            disabled={!endReason}
+            loading={loading}
+            onPress={handleSubmit}
+            title="Tandai"
+            variant="danger"
+          />
           <Button disabled={loading} onPress={onClose} title="Batal" variant="secondary" />
         </View>
       </View>
@@ -220,6 +272,8 @@ export function StartTreePlantingSheet({
   );
 }
 
+const SHEET_CHOICE_ROW_HEIGHT = 60;
+
 // Baris pilihan berketerangan di dalam sheet.
 //
 // Bentuknya sengaja meminjam SheetActionRow (kartu, tebal garis, radius, dan
@@ -229,11 +283,21 @@ export function StartTreePlantingSheet({
 // tidak bisa dipakai ulang apa adanya.
 function SheetChoiceRow({
   description,
+  markerShape,
   onPress,
   selected,
   title,
 }: {
   description: string;
+  /**
+   * Penanda BENTUK di kiri baris, berwarna NETRAL.
+   *
+   * Warnanya sengaja tidak pernah warna status — lihat catatan panjang pada
+   * END_REASON_OPTIONS. Bentuknya yang membedakan ketiga alasan satu sama
+   * lain; warnanya yang membedakan seluruh kelompok ini dari badge kondisi
+   * pohon, yang memakai bentuk serupa dengan warna status.
+   */
+  markerShape: StatusMarkerShape;
   onPress: () => void;
   selected: boolean;
   title: string;
@@ -252,10 +316,22 @@ function SheetChoiceRow({
         borderWidth: 1,
         flexDirection: 'row',
         gap: tokens.space.md,
-        minHeight: tokens.layout.tapTarget,
+        // 60, naik dari tapTarget (44). Baris pilihan BERKETERANGAN memuat dua
+        // baris teks; 44 memaksa keduanya berhimpit tanpa napas, dan baris yang
+        // berhimpit paling sulit dibaca justru oleh pengguna yang jadi alasan
+        // seluruh aturan ukuran ini ada.
+        minHeight: SHEET_CHOICE_ROW_HEIGHT,
         padding: tokens.space.md,
       }}
     >
+      {/* Slot berlebar tetap, supaya judul ketiga baris punya satu garis rata
+          yang sama walau bentuk penandanya berbeda lebar. */}
+      <View style={{ alignItems: 'center', width: tokens.icon.md }}>
+        <StatusMarker
+          color={selected ? palette.accent : palette.textMuted}
+          shape={markerShape}
+        />
+      </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text selectable={false} style={{ ...tokens.type.bodyStrong, color: tokens.color.text.primary }}>
           {title}

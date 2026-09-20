@@ -34,7 +34,7 @@ import {
   formatTreeConditionStatus,
   formatTreeDisplayCode,
 } from '../utils/treeFormat';
-import { fonts } from '../theme/tokens';
+import { colors as palette, fonts } from '../theme/tokens';
 import { PhotoViewerModal } from './media';
 import {
   Badge,
@@ -46,6 +46,7 @@ import {
   Field,
   MetaRow,
   PhotoPickerCard,
+  StatusMarker,
 } from './ui';
 import {
   AlertTriangleIcon,
@@ -80,9 +81,52 @@ export type TreeFormErrors = {
 
 export type TreeFormProps = {
   errors?: TreeFormErrors;
+  /**
+   * 'create' membiarkan posisi diisi dan menampilkan baris konfirmasi apakah
+   * posisi itu masih kosong. 'edit' MENGUNCI posisi jadi satu baris terbaca
+   * saja.
+   *
+   * Alasannya prinsip, bukan teknis. Kode posisi adalah identitas TEMPAT, bukan
+   * identitas pohon: '12-C' berarti baris 12 kolom C di kebun ini, dan ia tetap
+   * berarti itu setelah pohonnya mati dan diganti tiga kali. Membiarkan kode
+   * dipindah berarti menulis ulang sejarah tempat — seluruh riwayat kondisi,
+   * panen, dan perawatan yang tercatat di '12-C' mendadak jadi milik posisi
+   * lain, dan tidak ada satu pun catatan yang menyebutkan bahwa itu terjadi.
+   *
+   * update_tree_with_planting (migrasi 056) MASIH MENERIMA posisi baru, jadi
+   * penguncian ini murni di antarmuka. Itu disengaja: mengubah RPC berarti
+   * migrasi, dan batch ini tidak menyentuh database.
+   */
+  mode: 'create' | 'edit';
+  /**
+   * Baris konfirmasi di bawah kolom posisi pada mode 'create'.
+   *
+   * null berarti belum bisa dikatakan — posisinya belum lengkap diketik, atau
+   * daftar pohon belum selesai dimuat. Barisnya tidak dirender sama sekali,
+   * BUKAN dirender sebagai "memeriksa...": baris yang berkedip antara tiga
+   * keadaan di bawah kolom yang sedang diketik lebih mengganggu daripada
+   * membantu.
+   */
+  positionStatus?: { occupied: boolean; code: string } | null;
   values: TreeFormValues;
   onChange: (values: TreeFormValues) => void;
 };
+
+/**
+ * Tiga pilihan varietas sebagai TOMBOL BESAR, bukan dropdown.
+ *
+ * Dropdown menyembunyikan pilihannya sampai ditekan, menuntut ketukan kedua
+ * untuk memilih, dan menampilkan daftarnya sebagai menu melayang yang sulit
+ * disentuh dengan tepat. Tiga pilihan yang seluruhnya muat dalam satu baris
+ * tidak punya satu pun alasan untuk disembunyikan.
+ *
+ * 'Lain' BUKAN varietas — ia jalan menuju kolom teks bebas. Kolom variety pada
+ * tree_plantings menerima teks apa pun, jadi kedua nama ini murni jalan pintas
+ * antarmuka, bukan enum. Tidak ada field baru dan tidak ada validasi yang
+ * berubah: yang sampai ke service tetap satu string.
+ */
+const VARIETY_PRESETS = ['Miki', 'Aligator'] as const;
+const VARIETY_OTHER = 'Lain';
 
 export type TreeMainPhotoFormSectionProps = {
   currentPhotoUrl?: string | null;
@@ -414,8 +458,16 @@ export function TreeVisualPlaceholder({
 //
 // Penanaman ulang yang sungguhan punya jalurnya sendiri (end_tree_planting lalu
 // start_tree_planting) dan bukan lewat form ini.
-export function TreeForm({ errors, onChange, values }: TreeFormProps) {
+export function TreeForm({ errors, mode, onChange, positionStatus, values }: TreeFormProps) {
   const previewCode = buildTreeDisplayCode(values);
+  const trimmedVariety = values.variety.trim();
+  // Apakah kolom teks bebas sedang terbuka. Dibuka oleh tombol 'Lain', dan
+  // dibuka SENDIRI saat nilai yang sudah ada bukan salah satu preset — itu
+  // keadaan layar Edit untuk pohon yang varietasnya diketik sebelum ketiga
+  // tombol ini ada, dan juga keadaan pohon yang varietasnya memang lain.
+  const [otherOpen, setOtherOpen] = React.useState(
+    () => trimmedVariety.length > 0 && !isVarietyPreset(trimmedVariety)
+  );
 
   function updateTextValue(field: 'rowPosition' | 'columnPosition' | 'variety', value: string) {
     onChange({
@@ -431,64 +483,123 @@ export function TreeForm({ errors, onChange, values }: TreeFormProps) {
     });
   }
 
+  function chooseVariety(preset: string) {
+    setOtherOpen(false);
+    updateTextValue('variety', preset);
+  }
+
+  function chooseOther() {
+    setOtherOpen(true);
+
+    // Nilai preset DIKOSONGKAN saat beralih ke 'Lain'. Membiarkannya berarti
+    // kolom teks terbuka sudah berisi "Miki", dan pemilik yang menekan 'Lain'
+    // justru karena varietasnya bukan Miki harus menghapusnya dulu.
+    if (isVarietyPreset(trimmedVariety)) {
+      updateTextValue('variety', '');
+    }
+  }
+
   return (
     <View style={{ gap: spacing['2xl'] }}>
-      <TreeFormSection
-        title="Identitas Pohon"
-        description="Kode pohon otomatis dari baris dan kolom."
-      >
-        <View
-          style={{
-            backgroundColor: colors.primarySoft,
-            borderColor: colors.primaryBorder,
-            borderCurve: 'continuous',
-            borderRadius: radius.lg,
-            borderWidth: 1,
-            gap: spacing.xs,
-            padding: spacing.md,
-          }}
+      {/* KONTEKS DULU: di mana pohon ini berdiri. Pada mode 'create' ia pilihan
+          pertama yang menentukan sisanya; pada 'edit' ia fakta yang tidak boleh
+          diganggu. Keduanya pantas berada paling atas.
+
+          Kotak "Kode pohon otomatis" yang dulu berdiri di sini DICABUT. Ia
+          memberi bingkai, latar, dan teks 24pt kepada dua karakter yang bisa
+          dibaca langsung dari kedua kolom tepat di bawahnya — dan pada mode
+          'create' kotak itu menghabiskan sekitar 80px untuk mengulang apa yang
+          baru saja diketik. Yang menggantikannya baris konfirmasi di bawah,
+          yang mengatakan sesuatu yang BELUM diketahui pemilik. */}
+      {mode === 'create' ? (
+        <TreeFormSection
+          title="Posisi tanam"
+          description="Kode pohon dirakit otomatis dari baris dan kolom."
         >
-          <Text selectable style={{ color: colors.textMuted, fontSize: tokens.type.meta.fontSize, fontWeight: '700' }}>
-            Kode pohon otomatis
-          </Text>
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            <View style={{ flex: 1 }}>
+              <Field
+                error={errors?.rowPosition}
+                keyboardType="number-pad"
+                label="Baris *"
+                onChangeText={(value) => updateTextValue('rowPosition', value)}
+                placeholder="1"
+                value={values.rowPosition}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Field
+                error={errors?.columnPosition}
+                autoCapitalize="characters"
+                label="Kolom *"
+                onChangeText={(value) => updateTextValue('columnPosition', value)}
+                placeholder="A"
+                value={values.columnPosition}
+              />
+            </View>
+          </View>
+
+          {/* SATU BARIS KONFIRMASI, dan ia berbicara di KEDUA keadaan.
+              Posisi yang sudah terisi TIDAK didiamkan: pemilik yang mengetik
+              posisi yang sudah ada pohonnya akan tetap menekan Simpan dan baru
+              ditolak database — dengan pesan yang ditulis untuk mesin, setelah
+              ia selesai mengisi seluruh form. */}
+          {positionStatus ? <PositionStatusLine status={positionStatus} /> : null}
+        </TreeFormSection>
+      ) : (
+        <TreeFormSection
+          title="Posisi tanam"
+          description="Kode posisi tidak bisa diubah. Ia menandai tempat, bukan pohonnya."
+        >
+          <LockedPositionRow code={previewCode} />
+        </TreeFormSection>
+      )}
+
+      <TreeFormSection title="Varietas">
+        {/* Tiga tombol besar berlabel teks, bukan dropdown. Lihat catatan pada
+            VARIETY_PRESETS. */}
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          {VARIETY_PRESETS.map((preset) => (
+            <View key={preset} style={{ flex: 1 }}>
+              <VarietyChoiceButton
+                label={preset}
+                onPress={() => chooseVariety(preset)}
+                selected={!otherOpen && trimmedVariety === preset}
+              />
+            </View>
+          ))}
+          <View style={{ flex: 1 }}>
+            <VarietyChoiceButton
+              label={VARIETY_OTHER}
+              onPress={chooseOther}
+              selected={otherOpen}
+            />
+          </View>
+        </View>
+
+        {otherOpen ? (
+          <Field
+            error={errors?.variety}
+            label="Nama varietas *"
+            onChangeText={(value) => updateTextValue('variety', value)}
+            placeholder="Contoh: Alpukat mentega"
+            value={values.variety}
+          />
+        ) : errors?.variety ? (
+          // Galat varietas tetap harus terbaca walau kolom teksnya tertutup —
+          // tanpa baris ini, menekan Simpan tanpa memilih varietas menghasilkan
+          // form yang menolak tanpa mengatakan apa yang kurang.
           <Text
             selectable
             style={{
-              color: previewCode ? colors.primary : colors.textSoft,
-              fontSize: tokens.type.title.fontSize,
-              fontWeight: '700',
+              color: tokens.color.status.danger.text,
+              fontSize: tokens.type.meta.fontSize,
+              lineHeight: tokens.type.meta.lineHeight,
             }}
           >
-            {previewCode ?? 'Lengkapi baris & kolom'}
+            {errors.variety}
           </Text>
-        </View>
-        <View style={{ flexDirection: 'row', gap: spacing.md }}>
-          <View style={{ flex: 1 }}>
-            <Field
-              error={errors?.rowPosition}
-              label="Baris *"
-              onChangeText={(value) => updateTextValue('rowPosition', value)}
-              placeholder="1"
-              value={values.rowPosition}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Field
-              error={errors?.columnPosition}
-              label="Kolom *"
-              onChangeText={(value) => updateTextValue('columnPosition', value)}
-              placeholder="A"
-              value={values.columnPosition}
-            />
-          </View>
-        </View>
-        <Field
-          error={errors?.variety}
-          label="Varietas *"
-          onChangeText={(value) => updateTextValue('variety', value)}
-          placeholder="Contoh: Alpukat mentega"
-          value={values.variety}
-        />
+        ) : null}
       </TreeFormSection>
 
       <DateField
@@ -497,6 +608,111 @@ export function TreeForm({ errors, onChange, values }: TreeFormProps) {
         value={formatDateForDb(values.plantedAt)}
         onChangeDate={(value) => updateDateValue(parseDbDate(value))}
       />
+    </View>
+  );
+}
+
+function isVarietyPreset(value: string): boolean {
+  return (VARIETY_PRESETS as readonly string[]).includes(value);
+}
+
+// Tombol pilihan varietas. Tinggi kontrol penuh (56), bukan chip — spek
+// menyebutnya "tombol besar", dan di layar ini ia memang pilihan utama kedua
+// setelah posisi.
+//
+// Keadaan terpilih dibawa DUA saluran: latar brand.soft DAN garis accent yang
+// menebal jadi 2px. Warna sendirian tidak cukup, aturan yang sama yang berlaku
+// di seluruh repo.
+function VarietyChoiceButton({
+  label,
+  onPress,
+  selected,
+}: {
+  label: string;
+  onPress: () => void;
+  selected: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: 'center',
+        backgroundColor: selected ? tokens.color.brand.soft : tokens.color.surface.card,
+        borderColor: selected ? palette.accent : palette.borderStrong,
+        borderCurve: 'continuous',
+        borderRadius: tokens.radius.control,
+        borderWidth: selected ? 2 : 1,
+        justifyContent: 'center',
+        minHeight: tokens.layout.controlHeight,
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <Text
+        selectable={false}
+        numberOfLines={1}
+        style={{
+          color: selected ? palette.accentText : tokens.color.text.primary,
+          fontFamily: selected ? fonts.sansSemiBold : fonts.sans,
+          fontSize: tokens.type.body.fontSize,
+          lineHeight: tokens.type.body.lineHeight,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+// Posisi pada layar Edit: satu baris TERBACA SAJA, bukan kolom yang
+// dinonaktifkan. Kolom nonaktif masih terlihat seperti kolom, dan pemilik akan
+// mencoba mengetuknya berkali-kali sebelum menyimpulkan aplikasinya rusak.
+// Baris berlatar surfaceSunken tanpa bingkai kolom tidak pernah mengundang
+// ketukan.
+function LockedPositionRow({ code }: { code: string | null }) {
+  return (
+    <View
+      style={{
+        backgroundColor: tokens.color.surface.subtle,
+        borderCurve: 'continuous',
+        borderRadius: tokens.radius.control,
+        justifyContent: 'center',
+        minHeight: tokens.layout.fieldHeight,
+        paddingHorizontal: spacing.md,
+      }}
+    >
+      <Text selectable style={{ ...tokens.type.body, color: tokens.color.text.secondary }}>
+        {code ? `Posisi ${code} · tidak bisa dipindah` : 'Posisi tidak diketahui'}
+      </Text>
+    </View>
+  );
+}
+
+// Baris konfirmasi posisi pada layar Tambah.
+//
+// Kosong dan terisi dibedakan TIGA saluran sekaligus — kata, bentuk penanda,
+// dan warna — karena salah membaca baris ini berarti mengisi seluruh form lalu
+// ditolak di ujung.
+function PositionStatusLine({ status }: { status: { occupied: boolean; code: string } }) {
+  return (
+    <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.sm }}>
+      <StatusMarker
+        color={status.occupied ? palette.statusPerhatian : palette.neutralCell}
+        shape={status.occupied ? 'triangle-up' : 'circle-outline'}
+      />
+      <Text
+        selectable
+        style={{
+          ...tokens.type.bodySmall,
+          color: status.occupied ? tokens.color.status.warning.text : tokens.color.text.secondary,
+          flex: 1,
+        }}
+      >
+        {status.occupied
+          ? `Posisi ${status.code} sudah ada pohonnya. Pilih posisi lain.`
+          : `Posisi ${status.code} masih kosong`}
+      </Text>
     </View>
   );
 }
@@ -1038,7 +1254,11 @@ function TreeHistoryTimelineItem({
 // pertama baris meta — jadi mengulanginya sebagai judul membuat baris terbaca
 // "Kondisi / Kondisi · Anda" dan menyisakan nol tempat untuk hal yang benar-benar
 // membedakan satu kejadian dari kejadian lain.
-function formatHistoryRowTitle(item: TreeHistoryItem): string {
+// DIEKSPOR sejak batch 4b. Layar detail pohon memakainya untuk baris "Panen
+// terakhir", dan menyalin aturannya ke sana berarti dua tempat yang bisa
+// menyebut kejadian yang sama dengan kata berbeda — persis selisih yang paling
+// lama tidak ketahuan, karena keduanya jarang dilihat berdampingan.
+export function formatHistoryRowTitle(item: TreeHistoryItem): string {
   if (item.historyType === 'condition' && isTreeConditionStatus(item.title)) {
     return formatTreeConditionStatus(item.title);
   }
@@ -1145,7 +1365,8 @@ function formatHistoryKindLabel(item: TreeHistoryItem): string {
 // happened_at dinormalkan ke tanggal WIB lebih dulu: formatShortDate dan
 // formatFullDate bekerja pada 'YYYY-MM-DD' murni dan akan mengembalikan string
 // mentahnya kalau diberi timestamptz.
-function formatHistoryRowDate(value: string, todayIso: string = getTodayIsoDate()): string {
+// Diekspor bersama formatHistoryRowTitle, dan dengan alasan yang sama.
+export function formatHistoryRowDate(value: string, todayIso: string = getTodayIsoDate()): string {
   const iso = toWibIsoDate(value);
 
   if (!iso) {
