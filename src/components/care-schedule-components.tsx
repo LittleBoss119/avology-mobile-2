@@ -156,8 +156,9 @@ export type CareStateKey =
  * "Dibatalkan" di sisi pemilik tapi "Dibatalkan owner" di sisi pekerja — yang
  * membatalkan memang orang lain di sana. Yang mengikat adalah bentuk dan nada.
  *
- * Kata "Terlambat" TIDAK dipakai untuk 'overdue' maupun 'missed' di layar mana
- * pun: yang terlambat berbunyi "Terlambat N hari", yang hangus berbunyi "Hangus".
+ * 'overdue' dan 'missed' TIDAK berbagi nama di layar mana pun: yang terlambat
+ * berbunyi "Terlambat N hari", yang hangus berbunyi "Hangus". Keduanya keadaan
+ * yang berbeda perilaku — yang hangus tidak bisa ditunda lagi.
  */
 export const CARE_STATE_MARK: Record<
   CareStateKey,
@@ -1455,9 +1456,30 @@ export function WorkerTaskCard({
     .filter(Boolean)
     .join(' · ');
   const instructionText = instruction?.trim();
+  // TUGAS SELESAI TIDAK MEMBAWA "Catat hasil" (pasca-batch 7). Tombol itu
+  // mengajak mengerjakan sesuatu yang sudah dikerjakan; di tab Selesai ia
+  // bug, bukan pilihan desain.
+  //
+  // Diputuskan DI SINI dari status tugasnya sendiri, bukan oleh pemanggil
+  // lewat prop. Kartu yang sama dipakai tab Tugas dan Beranda, dan aturan
+  // "tugas selesai tidak dicatat lagi" harus berlaku di mana pun kartu ini
+  // muncul — termasuk di tempat yang kelak lupa mematikannya. Mengubah hasil
+  // yang sudah tercatat tetap bisa, lewat detail tugas ("Perbaiki catatan").
+  const isCompleted = task.status === 'completed';
 
+  // KARTU DIRAPATKAN (pasca-batch 7), dengan target ~30-40px lebih pendek tanpa
+  // kehilangan satu pun isinya:
+  //
+  //   padding dalam  cardPadding 18 -> space.md 12      -12
+  //   jarak antarisi gap Card 12 -> space.sm 8          -4 per jarak (2-3 jarak)
+  //   tombol         56 -> 48 (size 'compact')          -8
+  //
+  // Tombolnya TETAP tombol berlabel teks. Mencatat hasil adalah satu-satunya
+  // pekerjaan harian pekerja, dan menggantinya dengan navigasi tambahan adalah
+  // biaya yang dibayar setiap hari. Yang dikurangi ruangnya, bukan tombolnya.
+  // 48 adalah batas bawah target sentuh (touch.min), jadi ia tidak turun lagi.
   return (
-    <Card padding={tokens.layout.cardPadding}>
+    <Card padding={tokens.space.md} style={{ gap: tokens.space.sm }}>
       <Pressable
         accessibilityHint="Membuka detail tugas"
         accessibilityRole="button"
@@ -1498,7 +1520,9 @@ export function WorkerTaskCard({
       {/* Kewajiban foto disebut DI SINI, bukan hanya di layar pencatatan: ia
           menentukan apakah pekerja perlu membawa ponselnya ke pohon, dan itu
           keputusan yang diambil sebelum berangkat. */}
-      {task.requiresPhoto ? (
+      {/* Hanya untuk tugas yang BELUM dikerjakan: "Butuh bukti" adalah bekal
+          sebelum berangkat, dan pada tugas selesai ia tidak menuntut apa pun. */}
+      {task.requiresPhoto && !isCompleted ? (
         <View style={workerTaskCardStyles.proofPill}>
           <Icon name="camera" size={tokens.icon.xs} color={statusColors.warning.text} />
           <Text selectable={false} style={workerTaskCardStyles.proofPillText}>
@@ -1507,7 +1531,22 @@ export function WorkerTaskCard({
         </View>
       ) : null}
 
-      <Button title="Catat hasil" onPress={onRecord} />
+      {isCompleted ? (
+        // RINGKASAN, bukan tombol. Kartu tugas hanya membawa baris care_tasks,
+        // dan isi hasilnya — catatan, produk, foto — tinggal di care_activities
+        // yang baru dimuat layar detail. Menampilkannya di kartu menuntut kueri
+        // tambahan per tugas, jadi yang dicetak di sini adalah fakta yang memang
+        // dipegang kartu: hasilnya sudah tercatat. Isinya satu ketukan jauhnya,
+        // lewat baris judul berchevron di atas.
+        <View style={workerTaskCardStyles.doneRow}>
+          <Icon name="check" size={tokens.icon.sm} color={tokens.color.text.secondary} />
+          <Text selectable={false} style={workerTaskCardStyles.doneText}>
+            Hasil kerja sudah dicatat
+          </Text>
+        </View>
+      ) : (
+        <Button title="Catat hasil" onPress={onRecord} size="compact" />
+      )}
     </Card>
   );
 }
@@ -1527,6 +1566,8 @@ const workerTaskCardStyles = StyleSheet.create({
     paddingVertical: 2,
   },
   proofPillText: { ...tokens.type.caption, color: statusColors.warning.text },
+  doneRow: { alignItems: 'center', flexDirection: 'row', gap: tokens.space.xs },
+  doneText: { ...tokens.type.bodySmall, color: tokens.color.text.secondary },
 });
 
 /**
@@ -1550,8 +1591,8 @@ const workerTaskCardStyles = StyleSheet.create({
  * Keduanya berperilaku berbeda — yang hangus tidak bisa ditunda lagi — dan
  * sebelum ini keduanya tampil identik di kedua sisi aplikasi.
  *
- * Kata "Terlambat" TIDAK dipakai untuk satu pun dari keduanya, di sini maupun di
- * sisi pemilik.
+ * "Terlambat" hanya menamai yang pertama, dan "Hangus" hanya yang kedua — di
+ * sini maupun di sisi pemilik.
  */
 export function WorkerTaskMarker({
   overdueDays,

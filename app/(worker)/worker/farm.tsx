@@ -2,43 +2,55 @@ import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 
+import { ConfirmDialog } from '../../../src/components/bottom-sheet';
 import { MemberRow } from '../../../src/components/member-row';
+import { useSnackbar } from '../../../src/components/snackbar';
 import {
   EmptyState,
   ErrorBanner,
   LoadingState,
+  MenuRow,
+  MenuRowGroup,
   Screen,
   SectionLabel,
   TopAppBar,
 } from '../../../src/components/ui';
 import { tokens } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
-import { getFarmActorDisplayProfiles } from '../../../src/services/memberService';
+import { getFarmActorDisplayProfiles, leaveCurrentFarm } from '../../../src/services/memberService';
 import type { FarmActorDisplayProfile } from '../../../src/types/domain';
 
 // VERSI PEKERJA DARI LAYAR ANGGOTA — adendum §4.5.
 //
 // Spek §41 hanya merancang versi pemilik. Versi pekerja adalah DAFTAR ANGGOTA
-// AKTIF TANPA AKSI APA PUN: tidak ada tombol setujui/tolak, tidak ada baris yang
-// bisa ditekan, tidak ada dialog. Pekerja tidak boleh mengubah keanggotaan siapa
-// pun, termasuk keanggotaannya sendiri dari layar ini.
+// AKTIF TANPA AKSI TERHADAP ORANG LAIN: tidak ada tombol setujui/tolak dan tidak
+// ada baris anggota yang bisa ditekan. Pekerja tidak boleh mengubah keanggotaan
+// siapa pun selain dirinya sendiri.
 //
-// "Keluar dari kebun" TIDAK ADA DI SINI, dan tidak boleh dikembalikan (batch
-// 4a). Ia pindah ke tab Profil pekerja, berdampingan dengan "Keluar dari akun".
-// Alasannya bukan selera: dua jalan keluar yang berbeda akibatnya — satu
-// mengakhiri sesi, satu mengakhiri keanggotaan — harus bisa dibandingkan
-// berdampingan sebelum ditekan. Terpisah di dua layar, orang menekan yang
-// pertama ditemukannya.
+// "KELUAR DARI KEBUN" KEMBALI KE SINI (pasca-batch 7), sebagai baris merusak di
+// kaki layar dengan konfirmasi — tempat yang sejak awal ditetapkan adendum
+// §4.5. Ini MEMBATALKAN keputusan batch 4a yang memindahkannya ke Profil.
+//
+// Alasannya CAKUPAN, bukan tata letak. Keluar dari akun adalah urusan akun;
+// keluar dari kebun adalah urusan kebun, dan layar inilah layar kebunnya. Di
+// Profil keduanya duduk berdampingan sebagai dua tombol bergaris yang nyaris
+// identik — dua jalan keluar yang sulit ditarik kembali, dibedakan satu kata.
+// Argumen batch 4a ("keduanya harus bisa dibandingkan berdampingan") benar
+// tentang perbandingannya tapi salah tentang akibatnya: yang berdampingan itu
+// justru yang tertukar.
 //
 // getFarmDetail DICABUT di batch 7b. Ia dipanggil hanya untuk mengisi state
 // `farm` yang satu-satunya gunanya adalah memutuskan merender daftar atau kartu
 // "gagal dimuat" — pertanyaan yang sudah dijawab getFarmActorDisplayProfiles
 // sendiri. Satu permintaan jaringan untuk sebuah if.
 export default function WorkerFarmHubScreen() {
-  const { currentFarm } = useAuth();
+  const { currentFarm, refresh } = useAuth();
+  const showSnackbar = useSnackbar();
   const [actors, setActors] = React.useState<FarmActorDisplayProfile[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [confirmLeave, setConfirmLeave] = React.useState(false);
+  const [leaving, setLeaving] = React.useState(false);
 
   const farmId = currentFarm?.farmId;
   const currentUserId = currentFarm?.userId;
@@ -76,6 +88,33 @@ export default function WorkerFarmHubScreen() {
       load().finally(() => setLoading(false));
     }, [load])
   );
+
+  async function handleLeaveFarm() {
+    const farmId = currentFarm?.farmId;
+
+    if (!farmId) {
+      return;
+    }
+
+    setLeaving(true);
+
+    const result = await leaveCurrentFarm({ farmId });
+
+    if (result.error) {
+      setLeaving(false);
+      setConfirmLeave(false);
+      showSnackbar(result.error.message);
+      return;
+    }
+
+    // refresh() WAJIB mendahului navigasi: /removed-access membaca keanggotaan
+    // dari auth-context, dan tanpa penyegaran ini ia masih melihat pekerja yang
+    // baru saja keluar sebagai anggota aktif lalu memantulkannya kembali.
+    await refresh();
+    setLeaving(false);
+    setConfirmLeave(false);
+    router.replace('/removed-access');
+  }
 
   // TopAppBar ber-onBack, BUKAN MainTabHeader. Layar ini bukan tab root: ia
   // dibuka lewat push dari baris "Anggota" di seksi KEBUN tab Profil, dan
@@ -126,6 +165,46 @@ export default function WorkerFarmHubScreen() {
           </View>
         )}
       </View>
+
+      {/* Ruang kosong fleksibel: mendorong baris keluar ke kaki layar saat
+          daftar anggotanya pendek, dan menyusut jadi nol saat daftarnya
+          panjang atau font sistem dibesarkan. */}
+      <View style={{ flexGrow: 1 }} />
+
+      {/* BARIS MERUSAK, bukan tombol bergaris. Ia duduk di dalam MenuRowGroup
+          — bentuk yang sama dengan baris merusak di detail jadwal — sehingga
+          garisnya dibawa pemisah baris, bukan bingkai tombol. Itu yang
+          membuatnya tidak lagi terbaca sebagai kembaran "Keluar dari akun".
+
+          Hanya untuk pekerja AKTIF. Layar ini memang hanya terbuka untuk
+          keanggotaan aktif, tapi syaratnya ditulis eksplisit: baris yang
+          mencabut keanggotaan tidak boleh bergantung pada penjaga di tempat
+          lain. */}
+      {currentFarm?.status === 'active' && currentFarm.role === 'worker' ? (
+        <MenuRowGroup>
+          <MenuRow danger icon="logout" label="Keluar dari kebun" onPress={() => setConfirmLeave(true)} />
+        </MenuRowGroup>
+      ) : null}
+
+      {/* Kata-katanya dipindah APA ADANYA dari Profil — termasuk "kode kebun"
+          (bukan "kode bergabung") dan "bergabung lagi" (bukan "masuk lagi"),
+          dua pilihan kata yang sudah diperbaiki dan tidak boleh hilang dalam
+          pemindahan ini. */}
+      <ConfirmDialog
+        cancelLabel="Batal"
+        confirmLabel="Keluar"
+        loading={leaving}
+        message="Kamu perlu kode kebun untuk bergabung lagi."
+        onCancel={() => {
+          if (!leaving) {
+            setConfirmLeave(false);
+          }
+        }}
+        onConfirm={() => void handleLeaveFarm()}
+        title="Keluar dari kebun?"
+        tone="danger"
+        visible={confirmLeave}
+      />
     </Screen>
   );
 }

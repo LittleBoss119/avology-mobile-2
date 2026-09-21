@@ -157,8 +157,22 @@ export default function WorkerDashboardScreen() {
                   bentuk yang sama dengan <MenuRow> di seluruh aplikasi — dan
                   instruksinya tetap dicetak di kartu, jadi jalur umumnya tetap
                   tidak butuh perpindahan layar sama sekali. */}
+              {/* PALING BANYAK DUA KARTU (pasca-batch 7). Beranda adalah
+                  RINGKASAN; menumpuk seluruh tugas hari ini ke bawah membuatnya
+                  harus digulir, dan layar yang harus digulir untuk dibaca sudah
+                  berhenti jadi ringkasan. Sisanya satu baris di bawah.
+
+                  BUKAN GULIR MENDATAR. Kartu yang berada di luar layar ke samping
+                  tidak bisa ditemukan: tidak ada yang memberi tahu bahwa ada
+                  kartu di sebelah kanan. Menggulir ke bawah setidaknya punya
+                  afordans yang sudah dikenal — dan di sini pun ia tidak lagi
+                  diperlukan.
+
+                  Urutannya urutan getWorkerTasks yang sama dengan seksi "Hari
+                  ini" di tab Tugas, jadi dua kartu di sini adalah dua kartu
+                  teratas di sana. */}
               <View style={styles.taskList}>
-                {todayTasks.map((task) => (
+                {todayTasks.slice(0, HOME_TASK_LIMIT).map((task) => (
                   <WorkerTaskCard
                     key={task.id}
                     instruction={task.instruction}
@@ -168,6 +182,27 @@ export default function WorkerDashboardScreen() {
                   />
                 ))}
               </View>
+
+              {/* Hanya saat memang ada yang tersembunyi. Menyebut SELURUH
+                  jumlahnya ("Lihat semua 5 tugas"), bukan sisanya ("3 lainnya"):
+                  angka itu sama dengan angka besar di atas, jadi pekerja tidak
+                  perlu menjumlahkan apa pun untuk tahu ke mana baris ini
+                  membawanya.
+
+                  router.replace ke tab Tugas, BUKAN push — cara yang sama dengan
+                  bar navigasi bawah. Tab Tugas adalah tab root; mendorongnya ke
+                  atas Beranda akan membuat tombol kembali membawa pulang ke
+                  Beranda alih-alih ke luar aplikasi, dan satu tab akan berdiri di
+                  dua tempat tumpukan sekaligus. */}
+              {todayTasks.length > HOME_TASK_LIMIT ? (
+                <MenuRowGroup>
+                  <MenuRow
+                    icon="list-check"
+                    label={`Lihat semua ${todayTasks.length} tugas`}
+                    onPress={() => router.replace('/worker/tasks')}
+                  />
+                </MenuRowGroup>
+              ) : null}
             </>
           )}
 
@@ -195,6 +230,11 @@ export default function WorkerDashboardScreen() {
     </Screen>
   );
 }
+
+// Jumlah kartu tugas di Beranda. Dua: cukup untuk menjawab "apa yang harus
+// dikerjakan sekarang" tanpa menggulir di layar ponsel kelas bawah, bahkan saat
+// kartunya membawa instruksi dua baris dan penanda bukti foto.
+const HOME_TASK_LIMIT = 2;
 
 const styles = StyleSheet.create({
   // Serif 80, satu tingkat di atas angka 72 Beranda pemilik. Pemilik membaca

@@ -728,9 +728,10 @@ function ScheduleRowMarker({
   // terlambatnya adalah teks polos. Dua saluran pembeda sekaligus, dan yang kedua
   // bertahan di layar yang kena silau.
   //
-  // "Hangus", bukan "Terlambat". Kata "Terlambat" dilarang menamai keduanya
-  // sekaligus, dan di layar ini ia tidak dipakai sama sekali — yang terlambat
-  // berbunyi "Terlambat N hari".
+  // "Hangus", bukan "Terlambat". Keduanya keadaan yang BERBEDA — tugas hangus
+  // masih harus dikerjakan, yang hilang adalah hak menundanya — dan dua keadaan
+  // dengan perilaku berbeda tidak boleh berbagi nama. Yang terlambat berbunyi
+  // "Terlambat N hari"; yang hangus berbunyi "Hangus".
   if (bucket === 'missed') {
     return <Badge label="Hangus" marker="cross" maxWidth={110} tone="danger" />;
   }
@@ -908,10 +909,11 @@ function buildScheduleSections(
 
   // "TERLAMBAT · N", bukan "Terlambat" dengan angka di kolom kanan.
   //
-  // Kata "Terlambat" menggantikan "Terlambat" supaya SATU kata dipakai di satu
-  // layar: baris di bawahnya sudah berbunyi "Terlambat 3 hari", dan section yang
-  // menamai hal yang sama dengan kata yang lain memaksa pembacanya memeriksa
-  // apakah keduanya memang hal yang sama.
+  // SATU kata di satu layar: baris di bawahnya berbunyi "Terlambat 3 hari", dan
+  // section yang menamai hal yang sama dengan kata lain memaksa pembacanya
+  // memeriksa apakah keduanya memang hal yang sama. (Pasca-batch 7 kata itu
+  // berganti dari "Telat" ke "Terlambat" di SELURUH aplikasi sekaligus, jadi
+  // aturan satu-kata ini tetap utuh.)
   //
   // Angkanya tetap HANYA di section ini: ia satu-satunya yang jumlahnya berarti
   // tindakan ("sebanyak ini menumpuk"). "Hari ini" dan "Mendatang" sengaja

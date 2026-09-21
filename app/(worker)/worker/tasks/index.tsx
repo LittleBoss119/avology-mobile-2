@@ -60,12 +60,13 @@ const COMPLETION_SEGMENTS = [
 const COMPLETED_LOOKBACK_DAYS = 7;
 
 // Tinggi kartu kerangka. Ditiru dari <WorkerTaskCard> dengan instruksi dua
-// baris: padding 18+18, judul 23, meta 20, instruksi 2x22, tombol 56, ditambah
-// tiga gap 12 -> sekitar 212. Disalin sebagai angka, sama seperti kerangka
+// baris, SETELAH kartunya dirapatkan pasca-batch 7: padding 12+12, judul 23,
+// meta 20, instruksi 2x22, tombol 48, ditambah dua gap 8 -> sekitar 176
+// (sebelumnya 212: padding 18, gap 12, tombol 56). Disalin sebagai angka, sama seperti kerangka
 // daftar pohon dan daftar jadwal — kerangka yang meleset beberapa piksel tidak
 // merusak apa pun, dan mengekspor konstanta tata letak kartu hanya untuk
 // kerangkanya mengikat keduanya lebih erat daripada yang perlu.
-const TASK_CARD_SKELETON_HEIGHT = 212;
+const TASK_CARD_SKELETON_HEIGHT = 176;
 
 export default function WorkerTaskListScreen() {
   const { currentFarm } = useAuth();

@@ -2555,7 +2555,15 @@ export function Button({
   // dari setiap tombol simpan di setiap layar catatan, jadwal, dan pohon.
   loadingTitle?: string;
   onPress: () => void;
-  size?: 'regular' | 'small';
+  /**
+   * 'compact' (48) ditambahkan pasca-batch 7 untuk tombol "Catat hasil" di
+   * kartu tugas pekerja. Tinggi 48 adalah touch.min — batas bawah target sentuh
+   * Android — jadi ia ukuran terkecil yang masih boleh dipakai tombol aksi
+   * berlabel penuh. Selain tingginya, semuanya sama dengan 'regular': lebar
+   * penuh, huruf 17/18, subjudul tetap boleh. 'small' (40) tetap untuk tombol
+   * pendamping yang tidak selebar kolom.
+   */
+  size?: 'regular' | 'small' | 'compact';
   /**
    * Frasa kedua di bawah label, `textMuted` 14. Tanpa nilai, tombol setinggi
    * satu baris persis seperti sebelumnya — 78 pemanggil yang ada tidak bergeser.
@@ -2587,6 +2595,7 @@ export function Button({
   const isGhost = variant === 'ghost' || variant === 'quiet';
   const isIcon = variant === 'icon';
   const isSmall = size === 'small';
+  const isCompact = size === 'compact';
   // Ketiga varian usang mempertahankan tampilannya apa adanya; hanya utama,
   // sekunder, dan merusak yang dibentuk ulang oleh spek batch 1a.
   const isLegacyVariant = isGhost || isIcon;
@@ -2628,6 +2637,8 @@ export function Button({
   // Nonaktif mengikuti tinggi varian asalnya, jadi tidak ada baris tersendiri.
   const buttonHeight = isSmall
     ? 40
+    : isCompact
+      ? touch.min
     : isPrimary
       ? touch.primaryButton
       : isTextRow || variant === 'secondary'
