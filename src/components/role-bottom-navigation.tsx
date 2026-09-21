@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { spacing, tokens } from '../constants/theme';
+import { useDoubleBackToExit } from '../hooks/useDoubleBackToExit';
 import { colors as palette, fonts, radius as shapeRadius, touch } from '../theme/tokens';
 import type { MemberRole } from '../types/domain';
 import { Icon, type IconName } from './icons';
@@ -38,6 +39,16 @@ export function RoleBottomNavigation({ role }: { role: MemberRole }) {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const items = role === 'owner' ? ownerNavigationItems : workerNavigationItems;
+
+  // "Tekan sekali lagi untuk keluar" di KEEMPAT layar root tab saja — tujuan
+  // `href` bar ini, bukan seluruh ownerTopLevelPaths. Daftar itu juga memuat
+  // /owner/tasks dan /owner/farm, dua layar yang DIDORONG ke tumpukan dan harus
+  // kembali seperti biasa.
+  //
+  // Dipasang di sini, di bar yang dimuat bersama layout peran, dan dipanggil
+  // SEBELUM return null di bawah: aturan hook melarang memanggilnya bersyarat,
+  // dan keputusan "sedang di root tab atau tidak" dikirim lewat argumennya.
+  useDoubleBackToExit(items.some((item) => item.href === pathname));
 
   if (!shouldShowBottomNavigation(pathname, role)) {
     return null;

@@ -136,7 +136,7 @@ function DashboardBody({ summary }: { summary: OwnerDashboardSummary }) {
 // menjamin itu adalah tidak punya dua sumber untuk dijumlahkan.
 //
 // Baris bernilai nol tidak pernah masuk ke `rows` (lihat buildProblemRows),
-// jadi ia tidak dirender DAN tidak ikut terjumlah. "0 tugas telat" tidak pernah
+// jadi ia tidak dirender DAN tidak ikut terjumlah. "0 tugas terlambat" tidak pernah
 // muncul di layar ini.
 function ProblemBlock({ rows }: { rows: ProblemRow[] }) {
   const total = rows.reduce((sum, row) => sum + row.value, 0);
@@ -193,7 +193,7 @@ function CalmBlock({ summary }: { summary: OwnerDashboardSummary }) {
       <Text selectable style={styles.calmBody}>
         {summary.totalTrees === 0
           ? 'Belum ada pohon yang dicatat di kebun ini.'
-          : 'Tidak ada pohon yang perlu dicek, tugas yang telat, atau pengajuan yang menunggu.'}
+          : 'Tidak ada pohon yang perlu dicek, tugas yang terlambat, atau pengajuan yang menunggu.'}
       </Text>
     </View>
   );
@@ -239,7 +239,7 @@ function PhaseBlock({ summary }: { summary: OwnerDashboardSummary }) {
 // ini. Tidak satu pun dari keduanya dihitung di mana pun, dan keduanya menuntut
 // query berjendela tanggal yang belum ada. Ketiga angka ini menggantikannya.
 //
-// TIDAK BISA DITEKAN, dan itu disengaja. "Telat" sudah punya jalan masuknya
+// TIDAK BISA DITEKAN, dan itu disengaja. "Terlambat" sudah punya jalan masuknya
 // sendiri sebagai baris masalah di atas; dua angka sisanya tidak punya tujuan
 // yang jelas — /owner/tasks dan /owner/schedules sama-sama masuk akal dan
 // menyaring hal yang berbeda dari "hari ini". Tanpa chevron dan tanpa
@@ -254,7 +254,7 @@ function TaskBlock({ summary }: { summary: OwnerDashboardSummary }) {
           color={
             summary.overdueTasks > 0 ? tokens.color.status.danger.text : tokens.color.text.primary
           }
-          label="Telat"
+          label="Terlambat"
           value={summary.overdueTasks}
         />
         <StatColumn color={tokens.color.text.primary} label="Hari ini" value={summary.todayTasks} />
@@ -291,7 +291,7 @@ function RowCount({ value }: { value: number }) {
 //
 // Baris bernilai nol tidak masuk. Itu bukan penyaringan tampilan melainkan
 // aturan isi: pemilik membuka Beranda untuk tahu apa yang harus dikerjakan, dan
-// "0 tugas telat" adalah kabar bahwa tidak ada kabar — yang menempati baris
+// "0 tugas terlambat" adalah kabar bahwa tidak ada kabar — yang menempati baris
 // sebesar pekerjaan sungguhan.
 //
 // Urutannya TETAP, tidak diurut menurut besarnya angka: pohon dulu (ia bisa
@@ -314,7 +314,7 @@ function buildProblemRows(summary: OwnerDashboardSummary): ProblemRow[] {
   if (summary.overdueTasks > 0) {
     rows.push({
       key: 'overdue-tasks',
-      label: 'Tugas telat',
+      label: 'Tugas terlambat',
       markerColor: palette.statusBuruk,
       markerShape: 'triangle-up',
       route: '/owner/schedules',

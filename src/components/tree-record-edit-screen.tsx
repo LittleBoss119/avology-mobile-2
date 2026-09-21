@@ -44,6 +44,7 @@ import { MAX_ANGKA_DESIMAL, parseDecimalInput, sanitizeDecimalInput } from '../u
 import { formatGrowthPhase, formatTreeConditionStatus, formatTreeContextLine } from '../utils/treeFormat';
 import type { TreeRecordRouteType } from './tree-record-detail-screen';
 import { ConfirmDialog } from './bottom-sheet';
+import { useSnackbar } from './snackbar';
 import {
   Button,
   ChoiceRowGroup,
@@ -149,6 +150,7 @@ export function TreeRecordEditScreen({
   recordType,
   treeId,
 }: TreeRecordEditScreenProps) {
+  const showSnackbar = useSnackbar();
   const normalizedType = normalizeRecordType(recordType);
   // Isi form SAAT DIMUAT, acuan penjaga "perubahan belum disimpan". null =
   // belum pernah terisi (masih memuat, atau pemuatannya gagal), dan di keadaan
@@ -393,12 +395,18 @@ export function TreeRecordEditScreen({
       return;
     }
 
-    Alert.alert('Catatan berhasil diperbarui.', '', [
-      {
-        text: 'OK',
-        onPress: () => router.replace(`${basePath}/${treeId}/records/${normalizedType}/${recordId}`),
-      },
-    ]);
+    // SNACKBAR, BUKAN Alert (pasca-batch 7). Dialog sistem "Catatan berhasil
+    // diperbarui." dengan tombol OK biru menuntut satu ketukan lagi untuk
+    // sesuatu yang sudah berhasil — friksi tanpa guna, karena kembalinya layar
+    // detail dengan isi yang baru sudah menjadi buktinya. Tombolnya juga biru
+    // bawaan platform, satu-satunya biru di seluruh aplikasi.
+    //
+    // router.replace, bukan router.back(), dan itu tujuan yang SAMA dengan
+    // tombol OK yang digantikannya: layar detail catatan memuat datanya lewat
+    // useEffect, bukan useFocusEffect, jadi kembali ke instans lamanya akan
+    // menampilkan isi SEBELUM perubahan ini.
+    showSnackbar('Catatan diperbarui');
+    router.replace(`${basePath}/${treeId}/records/${normalizedType}/${recordId}`);
   }
 
   /**

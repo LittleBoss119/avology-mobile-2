@@ -1148,26 +1148,19 @@ function toggleSelectionMember(
 // tombol "Buat jadwal perawatan" muncul di atas himpunan kode posisi.
 // ---------------------------------------------------------------------------
 
-// TINGGINYA DICADANGKAN BEGITU MODE PILIH MENYALA, bukan saat sel pertama
-// ditekan. Ini mengembalikan keputusan yang sempat dibuang di batch 4a, dan
-// catatan lama yang membelanya memang benar.
+// PANEL SETINGGI ISINYA, di ketiga keadaan (pasca-batch 7):
 //
-// Bedanya halus tapi menentukan kapan petak bergeser:
+//   nol terpilih           -> hanya kalimat petunjuk
+//   posisi kosong terpilih -> satu tombol
+//   pohon terpilih         -> dua tombol
 //
-//   PERGESERAN SAAT MASUK MODE PILIH  wajar. Pengguna baru saja menekan
-//   "Pilih"; seluruh layar memang sedang berubah peran, dan bar yang muncul
-//   adalah bagian dari perubahan yang ia minta.
-//
-//   PERGESERAN SAAT MENYENTUH SEL PERTAMA  tidak wajar. Petak bergerak tepat
-//   ketika jari sedang menunjuk sesuatu di atasnya, dan sel yang dibidik
-//   berikutnya sudah pindah sebelum jari turun.
-//
-// Karena itu tinggi isinya DIPATOK, tidak mengikuti jumlah tombol yang sedang
-// dirender. Nilainya sebesar susunan TERTINGGI — dua tombol untuk himpunan
-// pohon — supaya panel juga tidak berubah tinggi saat pemilik membatalkan
-// pilihan pohonnya lalu memilih posisi kosong.
-const SELECTION_PANEL_CONTENT_HEIGHT = touch.primaryButton + tokens.space.sm + touch.secondaryButton;
-
+// PENCADANGAN TINGGI TETAP DICABUT. Ia sempat dipasang dengan alasan yang masuk
+// akal — petak tidak boleh bergeser tepat saat jari menyentuh sel pertama —
+// tapi di perangkat ia menghasilkan dua masalah yang lebih besar daripada
+// pergeseran yang dicegahnya: ruang kosong besar di bawah satu baris kalimat
+// saat nol sel terpilih, dan ruang setinggi dua tombol di bawah SATU tombol
+// saat yang terpilih posisi kosong. Pergeseran kecil saat beralih keadaan
+// diterima sebagai harganya.
 function SelectionActionPanel({
   onAddTrees,
   onCreateSchedule,
@@ -1177,8 +1170,8 @@ function SelectionActionPanel({
   onAddTrees: () => void;
   onCreateSchedule: () => void;
   onRecordCare: () => void;
-  // 'none' IKUT diterima sekarang: panel dirender sejak mode pilih menyala,
-  // dan keadaan itulah yang tingginya sedang dicadangkan.
+  // 'none' IKUT diterima: panel dirender sejak mode pilih menyala, dan pada
+  // keadaan itu isinya kalimat petunjuk.
   selection: MapSelection;
 }) {
   const insets = useSafeAreaInsets();
@@ -1198,31 +1191,18 @@ function SelectionActionPanel({
         paddingTop: tokens.space.md,
       }}
     >
-      {/* Kotak setinggi TETAP. Isinya yang berganti, bukan tingginya. */}
-      <View style={{ gap: tokens.space.sm, height: SELECTION_PANEL_CONTENT_HEIGHT }}>
+      {/* Tinggi mengikuti isi — lihat catatan di atas fungsi ini. */}
+      <View style={{ gap: tokens.space.sm }}>
         {selection.kind === 'none' ? (
-          // Ruang yang dicadangkan TIDAK dibiarkan kosong melompong. Kalimat
-          // ini mengisi tempat yang memang sudah dipesan, dan ia satu-satunya
-          // yang memberi tahu bahwa PADA KEADAAN INI kedua jenis sel boleh
-          // ditekan — begitu sel pertama dipilih, jenis yang berlawanan
-          // diredupkan dan tidak bisa ditekan lagi.
-          //
-          // justifyContent center, bukan menempel ke atas: satu baris teks di
-          // dalam kotak setinggi dua tombol yang menggantung di tepi atas
-          // terbaca sebagai sesuatu yang belum selesai dimuat.
-          <View style={{ flex: 1, justifyContent: 'center' }}>
-            <Text selectable style={{ color: tokens.color.text.secondary, ...tokens.type.bodySmall }}>
-              Pilih pohon, atau pilih posisi kosong.
-            </Text>
-          </View>
+          // Satu-satunya yang memberi tahu bahwa PADA KEADAAN INI kedua jenis
+          // sel boleh ditekan — begitu sel pertama dipilih, jenis yang
+          // berlawanan diredupkan dan tidak bisa ditekan lagi.
+          <Text selectable style={{ color: tokens.color.text.secondary, ...tokens.type.bodySmall }}>
+            Pilih pohon, atau pilih posisi kosong.
+          </Text>
         ) : selection.kind === 'position' ? (
           // Label spek: "Tambah pohon di sini". "Di sini" benar — sel yang
           // dimaksud sedang bertanda centang di layar yang sama.
-          //
-          // SATU tombol di dalam kotak setinggi dua. Sisanya sengaja dibiarkan
-          // kosong di bawah: menengahkan tombolnya secara vertikal akan
-          // membuatnya melompat begitu pemilik beralih ke himpunan pohon, yaitu
-          // pergeseran yang seluruh kotak ini ada untuk mencegahnya.
           <Button onPress={onAddTrees} title="Tambah pohon di sini" variant="primary" />
         ) : (
           <>
@@ -1902,13 +1882,17 @@ export function FarmMapScreen({
                 itu tidak dipakai. */}
             <Animated.ScrollView
               key={cellSize}
-              // Ruang bawah mengikuti tingkat perbesaran, dan pada zoom jauh ia
-              // dipangkas habis. xxxl (32) ada untuk memberi napas di bawah
-              // baris terakhir saat petaknya memang panjang; pada zoom jauh
-              // petaknya justru sedang diusahakan MUAT, dan 32px itu selisih
-              // antara muat dan tidak.
+              // Ruang bawah mengikuti tingkat perbesaran. xxxl (32) memberi
+              // napas di bawah baris terakhir saat petaknya memang panjang.
+              //
+              // Zoom jauh NAIK dari space.sm (8) ke space.lg (18) pasca-batch 7.
+              // Pada 8px baris terakhir petak menempel ke garis panel mode pilih
+              // dan ke garis bottom tab, sehingga sel paling bawah terbaca
+              // terpotong. Petaknya memang sedang diusahakan muat pada zoom ini,
+              // dan 10px tambahan itu harganya; napas di bawah baris terakhir
+              // lebih penting daripada menghemat satu baris gulir.
               contentContainerStyle={{
-                paddingBottom: zoomedIn ? tokens.space.xxxl : tokens.space.sm,
+                paddingBottom: zoomedIn ? tokens.space.xxxl : tokens.space.lg,
               }}
               onScroll={scroll.onScrollY}
               scrollEventThrottle={16}

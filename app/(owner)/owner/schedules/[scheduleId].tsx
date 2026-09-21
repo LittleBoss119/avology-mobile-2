@@ -645,9 +645,9 @@ function scheduleStatusMark(schedule: CareScheduleDetail, todayIso: string): Sch
   }
 
   // Ember waktu yang SAMA yang dipakai daftar jadwal untuk menempatkan baris ini
-  // di section Telat/Hari ini/Mendatang. Dipakai ulang, bukan dihitung ulang:
+  // di section Terlambat/Hari ini/Mendatang. Dipakai ulang, bukan dihitung ulang:
   // badge yang berbunyi "Jatuh tempo hari ini" pada jadwal yang barusan duduk di
-  // bawah label "Telat" adalah dua jawaban untuk satu pertanyaan.
+  // bawah label "Terlambat" adalah dua jawaban untuk satu pertanyaan.
   const bucket = scheduleTimeBucket(schedule, schedule.tasks, todayIso);
 
   if (bucket === 'missed') {
@@ -657,7 +657,7 @@ function scheduleStatusMark(schedule: CareScheduleDetail, todayIso: string): Sch
   if (bucket === 'overdue') {
     const days = Math.max(1, dayDifference(scheduleOverdueSinceIso(schedule), todayIso));
 
-    return { label: `Telat ${days} hari`, ...CARE_STATE_MARK.overdue };
+    return { label: `Terlambat ${days} hari`, ...CARE_STATE_MARK.overdue };
   }
 
   if (bucket === 'today') {
@@ -665,7 +665,7 @@ function scheduleStatusMark(schedule: CareScheduleDetail, todayIso: string): Sch
   }
 
   // Diperiksa SESUDAH ember waktu: tugas yang ditunda ke tanggal yang sudah
-  // lewat tetap tunggakan lebih dulu, dan "Ditunda" pada baris yang telat tiga
+  // lewat tetap tunggakan lebih dulu, dan "Ditunda" pada baris yang terlambat tiga
   // hari menutupi kabar yang lebih mendesak.
   if (schedule.tasks.some((task) => task.status === 'postponed')) {
     return { label: 'Ditunda', ...CARE_STATE_MARK.postponed };

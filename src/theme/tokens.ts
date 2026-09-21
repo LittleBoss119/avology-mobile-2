@@ -81,6 +81,15 @@ export const colors = {
   // antara scrimLight dan scrim: cukup pekat supaya keadaan memuat terbaca,
   // cukup tipis supaya foto yang sedang diunggah masih dikenali.
   overlayUpload: 'rgba(33, 29, 24, 0.28)',
+
+  // Latar penampil foto layar penuh (pasca-batch 7). HITAM MURNI, bukan
+  // overlayViewer yang tembus pandang: penampil kini menutup seluruh antarmuka,
+  // dan foto kebun — daun, bercak, buah — dinilai warnanya dengan paling jujur
+  // di atas bidang tanpa rona. Rona hangat textPrimary yang dipakai tiga
+  // penggelap di atas akan menggeser warna yang justru sedang diperiksa.
+  //
+  // Satu-satunya pemakainya PhotoViewerModal. Jangan dipakai sebagai latar lain.
+  photoViewerBg: '#000000',
 } as const;
 
 // Di Android, React Native TIDAK mensintesis berat untuk font kustom. Berat

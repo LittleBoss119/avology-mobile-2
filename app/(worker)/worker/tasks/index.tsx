@@ -28,7 +28,7 @@ import {
   type TimeBucket,
 } from '../../../../src/utils/taskDueDate';
 
-// Sumbu waktu dinyatakan oleh struktur seksi (Telat / Hari ini / Besok), bukan
+// Sumbu waktu dinyatakan oleh struktur seksi (Terlambat / Hari ini / Besok), bukan
 // chip — sama seperti layar Perawatan pemilik. Pemisah agenda-vs-arsip memakai
 // TAB BERGARIS BAWAH: ia mengganti TAMPILAN, bukan menyaring, dan bentuknya
 // harus beda dari chip filter. Sejak batch 6b ia komponen yang sama persis
@@ -224,7 +224,7 @@ export default function WorkerTaskListScreen() {
             ) : isArchive ? (
               // Arsip: satu daftar rata, tanpa seksi dan tanpa label.
               // overdueDays selalu null — tugas yang sudah selesai tidak bisa
-              // telat lagi.
+              // terlambat lagi.
               <View style={styles.cardList}>
                 {displayedTasks.map((task) => (
                   <WorkerTaskCard
@@ -246,7 +246,7 @@ export default function WorkerTaskListScreen() {
                         Menggantikan baris judul 14 yang mewarnai dirinya merah
                         di seksi tunggakan. Warna itu tidak lagi dibutuhkan:
                         tiap kartu di bawahnya sudah membawa penandanya sendiri
-                        ("Telat N hari" atau badge "Hangus"), dan label seksi
+                        ("Terlambat N hari" atau badge "Hangus"), dan label seksi
                         yang ikut memerah membuat satu fakta diulang dua kali
                         dalam satu tarikan mata. */}
                     <SectionLabel title={section.title} />
@@ -361,10 +361,10 @@ type TaskSection = {
 // sudah membuangnya lebih dulu. Kalau salah satu definisi itu bergeser, barisnya
 // tetap TERLIHAT alih-alih lenyap tanpa jejak.
 //
-// EMPAT ember, TIGA nama yang disebut spek. Urut tetap: Telat, Hari ini, Besok,
+// EMPAT ember, TIGA nama yang disebut spek. Urut tetap: Terlambat, Hari ini, Besok,
 // Mendatang.
 //
-// Spek batch 6b menyebut tiga: TELAT, HARI INI, BESOK. Ember keempat DITAMBAHKAN
+// Spek batch 6b menyebut tiga: TERLAMBAT, HARI INI, BESOK. Ember keempat DITAMBAHKAN
 // dan itu penyimpangan yang disengaja — tanpanya tugas yang jatuh tempo lusa
 // atau minggu depan tidak punya tempat, dan satu-satunya cara memuatnya di
 // bawah label "Besok" adalah menulis label yang berbohong. Pilihan yang tersisa
@@ -376,8 +376,8 @@ type TaskSection = {
 // ke dalam satu tumpukan "nanti". Pada kebun yang jadwalnya rapat, seksi
 // "Mendatang" sering kosong dan layarnya memang berisi tepat tiga label.
 //
-// "Telat" menggantikan "Terlambat", kata yang sama dengan penanda di tiap
-// kartunya ("Telat N hari") dan dengan seksi di layar Perawatan pemilik. Satu
+// "Terlambat" menggantikan "Terlambat", kata yang sama dengan penanda di tiap
+// kartunya ("Terlambat N hari") dan dengan seksi di layar Perawatan pemilik. Satu
 // kata untuk satu keadaan, di kedua sisi aplikasi.
 //
 // Partisi TOTAL: setiap tugas masuk ke tepat satu ember — tidak ada filter dan
@@ -401,8 +401,8 @@ function buildTaskSections(
   const upcoming: CareTask[] = [];
 
   for (const task of tasks) {
-    // 'missed' (migrasi 048) ikut seksi "Telat", sama seperti di sisi pemilik.
-    // Yang membedakannya dari telat biasa adalah PENANDA di kartunya, bukan
+    // 'missed' (migrasi 048) ikut seksi "Terlambat", sama seperti di sisi pemilik.
+    // Yang membedakannya dari terlambat biasa adalah PENANDA di kartunya, bukan
     // tempat duduknya: bagi pekerja yang memindai tunggakan, keduanya sama-sama
     // pekerjaan yang tidak terjadi pada waktunya.
     const bucket = buckets[task.id];
@@ -429,12 +429,12 @@ function buildTaskSections(
 
   const sections: TaskSection[] = [];
 
-  // TANPA angka di label, termasuk di "Telat" — berbeda dari layar Perawatan
+  // TANPA angka di label, termasuk di "Terlambat" — berbeda dari layar Perawatan
   // pemilik, dan itu disengaja. Pemilik memindai puluhan baris dan jumlahnya
   // berarti tindakan; pekerja memegang beberapa, dan angka di sebelah kata
-  // "Telat" mudah salah dibaca sebagai lama hari.
+  // "Terlambat" mudah salah dibaca sebagai lama hari.
   if (overdue.length > 0) {
-    sections.push({ key: 'overdue', title: 'Telat', tone: 'danger', tasks: overdue });
+    sections.push({ key: 'overdue', title: 'Terlambat', tone: 'danger', tasks: overdue });
   }
 
   if (today.length > 0) {

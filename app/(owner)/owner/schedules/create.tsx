@@ -253,28 +253,14 @@ export default function CreateManualScheduleScreen() {
     router.replace(`/owner/schedules/${result.data.scheduleId}`);
   }
 
-  if (loading) {
-    return <LoadingState message="Menyiapkan form jadwal..." />;
-  }
-
-  // Baris ringkasan menggantikan konfirmasi yang dulu diberikan kolom judul:
-  // sesudah kolom itu hilang, tidak ada satu pun tempat di layar ini yang
-  // menyatakan "inilah yang akan Anda buat" dalam satu tarikan.
-  //
-  // Isinya string yang SAMA PERSIS dengan judul yang akan tersimpan (fungsi
-  // yang sama, bukan salinan aturannya), ditambah pengulangan kalau ada.
-  const summaryTitle = buildScheduleTitle({
-    category: values.category,
-    customTargetNote: values.targetType === 'custom' ? values.customTargetNote : null,
-    targetTreeIds: values.targetTreeIds,
-    targetType: values.targetType,
-  });
-  const repeatDays = values.repeatEnabled ? values.repeatEveryDays.trim() : '';
-  const summaryLine = summaryTitle
-    ? [summaryTitle, repeatDays ? `tiap ${repeatDays} hari` : null].filter(Boolean).join(' · ')
-    : null;
-
   // PENJAGA PERUBAHAN BELUM DISIMPAN (batch 7b, langkah 2a).
+  //
+  // WAJIB DI ATAS `if (loading) return`, bukan di bawahnya. Versi pertama
+  // memanggilnya sesudah early return itu: render pertama (loading) berhenti
+  // sebelum hook ini, render kedua memanggilnya, dan React melempar "Rendered
+  // more hooks than during the previous render" — layar Buat jadwal tidak bisa
+  // dibuka sama sekali. Setiap hook di komponen ini dipanggil tanpa syarat;
+  // keadaan yang harus mematikan penjaganya dinyatakan lewat ARGUMENNYA.
   //
   // Dibandingkan lewat JSON, bukan lewat identitas objek: ManualScheduleForm
   // mengirim objek BARU pada tiap perubahan, jadi perbandingan identitas akan
@@ -296,6 +282,27 @@ export default function CreateManualScheduleScreen() {
       router.back();
     },
   });
+
+  if (loading) {
+    return <LoadingState message="Menyiapkan form jadwal..." />;
+  }
+
+  // Baris ringkasan menggantikan konfirmasi yang dulu diberikan kolom judul:
+  // sesudah kolom itu hilang, tidak ada satu pun tempat di layar ini yang
+  // menyatakan "inilah yang akan Anda buat" dalam satu tarikan.
+  //
+  // Isinya string yang SAMA PERSIS dengan judul yang akan tersimpan (fungsi
+  // yang sama, bukan salinan aturannya), ditambah pengulangan kalau ada.
+  const summaryTitle = buildScheduleTitle({
+    category: values.category,
+    customTargetNote: values.targetType === 'custom' ? values.customTargetNote : null,
+    targetTreeIds: values.targetTreeIds,
+    targetType: values.targetType,
+  });
+  const repeatDays = values.repeatEnabled ? values.repeatEveryDays.trim() : '';
+  const summaryLine = summaryTitle
+    ? [summaryTitle, repeatDays ? `tiap ${repeatDays} hari` : null].filter(Boolean).join(' · ')
+    : null;
 
   return (
     <Screen

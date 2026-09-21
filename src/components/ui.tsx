@@ -247,6 +247,52 @@ export function Screen({
   const scrollOffsetRef = React.useRef(0);
   const focusedNodeRef = React.useRef<React.ComponentRef<typeof View> | null>(null);
 
+  // GARIS ATAS BAR AKSI HANYA SAAT ADA ISI DI BAWAHNYA (pasca-batch 7).
+  //
+  // Garis itu pemisah antara bar dan isi yang MENGGULIR DI BELAKANGNYA. Di layar
+  // yang isinya muat seluruhnya tidak ada apa pun di belakang bar, dan garis
+  // yang selalu ada memotong halaman jadi dua daerah yang tidak perlu dipisah —
+  // terbaca kaku. Latar bar TIDAK dikembalikan ke surfaceRaised; yang
+  // dikondisikan hanya garisnya.
+  //
+  // Diukur dari tiga angka: tinggi viewport (onLayout ScrollView), tinggi isi
+  // (onContentSizeChange), dan posisi gulir (onScroll). Isi dianggap "di bawah
+  // bar" kalau piksel terakhir anak-anaknya — tinggi isi dikurangi cadangan
+  // bawah yang memang disisakan untuk bar — melewati tepi atas bar.
+  //
+  // Konsekuensi yang disengaja: begitu digulung sampai dasar, garisnya hilang
+  // lagi. Di titik itu memang tidak ada lagi isi di belakang bar — cadangan
+  // bawah menyisakan space.lg di antara keduanya.
+  //
+  // Dua angka tinggi disimpan di ref dan hanya BOOLEAN-nya yang jadi state, dan
+  // state itu hanya ditulis saat nilainya berubah: onScroll menembak tiap 16ms,
+  // dan menulis state di tiap tembakan berarti merender ulang seluruh layar
+  // sepanjang gulir.
+  const viewportHeightRef = React.useRef(0);
+  const contentHeightRef = React.useRef(0);
+  const [contentBelowBar, setContentBelowBar] = React.useState(false);
+  const evaluateContentBelowBar = React.useCallback(() => {
+    if (!hasActionBar || viewportHeightRef.current <= 0 || actionBarHeight <= 0) {
+      setContentBelowBar((previous) => (previous ? false : previous));
+      return;
+    }
+
+    const contentEnd = contentHeightRef.current - overlayBottomPadding;
+    const barTop = scrollOffsetRef.current + viewportHeightRef.current - actionBarHeight;
+    // Toleransi 1px: pembulatan tata letak bisa menyisakan pecahan piksel pada
+    // layar yang isinya tepat pas, dan garis yang berkedip karenanya lebih buruk
+    // daripada tidak ada garis.
+    const next = contentEnd - barTop > 1;
+
+    setContentBelowBar((previous) => (previous === next ? previous : next));
+  }, [actionBarHeight, hasActionBar, overlayBottomPadding]);
+
+  // Dijalankan ulang saat tinggi bar atau cadangan bawah berubah (keyboard
+  // naik-turun, bar selesai diukur), bukan hanya saat menggulir.
+  React.useEffect(() => {
+    evaluateContentBelowBar();
+  }, [evaluateContentBelowBar]);
+
   const scrollFocusedNodeIntoView = React.useCallback(() => {
     const node = focusedNodeRef.current;
     const scrollView = resolvedScrollRef.current;
@@ -326,16 +372,26 @@ export function Screen({
         ref={resolvedScrollRef}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
-        // onScroll hanya dipasang untuk layar opt-in; layar lain tetap tanpa
-        // handler scroll sama sekali, seperti sebelumnya.
+        // onScroll kini dipasang di SEMUA layar ber-bar-aksi, bukan hanya yang
+        // opt-in auto-scroll: garis atas bar perlu tahu posisi gulir. Layar tanpa
+        // bar aksi dan tanpa auto-scroll tetap tanpa handler sama sekali.
+        onContentSizeChange={(_width, height) => {
+          contentHeightRef.current = height;
+          evaluateContentBelowBar();
+        }}
+        onLayout={(event) => {
+          viewportHeightRef.current = event.nativeEvent.layout.height;
+          evaluateContentBelowBar();
+        }}
         onScroll={
-          autoScrollOnFocus
+          autoScrollOnFocus || hasActionBar
             ? (event) => {
                 scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+                evaluateContentBelowBar();
               }
             : undefined
         }
-        scrollEventThrottle={autoScrollOnFocus ? 16 : undefined}
+        scrollEventThrottle={autoScrollOnFocus || hasActionBar ? 16 : undefined}
         style={{ flex: 1, backgroundColor }}
         contentContainerStyle={[
           {
@@ -416,7 +472,14 @@ export function Screen({
             // AccountRow, divider di dalam kartu) TETAP `border`: di sana garis
             // memisah dua baris sejenis di dalam satu blok, bukan dua bidang
             // yang berbeda perannya.
-            borderTopColor: palette.borderStrong,
+            //
+            // KONDISIONAL sejak pasca-batch 7: berwarna hanya saat ada isi yang
+            // tergulir di belakang bar (lihat contentBelowBar di atas). Lebarnya
+            // TETAP 1 dan yang berganti hanya warnanya — menghapus lebarnya akan
+            // mengubah tinggi bar satu piksel, tinggi itu mengubah cadangan bawah,
+            // dan cadangan itu mengubah lagi jawaban "ada isi di bawah bar?".
+            // Lingkaran ukur yang bisa berkedip bolak-balik.
+            borderTopColor: contentBelowBar ? palette.borderStrong : 'transparent',
             borderTopWidth: 1,
             bottom: keyboardLift,
             // Jarak antartombol bertumpuk. Sebelumnya tidak ada sama sekali:
@@ -2613,8 +2676,21 @@ export function Button({
         borderColor: isStrong ? palette.borderStrong : getButtonBorderColor(variant),
         borderCurve: 'continuous',
         borderRadius: isIcon ? radius.round : shapeRadius.control,
-        // Baris teks tanpa garis, dan nonaktif tanpa garis. Sisanya seperti dulu.
-        borderWidth: isGhost || isTextRow || isDisabledLook ? 0 : isStrong ? 1.5 : 1,
+        // Baris teks (danger, neutral) KINI BERGARIS borderStrong 1px — perbaikan
+        // pasca-batch 7. Tanpa latar DAN tanpa garis, "Keluar dari akun" dan
+        // "Keluar dari kebun" di atas kertas terang terbaca sebagai kalimat yang
+        // kebetulan berwarna, bukan sebagai sesuatu yang bisa ditekan. Latarnya
+        // TETAP transparan: yang ditambahkan hanya batas, bukan bidang, jadi
+        // aturan "aksi merusak tidak mendapat blok berwarna" tetap utuh.
+        //
+        // Garisnya bertahan saat nonaktif, berbeda dari varian berlatar: baris
+        // teks nonaktif tidak mendapat bidang surfaceSunken, jadi tanpa garis ia
+        // akan kehilangan satu-satunya bentuk tombolnya.
+        //
+        // Aksi merusak berupa BARIS di dalam daftar (<MenuRow danger>) tidak
+        // lewat komponen ini, jadi tidak ikut bergaris — pemisah antarbarisnya
+        // sudah membawa batas itu.
+        borderWidth: isGhost || (isDisabledLook && !isTextRow) ? 0 : isStrong ? 1.5 : 1,
         flexDirection: 'row',
         gap: spacing.sm,
         height: isIcon ? (isSmall ? 40 : 48) : undefined,

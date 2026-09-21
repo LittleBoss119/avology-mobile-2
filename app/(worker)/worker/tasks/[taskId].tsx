@@ -296,9 +296,9 @@ function taskStatusMark(
   }
 
   // Ember waktu yang SAMA yang dipakai daftar Tugas untuk menempatkan kartu ini
-  // di seksi Telat/Hari ini/Besok. Dipakai ulang, bukan dihitung ulang: badge
+  // di seksi Terlambat/Hari ini/Besok. Dipakai ulang, bukan dihitung ulang: badge
   // yang berbunyi "Jatuh tempo hari ini" pada tugas yang barusan duduk di bawah
-  // label "Telat" adalah dua jawaban untuk satu pertanyaan.
+  // label "Terlambat" adalah dua jawaban untuk satu pertanyaan.
   //
   // scheduleIsCancelled false: cabang pembatalan sudah ditangani di atas.
   const bucket = taskTimeBucket(task, todayIso, false);
@@ -309,7 +309,7 @@ function taskStatusMark(
 
   if (bucket === 'overdue') {
     return {
-      label: `Telat ${Math.max(1, dayDifference(task.dueDate, todayIso))} hari`,
+      label: `Terlambat ${Math.max(1, dayDifference(task.dueDate, todayIso))} hari`,
       ...CARE_STATE_MARK.overdue,
     };
   }
@@ -319,7 +319,7 @@ function taskStatusMark(
   }
 
   // Diperiksa SESUDAH ember waktu: tugas yang ditunda ke tanggal yang sudah
-  // lewat tetap tunggakan lebih dulu, dan "Ditunda" pada tugas yang telat tiga
+  // lewat tetap tunggakan lebih dulu, dan "Ditunda" pada tugas yang terlambat tiga
   // hari menutupi kabar yang lebih mendesak.
   if (task.status === 'postponed') {
     return { label: 'Ditunda', ...CARE_STATE_MARK.postponed };

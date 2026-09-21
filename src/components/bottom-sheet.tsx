@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { tokens } from '../constants/theme';
+import { colors as palette } from '../theme/tokens';
 import { Icon, type IconName } from './icons';
 
 export type SheetIconTone = 'condition' | 'phase' | 'harvest' | 'care' | 'brand' | 'neutral' | 'danger';
@@ -304,7 +305,20 @@ const confirmStyles = StyleSheet.create({
     minHeight: 52,
   },
   confirmText: { fontSize: 16, fontWeight: '700' },
-  cancelButton: { alignItems: 'center', justifyContent: 'center', minHeight: 52 },
+  // Tombol kedua dialog KINI BERGARIS borderStrong 1px (pasca-batch 7), bentuk
+  // yang sama dengan tombol konfirmasi di atasnya minus latarnya. Tanpa garis ia
+  // hanya kata di tengah kartu putih, dan pada dialog penjaga — tempat ia
+  // berbunyi "Buang isian" — kata yang tidak terlihat bisa ditekan justru aksi
+  // yang paling perlu terlihat.
+  cancelButton: {
+    alignItems: 'center',
+    borderColor: palette.borderStrong,
+    borderCurve: 'continuous',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 52,
+  },
   cancelText: { color: tokens.color.text.primary, fontSize: 16, fontWeight: '700' },
 });
 

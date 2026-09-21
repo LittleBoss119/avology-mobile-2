@@ -151,13 +151,13 @@ export type CareStateKey =
  * status, dan memberinya bentuk membuat kosakata bentuk berarti "ini sebuah
  * chip", yang tidak berguna.
  *
- * LABELNYA TIDAK DI SINI, dan itu disengaja: 'overdue' berbunyi "Telat 3 hari"
+ * LABELNYA TIDAK DI SINI, dan itu disengaja: 'overdue' berbunyi "Terlambat 3 hari"
  * dengan angka yang hanya diketahui pemanggilnya, dan 'cancelled' berbunyi
  * "Dibatalkan" di sisi pemilik tapi "Dibatalkan owner" di sisi pekerja — yang
  * membatalkan memang orang lain di sana. Yang mengikat adalah bentuk dan nada.
  *
  * Kata "Terlambat" TIDAK dipakai untuk 'overdue' maupun 'missed' di layar mana
- * pun: yang telat berbunyi "Telat N hari", yang hangus berbunyi "Hangus".
+ * pun: yang terlambat berbunyi "Terlambat N hari", yang hangus berbunyi "Hangus".
  */
 export const CARE_STATE_MARK: Record<
   CareStateKey,
@@ -1428,7 +1428,7 @@ export function WorkerTaskCard({
    */
   instruction?: string | null;
   /**
-   * Penanda keadaan di ujung baris judul: "Telat N hari", "Hangus", "Ditunda".
+   * Penanda keadaan di ujung baris judul: "Terlambat N hari", "Hangus", "Ditunda".
    * Dirakit pemanggil lewat <WorkerTaskMarker>, bukan di sini — Beranda hanya
    * menampilkan tugas hari ini dan tidak punya satu pun dari ketiganya untuk
    * ditampilkan.
@@ -1536,7 +1536,7 @@ const workerTaskCardStyles = StyleSheet.create({
  * tindakan:
  *
  *   1. Hangus  -- sudah lewat masa toleransi; TIDAK BISA DITUNDA LAGI.
- *   2. Telat   -- tunggakan yang masih bisa dikerjakan DAN masih bisa ditunda.
+ *   2. Terlambat   -- tunggakan yang masih bisa dikerjakan DAN masih bisa ditunda.
  *   3. Ditunda -- care_tasks.status, milik tugas itu sendiri.
  *
  * "Berulang" tidak ada di sini: pengulangan adalah sifat care_schedules
@@ -1544,9 +1544,9 @@ const workerTaskCardStyles = StyleSheet.create({
  * getWorkerTasks sudah menyaring keluar tugas dari jadwal yang dibatalkan
  * sebelum datanya sampai ke layar mana pun.
  *
- * HANGUS DIBEDAKAN DARI TELAT, dengan pasangan kata dan bentuk yang SAMA PERSIS
+ * HANGUS DIBEDAKAN DARI TERLAMBAT, dengan pasangan kata dan bentuk yang SAMA PERSIS
  * dengan sisi pemilik (batch 6a, baris daftar Perawatan dan badge detail
- * jadwal): badge "Hangus" berpenanda silang, lawan teks polos "Telat N hari".
+ * jadwal): badge "Hangus" berpenanda silang, lawan teks polos "Terlambat N hari".
  * Keduanya berperilaku berbeda — yang hangus tidak bisa ditunda lagi — dan
  * sebelum ini keduanya tampil identik di kedua sisi aplikasi.
  *
@@ -1557,7 +1557,7 @@ export function WorkerTaskMarker({
   overdueDays,
   task,
 }: {
-  /** Non-null hanya di seksi "Telat". */
+  /** Non-null hanya di seksi "Terlambat". */
   overdueDays: number | null;
   task: CareTask;
 }) {
@@ -1568,7 +1568,7 @@ export function WorkerTaskMarker({
   if (overdueDays !== null) {
     return (
       <Text selectable={false} style={workerTaskMarkerStyles.overdue}>
-        {`Telat ${overdueDays} hari`}
+        {`Terlambat ${overdueDays} hari`}
       </Text>
     );
   }

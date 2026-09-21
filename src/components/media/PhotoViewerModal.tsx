@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, View, useWindowDimensions } from 'react-native';
+import { Modal, Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   clamp,
@@ -8,16 +9,13 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { radius, spacing, tokens } from '../../constants/theme';
-import { Button } from '../ui';
+import { spacing, tokens } from '../../constants/theme';
+import { colors as palette } from '../../theme/tokens';
+import { Icon } from '../icons';
 
-// Tinggi gambar sebagai PERSEN dari kotak berlatar gelap, bukan dari layar.
-//
-// Disimpan sebagai angka, bukan string '82%', supaya gaya tampilan dan
-// perhitungan batas geser memakai SATU sumber. Kalau angka ini bergeser, kotak
-// gambar dan batas pan bergeser bersamaan; menuliskannya dua kali adalah cara
-// paling gampang membuat keduanya diam-diam berbeda.
-const VIEWER_IMAGE_HEIGHT_PERCENT = 82;
+// Slot sentuh tombol kembali. 48, pedoman Android — sama dengan slot kembali di
+// <TopAppBar>, dan dengan alasan yang sama.
+const BACK_SLOT_SIZE = 48;
 
 // Skala saat gambar duduk tenang. Pan dimatikan tepat di angka ini.
 const MIN_SCALE = 1;
@@ -74,16 +72,16 @@ export type PhotoViewerModalProps = {
 // bingkai di UI thread, dan Animated bawaan tidak bisa melakukannya tanpa
 // tersendat. Jangan jadikan berkas ini alasan memakai Reanimated di tempat lain.
 export function PhotoViewerModal({ onClose, photoUrl, visible }: PhotoViewerModalProps) {
-  // Ukuran diambil dari jendela, BUKAN dari parent: <Modal> transparan tidak
-  // memberi konteks layout seluruh layar secara otomatis, jadi mengandalkan
-  // parent akan menghasilkan batas geser yang salah.
-  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
-
-  const boxWidth = Math.max(0, windowWidth - spacing.xl * 2);
-  const boxHeight = Math.max(
-    0,
-    ((windowHeight - spacing.xl * 2) * VIEWER_IMAGE_HEIGHT_PERCENT) / 100
-  );
+  const insets = useSafeAreaInsets();
+  // Ukuran kotak gambar DIUKUR lewat onLayout, bukan dihitung dari jendela.
+  // Sejak penampil jadi layar penuh dan statusBarTranslucent, useWindowDimensions
+  // di Android tidak lagi sama dengan bidang yang benar-benar ditempati — ia
+  // mengecualikan status bar yang kini justru ikut tertutup. Batas geser di bawah
+  // harus memakai ukuran bidang yang sebenarnya, atau tepi foto yang diperbesar
+  // bisa ditarik masuk melewati tepi layar.
+  const [box, setBox] = React.useState({ height: 0, width: 0 });
+  const boxWidth = box.width;
+  const boxHeight = box.height;
 
   // Nilai hidup yang dibaca setiap bingkai di UI thread.
   const scale = useSharedValue(MIN_SCALE);
@@ -222,8 +220,31 @@ export function PhotoViewerModal({ onClose, photoUrl, visible }: PhotoViewerModa
     ],
   }));
 
+  // PENAMPIL LAYAR PENUH (pasca-batch 7), berlaku untuk foto pohon, foto
+  // catatan, dan foto bukti hasil kerja — ketiganya lewat komponen ini.
+  //
+  //   * Latar HITAM PENUH, termasuk di bawah status bar (statusBarTranslucent).
+  //     Tidak ada sepotong pun antarmuka aplikasi yang terlihat di belakangnya.
+  //   * Foto dipaskan ke layar (resizeMode contain di bidang penuh), tanpa kotak
+  //     bersudut membulat dan tanpa padding.
+  //   * TOMBOL KEMBALI DI KIRI ATAS, menggantikan tombol "Tutup" di bawah foto.
+  //     Arah dan letaknya sama dengan panah kembali di setiap layar aplikasi,
+  //     jadi tidak ada kosakata baru yang harus dipelajari untuk keluar dari
+  //     sini.
+  //   * Tombol kembali perangkat menutup penampil lewat onRequestClose — itu
+  //     sudah benar sejak awal dan tidak berubah.
+  //
+  // Tap pada gambar SENGAJA tetap tidak menutup penampil: tap adalah bagian dari
+  // gerakan mencubit, dan penampil yang menutup sendiri di tengah zoom tidak
+  // bisa dipakai.
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      transparent
+      visible={visible}
+    >
       {/*
         GestureHandlerRootView KEDUA, selain yang ada di app/_layout.tsx.
         Bukan duplikasi yang bisa dihapus: <Modal> bawaan React Native membuat
@@ -233,30 +254,22 @@ export function PhotoViewerModal({ onClose, photoUrl, visible }: PhotoViewerModa
         yang lolos dari pengujian di satu platform.
       */}
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View
-          style={{
-            backgroundColor: tokens.color.overlay.viewer,
-            flex: 1,
-            gap: spacing.lg,
-            justifyContent: 'center',
-            padding: spacing.xl,
-          }}
-        >
+        <View style={{ backgroundColor: palette.photoViewerBg, flex: 1 }}>
           {photoUrl ? (
             <GestureDetector gesture={gesture}>
               {/*
-                Pengapit dengan overflow:'hidden' menahan gambar yang diperbesar
-                tetap di dalam kotaknya. Tanpa ini gambar pada skala 4 tumpah ke
-                seluruh layar, termasuk menutupi tombol Tutup di bawahnya.
+                Pengapit selebar layar dengan overflow:'hidden'. Ia yang diukur
+                untuk batas geser, dan ia yang menahan gambar pada skala 4
+                supaya tidak meluber keluar bidangnya sendiri.
               */}
               <View
-                style={{
-                  borderCurve: 'continuous',
-                  borderRadius: radius.lg,
-                  height: `${VIEWER_IMAGE_HEIGHT_PERCENT}%`,
-                  overflow: 'hidden',
-                  width: '100%',
+                onLayout={(event) => {
+                  const { height, width } = event.nativeEvent.layout;
+                  setBox((current) =>
+                    current.height === height && current.width === width ? current : { height, width }
+                  );
                 }}
+                style={{ flex: 1, overflow: 'hidden' }}
               >
                 <Animated.Image
                   resizeMode="contain"
@@ -267,17 +280,34 @@ export function PhotoViewerModal({ onClose, photoUrl, visible }: PhotoViewerModa
             </GestureDetector>
           ) : null}
           {/*
-            Tombol ini SIBLING dari GestureDetector, bukan anaknya, jadi tidak
-            pernah ada gesture yang perlu berebut tekanan dengannya. Ia juga
-            dirender setelah gambar sehingga berada di atas dalam urutan tumpuk;
-            gambar yang diperbesar tidak bisa menutupinya.
+            Tombol kembali MELAYANG di atas foto, di kiri atas, dan SIBLING dari
+            GestureDetector — bukan anaknya — jadi tidak pernah ada gesture yang
+            berebut tekanan dengannya. Dirender sesudah gambar sehingga berada di
+            atas dalam urutan tumpuk: foto yang diperbesar tidak bisa
+            menutupinya.
 
-            Tap pada gambar SENGAJA tidak menutup viewer. Tombol ini dan tombol
-            back Android adalah satu-satunya jalan keluar, karena tap adalah
-            bagian dari gerakan mencubit dan viewer yang menutup sendiri di
-            tengah zoom tidak bisa dipakai.
+            Panah, bukan silang, dan di KIRI: penampil ini dibuka dari sebuah
+            layar dan kembali ke layar itu, jadi yang dilakukan tombol ini adalah
+            "kembali", sama persis dengan panah di TopAppBar. Warnanya putih
+            (textOnAccent) karena ia duduk di atas hitam.
           */}
-          <Button onPress={onClose} title="Tutup" variant="primary" />
+          <Pressable
+            accessibilityLabel="Kembali"
+            accessibilityRole="button"
+            onPress={onClose}
+            style={({ pressed }) => ({
+              alignItems: 'center',
+              height: BACK_SLOT_SIZE,
+              justifyContent: 'center',
+              left: spacing.screenHorizontal - (BACK_SLOT_SIZE - tokens.icon.lg) / 2,
+              opacity: pressed ? 0.6 : 1,
+              position: 'absolute',
+              top: Math.max(insets.top, spacing.sm),
+              width: BACK_SLOT_SIZE,
+            })}
+          >
+            <Icon name="arrow-left" size={tokens.icon.lg} color={palette.textOnAccent} />
+          </Pressable>
         </View>
       </GestureHandlerRootView>
     </Modal>

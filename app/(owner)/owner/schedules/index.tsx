@@ -36,7 +36,7 @@ import {
   type TimeBucket,
 } from '../../../../src/utils/taskDueDate';
 
-// Sumbu waktu dinyatakan oleh struktur section (Telat / Hari ini / Mendatang),
+// Sumbu waktu dinyatakan oleh struktur section (Terlambat / Hari ini / Mendatang),
 // bukan chip. Pemisah agenda-vs-arsip adalah TAB BERGARIS BAWAH: ia MENGGANTI
 // TAMPILAN, bukan menyaring, jadi bentuknya harus beda dari chip filter — sama
 // seperti "Daftar | Denah" di layar Pohon, dan sejak batch 6a memakai komponen
@@ -311,7 +311,7 @@ export default function CareScheduleListScreen() {
 
   // Segmen "Selesai" adalah ARSIP, bukan agenda: ia dirender sebagai satu daftar
   // rata tanpa section dan tanpa header, dan tidak melewati
-  // buildScheduleSections sama sekali. Tiga nama section yang ada — Telat,
+  // buildScheduleSections sama sekali. Tiga nama section yang ada — Terlambat,
   // Hari ini, Mendatang — semuanya menyatakan hubungan dengan pekerjaan yang
   // MASIH menunggu, dan tak satu pun benar untuk yang sudah tidak menunggu.
   const isArchive = loadedFilter === 'completed';
@@ -319,7 +319,7 @@ export default function CareScheduleListScreen() {
   // Dua arah urutan, sesuai pertanyaan yang dijawab masing-masing segmen.
   //
   // Agenda MENAIK: pertanyaannya "apa yang paling lama tertunggak", jadi yang
-  // paling tua duduk paling atas — di "Telat" paling lama telat, di
+  // paling tua duduk paling atas — di "Terlambat" paling lama terlambat, di
   // "Mendatang" yang paling dekat.
   //
   // Arsip MENURUN: pertanyaannya "yang barusan itu tercatat, kan", dan
@@ -503,7 +503,7 @@ export default function CareScheduleListScreen() {
             ) : isArchive ? (
               // Arsip: satu kotak, tanpa section dan tanpa label. overdueSinceIso
               // selalu null di sini — sebuah jadwal yang sudah selesai atau
-              // dibatalkan tidak bisa "telat" lagi.
+              // dibatalkan tidak bisa "terlambat" lagi.
               <View style={styles.sectionRows}>
                 {displayedSchedules.map((schedule, index) => (
                   <ScheduleRow
@@ -525,7 +525,7 @@ export default function CareScheduleListScreen() {
                   <View key={section.key} style={styles.section}>
                     {/* <SectionLabel> bersama: 12/600 huruf besar, textMuted.
                         Menggantikan baris judul 14 berwarna danger dengan angka
-                        di ujung kanan. Angkanya pindah ke DALAM label ("Telat ·
+                        di ujung kanan. Angkanya pindah ke DALAM label ("Terlambat ·
                         3") karena sejak labelnya 12 dan redup, angka rata kanan
                         di seberangnya terbaca sebagai kolom kedua dari sebuah
                         tabel yang tidak ada. */}
@@ -618,7 +618,7 @@ function ScheduleRow({
   bucket: TimeBucket | undefined;
   isLast: boolean;
   onPress: () => void;
-  // Non-null hanya di section "Telat".
+  // Non-null hanya di section "Terlambat".
   overdueSinceIso: string | null;
   schedule: CareScheduleDetail;
   showDate: boolean;
@@ -690,7 +690,7 @@ function ScheduleRow({
 //      aslinya: badge ini wajib dipertahankan (baris arsip yang dibatalkan
 //      harus bisa dibedakan dari yang benar-benar selesai).
 //   1. Hangus      -- sudah lewat masa toleransi. Lihat blok di bawah.
-//   2. Telat       -- tunggakan yang masih bisa dikerjakan.
+//   2. Terlambat       -- tunggakan yang masih bisa dikerjakan.
 //   3. Ditunda     -- pekerjaannya diakui belum dilakukan, tapi bukan tunggakan.
 //   4. Berulang    -- sifat jadwal, bukan keadaannya. Kalah dari semuanya.
 //
@@ -710,13 +710,13 @@ function ScheduleRowMarker({
     return <Badge label="Dibatalkan" marker="circle-outline" maxWidth={110} tone="danger" />;
   }
 
-  // TUGAS HANGUS DIBEDAKAN DARI TUGAS TELAT BIASA (adendum §4.6).
+  // TUGAS HANGUS DIBEDAKAN DARI TUGAS TERLAMBAT BIASA (adendum §4.6).
   //
-  // Keduanya duduk di section yang sama — "Telat" — dan itu disengaja: bagi
+  // Keduanya duduk di section yang sama — "Terlambat" — dan itu disengaja: bagi
   // pemilik yang memindai tunggakan, keduanya sama-sama pekerjaan yang tidak
   // terjadi pada waktunya. Yang berbeda adalah apa yang MASIH BISA dilakukan:
-  // tugas telat masih bisa dikerjakan dan masih bisa ditunda, tugas hangus
-  // tidak bisa ditunda lagi. Sebelum ini keduanya tampil identik — "Telat N
+  // tugas terlambat masih bisa dikerjakan dan masih bisa ditunda, tugas hangus
+  // tidak bisa ditunda lagi. Sebelum ini keduanya tampil identik — "Terlambat N
   // hari", kata yang sama, bentuk yang sama.
   //
   // Datanya SUDAH ADA di layar ini tanpa satu pun kueri tambahan: `missedAt`
@@ -725,12 +725,12 @@ function ScheduleRowMarker({
   // 'missed' sejak migrasi 048. Yang belum ada hanyalah yang menampilkannya.
   //
   // BENTUK, bukan hanya kata: badge berpenanda di sebelah baris yang penanda
-  // telatnya adalah teks polos. Dua saluran pembeda sekaligus, dan yang kedua
+  // terlambatnya adalah teks polos. Dua saluran pembeda sekaligus, dan yang kedua
   // bertahan di layar yang kena silau.
   //
   // "Hangus", bukan "Terlambat". Kata "Terlambat" dilarang menamai keduanya
-  // sekaligus, dan di layar ini ia tidak dipakai sama sekali — yang telat
-  // berbunyi "Telat N hari".
+  // sekaligus, dan di layar ini ia tidak dipakai sama sekali — yang terlambat
+  // berbunyi "Terlambat N hari".
   if (bucket === 'missed') {
     return <Badge label="Hangus" marker="cross" maxWidth={110} tone="danger" />;
   }
@@ -738,7 +738,7 @@ function ScheduleRowMarker({
   if (overdueSinceIso) {
     return (
       <Text selectable={false} style={styles.overdueText}>
-        {`Telat ${overdueDays} hari`}
+        {`Terlambat ${overdueDays} hari`}
       </Text>
     );
   }
@@ -846,7 +846,7 @@ type ScheduleSection = {
   key: string;
   title: string;
   // Dipakai untuk SATU hal saja sejak batch 6a: memutuskan apakah baris di
-  // dalamnya perlu menghitung sejak kapan ia telat. Labelnya sendiri tidak lagi
+  // dalamnya perlu menghitung sejak kapan ia terlambat. Labelnya sendiri tidak lagi
   // berwarna — <SectionLabel> bersama tidak punya nada, dan tunggakan sudah
   // dinyatakan oleh angka di dalam labelnya serta penanda di tiap barisnya.
   tone: 'danger' | 'default';
@@ -867,7 +867,7 @@ type ScheduleSection = {
 // hari salah satu dari dua definisi itu bergeser, barisnya tetap TERLIHAT di
 // tempat yang paling tidak berbahaya, bukan lenyap tanpa jejak.
 //
-// TIGA section, urut tetap: Telat, Hari ini, Mendatang. Header per tanggal
+// TIGA section, urut tetap: Terlambat, Hari ini, Mendatang. Header per tanggal
 // ("Sabtu, 19 Sep 2026") dihapus: pada kebun dengan jadwal berulang, satu
 // tanggal sering hanya berisi satu baris, sehingga daftar berubah jadi deret
 // header dengan satu baris di bawah masing-masing — lebih banyak header
@@ -878,7 +878,7 @@ type ScheduleSection = {
 // pernah dirender.
 //
 // `schedules` sudah terurut scheduledDate MENAIK, jadi isi tiap section ikut
-// menaik: di "Telat" paling lama telat di atas, di "Mendatang" yang paling
+// menaik: di "Terlambat" paling lama terlambat di atas, di "Mendatang" yang paling
 // dekat di atas.
 function buildScheduleSections(
   schedules: CareScheduleDetail[],
@@ -890,7 +890,7 @@ function buildScheduleSections(
 
   for (const schedule of schedules) {
     // 'missed' (migrasi 048) diperlakukan sama seperti 'overdue': jadwal
-    // terlewat tetap berada di section "Telat", bukan berpindah diam-diam
+    // terlewat tetap berada di section "Terlambat", bukan berpindah diam-diam
     // ke tempat lain. Datanya sudah terpisah di taskDueDate.ts dan tinggal
     // dipakai saat statusnya benar-benar ditampilkan.
     const bucket = buckets[schedule.id];
@@ -906,10 +906,10 @@ function buildScheduleSections(
 
   const sections: ScheduleSection[] = [];
 
-  // "TELAT · N", bukan "Terlambat" dengan angka di kolom kanan.
+  // "TERLAMBAT · N", bukan "Terlambat" dengan angka di kolom kanan.
   //
-  // Kata "Telat" menggantikan "Terlambat" supaya SATU kata dipakai di satu
-  // layar: baris di bawahnya sudah berbunyi "Telat 3 hari", dan section yang
+  // Kata "Terlambat" menggantikan "Terlambat" supaya SATU kata dipakai di satu
+  // layar: baris di bawahnya sudah berbunyi "Terlambat 3 hari", dan section yang
   // menamai hal yang sama dengan kata yang lain memaksa pembacanya memeriksa
   // apakah keduanya memang hal yang sama.
   //
@@ -919,7 +919,7 @@ function buildScheduleSections(
   if (overdue.length > 0) {
     sections.push({
       key: 'overdue',
-      title: `Telat · ${overdue.length}`,
+      title: `Terlambat · ${overdue.length}`,
       tone: 'danger',
       schedules: overdue,
     });

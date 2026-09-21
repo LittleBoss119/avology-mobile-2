@@ -561,6 +561,31 @@ function TreeFilterSheet({
   return (
     <BottomSheet onClose={onClose} title="Filter pohon" visible={visible}>
       <View style={styles.filterSheetBody}>
+        {/* SUSUNAN FILTER JADWAL, diterapkan ke sini pasca-batch 7. Kedua lembar
+            filter kini sama bentuknya, dan pola filter jadwal yang menang:
+
+              * "Atur ulang" di KANAN ATAS, bukan di bawah tombol Terapkan. Ia
+                aksi sekunder, dan aksi sekunder tidak duduk di jalur ibu jari
+                yang sedang menuju tombol utama.
+              * Terapkan SATU tombol utama selebar lembar di dasar.
+              * Chip aktif bercentang — sudah begitu di kedua lembar lewat
+                <ChipButton>, yang membubuhkan ikon 'check' pada chip aktif.
+                Pembedanya bentuk, bukan warna saja (prinsip sejak batch 0).
+
+            Isi dan sumbu filternya tidak berubah. */}
+        <View style={styles.sheetResetRow}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={isDefault}
+            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
+            onPress={() => onDraftChange(DEFAULT_TREE_FILTER_CRITERIA)}
+          >
+            <Text selectable={false} style={[styles.resetText, isDefault ? styles.resetTextDisabled : null]}>
+              Atur ulang
+            </Text>
+          </Pressable>
+        </View>
+
         <FilterBadgeGroup title="Kondisi">
           {conditionOptions.map((option) => (
             <ChipButton
@@ -613,24 +638,10 @@ function TreeFilterSheet({
           />
         </FilterBadgeGroup>
 
-        {/* Tombol tidak selebar sheet. Selebar penuh ia terbaca sebagai penutup
-            halaman — sesuatu yang harus ditekan untuk keluar — padahal menutup
-            sheet ini juga bisa lewat backdrop dan gestur. */}
-        <View style={styles.sheetFooter}>
-          <View style={styles.applyButtonWrap}>
-            <Button title="Terapkan" variant="primary" onPress={onApply} />
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            disabled={isDefault}
-            hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
-            onPress={() => onDraftChange(DEFAULT_TREE_FILTER_CRITERIA)}
-          >
-            <Text selectable={false} style={[styles.resetText, isDefault ? styles.resetTextDisabled : null]}>
-              Atur ulang
-            </Text>
-          </Pressable>
-        </View>
+        {/* Selebar lembar, sama dengan Filter jadwal. Bentuk 78% yang dulu
+            dipakai di sini membuat dua lembar filter yang berdampingan dalam
+            satu aplikasi punya dua bentuk tombol Terapkan. */}
+        <Button title="Terapkan" variant="primary" onPress={onApply} />
       </View>
     </BottomSheet>
   );
@@ -699,8 +710,7 @@ const styles = StyleSheet.create({
   filterGroup: { gap: tokens.space.sm },
   filterLabel: { ...tokens.type.label, color: tokens.color.text.primary },
   badgeWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space.sm },
-  sheetFooter: { alignItems: 'center', gap: tokens.space.md, paddingTop: tokens.space.sm },
-  applyButtonWrap: { width: '78%' },
+  sheetResetRow: { alignItems: 'flex-end' },
   resetText: { ...tokens.type.label, color: tokens.color.brand.base },
   resetTextDisabled: { color: tokens.color.text.tertiary },
 });
