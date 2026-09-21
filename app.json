@@ -3,7 +3,7 @@
     "name": "Avology",
     "slug": "avology-mobile-v2",
     "scheme": "avology",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -30,6 +30,14 @@
           "cameraPermission": "Avology membutuhkan kamera untuk mengambil foto kebun.",
           "photosPermission": "Avology membutuhkan akses galeri untuk memilih foto kebun.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#1E5134",
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain"
         }
       ]
     ],

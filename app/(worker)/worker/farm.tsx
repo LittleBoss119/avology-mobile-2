@@ -6,11 +6,10 @@ import { ConfirmDialog } from '../../../src/components/bottom-sheet';
 import { MemberRow } from '../../../src/components/member-row';
 import { useSnackbar } from '../../../src/components/snackbar';
 import {
+  Button,
   EmptyState,
   ErrorBanner,
   LoadingState,
-  MenuRow,
-  MenuRowGroup,
   Screen,
   SectionLabel,
   TopAppBar,
@@ -166,24 +165,36 @@ export default function WorkerFarmHubScreen() {
         )}
       </View>
 
-      {/* Ruang kosong fleksibel: mendorong baris keluar ke kaki layar saat
+      {/* Ruang kosong fleksibel: mendorong tombol keluar ke kaki layar saat
           daftar anggotanya pendek, dan menyusut jadi nol saat daftarnya
           panjang atau font sistem dibesarkan. */}
       <View style={{ flexGrow: 1 }} />
 
-      {/* BARIS MERUSAK, bukan tombol bergaris. Ia duduk di dalam MenuRowGroup
-          — bentuk yang sama dengan baris merusak di detail jadwal — sehingga
-          garisnya dibawa pemisah baris, bukan bingkai tombol. Itu yang
-          membuatnya tidak lagi terbaca sebagai kembaran "Keluar dari akun".
+      {/* TOMBOL MERUSAK, bukan baris. Button varian danger: bergaris
+          borderStrong, tanpa latar, rata tengah, tanpa ikon — rupa yang sama
+          persis dengan "Keluar dari akun" di Profil.
+
+          ATURANNYA, supaya tidak ditinjau ulang:
+            * BARIS merusak (<MenuRow danger>) dipakai bila aksinya duduk DI
+              DALAM DAFTAR, di antara baris-baris lain. "Batalkan jadwal" dan
+              "Pohon sudah tidak ada" tetap baris karena keduanya begitu.
+            * TOMBOL merusak (<Button variant="danger">) dipakai bila aksinya
+              BERDIRI SENDIRI di kaki layar. "Keluar dari kebun" begitu, dan
+              begitu pula "Keluar dari akun".
+          Yang menentukan bentuknya adalah TEMPAT aksinya berdiri, bukan seberapa
+          merusak aksinya.
+
+          Rupanya sama dengan "Keluar dari akun", tapi keduanya TIDAK lagi
+          berdampingan: yang satu di Profil (urusan akun), yang ini di Anggota
+          (urusan kebun). Keserupaan bentuk tidak lagi berbahaya begitu
+          keduanya tidak bisa tertukar dalam satu tarikan mata.
 
           Hanya untuk pekerja AKTIF. Layar ini memang hanya terbuka untuk
-          keanggotaan aktif, tapi syaratnya ditulis eksplisit: baris yang
+          keanggotaan aktif, tapi syaratnya ditulis eksplisit: tombol yang
           mencabut keanggotaan tidak boleh bergantung pada penjaga di tempat
           lain. */}
       {currentFarm?.status === 'active' && currentFarm.role === 'worker' ? (
-        <MenuRowGroup>
-          <MenuRow danger icon="logout" label="Keluar dari kebun" onPress={() => setConfirmLeave(true)} />
-        </MenuRowGroup>
+        <Button title="Keluar dari kebun" variant="danger" onPress={() => setConfirmLeave(true)} />
       ) : null}
 
       {/* Kata-katanya dipindah APA ADANYA dari Profil — termasuk "kode kebun"
