@@ -1,50 +1,72 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { tokens } from '../constants/theme';
 import { useAuth } from '../context/auth-context';
-import { getFloweringAndFruitingTrees } from '../services/growthPhaseService';
-import type { FloweringMonitoringTree, GrowthPhase } from '../types/domain';
+import { getTrees } from '../services/treeService';
+import type { GrowthPhase, Tree } from '../types/domain';
 import { daysSinceLocal } from '../utils/dateDiff';
-import { formatGrowthPhase, formatTreeLocation } from '../utils/treeFormat';
-// FloweringAgeMarker TIDAK LAGI DIPAKAI DI SINI. Umur fase kini dibawa
-// GrowthPhaseBadge — komponen yang sama yang dipakai layar detail pohon —
-// sehingga kedua layar menghasilkan bentuk teks yang sama persis
-// ('Berbunga · 96 hari') dari kolom yang sama. Komponennya tetap ada di repo.
-import { GrowthPhaseBadge, TreeCard } from './tree-components';
-import {
-  Button,
-  Card,
-  EmptyState,
-  ErrorBanner,
-  LoadingState,
-  MetaRow,
-  Screen,
-  SegmentedControl,
-  TopAppBar,
-} from './ui';
+import { formatGrowthPhase } from '../utils/treeFormat';
+import { Icon } from './icons';
+import { TreeCard } from './tree-components';
+import { ErrorBanner, LoadingState, Screen, TopAppBar } from './ui';
 
-// Dua fase yang dipantau layar ini. SENGAJA bukan GrowthPhase penuh: enum itu
-// punya nilai lain (vegetatif, panen, ...) yang tidak pernah jadi segmen di
-// sini, dan menyempitkan tipenya membuat penyempitan itu dijaga compiler alih-
-// alih dijaga kedisiplinan pemanggil.
-type PhaseSegment = 'flowering' | 'fruiting';
+// LIMA FASE, URUTAN KANONIK, DAN URUTANNYA MENGIKAT (§17).
+//
+// Bukan urutan abjad dan bukan urutan "yang paling banyak dulu": ia urutan
+// HIDUP sebuah pohon, dan itu satu-satunya urutan yang tidak perlu dipelajari
+// oleh pembacanya. Karena urutannya sendiri yang membawa arti, fase TIDAK
+// mendapat penanda bentuk — aturan yang sudah ditetapkan di batch 5. Bentuk
+// dipakai untuk membedakan hal-hal yang setara (kondisi pohon); fase tidak
+// setara, ia berurutan, dan posisi di daftar sudah mengatakannya.
+const PHASE_ORDER: GrowthPhase[] = [
+  'initial_planting',
+  'vegetative',
+  'flowering',
+  'fruiting',
+  'harvesting',
+];
+
+// DUA FASE YANG DIBENTANGKAN saat layar dibuka. Keduanya yang benar-benar
+// dipantau pemilik dari hari ke hari — dan itu juga alasan kartu Beranda hanya
+// menghitung keduanya. Tiga fase lain tetap punya barisnya sendiri beserta
+// jumlahnya; yang dilipat hanya isinya.
+const EXPANDED_BY_DEFAULT: GrowthPhase[] = ['flowering', 'fruiting'];
+
+// Berapa baris yang ditampilkan sebuah kelompok yang terbentang sebelum baris
+// "Lihat N lainnya" muncul. Tiga, bukan semua: kebun dengan enam puluh pohon
+// berbuah akan mengubur keempat kelompok lain di bawah satu daftar panjang,
+// dan yang dicari orang di layar ini justru perbandingan antar fase.
+const PREVIEW_ROWS = 3;
 
 export function OwnerGrowthMonitoringScreen() {
   const { currentFarm } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [trees, setTrees] = React.useState<FloweringMonitoringTree[]>([]);
-  // SELALU 'flowering' saat dibuka, berapa pun isinya. Perilaku yang bisa
-  // ditebak menang atas perilaku yang pintar: segmen yang berpindah sendiri
-  // menurut data membuat pemilik yang membuka layar ini dua hari berturut-turut
-  // mendapati dirinya di tempat yang berbeda tanpa menyentuh apa pun. Jumlah di
-  // label kedua segmen sudah mengabarkan ada apa di seberang tanpa perlu pindah.
-  const [phase, setPhase] = React.useState<PhaseSegment>('flowering');
+  const [trees, setTrees] = React.useState<Tree[]>([]);
+  // Dua keadaan terpisah, bukan satu tingkat "terbuka sebagian / terbuka
+  // penuh": sebuah kelompok bisa terbentang tapi masih memotong barisnya, dan
+  // menutupnya harus mengembalikannya ke keadaan terpotong — bukan ke keadaan
+  // penuh yang terakhir dibuka.
+  const [openPhases, setOpenPhases] = React.useState<GrowthPhase[]>(EXPANDED_BY_DEFAULT);
+  const [fullPhases, setFullPhases] = React.useState<GrowthPhase[]>([]);
 
   const farmId = currentFarm?.farmId;
 
+  // getTrees, MENGGANTIKAN getFloweringAndFruitingTrees (batch 7b).
+  //
+  // Bukan query baru: getTrees adalah service yang SUDAH ADA dengan argumen
+  // yang SAMA PERSIS seperti yang dipakai daftar pohon, denah kebun, layar buat
+  // jadwal, dan layar tambah pohon. Yang berubah hanya layar ini berhenti
+  // meminta dua fase saja.
+  //
+  // Harus berubah karena §17 menuntut LIMA kelompok. getFloweringAndFruitingTrees
+  // menyaring di sisi database ke 'flowering' dan 'fruiting', jadi tiga fase
+  // lain tidak punya cara untuk sampai ke layar ini lewat jalur itu.
+  //
+  // archived:false — pohon yang diarsipkan tidak sedang menjalani fase apa pun.
+  // Baris yang sama dipakai daftar pohon untuk tab "aktif".
   const loadTrees = React.useCallback(async () => {
     if (!farmId) {
       setError('Kebun aktif tidak ditemukan.');
@@ -54,7 +76,7 @@ export function OwnerGrowthMonitoringScreen() {
 
     setError(null);
 
-    const result = await getFloweringAndFruitingTrees({ farmId });
+    const result = await getTrees({ archived: false, farmId });
 
     if (result.error) {
       setError(result.error.message);
@@ -81,9 +103,16 @@ export function OwnerGrowthMonitoringScreen() {
     );
   }
 
-  const floweringTrees = sortByPhaseAge(trees.filter((tree) => tree.currentGrowthPhase === 'flowering'));
-  const fruitingTrees = sortByPhaseAge(trees.filter((tree) => tree.currentGrowthPhase === 'fruiting'));
-  const displayedTrees = phase === 'flowering' ? floweringTrees : fruitingTrees;
+  function togglePhase(phase: GrowthPhase) {
+    setOpenPhases((current) =>
+      current.includes(phase) ? current.filter((item) => item !== phase) : [...current, phase]
+    );
+    // Menutup kelompok mengembalikannya ke keadaan terpotong. Tanpa baris ini,
+    // kelompok yang pernah dibentangkan penuh akan meledak jadi enam puluh
+    // baris lagi begitu dibuka kembali — keadaan yang tidak pernah diminta
+    // ulang oleh siapa pun.
+    setFullPhases((current) => current.filter((item) => item !== phase));
+  }
 
   return (
     /* Judulnya ADA, dan itu bukan pengecualian terhadap aturan "layar detail
@@ -92,67 +121,179 @@ export function OwnerGrowthMonitoringScreen() {
 
        "Fase pohon", sama persis dengan label baris di Beranda yang mengantar ke
        sini. Judul yang berbeda dari pintu masuknya membuat orang bertanya-tanya
-       apakah ia sampai di tempat yang benar.
-
-       Subjudul dicabut: segmented tepat di bawahnya sudah mengatakan hal yang
-       sama — dua fase, dengan jumlahnya — dalam bentuk yang bisa ditekan. */
+       apakah ia sampai di tempat yang benar. */
     <Screen header={<TopAppBar title="Fase pohon" onBack={() => router.back()} />}>
       <ErrorBanner message={error} />
 
-      {/* Jumlahnya masuk KE DALAM label, bukan jadi dua kartu angka terpisah di
-          atas. Dua kartu itu memakan tinggi satu layar penuh untuk mengatakan
-          dua angka, lalu daftar di bawahnya tetap harus digulung jauh untuk
-          sampai ke fase kedua. Di sini satu pandangan menjawab dua-duanya, dan
-          berpindah fase satu ketukan. */}
-      <SegmentedControl
-        onChange={(key) => setPhase(key === 'fruiting' ? 'fruiting' : 'flowering')}
-        options={[
-          { key: 'flowering', label: `Berbunga ${floweringTrees.length}` },
-          { key: 'fruiting', label: `Berbuah ${fruitingTrees.length}` },
-        ]}
-        value={phase}
-      />
+      {/* SegmentedControl dua fase DICABUT (batch 7b). Ia memaksa memilih satu
+          dari dua fase pada layar yang gunanya justru MEMBANDINGKAN — dan ia
+          tidak punya tempat sama sekali untuk tiga fase lain yang kini ikut
+          ditampilkan. Kelompok yang bisa dilipat menggantikannya: semua fase
+          terlihat sekaligus beserta jumlahnya, dan isinya dibuka seperlunya. */}
+      <View style={{ gap: tokens.space.lg }}>
+        {PHASE_ORDER.map((phase) => {
+          const phaseTrees = sortByPhaseAge(
+            trees.filter((tree) => tree.currentGrowthPhase === phase)
+          );
+          const open = openPhases.includes(phase);
+          const full = fullPhases.includes(phase);
+          const visibleTrees = full ? phaseTrees : phaseTrees.slice(0, PREVIEW_ROWS);
+          const hiddenCount = phaseTrees.length - visibleTrees.length;
 
-      {/* Segmen yang TIDAK terpilih tidak dirender sama sekali — bukan
-          disembunyikan, bukan digulung lewat. */}
-      {displayedTrees.length === 0 ? (
-        <Text selectable style={styles.emptyText}>
-          {phase === 'flowering' ? 'Belum ada pohon berbunga.' : 'Belum ada pohon berbuah.'}
-        </Text>
-      ) : (
-        // Satu kolom dengan garis rambut antar baris, sama seperti daftar Pohon.
-        // Baris terakhir tidak diberi garis supaya daftarnya tidak menggantung.
-        <View>
-          {displayedTrees.map((tree, index) => {
-            const phaseAgeText = buildPhaseAgeText(tree);
+          return (
+            <View key={phase} style={{ gap: tokens.space.sm }}>
+              <PhaseGroupHeader
+                count={phaseTrees.length}
+                open={open}
+                phase={phase}
+                onPress={() => togglePhase(phase)}
+              />
 
-            return (
-              <React.Fragment key={tree.id}>
-                {index > 0 ? <View style={styles.rowDivider} /> : null}
-                {/* TreeCard yang SAMA dengan daftar Pohon, kontraknya tidak
-                    disentuh. Chip di sisi kanannya tetap terikat ke KONDISI
-                    pohon, bukan ke fase — pohon berbuah yang kena hama harus
-                    tetap terlihat kena hama di layar ini, dan fase sudah
-                    dinyatakan oleh segmen yang sedang terbuka.
+              {/* Kelompok KOSONG tidak pernah merender isi, terbuka atau tidak.
+                  Barisnya sendiri TETAP ADA beserta angka 0 — kelompok yang
+                  hilang saat kosong akan membuat urutan lima fase itu berlubang,
+                  dan urutan itulah satu-satunya hal yang membawa arti di sini. */}
+              {open && phaseTrees.length > 0 ? (
+                <View>
+                  {visibleTrees.map((tree, index) => (
+                    <React.Fragment key={tree.id}>
+                      {index > 0 ? <View style={styles.rowDivider} /> : null}
+                      {/* TreeCard yang SAMA dengan daftar Pohon, kontraknya
+                          tidak disentuh selain slot `trailing` yang memang
+                          dibuat untuk baris ini. Badge di sisi kanannya tetap
+                          terikat ke KONDISI pohon, bukan ke fase — pohon
+                          berbuah yang kena hama harus tetap terlihat kena hama
+                          di layar ini, dan fasenya sudah dinyatakan kelompok
+                          tempat barisnya berdiri.
 
-                    photoUrl sengaja TIDAK dioper: fotonya datang dari jalur
-                    pengambilan terpisah yang tidak dipakai layar ini, dan
-                    menambahkannya berarti menambah permintaan jaringan.
-                    TreeCard jatuh ke placeholder-nya sendiri. */}
-                <TreeCard tree={tree} onPress={() => router.push(`/owner/trees/${tree.id}`)}>
-                  {phaseAgeText ? (
-                    <Text selectable numberOfLines={1} style={styles.phaseAge}>
-                      {phaseAgeText}
-                    </Text>
+                          photoUrl sengaja TIDAK dioper: fotonya datang dari
+                          jalur pengambilan terpisah yang tidak dipakai layar
+                          ini, dan menambahkannya berarti menambah permintaan
+                          jaringan. TreeCard jatuh ke placeholder-nya sendiri. */}
+                      <TreeCard
+                        tree={tree}
+                        trailing={<PhaseAge tree={tree} />}
+                        onPress={() => router.push(`/owner/trees/${tree.id}`)}
+                      />
+                    </React.Fragment>
+                  ))}
+
+                  {/* "Lihat N lainnya" — baris teks, bukan tombol berbingkai.
+                      Ia bagian dari daftarnya, bukan aksi yang berdiri sejajar
+                      dengan menyimpan atau menghapus sesuatu. */}
+                  {hiddenCount > 0 ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      style={({ pressed }) => [styles.moreRow, { opacity: pressed ? 0.6 : 1 }]}
+                      onPress={() => setFullPhases((current) => [...current, phase])}
+                    >
+                      <Text selectable={false} style={styles.moreText}>
+                        {`Lihat ${hiddenCount} lainnya`}
+                      </Text>
+                    </Pressable>
                   ) : null}
-                </TreeCard>
-              </React.Fragment>
-            );
-          })}
-        </View>
-      )}
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+
+      {/* Pohon yang BELUM PERNAH dicatat fasenya tidak muncul di kelompok mana
+          pun, dan jumlahnya dikatakan terus terang di sini alih-alih dibiarkan
+          hilang diam-diam. Ia bukan fase keenam: currentGrowthPhase null
+          berarti belum ada catatan fase sama sekali, dan mengarang kelompok
+          untuknya akan menaruh "belum diketahui" sejajar dengan lima keadaan
+          yang benar-benar diketahui. */}
+      {countWithoutPhase(trees) > 0 ? (
+        <Text selectable style={styles.footnote}>
+          {`${countWithoutPhase(trees)} pohon belum punya catatan fase.`}
+        </Text>
+      ) : null}
     </Screen>
   );
+}
+
+// Kepala kelompok: nama fase, jumlahnya, dan chevron yang menyatakan arah.
+//
+// Seluruh barisnya yang bisa ditekan, bukan chevron-nya saja — target sentuh
+// selebar layar jauh lebih mudah dikenai daripada ikon 20px, dan pembacanya
+// memakai aplikasi ini sambil berdiri di kebun.
+function PhaseGroupHeader({
+  count,
+  onPress,
+  open,
+  phase,
+}: {
+  count: number;
+  onPress: () => void;
+  open: boolean;
+  phase: GrowthPhase;
+}) {
+  const empty = count === 0;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: empty, expanded: open && !empty }}
+      disabled={empty}
+      style={({ pressed }) => [styles.groupHeader, { opacity: pressed ? 0.6 : 1 }]}
+      onPress={onPress}
+    >
+      <Text selectable style={[styles.groupTitle, empty ? styles.groupTitleEmpty : null]}>
+        {formatGrowthPhase(phase)}
+      </Text>
+      <Text selectable style={[styles.groupCount, empty ? styles.groupTitleEmpty : null]}>
+        {count}
+      </Text>
+      {/* Kelompok kosong tidak punya chevron: tidak ada yang bisa dibuka, dan
+          chevron yang tidak menanggapi ketukan lebih membingungkan daripada
+          chevron yang tidak ada. */}
+      {empty ? null : (
+        <Icon
+          name={open ? 'chevron-down' : 'chevron-right'}
+          size={tokens.icon.md}
+          color={tokens.color.text.tertiary}
+        />
+      )}
+    </Pressable>
+  );
+}
+
+// "96 hari" — sejak fase yang sedang berjalan DITANDAI, bukan sejak pohonnya
+// ditanam.
+//
+// SATU PENGURANGAN, TITIK. Tanggalnya datang dari kolom turunan
+// trees.current_growth_phase_since (migrasi 066), yang ditulis
+// recalculate_tree_current_growth_phase dari BARIS catatan yang sama yang
+// menetapkan currentGrowthPhase. Tidak ada kueri tambahan dan tidak ada
+// penyapuan daftar riwayat di klien — penyaringan siklusnya sudah selesai di
+// database, dan layar detail pohon membaca angka yang sama dari kolom yang sama.
+//
+// null berarti tanggalnya tidak diketahui, dan barisnya tidak mendapat
+// keterangan sama sekali — BUKAN "0 hari", yang akan terbaca sebagai "baru hari
+// ini" padahal artinya "tidak tahu". Nol sendiri angka yang benar untuk fase
+// yang dicatat hari ini, dan daysSinceLocal memang mengembalikan 0 untuk itu.
+function PhaseAge({ tree }: { tree: Tree }) {
+  if (!tree.currentGrowthPhaseSince) {
+    return null;
+  }
+
+  const days = daysSinceLocal(tree.currentGrowthPhaseSince);
+
+  if (days === null) {
+    return null;
+  }
+
+  return (
+    <Text selectable numberOfLines={1} style={styles.phaseAge}>
+      {`${days} hari`}
+    </Text>
+  );
+}
+
+function countWithoutPhase(trees: Tree[]): number {
+  return trees.filter((tree) => tree.currentGrowthPhase === null).length;
 }
 
 // Paling lama di fase itu DI ATAS, yaitu currentGrowthPhaseSince menaik.
@@ -164,15 +305,15 @@ export function OwnerGrowthMonitoringScreen() {
 // src/services/, dan jumlah barisnya paling banyak ratusan.
 //
 // TANGGAL KOSONG DITARUH PALING BAWAH. Menurut komentar migrasi 066 baris
-// seperti itu seharusnya tidak ada untuk fase berbunga dan berbuah —
-// current_growth_phase_since ditulis dari baris catatan yang sama dengan
-// current_growth_phase — tapi itu janji yang tidak bisa diverifikasi dari kode
-// terhadap data nyata, jadi ditangani apa adanya.
+// seperti itu seharusnya tidak ada — current_growth_phase_since ditulis dari
+// baris catatan yang sama dengan current_growth_phase — tapi itu janji yang
+// tidak bisa diverifikasi dari kode terhadap data nyata, jadi ditangani apa
+// adanya.
 //
 // tree_code jadi pemecah seri supaya urutannya DETERMINISTIK: tanpa itu dua
 // pohon yang masuk fase pada tanggal yang sama (jalur nyatanya pencatatan
 // massal) bisa bertukar tempat antar pemuatan tanpa ada yang berubah.
-function sortByPhaseAge(trees: FloweringMonitoringTree[]): FloweringMonitoringTree[] {
+function sortByPhaseAge(trees: Tree[]): Tree[] {
   return [...trees].sort((first, second) => {
     const firstSince = first.currentGrowthPhaseSince;
     const secondSince = second.currentGrowthPhaseSince;
@@ -199,154 +340,45 @@ function sortByPhaseAge(trees: FloweringMonitoringTree[]): FloweringMonitoringTr
   });
 }
 
-// "96 hari di fase ini".
-//
-// FRASA BARU, dan itu disengaja walau ada dua frasa bertetangga di repo:
-//   * GrowthPhaseBadge  -> 'Berbunga · 96 hari' (chip di detail pohon). Ia
-//     menyebut nama fasenya, yang di layar ini sudah dinyatakan segmen yang
-//     sedang terbuka — mengulangnya di tiap baris berarti mencetak kata yang
-//     sama sebanyak jumlah pohon.
-//   * FloweringAgeMarker -> '96 hari sejak berbunga' (pita, kini tanpa
-//     pemanggil). Ia mengukur HAL LAIN: hari sejak fase berbunga, bukan hari di
-//     fase yang sedang berjalan. Untuk pohon berbuah keduanya menjawab
-//     pertanyaan yang berbeda.
-//
-// null berarti tanggalnya tidak diketahui, dan barisnya tidak mendapat
-// keterangan sama sekali — BUKAN '0 hari', yang akan terbaca sebagai "baru hari
-// ini" padahal artinya "tidak tahu". Nol sendiri angka yang benar untuk fase
-// yang dicatat hari ini, dan daysSinceLocal memang mengembalikan 0 untuk itu.
-function buildPhaseAgeText(tree: FloweringMonitoringTree): string | null {
-  if (!tree.currentGrowthPhaseSince) {
-    return null;
-  }
-
-  const days = daysSinceLocal(tree.currentGrowthPhaseSince);
-
-  return days === null ? null : `${days} hari di fase ini`;
-}
-
 const styles = StyleSheet.create({
+  footnote: { ...tokens.type.meta, color: tokens.color.text.tertiary },
+  groupCount: {
+    color: tokens.color.text.secondary,
+    fontSize: tokens.type.bodyStrong.fontSize,
+    fontWeight: tokens.type.bodyStrong.fontWeight,
+    lineHeight: tokens.type.bodyStrong.lineHeight,
+  },
+  groupHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: tokens.space.md,
+    minHeight: tokens.layout.rowMinHeight,
+  },
+  groupTitle: {
+    color: tokens.color.text.primary,
+    flex: 1,
+    fontSize: tokens.type.subheading.fontSize,
+    fontWeight: tokens.type.subheading.fontWeight,
+    lineHeight: tokens.type.subheading.lineHeight,
+  },
+  // Kelompok kosong tetap terbaca, hanya lebih redup. Ia tidak disembunyikan:
+  // "tidak ada pohon berbunga" adalah kabar, dan kabar itu hilang kalau
+  // barisnya ikut hilang.
+  groupTitleEmpty: { color: tokens.color.text.tertiary },
+  moreRow: {
+    borderTopColor: tokens.color.line.hairline,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+    minHeight: tokens.layout.rowMinHeight,
+  },
+  moreText: {
+    color: tokens.color.brand.base,
+    fontSize: tokens.type.bodySmall.fontSize,
+    lineHeight: tokens.type.bodySmall.lineHeight,
+  },
+  phaseAge: { ...tokens.type.meta, color: tokens.color.text.secondary },
   rowDivider: {
     backgroundColor: tokens.color.line.hairline,
     height: StyleSheet.hairlineWidth,
   },
-  // Rata tengah: keadaan kosong satu-satunya hal yang boleh rata tengah di
-  // layar ini. Tanpa kartu, tanpa tombol.
-  emptyText: { ...tokens.type.body, color: tokens.color.text.secondary, textAlign: 'center' },
-  phaseAge: { ...tokens.type.meta, color: tokens.color.text.tertiary },
 });
-
-// Empat hex mentah di berkas ini dipetakan ke token TEKS, dan pemetaannya
-// ditentukan PERANNYA, bukan kemiripan angkanya:
-//
-//   '#68746D' -> tokens.color.text.secondary ('#5B6B60')  label di atas angka
-//   '#1E2A24' -> tokens.color.text.primary   ('#17231B')  angka, judul, kode
-//
-// TIDAK SATU PUN cocok persis, dan itu disebut terus terang di laporan yang
-// menyertai perubahan ini. Keduanya nilai peninggalan dari sebelum lapisan token
-// ada — selisihnya di bawah 14/255 per kanal, tidak terlihat pada teks — dan
-// sistem tokennya hanya punya tiga peran teks (primary, secondary, tertiary)
-// sehingga perannya tidak ambigu. Tidak ada token baru yang dikarang.
-//
-// Hanya WARNA yang berpindah; fontSize dan fontWeight dibiarkan apa adanya.
-function SummaryCard({ count, label }: { count: number; label: string }) {
-  return (
-    <Card>
-      <Text selectable style={{ color: tokens.color.text.secondary, fontSize: 13, fontWeight: '600' }}>
-        {label}
-      </Text>
-      <Text
-        selectable
-        style={{
-          color: tokens.color.text.primary,
-          fontSize: 30,
-          fontVariant: ['tabular-nums'],
-          fontWeight: '700',
-        }}
-      >
-        {count}
-      </Text>
-    </Card>
-  );
-}
-
-function TreePhaseSection({
-  emptySubtitle,
-  emptyTitle,
-  phase,
-  title,
-  trees,
-}: {
-  emptySubtitle: string;
-  emptyTitle: string;
-  phase: GrowthPhase;
-  title: string;
-  trees: FloweringMonitoringTree[];
-}) {
-  return (
-    <View style={{ gap: 12 }}>
-      <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'space-between' }}>
-        <Text selectable style={{ color: tokens.color.text.primary, flex: 1, fontSize: 20, fontWeight: '700' }}>
-          {title}
-        </Text>
-        <GrowthPhaseBadge phase={phase} />
-      </View>
-
-      {trees.length === 0 ? (
-        <EmptyState title={emptyTitle} subtitle={emptySubtitle} />
-      ) : (
-        <View style={{ gap: 12 }}>
-          {trees.map((tree) => (
-            <MonitoringTreeCard key={tree.id} tree={tree} />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-function MonitoringTreeCard({ tree }: { tree: FloweringMonitoringTree }) {
-  // Perhitungan yang SAMA PERSIS dengan layar detail pohon: satu pengurangan
-  // dari kolom turunan, bukan pencarian di daftar riwayat. Penyaringan siklus
-  // sudah selesai di database (migrasi 064 dan 066), jadi tidak ada aturan
-  // siklus yang hidup di sisi klien — di layar ini maupun di sana.
-  //
-  // Penjaganya `tree.currentGrowthPhaseSince ? ... : null`, dan pasangannya di
-  // GrowthPhaseBadge memakai `typeof ageDays === 'number'`. Itu yang membuat
-  // "0 hari" tetap tampil untuk fase yang dicatat HARI INI: nol adalah angka
-  // yang benar, sedangkan tanggal yang tidak diketahui menghasilkan null dan
-  // chip-nya jatuh ke nama fase saja.
-  //
-  // NON-PREDIKTIF: angkanya menyatakan sudah berapa lama fase berjalan, tidak
-  // pernah kapan buahnya siap dipetik (keputusan desain v4).
-  const phaseAgeDays = tree.currentGrowthPhaseSince
-    ? daysSinceLocal(tree.currentGrowthPhaseSince)
-    : null;
-
-  return (
-    <Card>
-      {/* Hanya WARNANYA yang pindah ke token; fontSize dan fontWeight dibiarkan
-          apa adanya. Menyeragamkan tipografinya sekaligus akan mengubah bentuk
-          kartu ini, dan itu di luar yang diminta. */}
-      <Text selectable style={{ color: tokens.color.text.primary, fontSize: 18, fontWeight: '700' }}>
-        {tree.treeCode}
-      </Text>
-      <MetaRow label="Lokasi" value={formatTreeLocation(tree)} />
-      {tree.activePlanting?.variety ? (
-        <MetaRow label="Varietas" value={tree.activePlanting.variety} />
-      ) : null}
-      {/* Chip menggantikan baris "Fase saat ini" DAN pita FloweringAgeMarker
-          sekaligus. Keduanya dulu berdiri berdampingan mengatakan hal yang
-          bersinggungan — satu menyebut nama fasenya, satu lagi menyebut umurnya,
-          dan yang kedua bahkan menghitung dari fase yang berbeda. Chip membawa
-          keduanya dalam satu baris, dengan bentuk yang sama seperti di layar
-          detail pohon. */}
-      {tree.currentGrowthPhase ? (
-        <View style={{ flexDirection: 'row' }}>
-          <GrowthPhaseBadge ageDays={phaseAgeDays} phase={tree.currentGrowthPhase} />
-        </View>
-      ) : null}
-      <Button title="Buka detail" variant="secondary" onPress={() => router.push(`/owner/trees/${tree.id}`)} />
-    </Card>
-  );
-}

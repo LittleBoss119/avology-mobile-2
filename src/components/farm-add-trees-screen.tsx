@@ -15,6 +15,7 @@ import type { CreateTreesAtPositionsData } from '../types/domain';
 // kedua melewatkan string itu ke new Date(), yang menafsirkannya sebagai tengah
 // malam UTC. Kalimat konfirmasi ini yang dibaca orang sebelum melahirkan baris
 // yang tidak bisa dihapus — tanggalnya tidak boleh meleset.
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { formatFullDate } from '../utils/taskDueDate';
 import { ConfirmDialog } from './bottom-sheet';
 import { Icon } from './icons';
@@ -182,7 +183,12 @@ export function FarmAddTreesScreen() {
   const [confirmVisible, setConfirmVisible] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState(false);
+  const [discardVisible, setDiscardVisible] = React.useState(false);
   const [plantedAt, setPlantedAt] = React.useState(formatDateInput(new Date()));
+  // Titik nol pembanding "ada perubahan". Penginisialisasi useState hanya
+  // dibaca pada render pertama, jadi nilainya terkunci pada tanggal yang
+  // PERTAMA ditampilkan.
+  const [initialPlantedAt] = React.useState(plantedAt);
   const [result, setResult] = React.useState<CreateTreesAtPositionsData | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [variety, setVariety] = React.useState('');
@@ -245,6 +251,33 @@ export function FarmAddTreesScreen() {
   function removeCode(code: string) {
     setCodes((current) => current.filter((item) => item !== code));
   }
+
+  // PENJAGA PERUBAHAN BELUM DISIMPAN (batch 7b, langkah 2a).
+  //
+  // Daftar kode yang DIPANGKAS ikut dihitung sebagai perubahan, bukan hanya
+  // varietas dan tanggal. Membuang chip satu per satu dari daftar puluhan
+  // posisi adalah pekerjaan yang benar-benar dilakukan pemilik di layar ini,
+  // dan tidak ada jalan mengulanginya selain kembali ke denah lalu memilih
+  // ulang seluruh posisinya dari nol.
+  //
+  // LAYAR HASIL DIKECUALIKAN: begitu `result` terisi, pohonnya sudah tercatat
+  // dan tidak ada lagi isian yang bisa hilang. Cabang itu memang mengembalikan
+  // <Screen> sendiri sebelum baris ini dipakai, dan goBackToMap di sana
+  // dibiarkan apa adanya.
+  const hasUnsavedChanges =
+    variety.trim() !== '' || plantedAt !== initialPlantedAt || codes.length !== initialCodes.length;
+
+  const { handleBackPress } = useUnsavedChangesGuard({
+    hasUnsavedChanges: hasUnsavedChanges && !submitting && result === null,
+    onBlocked: () => setDiscardVisible(true),
+    onLeave: () => {
+      if (submitting) {
+        return;
+      }
+
+      goBackToMap();
+    },
+  });
 
   // Menekan simpan TIDAK menulis apa pun. Ia memvalidasi lalu membuka
   // konfirmasi; penulisannya ada di handleConfirmedSave.
@@ -420,7 +453,7 @@ export function FarmAddTreesScreen() {
 
   return (
     <Screen
-      header={<TopAppBar title="Tambah pohon" onBack={goBackToMap} />}
+      header={<TopAppBar title="Tambah pohon" onBack={handleBackPress} />}
       stickyFooter={
         <Button
           disabled={codes.length === 0}
@@ -531,6 +564,24 @@ export function FarmAddTreesScreen() {
           }
         }}
         onConfirm={() => void handleConfirmedSave()}
+      />
+
+      {/* Dialog KEDUA, dan sengaja terpisah dari konfirmasi simpan di atas.
+          Yang satu menanyakan "jadi disimpan?", yang ini "jadi dibuang?" —
+          menggabungkan keduanya jadi satu dialog bercabang adalah tempat yang
+          tepat untuk salah cabang. */}
+      <ConfirmDialog
+        cancelLabel="Buang isian"
+        cancelTone="danger"
+        confirmLabel="Lanjut isi"
+        message="Posisi yang dipilih beserta isiannya belum disimpan. Kalau keluar sekarang, pilihannya harus diulang dari denah."
+        onCancel={() => {
+          setDiscardVisible(false);
+          goBackToMap();
+        }}
+        onConfirm={() => setDiscardVisible(false)}
+        title="Isian belum disimpan"
+        visible={discardVisible}
       />
     </Screen>
   );

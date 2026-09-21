@@ -24,6 +24,7 @@ export type StatusMarkerShape =
   | 'circle-outline'
   | 'circle-filled'
   | 'square'
+  | 'diamond'
   | 'triangle-up'
   | 'triangle-down'
   | 'cross';
@@ -82,6 +83,35 @@ export function StatusMarker({
           width: 0,
         }}
       />
+    );
+  }
+
+  if (shape === 'diamond') {
+    // Belah ketupat = kotak yang diputar 45 derajat. Ditambahkan di batch 7b
+    // untuk penanda catatan FASE di timeline riwayat pohon (§4).
+    //
+    // Sisinya size * 0,72, bukan size: kotak yang diputar 45 derajat punya
+    // diagonal size * 1,41, jadi kotak seukuran penuh akan menyembul keluar
+    // kotak pembatasnya dan berdiri lebih besar daripada kelima bentuk lain
+    // yang berdampingan dengannya.
+    //
+    // Pembungkusnya tetap berukuran `size` penuh supaya seluruh penanda —
+    // lingkaran, kotak, segitiga, belah ketupat — menempati ruang yang sama dan
+    // tidak saling menggeser saat berganti di baris yang sama.
+    const side = size * 0.72;
+
+    return (
+      <View style={{ alignItems: 'center', height: size, justifyContent: 'center', width: size }}>
+        <View
+          style={{
+            backgroundColor: color,
+            borderRadius: 1,
+            height: side,
+            transform: [{ rotate: '45deg' }],
+            width: side,
+          }}
+        />
+      </View>
     );
   }
 

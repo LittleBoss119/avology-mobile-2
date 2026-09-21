@@ -98,10 +98,29 @@ export default function WorkerLayout() {
           <Stack.Screen name="worker/trees/index" options={{ headerShown: false, title: 'Pohon' }} />
           <Stack.Screen name="worker/trees/map" options={{ headerShown: false, title: 'Denah Kebun' }} />
           <Stack.Screen name="worker/trees/[treeId]" options={{ headerShown: false, title: 'Detail Pohon' }} />
-          <Stack.Screen name="worker/trees/[treeId]/report" options={{ headerShown: false, title: 'Catat Kondisi' }} />
-          <Stack.Screen name="worker/trees/[treeId]/phase" options={{ headerShown: false, title: 'Catat Fase' }} />
-          <Stack.Screen name="worker/trees/[treeId]/care" options={{ headerShown: false, title: 'Catat Perawatan' }} />
-          <Stack.Screen name="worker/trees/[treeId]/harvest" options={{ headerShown: false, title: 'Catat Panen' }} />
+          {/* gestureEnabled:false — pasangan wajib useUnsavedChangesGuard yang
+              dipasang di dalam ketujuh layar catat/buat di batch 7b. Alasannya
+              sama persis dengan layar edit di atas: swipe-back iOS tidak bisa
+              dicegat lewat API publik expo-router, jadi ia dimatikan supaya
+              isian yang belum disimpan tidak bisa hilang lewat gestur. Back
+              tetap ada di chevron, dan chevron itulah yang menanyakan
+              konfirmasinya. */}
+          <Stack.Screen
+            name="worker/trees/[treeId]/report"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Catat Kondisi' }}
+          />
+          <Stack.Screen
+            name="worker/trees/[treeId]/phase"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Catat Fase' }}
+          />
+          <Stack.Screen
+            name="worker/trees/[treeId]/care"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Catat Perawatan' }}
+          />
+          <Stack.Screen
+            name="worker/trees/[treeId]/harvest"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Catat Panen' }}
+          />
           <Stack.Screen name="worker/tasks/index" options={{ headerShown: false, title: 'Tugas' }} />
           <Stack.Screen name="worker/tasks/[taskId]" options={{ headerShown: false, title: 'Detail Tugas' }} />
           {/* gestureEnabled:false — pasangan wajib useUnsavedChangesGuard di

@@ -14,6 +14,7 @@ import {
 import { ConfirmDialog } from '../../../../src/components/bottom-sheet';
 import { Button, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
+import { useUnsavedChangesGuard } from '../../../../src/hooks/useUnsavedChangesGuard';
 import {
   consumePendingScheduleTrees,
   peekPendingScheduleTrees,
@@ -86,7 +87,14 @@ export default function CreateManualScheduleScreen() {
   const [createdScheduleId, setCreatedScheduleId] = React.useState<string | null>(null);
   const [rejectedMessage, setRejectedMessage] = React.useState<string | null>(null);
   const [trees, setTrees] = React.useState<Tree[]>([]);
-  const [values, setValues] = React.useState<ManualScheduleFormValues>(buildInitialValues);
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
+  // Titik nol pembanding "ada perubahan", DIPISAH dari state formulirnya dan
+  // dipakai sebagai nilai awalnya. buildInitialValues membaca kotak titipan
+  // pilihan pohon dari denah, dan kotak itu dikosongkan effect setelahnya —
+  // memanggilnya lagi belakangan akan mengembalikan daftar kosong dan membuat
+  // setiap pilihan yang datang dari denah terbaca sebagai perubahan pengguna.
+  const [initialFormValues] = React.useState<ManualScheduleFormValues>(buildInitialValues);
+  const [values, setValues] = React.useState<ManualScheduleFormValues>(initialFormValues);
   const [workers, setWorkers] = React.useState<WorkerMembership[]>([]);
 
   const scrollRef = React.useRef<ScrollView>(null);
@@ -266,9 +274,32 @@ export default function CreateManualScheduleScreen() {
     ? [summaryTitle, repeatDays ? `tiap ${repeatDays} hari` : null].filter(Boolean).join(' · ')
     : null;
 
+  // PENJAGA PERUBAHAN BELUM DISIMPAN (batch 7b, langkah 2a).
+  //
+  // Dibandingkan lewat JSON, bukan lewat identitas objek: ManualScheduleForm
+  // mengirim objek BARU pada tiap perubahan, jadi perbandingan identitas akan
+  // menyatakan "ada perubahan" bahkan setelah pengguna mengembalikan isiannya
+  // seperti semula.
+  const hasUnsavedChanges = JSON.stringify(values) !== JSON.stringify(initialFormValues);
+
+  const { handleBackPress } = useUnsavedChangesGuard({
+    // rejectedMessage terisi berarti jadwalnya SUDAH dibuat dan dialog hasil
+    // sedang terbuka; tidak ada lagi isian yang bisa hilang, dan penjaga yang
+    // tetap menyala hanya akan menghalangi jalan keluarnya.
+    hasUnsavedChanges: hasUnsavedChanges && !submitting && rejectedMessage === null,
+    onBlocked: () => setConfirmDiscard(true),
+    onLeave: () => {
+      if (submitting) {
+        return;
+      }
+
+      router.back();
+    },
+  });
+
   return (
     <Screen
-      header={<TopAppBar title="Buat jadwal" onBack={() => router.back()} />}
+      header={<TopAppBar title="Buat jadwal" onBack={handleBackPress} />}
       scrollRef={scrollRef}
       stickyFooter={
         <View style={{ gap: tokens.space.sm }}>
@@ -327,6 +358,22 @@ export default function CreateManualScheduleScreen() {
             router.replace(`/owner/schedules/${createdScheduleId}`);
           }
         }}
+      />
+
+      {/* Dialog KEDUA, terpisah dari dialog hasil di atas: yang satu melaporkan
+          apa yang sudah terjadi, yang ini menanyakan apa yang akan dibuang. */}
+      <ConfirmDialog
+        cancelLabel="Buang isian"
+        cancelTone="danger"
+        confirmLabel="Lanjut isi"
+        message="Jadwal ini belum disimpan. Kalau keluar sekarang, isian itu hilang."
+        onCancel={() => {
+          setConfirmDiscard(false);
+          router.back();
+        }}
+        onConfirm={() => setConfirmDiscard(false)}
+        title="Isian belum disimpan"
+        visible={confirmDiscard}
       />
     </Screen>
   );

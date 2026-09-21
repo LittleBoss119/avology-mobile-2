@@ -1,29 +1,41 @@
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { MemberRow } from '../../../src/components/member-row';
-import { Button, Card, ErrorBanner, LoadingState, Screen, TopAppBar } from '../../../src/components/ui';
-import { colors, spacing, typography } from '../../../src/constants/theme';
+import {
+  EmptyState,
+  ErrorBanner,
+  LoadingState,
+  Screen,
+  SectionLabel,
+  TopAppBar,
+} from '../../../src/components/ui';
+import { tokens } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
-import { getFarmDetail } from '../../../src/services/farmService';
 import { getFarmActorDisplayProfiles } from '../../../src/services/memberService';
-import type { Farm, FarmActorDisplayProfile } from '../../../src/types/domain';
+import type { FarmActorDisplayProfile } from '../../../src/types/domain';
 
-// "Keluar dari kebun" TIDAK ADA LAGI DI LAYAR INI (batch 4a).
+// VERSI PEKERJA DARI LAYAR ANGGOTA — adendum §4.5.
 //
-// Ia pindah ke tab Profil pekerja, berdampingan dengan "Keluar dari akun".
-// Adendum sebelumnya menaruhnya di sini; briefing menaruhnya di Profil, dan
-// briefing yang berlaku. Alasannya bukan selera: dua jalan keluar yang
-// berbeda-akibatnya — satu mengakhiri sesi, satu mengakhiri keanggotaan —
-// harus bisa dibandingkan berdampingan sebelum ditekan. Terpisah di dua layar,
-// orang menekan yang pertama ditemukannya.
+// Spek §41 hanya merancang versi pemilik. Versi pekerja adalah DAFTAR ANGGOTA
+// AKTIF TANPA AKSI APA PUN: tidak ada tombol setujui/tolak, tidak ada baris yang
+// bisa ditekan, tidak ada dialog. Pekerja tidak boleh mengubah keanggotaan siapa
+// pun, termasuk keanggotaannya sendiri dari layar ini.
 //
-// Konsekuensinya layar ini murni BACA. Tidak ada lagi aksi tulis, tidak ada
-// ConfirmDialog, tidak ada snackbar, dan tidak ada stickyFooter.
+// "Keluar dari kebun" TIDAK ADA DI SINI, dan tidak boleh dikembalikan (batch
+// 4a). Ia pindah ke tab Profil pekerja, berdampingan dengan "Keluar dari akun".
+// Alasannya bukan selera: dua jalan keluar yang berbeda akibatnya — satu
+// mengakhiri sesi, satu mengakhiri keanggotaan — harus bisa dibandingkan
+// berdampingan sebelum ditekan. Terpisah di dua layar, orang menekan yang
+// pertama ditemukannya.
+//
+// getFarmDetail DICABUT di batch 7b. Ia dipanggil hanya untuk mengisi state
+// `farm` yang satu-satunya gunanya adalah memutuskan merender daftar atau kartu
+// "gagal dimuat" — pertanyaan yang sudah dijawab getFarmActorDisplayProfiles
+// sendiri. Satu permintaan jaringan untuk sebuah if.
 export default function WorkerFarmHubScreen() {
   const { currentFarm } = useAuth();
-  const [farm, setFarm] = React.useState<Farm | null>(currentFarm?.farm ?? null);
   const [actors, setActors] = React.useState<FarmActorDisplayProfile[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -31,6 +43,9 @@ export default function WorkerFarmHubScreen() {
   const farmId = currentFarm?.farmId;
   const currentUserId = currentFarm?.userId;
 
+  // Pemilik lebih dulu, lalu pekerja. Urutan itu bukan hierarki yang dipajang:
+  // pemilik satu-satunya orang di daftar ini yang perannya menentukan apa yang
+  // bisa dimintakan kepadanya, jadi ia yang paling sering dicari.
   const activeMembers = actors
     .filter((actor) => actor.status === 'active')
     .sort((first, second) => roleOrder(first.role) - roleOrder(second.role));
@@ -38,34 +53,21 @@ export default function WorkerFarmHubScreen() {
   const load = React.useCallback(async () => {
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
-      setFarm(null);
       setActors([]);
       return;
     }
 
     setError(null);
 
-    const [farmResult, actorsResult] = await Promise.all([
-      getFarmDetail(farmId),
-      getFarmActorDisplayProfiles(farmId),
-    ]);
+    const result = await getFarmActorDisplayProfiles(farmId);
 
-    if (farmResult.error) {
-      setError(farmResult.error.message);
-      setFarm(null);
+    if (result.error) {
+      setError(result.error.message);
       setActors([]);
       return;
     }
 
-    setFarm(farmResult.data);
-
-    if (actorsResult.error) {
-      setError(actorsResult.error.message);
-      setActors([]);
-      return;
-    }
-
-    setActors(actorsResult.data);
+    setActors(result.data);
   }, [farmId]);
 
   useFocusEffect(
@@ -75,93 +77,56 @@ export default function WorkerFarmHubScreen() {
     }, [load])
   );
 
-  function handleRetry() {
-    setLoading(true);
-    load().finally(() => setLoading(false));
-  }
-
   // TopAppBar ber-onBack, BUKAN MainTabHeader. Layar ini bukan tab root: ia
-  // dibuka lewat push dari baris "Anggota" di Beranda, dan MainTabHeader tidak
-  // pernah merender tombol kembali (TopAppBar hanya merendernya kalau `onBack`
-  // dikirim, dan MainTabHeader tidak mengirimnya). Sebelum ini layar tersebut
-  // sama sekali tidak punya afordans mundur di layarnya sendiri.
-  //
-  // Judulnya "Anggota", sama dengan label baris di Beranda yang mengantar ke
-  // sini.
+  // dibuka lewat push dari baris "Anggota" di seksi KEBUN tab Profil, dan
+  // MainTabHeader tidak pernah merender tombol kembali.
   const header = <TopAppBar title="Anggota" onBack={() => router.back()} />;
 
   if (loading) {
-    return <LoadingState message="Memuat kebun..." />;
-  }
-
-  if (!farm) {
-    return (
-      <Screen header={header}>
-        <ErrorBanner message={error} />
-        <Card>
-          <Text style={{ color: colors.textMuted, lineHeight: 21 }}>Data kebun gagal dimuat.</Text>
-          <Button title="Coba lagi" onPress={handleRetry} />
-        </Card>
-      </Screen>
-    );
+    return <LoadingState header={header} message="Memuat anggota..." />;
   }
 
   return (
     <Screen header={header}>
       <ErrorBanner message={error} />
 
-      {/* Kartu identitas kebun — nama, lokasi, luas — sudah lama pindah ke
-          Beranda, lalu ke tab Profil. Yang tersisa di sini orangnya saja:
-          siapa yang ada di kebun ini. Jalan keluarnya pindah ke Profil di
-          batch 4a. */}
+      <View style={{ gap: tokens.space.sm }}>
+        {/* SectionLabel BERSAMA dari ui.tsx, menggantikan salinan lokal yang
+            dulu berdiri di kaki berkas ini. Salinan itu merender judul 20/700
+            sementara SectionLabel bersama memakai label huruf besar — dua
+            bentuk untuk satu peran, di dua layar yang isinya sama persis.
 
-      <SectionLabel
-        title="Anggota"
-        trailing={<Text style={{ color: colors.textMuted, fontSize: 14 }}>{activeMembers.length} orang</Text>}
-      />
-      <Card>
-        <View>
-          {activeMembers.map((actor, index) => (
-            <View
-              key={actor.userId}
-              style={index > 0 ? { borderTopColor: colors.divider, borderTopWidth: 1 } : undefined}
-            >
-              <MemberRow
-                name={actor.fullName}
-                meta={buildMemberMeta(actor, currentUserId)}
-                tone={actor.role === 'owner' ? 'accent' : 'neutral'}
-              />
-            </View>
-          ))}
-        </View>
-      </Card>
+            Jumlahnya masuk KE DALAM judulnya, bentuk yang sama dengan seksi
+            "Pekerja aktif · N" di layar Anggota pemilik. */}
+        <SectionLabel title={`Anggota kebun · ${activeMembers.length}`} />
+        {activeMembers.length === 0 ? (
+          <EmptyState title="Belum ada anggota" subtitle="Daftar anggota kebun akan muncul di sini." />
+        ) : (
+          <View>
+            {activeMembers.map((actor, index) => (
+              <View
+                key={actor.userId}
+                style={
+                  index > 0
+                    ? { borderTopColor: tokens.color.line.hairline, borderTopWidth: 1 }
+                    : undefined
+                }
+              >
+                {/* TANPA `onPress` dan TANPA `trailing`. Ketiadaan keduanya yang
+                    membedakan layar ini dari versi pemilik, dan ia harus terbaca
+                    tanpa dicoba: baris tanpa chevron adalah baris yang tidak
+                    membuka apa pun. */}
+                <MemberRow
+                  meta={buildMemberMeta(actor, currentUserId)}
+                  name={actor.fullName}
+                  tone={actor.role === 'owner' ? 'accent' : 'neutral'}
+                />
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
     </Screen>
-  );
-}
-
-function SectionLabel({ title, trailing }: { title: string; trailing?: React.ReactNode }) {
-  return (
-    <View
-      style={{
-        alignItems: 'center',
-        flexDirection: 'row',
-        gap: spacing.md,
-        justifyContent: 'space-between',
-        paddingTop: spacing.xs,
-      }}
-    >
-      <Text
-        style={{
-          color: colors.text,
-          fontSize: typography.h3.fontSize,
-          fontWeight: '700',
-          lineHeight: typography.h3.lineHeight,
-        }}
-      >
-        {title}
-      </Text>
-      {trailing}
-    </View>
   );
 }
 
@@ -173,4 +138,3 @@ function buildMemberMeta(actor: FarmActorDisplayProfile, currentUserId?: string)
   const roleLabel = actor.role === 'owner' ? 'Pemilik' : 'Pekerja';
   return actor.userId === currentUserId ? `${roleLabel} · kamu` : roleLabel;
 }
-

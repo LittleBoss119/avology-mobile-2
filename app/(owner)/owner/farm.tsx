@@ -1,25 +1,23 @@
-import * as Clipboard from 'expo-clipboard';
 import { router, useFocusEffect } from 'expo-router';
 import React from 'react';
-import { Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { Text, View } from 'react-native';
 
-import { BottomSheet } from '../../../src/components/bottom-sheet';
+import { ConfirmDialog } from '../../../src/components/bottom-sheet';
 import { Icon } from '../../../src/components/icons';
 import { Avatar, MemberRow } from '../../../src/components/member-row';
 import { useSnackbar } from '../../../src/components/snackbar';
 import {
   Button,
   Card,
+  EmptyState,
   ErrorBanner,
   LoadingState,
-  MetaRow,
   Screen,
+  SectionLabel,
   TopAppBar,
 } from '../../../src/components/ui';
 import { tokens } from '../../../src/constants/theme';
 import { useAuth } from '../../../src/context/auth-context';
-import { getFarmDetail } from '../../../src/services/farmService';
 import {
   approveWorker,
   getActiveWorkers,
@@ -27,40 +25,66 @@ import {
   rejectWorker,
   removeWorker,
 } from '../../../src/services/memberService';
-import type { Farm, WorkerMembership } from '../../../src/types/domain';
+import type { WorkerMembership } from '../../../src/types/domain';
 
 // Pengajuan dan anggota diambil lewat DUA RPC terpisah — get_pending_workers dan
 // get_active_workers — bukan satu query gabungan yang disaring di klien. Versi
 // lama memakai getWorkerMemberships lalu memfilter status di sini, dan itulah
 // yang membuat header berbunyi "Anggota · 3 orang" sementara barisnya lima:
 // pending ikut terender di daftar yang sama tapi tidak ikut dihitung.
-// get_pending_workers sempat tercatat sebagai kode mati di audit; sekarang
-// dipakai sebagaimana mestinya.
+//
+// PETAK KODE KEBUN TIDAK ADA LAGI DI LAYAR INI (batch 7b, langkah 2b).
+//
+// Ia pindah ke layar Data kebun bersama tombol "Bagikan kode" (§39). Kode kebun
+// adalah data KEBUN, bukan data orang; dua tampilan untuk satu kode berarti dua
+// tempat yang bisa menyimpang, dan yang menyimpang di sini bukan gaya melainkan
+// panjangnya — petak lama mencetak kodenya sebagai satu teks monospace,
+// sementara layar Gabung kebun dan Data kebun memakai delapan petak. Bersama
+// petaknya ikut pergi: getFarmDetail (satu-satunya pembacanya di layar ini),
+// tombol "Bagikan", Clipboard, Share, dan ShareGlyph.
+//
+// BENTUK BARUNYA (§41), menggantikan bottom sheet dua langkah:
+//
+//   * Pengajuan  -> dua TOMBOL BERLABEL, "Setujui" dan "Tolak", langsung di
+//     barisnya. Bukan satu tombol "Tinjau" yang membuka lembar, dan sama sekali
+//     bukan sepasang ikon centang-silang: dua ikon berdampingan untuk dua
+//     keputusan berlawanan adalah tempat paling mahal untuk salah tekan di
+//     seluruh aplikasi ini, dan menolak orang yang seharusnya diterima tidak
+//     bisa dibatalkan dari layar ini.
+//   * Pekerja aktif -> BARIS YANG BISA DITEKAN, dan ketukannya membuka dialog
+//     konfirmasi. Menu "⋯" di ujung baris dicabut: ia ikon tanpa label yang
+//     membuka lembar berisi satu aksi, yaitu tiga lapis untuk satu keputusan.
+//
+// TELEPON DITAMPILKAN DI BARISNYA, bukan disembunyikan di balik lembar. Ia
+// satu-satunya cara pemilik mengenali siapa yang mengajukan — dan itu juga
+// alasan nomor HP wajib diisi saat mendaftar (§37).
 
-type SheetState = { mode: 'active' | 'pending'; worker: WorkerMembership };
-type ConfirmStep = 'reject' | 'remove';
+type PendingAction = { kind: 'reject'; worker: WorkerMembership };
+type ActiveAction = { kind: 'remove'; worker: WorkerMembership };
 
 export default function OwnerFarmHubScreen() {
-  const { currentFarm, profile } = useAuth();
+  const { currentFarm } = useAuth();
   const showSnackbar = useSnackbar();
-  const [farm, setFarm] = React.useState<Farm | null>(currentFarm?.farm ?? null);
   const [pendingWorkers, setPendingWorkers] = React.useState<WorkerMembership[]>([]);
   const [activeWorkers, setActiveWorkers] = React.useState<WorkerMembership[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
-  const [sheet, setSheet] = React.useState<SheetState | null>(null);
-  const [confirmStep, setConfirmStep] = React.useState<ConfirmStep | null>(null);
+  // Satu state untuk dua dialog yang tidak pernah terbuka bersamaan, tapi
+  // TIPENYA dibedakan: 'reject' dan 'remove' berakhir di RPC yang berbeda
+  // dengan akibat yang berbeda, dan satu boolean bersama adalah tempat yang
+  // tepat untuk salah cabang.
+  const [confirm, setConfirm] = React.useState<PendingAction | ActiveAction | null>(null);
+  // Baris pengajuan yang tombolnya sedang menunggu jawaban server. Per-baris,
+  // bukan satu bendera untuk seluruh layar: pemilik dengan tiga pengajuan
+  // masuk harus tetap melihat dua baris lain hidup saat satu sedang diproses.
+  const [pendingBusyId, setPendingBusyId] = React.useState<string | null>(null);
 
   const farmId = currentFarm?.farmId;
-  const ownerName = profile?.fullName ?? 'Pemilik kebun';
-  // Pemilik + pekerja aktif. Pengajuan TIDAK dihitung — pending bukan anggota.
-  const memberCount = 1 + activeWorkers.length;
 
   const load = React.useCallback(async () => {
     if (!farmId) {
       setError('Data kebun aktif tidak ditemukan.');
-      setFarm(null);
       setPendingWorkers([]);
       setActiveWorkers([]);
       return;
@@ -68,21 +92,10 @@ export default function OwnerFarmHubScreen() {
 
     setError(null);
 
-    const [farmResult, pendingResult, activeResult] = await Promise.all([
-      getFarmDetail(farmId),
+    const [pendingResult, activeResult] = await Promise.all([
       getPendingWorkers(farmId),
       getActiveWorkers(farmId),
     ]);
-
-    if (farmResult.error) {
-      setError(farmResult.error.message);
-      setFarm(null);
-      setPendingWorkers([]);
-      setActiveWorkers([]);
-      return;
-    }
-
-    setFarm(farmResult.data);
 
     if (pendingResult.error) {
       setError(pendingResult.error.message);
@@ -113,54 +126,32 @@ export default function OwnerFarmHubScreen() {
     load().finally(() => setLoading(false));
   }
 
-  function closeSheet() {
-    if (busy) {
-      return;
-    }
-
-    setSheet(null);
-    setConfirmStep(null);
-  }
-
-  async function handleCopyJoinCode() {
-    if (!farm?.joinCode) {
-      return;
-    }
-
-    await Clipboard.setStringAsync(farm.joinCode);
-    showSnackbar('Kode disalin');
-  }
-
-  // Pemilik dalam kasus ini tinggal jauh dari kebunnya, jadi kodenya hampir pasti
-  // dikirim lewat aplikasi pesan. Menyalin lalu berpindah aplikasi itu empat
-  // langkah; berbagi satu langkah.
-  async function handleShareJoinCode() {
-    if (!farm?.joinCode) {
-      return;
-    }
-
-    await Share.share({ message: `Kode kebun ${farm.name}: ${farm.joinCode}` });
-  }
-
+  // MENYETUJUI TIDAK MINTA KONFIRMASI, dan itu bukan kelalaian. Menyetujui bisa
+  // ditarik kembali lewat "Keluarkan" di seksi di bawahnya; menolak tidak bisa
+  // ditarik kembali dari layar ini sama sekali — pemohonnya harus mengajukan
+  // ulang. Konfirmasi dipasang pada yang tidak bisa dibatalkan, bukan pada
+  // setiap tombol yang menulis sesuatu.
   async function handleApprove(worker: WorkerMembership) {
-    setBusy(true);
+    setPendingBusyId(worker.membershipId);
+
     const result = await approveWorker({ membershipId: worker.membershipId });
-    setBusy(false);
+
+    setPendingBusyId(null);
 
     if (result.error) {
       showSnackbar(result.error.message);
       return;
     }
 
-    setSheet(null);
-    setConfirmStep(null);
     await load();
     showSnackbar(`${worker.fullName} ditambahkan sebagai pekerja`);
   }
 
   async function handleReject(worker: WorkerMembership) {
     setBusy(true);
+
     const result = await rejectWorker({ membershipId: worker.membershipId });
+
     setBusy(false);
 
     if (result.error) {
@@ -168,15 +159,16 @@ export default function OwnerFarmHubScreen() {
       return;
     }
 
-    setSheet(null);
-    setConfirmStep(null);
+    setConfirm(null);
     await load();
     showSnackbar(`Pengajuan ${worker.fullName} ditolak`);
   }
 
   async function handleRemove(worker: WorkerMembership) {
     setBusy(true);
+
     const result = await removeWorker({ membershipId: worker.membershipId });
+
     setBusy(false);
 
     if (result.error) {
@@ -184,542 +176,262 @@ export default function OwnerFarmHubScreen() {
       return;
     }
 
-    setSheet(null);
-    setConfirmStep(null);
+    setConfirm(null);
     await load();
-    showSnackbar(`Akses ${worker.fullName} dinonaktifkan`);
+    showSnackbar(`${worker.fullName} dikeluarkan dari kebun`);
   }
 
   // TopAppBar ber-onBack, BUKAN MainTabHeader. Layar ini bukan tab root: ia
-  // dibuka lewat push dari baris "Anggota" di Beranda, dan MainTabHeader tidak
-  // pernah merender tombol kembali (TopAppBar hanya merendernya kalau `onBack`
-  // dikirim, dan MainTabHeader tidak mengirimnya). Sebelum ini layar tersebut
-  // sama sekali tidak punya afordans mundur di layarnya sendiri.
+  // dibuka lewat push dari baris "Anggota" di seksi KEBUN tab Profil, dan
+  // MainTabHeader tidak pernah merender tombol kembali.
   //
-  // Judulnya "Anggota", sama dengan label baris di Beranda yang mengantar ke
-  // sini — judul yang berbeda dari pintu masuknya membuat orang bertanya-tanya
-  // apakah ia sampai di tempat yang benar.
+  // Judulnya "Anggota", sama dengan label baris yang mengantar ke sini — judul
+  // yang berbeda dari pintu masuknya membuat orang bertanya-tanya apakah ia
+  // sampai di tempat yang benar.
   const header = <TopAppBar title="Anggota" onBack={() => router.back()} />;
 
   if (loading) {
-    return <LoadingState message="Memuat kebun..." />;
-  }
-
-  if (!farm) {
-    return (
-      <Screen header={header}>
-        <ErrorBanner message={error} />
-        <Card>
-          <Text style={{ color: tokens.color.text.secondary, lineHeight: 21 }}>Data kebun gagal dimuat.</Text>
-          <Button title="Coba lagi" onPress={handleRetry} />
-        </Card>
-      </Screen>
-    );
+    return <LoadingState header={header} message="Memuat anggota..." />;
   }
 
   return (
     <Screen header={header}>
       <ErrorBanner message={error} />
 
-      {/* Identitas kebun — nama, lokasi, luas — beserta tombol edit-nya PINDAH
-          ke Beranda, tempat ia jadi judul halaman yang sesungguhnya. Layar ini
-          tinggal berisi orang: kode untuk mengundang, pengajuan yang masuk,
-          anggota yang ada, dan jejak akses. Jalan ke /owner/farm-profile kini
-          lewat baris "Data kebun" di kelompok navigasi Beranda — chip "Ubah
-          data kebun" yang dulu disebut di sini sudah ikut dicabut. */}
-
-      {/* Satu-satunya kartu yang dipertahankan di layar ini: isinya benda yang
-          disalin dan dibagikan, bukan sekadar teks.
-
-          DUA TOMBOL IKON-SAJA DICABUT. Ikon tanpa label adalah bahasa yang
-          harus dipelajari lebih dulu, dan sebagian pemakai aplikasi ini orang
-          lanjut usia yang belum pernah mempelajarinya. Salin pindah ke kodenya
-          sendiri — benda yang memang ingin disalin — dan Bagikan jadi tombol
-          berlabel di bawah kartu. */}
-      <Card padding={tokens.layout.cardPadding}>
-        <Text selectable style={styles.cardLabel}>
-          Kode kebun
-        </Text>
-        {/* Pressable membungkus, bukan onPress di Text: pembungkus memberi
-            target sentuh setinggi tapTarget, sedangkan tinggi Text sendiri
-            hanya sebesar barisnya.
-
-            `selectable` DIPERTAHANKAN pada Text-nya. Ia tidak memasang
-            penanggap tekan sendiri, jadi ketukan tetap sampai ke Pressable;
-            yang ia tambahkan hanya seleksi teks pada tekan-lama. Kalau di
-            perangkat ternyata seleksi menelan ketukannya, KETUKAN yang menang
-            dan `selectable` yang dibuang — bukan sebaliknya. */}
-        <Pressable
-          accessibilityHint="Menyalin kode kebun ke papan klip"
-          accessibilityLabel={`Salin kode kebun ${farm.joinCode}`}
-          accessibilityRole="button"
-          onPress={handleCopyJoinCode}
-          style={({ pressed }) => ({
-            justifyContent: 'center',
-            minHeight: tokens.layout.tapTarget,
-            opacity: pressed ? 0.6 : 1,
-          })}
-        >
-          <Text selectable style={styles.joinCode}>
-            {farm.joinCode}
-          </Text>
-        </Pressable>
-        {/* Aksinya harus DIKATAKAN. Tanpa baris ini tidak ada apa pun yang
-            memberi tahu bahwa kodenya bisa diketuk — teks tidak terlihat seperti
-            tombol, dan itu memang disengaja supaya kodenya tetap terbaca sebagai
-            kode. */}
-        <Text selectable style={styles.joinCodeHint}>
-          Ketuk kode untuk menyalin
-        </Text>
-      </Card>
-
-      {/* Tombol lebar berlabel, satu kata. Tanpa umpan balik tambahan: sheet
-          bagikan milik sistem yang muncul sesudahnya sudah jadi umpan baliknya. */}
-      <Button title="Bagikan" variant="secondary" onPress={handleShareJoinCode} />
-
-      {/* Hilang total kalau tidak ada pengajuan — pemilik tidak perlu diberi tahu
-          bahwa tidak ada yang perlu dia kerjakan. */}
+      {/* Hilang total kalau tidak ada pengajuan — pemilik tidak perlu diberi
+          tahu bahwa tidak ada yang perlu dia kerjakan. */}
       {pendingWorkers.length > 0 ? (
-        <>
-          <SectionLabel
-            title="Pengajuan masuk"
-            trailing={
-              <Text style={{ color: tokens.color.text.secondary, fontSize: 14 }}>{pendingWorkers.length}</Text>
-            }
-          />
-          <RowGroup>
-            {pendingWorkers.map((worker) => (
+        <View style={{ gap: tokens.space.sm }}>
+          <SectionLabel title="Menunggu persetujuan" />
+          <View>
+            {pendingWorkers.map((worker, index) => (
               <PendingRow
                 key={worker.membershipId}
+                busy={pendingBusyId === worker.membershipId}
+                disabled={busy || (pendingBusyId !== null && pendingBusyId !== worker.membershipId)}
+                showHairline={index > 0}
                 worker={worker}
-                onReview={() => setSheet({ mode: 'pending', worker })}
+                onApprove={() => void handleApprove(worker)}
+                onReject={() => setConfirm({ kind: 'reject', worker })}
               />
             ))}
-          </RowGroup>
-        </>
+          </View>
+        </View>
       ) : null}
 
-      <SectionLabel
-        title="Anggota"
-        trailing={<Text style={{ color: tokens.color.text.secondary, fontSize: 14 }}>{memberCount} orang</Text>}
-      />
-      <RowGroup>
-        <MemberRow name={ownerName} meta="Pemilik · kamu" tone="accent" />
-        {activeWorkers.map((worker) => (
-          <MemberRow
-            key={worker.membershipId}
-            name={worker.fullName}
-            meta={`Pekerja · sejak ${formatDayMonth(worker.joinedAt)}`}
-            tone="neutral"
-            trailing={
-              <Pressable
-                accessibilityLabel={`Opsi untuk ${worker.fullName}`}
-                accessibilityRole="button"
-                hitSlop={{ bottom: 8, left: 8, right: 8, top: 8 }}
-                onPress={() => setSheet({ mode: 'active', worker })}
-                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: tokens.space.xs })}
+      <View style={{ gap: tokens.space.sm }}>
+        {/* Jumlahnya MASUK KE DALAM judulnya, bukan berdiri sebagai angka rata
+            kanan yang harus dipasangkan sendiri oleh mata. Bentuk yang sama
+            dengan label seksi di layar Fase pohon. */}
+        <SectionLabel title={`Pekerja aktif · ${activeWorkers.length}`} />
+        {activeWorkers.length === 0 ? (
+          <EmptyState
+            title="Belum ada pekerja"
+            subtitle="Bagikan kode kebun dari layar Data kebun supaya pekerja bisa mengajukan diri."
+          />
+        ) : (
+          <View>
+            {activeWorkers.map((worker, index) => (
+              <View
+                key={worker.membershipId}
+                style={
+                  index > 0
+                    ? { borderTopColor: tokens.color.line.hairline, borderTopWidth: 1 }
+                    : undefined
+                }
               >
-                <Icon name="dots" size={20} color={tokens.color.text.tertiary} />
-              </Pressable>
-            }
-          />
-        ))}
-      </RowGroup>
+                {/* Barisnya YANG DITEKAN, bukan ikon kecil di ujungnya.
+                    Chevron-nya dibawa MemberRow lewat slot `trailing`, dan ia
+                    penanda "ada yang terbuka di sini" — bukan tombol kedua yang
+                    berdiri sendiri. */}
+                <MemberRow
+                  meta={buildWorkerMeta(worker)}
+                  name={worker.fullName}
+                  tone="neutral"
+                  trailing={<ChevronHint />}
+                  onPress={() => setConfirm({ kind: 'remove', worker })}
+                />
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
 
-      {/* Baris "Riwayat akses" PINDAH ke seksi KEBUN di tab Profil (batch 3),
-          bersama "Anggota" dan "Data kebun" yang dicabut dari Beranda.
+      {error && pendingWorkers.length === 0 && activeWorkers.length === 0 ? (
+        <Card>
+          <Text style={{ color: tokens.color.text.secondary, lineHeight: 21 }}>
+            Daftar anggota gagal dimuat.
+          </Text>
+          <Button title="Coba lagi" onPress={handleRetry} />
+        </Card>
+      ) : null}
 
-          Ia satu-satunya dari ketiganya yang TIDAK pernah tinggal di Beranda —
-          ia hidup di sini, di kaki layar Anggota. Tetap ikut pindah karena
-          ketiganya adalah setelan kebun yang sekarang berkumpul di satu tempat,
-          dan meninggalkan satu baris di layar lain berarti pemilik harus ingat
-          bahwa yang satu ini ada di tempat yang berbeda dari dua saudaranya.
+      {/* SATU dialog, dua kata-kata. Keduanya merusak dan keduanya bernada
+          danger; yang berbeda adalah apa yang hilang, dan itulah yang ditulis
+          di kalimatnya.
 
-          Jalan masuknya TIDAK hilang di antara kedua batch: sisi Profil dipasang
-          di batch yang sama dengan pencabutan ini. */}
+          "Tugas yang sudah dicatat tetap tersimpan." adalah kalimat §41 apa
+          adanya. Ia menjawab ketakutan yang sebenarnya: pemilik yang ragu
+          mengeluarkan pekerja bukan ragu soal aksesnya, melainkan soal apakah
+          pekerjaan yang sudah tercatat ikut terhapus bersama orangnya. */}
+      <ConfirmDialog
+        cancelLabel="Batal"
+        confirmLabel={confirm?.kind === 'reject' ? 'Tolak' : 'Keluarkan'}
+        loading={busy}
+        message={
+          confirm?.kind === 'reject'
+            ? 'Dia harus mengajukan ulang dengan kode kebun kalau kamu berubah pikiran.'
+            : 'Tugas yang sudah dicatat tetap tersimpan.'
+        }
+        title={
+          confirm
+            ? confirm.kind === 'reject'
+              ? `Tolak pengajuan ${confirm.worker.fullName}?`
+              : `Keluarkan ${confirm.worker.fullName}?`
+            : ''
+        }
+        tone="danger"
+        visible={confirm !== null}
+        onCancel={() => {
+          if (!busy) {
+            setConfirm(null);
+          }
+        }}
+        onConfirm={() => {
+          if (!confirm) {
+            return;
+          }
 
-      <BottomSheet
-        onClose={closeSheet}
-        title={buildSheetTitle(sheet, confirmStep)}
-        visible={sheet !== null}
-      >
-        {sheet ? (
-          <SheetBody
-            busy={busy}
-            confirmStep={confirmStep}
-            sheet={sheet}
-            onApprove={() => void handleApprove(sheet.worker)}
-            onCancelConfirm={() => setConfirmStep(null)}
-            onReject={() => void handleReject(sheet.worker)}
-            onRemove={() => void handleRemove(sheet.worker)}
-            onRequestConfirm={setConfirmStep}
-          />
-        ) : null}
-      </BottomSheet>
+          if (confirm.kind === 'reject') {
+            void handleReject(confirm.worker);
+            return;
+          }
+
+          void handleRemove(confirm.worker);
+        }}
+      />
     </Screen>
   );
 }
 
-// Isi sheet dipisah jadi fungsi sendiri karena ia punya DUA langkah yang saling
-// menggantikan di wadah yang sama — bukan dialog baru bertumpuk di atas sheet
-// seperti versi lama. Polanya sama dengan sheet keputusan laporan operasional.
-function SheetBody({
+// Baris pengajuan: avatar, nama, telepon, tanggal, lalu DUA TOMBOL BERLABEL.
+//
+// Tombolnya di BARIS SENDIRI di bawah identitasnya, bukan berdesakan di sisi
+// kanan nama. Dua tombol selebar separuh baris punya target sentuh yang layak;
+// dua tombol yang berbagi sisa lebar setelah nama tidak, dan nama orang bisa
+// panjang.
+//
+// "Setujui" sekunder, "Tolak" merah tanpa latar. Yang pertama SENGAJA bukan
+// tombol utama berlatar penuh: dua keputusan ini setara beratnya, dan mendorong
+// mata ke salah satunya adalah hal yang justru tidak boleh dilakukan layar ini.
+function PendingRow({
   busy,
-  confirmStep,
+  disabled,
   onApprove,
-  onCancelConfirm,
   onReject,
-  onRemove,
-  onRequestConfirm,
-  sheet,
+  showHairline,
+  worker,
 }: {
   busy: boolean;
-  confirmStep: ConfirmStep | null;
+  disabled: boolean;
   onApprove: () => void;
-  onCancelConfirm: () => void;
   onReject: () => void;
-  onRemove: () => void;
-  onRequestConfirm: (step: ConfirmStep) => void;
-  sheet: SheetState;
+  showHairline: boolean;
+  worker: WorkerMembership;
 }) {
-  if (confirmStep) {
-    return (
-      <ConfirmBody
-        busy={busy}
-        consequence={
-          confirmStep === 'reject'
-            ? 'Dia harus mengajukan ulang kalau kamu berubah pikiran.'
-            : `${sheet.worker.fullName} akan kehilangan akses ke kebun ini dan perlu mengajukan ulang dengan kode kebun.`
-        }
-        confirmLabel={confirmStep === 'reject' ? 'Ya, tolak' : 'Ya, nonaktifkan'}
-        onCancel={onCancelConfirm}
-        onConfirm={confirmStep === 'reject' ? onReject : onRemove}
-      />
-    );
-  }
-
-  if (sheet.mode === 'pending') {
-    return (
-      <View style={{ gap: tokens.space.lg }}>
-        <PhoneRow phone={sheet.worker.phone} />
-        <MetaRow label="Diajukan" value={formatDateTimeFull(sheet.worker.createdAt)} />
-        {/* Bukan cuma "Terima" — konsekuensinya harus terbaca di tombolnya. */}
-        <Button title="Terima sebagai pekerja" loading={busy} onPress={onApprove} />
-        <TextAction
-          title="Tolak pengajuan"
-          tone="danger"
-          disabled={busy}
-          onPress={() => onRequestConfirm('reject')}
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View style={{ gap: tokens.space.lg }}>
-      <PhoneRow phone={sheet.worker.phone} />
-      <MetaRow label="Bergabung" value={formatDateTimeFull(sheet.worker.joinedAt)} />
-      <TextAction
-        title="Nonaktifkan akses"
-        tone="danger"
-        disabled={busy}
-        onPress={() => onRequestConfirm('remove')}
-      />
-    </View>
-  );
-}
-
-function ConfirmBody({
-  busy,
-  confirmLabel,
-  consequence,
-  onCancel,
-  onConfirm,
-}: {
-  busy: boolean;
-  confirmLabel: string;
-  consequence: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <View style={{ gap: tokens.space.lg }}>
-      <View
-        style={{
-          alignItems: 'center',
-          alignSelf: 'flex-start',
-          backgroundColor: tokens.color.status.danger.bg,
-          borderRadius: tokens.radius.pill,
-          height: 48,
-          justifyContent: 'center',
-          width: 48,
-        }}
-      >
-        <Icon name="alert-triangle" size={24} color={tokens.color.status.danger.text} />
-      </View>
-      <Text
-        selectable
-        style={{
-          color: tokens.color.text.secondary,
-          fontSize: tokens.type.body.fontSize,
-          lineHeight: tokens.type.body.lineHeight,
-        }}
-      >
-        {consequence}
-      </Text>
-      {/* Jalan keluar yang aman jadi tombol utama; aksi merusaknya tombol teks. */}
-      <Button title="Kembali" disabled={busy} onPress={onCancel} />
-      <TextAction title={confirmLabel} tone="danger" loading={busy} onPress={onConfirm} />
-    </View>
-  );
-}
-
-// Nomor HP adalah satu-satunya bukti identitas yang dipegang pemilik, jadi ia
-// harus bisa dicocokkan dengan kontak di HP-nya sekilas — karena itu dikelompokkan,
-// bukan deretan angka mentah. Tombol teleponnya memakai tel:, BUKAN tautan
-// WhatsApp: menebak format internasional dari nomor yang mungkin tidak rapi akan
-// gagal diam-diam.
-function PhoneRow({ phone }: { phone: string | null }) {
-  const formatted = formatPhoneNumber(phone);
-  const dialTarget = buildDialTarget(phone);
-
-  return (
-    <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: tokens.space.md }}>
-      <View style={{ flex: 1 }}>
-        <MetaRow label="Nomor telepon" value={formatted} />
-      </View>
-      {dialTarget ? (
-        <IconActionButton
-          label="Telepon pemohon"
-          onPress={() => void Linking.openURL(dialTarget)}
-          icon={<PhoneGlyph color={tokens.color.brand.base} />}
-        />
-      ) : null}
-    </View>
-  );
-}
-
-function PendingRow({ onReview, worker }: { onReview: () => void; worker: WorkerMembership }) {
   return (
     <View
       style={{
-        alignItems: 'center',
-        flexDirection: 'row',
+        borderTopColor: tokens.color.line.hairline,
+        borderTopWidth: showHairline ? 1 : 0,
         gap: tokens.space.md,
         paddingVertical: tokens.space.md,
       }}
     >
-      <Avatar name={worker.fullName} tone="warning" />
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: tokens.color.text.primary,
-            fontSize: tokens.type.bodyStrong.fontSize,
-            fontWeight: '700',
-            lineHeight: tokens.type.bodyStrong.lineHeight,
-          }}
-        >
-          {worker.fullName}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: tokens.color.status.warning.text,
-            fontSize: tokens.type.meta.fontSize,
-            lineHeight: tokens.type.meta.lineHeight,
-          }}
-        >
-          {`Mengajukan ${formatDayMonth(worker.createdAt)}`}
-        </Text>
-      </View>
-      <Button title="Tinjau" variant="secondary" size="small" onPress={onReview} />
-    </View>
-  );
-}
-
-// Pemisah antar baris pakai garis tipis, bukan kartu pembungkus.
-function RowGroup({ children }: { children: React.ReactNode }) {
-  const rows = React.Children.toArray(children);
-
-  return (
-    <View>
-      {rows.map((row, index) => (
-        <View
-          key={index}
-          style={index > 0 ? { borderTopColor: tokens.color.line.hairline, borderTopWidth: 1 } : undefined}
-        >
-          {row}
+      <View style={{ alignItems: 'center', flexDirection: 'row', gap: tokens.space.md }}>
+        <Avatar name={worker.fullName} tone="warning" />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text
+            numberOfLines={1}
+            selectable
+            style={{
+              color: tokens.color.text.primary,
+              fontSize: tokens.type.bodyStrong.fontSize,
+              fontWeight: tokens.type.bodyStrong.fontWeight,
+              lineHeight: tokens.type.bodyStrong.lineHeight,
+            }}
+          >
+            {worker.fullName}
+          </Text>
+          {/* `selectable` pada nomornya, dan itu bukan kebiasaan yang disalin:
+              pemilik yang ingin menelepon pemohon menyalin nomornya dari sini.
+              Tombol telepon ikon-saja yang dulu ada di dalam lembar dicabut
+              bersama lembarnya. */}
+          <Text
+            numberOfLines={1}
+            selectable
+            style={{
+              color: tokens.color.text.secondary,
+              fontSize: tokens.type.bodySmall.fontSize,
+              lineHeight: tokens.type.bodySmall.lineHeight,
+            }}
+          >
+            {buildPendingMeta(worker)}
+          </Text>
         </View>
-      ))}
+      </View>
+      <View style={{ flexDirection: 'row', gap: tokens.space.sm }}>
+        <View style={{ flex: 1 }}>
+          <Button
+            title="Setujui"
+            variant="secondary"
+            emphasis="strong"
+            disabled={disabled}
+            loading={busy}
+            onPress={onApprove}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button title="Tolak" variant="danger" disabled={disabled || busy} onPress={onReject} />
+        </View>
+      </View>
     </View>
   );
 }
 
-// NavRow DIHAPUS di batch 3. Ia hanya pernah punya satu pemanggil — baris
-// "Riwayat akses" di atas — dan baris itu pindah ke tab Profil, tempat ia
-// dirender oleh <MenuRow> bersama. TODO batch 7 yang dulu menempel di sini
-// (mengganti NavRow dengan MenuRow) karena itu sudah terbayar lunas: tidak ada
-// lagi varian baris navigasi lokal di layar ini.
-
-function IconActionButton({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => ({
-        alignItems: 'center',
-        backgroundColor: pressed ? tokens.color.brand.soft : tokens.color.surface.card,
-        borderColor: tokens.color.line.card,
-        borderCurve: 'continuous',
-        borderRadius: 11,
-        borderWidth: 1,
-        height: 36,
-        justifyContent: 'center',
-        width: 36,
-      })}
-    >
-      {icon}
-    </Pressable>
-  );
+// Penanda "baris ini membuka sesuatu". Bentuknya chevron, dan ia SATU-SATUNYA
+// isyarat visual yang tersisa setelah menu "⋯" dicabut — barisnya sendiri tidak
+// berbingkai dan tidak berlatar.
+function ChevronHint() {
+  // Ikon, bukan karakter '›'. Karakter teks dirender oleh font perangkat dan
+  // bentuk maupun garis dasarnya berbeda antar Android — alasan yang sama yang
+  // membuat StatusMarker menolak glif teks. Ukuran dan warnanya disamakan
+  // dengan chevron pada <MenuRow> supaya dua bentuk baris yang mengantar ke
+  // sesuatu tidak punya dua chevron yang berbeda.
+  return <Icon name="chevron-right" size={tokens.icon.md} color={tokens.color.text.tertiary} />;
 }
 
-// Tombol teks. <Button variant="ghost"> selalu memakai warna merek, sedangkan
-// aksi merusak butuh warna bahaya tanpa blok berwarna, dan ui.tsx tidak boleh
-// disentuh di fase ini.
-function TextAction({
-  disabled = false,
-  loading = false,
-  onPress,
-  title,
-  tone = 'brand',
-}: {
-  disabled?: boolean;
-  loading?: boolean;
-  onPress: () => void;
-  title: string;
-  tone?: 'brand' | 'danger';
-}) {
-  const color = tone === 'danger' ? tokens.color.status.danger.text : tokens.color.brand.base;
-  const isDisabled = disabled || loading;
+function buildPendingMeta(worker: WorkerMembership): string {
+  const phone = formatPhoneNumber(worker.phone);
 
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={isDisabled}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: tokens.layout.tapTarget,
-        opacity: pressed || isDisabled ? 0.5 : 1,
-      })}
-    >
-      <Text selectable={false} style={{ color, fontSize: 16, fontWeight: '700' }}>
-        {loading ? 'Memproses...' : title}
-      </Text>
-    </Pressable>
-  );
+  return [phone, `Mengajukan ${formatDayMonth(worker.createdAt)}`]
+    .filter((part): part is string => Boolean(part))
+    .join(' · ');
 }
 
-function SectionLabel({ title, trailing }: { title: string; trailing?: React.ReactNode }) {
-  return (
-    <View
-      style={{
-        alignItems: 'center',
-        flexDirection: 'row',
-        gap: tokens.space.md,
-        justifyContent: 'space-between',
-        paddingTop: tokens.space.xs,
-      }}
-    >
-      <Text
-        style={{
-          color: tokens.color.text.primary,
-          fontSize: tokens.type.heading.fontSize,
-          fontWeight: tokens.type.heading.fontWeight,
-          lineHeight: tokens.type.heading.lineHeight,
-        }}
-      >
-        {title}
-      </Text>
-      {trailing}
-    </View>
-  );
+// 'telepon · sejak 12 Mar'. Nomor lebih dulu, dan itu bukan urutan yang
+// dikarang: ia yang dipakai mengenali orangnya, sedangkan tanggal bergabung
+// keterangan yang jarang menentukan apa pun.
+function buildWorkerMeta(worker: WorkerMembership): string {
+  const phone = formatPhoneNumber(worker.phone);
+
+  return [phone, `sejak ${formatDayMonth(worker.joinedAt)}`]
+    .filter((part): part is string => Boolean(part))
+    .join(' · ');
 }
 
-// Dua ikon yang belum ada di src/components/icons.tsx, dan file itu di luar
-// cakupan fase ini. Path-nya dari Tabler Icons (MIT) varian outline, digambar
-// dengan konvensi yang sama: viewBox 24, fill none, stroke membulat.
-function PhoneGlyph({ color, size = 20 }: { color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M5 4h4l2 5l-2.5 1.5a11 11 0 0 0 5 5l1.5 -2.5l5 2v4a2 2 0 0 1 -2 2a16 16 0 0 1 -15 -15a2 2 0 0 1 2 -2"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-function ShareGlyph({ color, size = 20 }: { color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M6 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M18 6m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M18 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path d="M8.7 10.7l6.6 -3.4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M8.7 13.3l6.6 3.4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
-
-function buildSheetTitle(sheet: SheetState | null, confirmStep: ConfirmStep | null): string {
-  if (!sheet) {
-    return '';
-  }
-
-  if (confirmStep === 'reject') {
-    return `Tolak pengajuan ${sheet.worker.fullName}?`;
-  }
-
-  if (confirmStep === 'remove') {
-    return `Nonaktifkan akses ${sheet.worker.fullName}?`;
-  }
-
-  return sheet.worker.fullName;
-}
-
+// Nomor HP dikelompokkan empat-empat supaya bisa dicocokkan sekilas dengan
+// kontak di HP pemilik, bukan dibaca sebagai deret angka panjang.
 function formatPhoneNumber(value?: string | null): string | null {
   const trimmed = value?.trim();
 
@@ -735,22 +447,6 @@ function formatPhoneNumber(value?: string | null): string | null {
 
   const groups = digits.match(/.{1,4}/g) ?? [digits];
   return `${trimmed.startsWith('+') ? '+' : ''}${groups.join(' ')}`;
-}
-
-function buildDialTarget(value?: string | null): string | null {
-  const trimmed = value?.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  const digits = trimmed.replace(/\D/g, '');
-
-  if (!digits) {
-    return null;
-  }
-
-  return `tel:${trimmed.startsWith('+') ? '+' : ''}${digits}`;
 }
 
 function toTime(value?: string | null): number {
@@ -775,50 +471,3 @@ function formatDayMonth(value?: string | null): string {
 
   return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 }
-
-function formatDateTimeFull(value?: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date.toLocaleString('id-ID', {
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
-const styles = StyleSheet.create({
-  // Label kartu, bentuknya sama dengan judul kartu di Beranda pemilik supaya
-  // kartu di dua layar berbeda tidak punya dua tingkat judul yang berbeda.
-  // Rata KIRI: ia label, dan aturan desain hanya memusatkan kode kebunnya.
-  cardLabel: { ...tokens.type.label, color: tokens.color.text.secondary },
-
-  // RATA TENGAH — kode kebun salah satu dari tiga hal yang boleh rata tengah di
-  // layar ini. Monospace supaya angka nol dan huruf O tidak tertukar saat
-  // dibacakan lewat telepon, dan letterSpacing supaya karakternya bisa dieja
-  // satu per satu.
-  joinCode: {
-    color: tokens.color.text.primary,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    fontSize: 24,
-    fontWeight: '700',
-    letterSpacing: 2,
-    textAlign: 'center',
-  },
-  // Ikut rata tengah karena ia keterangan dari kode di atasnya, bukan label yang
-  // berdiri sendiri.
-  joinCodeHint: {
-    ...tokens.type.meta,
-    color: tokens.color.text.secondary,
-    textAlign: 'center',
-  },
-});

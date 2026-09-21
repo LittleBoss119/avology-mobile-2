@@ -12,9 +12,11 @@ import {
   type TreeFormErrors,
   type TreeFormValues,
 } from '../../../../src/components/tree-components';
+import { ConfirmDialog } from '../../../../src/components/bottom-sheet';
 import { useSnackbar } from '../../../../src/components/snackbar';
 import { Button, ErrorBanner, Screen, TopAppBar } from '../../../../src/components/ui';
 import { useAuth } from '../../../../src/context/auth-context';
+import { useUnsavedChangesGuard } from '../../../../src/hooks/useUnsavedChangesGuard';
 import { pickImageFromGallery, takePhotoFromCamera } from '../../../../src/lib/media';
 import { uploadTreeMainPhoto } from '../../../../src/services/photoAttachmentService';
 import { createTree, getTrees } from '../../../../src/services/treeService';
@@ -31,15 +33,21 @@ const initialValues: TreeFormValues = {
 export default function OwnerCreateTreeScreen() {
   const { currentFarm } = useAuth();
   const showSnackbar = useSnackbar();
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<TreeFormErrors>({});
   const [processingPhoto, setProcessingPhoto] = React.useState(false);
   const [selectedPhoto, setSelectedPhoto] = React.useState<PickedPhotoAsset | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
-  const [values, setValues] = React.useState<TreeFormValues>(() => ({
+  // Titik nol pembanding "ada perubahan", DIPISAH dari state formulirnya dan
+  // dipakai sebagai nilai awalnya. Tanpa pemisahan ini tidak ada apa pun yang
+  // masih memegang `plantedAt` semula — nilainya `new Date()`, yang tidak bisa
+  // dihitung ulang belakangan tanpa meleset beberapa milidetik.
+  const [initialFormValues] = React.useState<TreeFormValues>(() => ({
     ...initialValues,
     plantedAt: new Date(),
   }));
+  const [values, setValues] = React.useState<TreeFormValues>(initialFormValues);
   // Kode posisi yang SUDAH TERISI di kebun ini.
   //
   // getTrees adalah service yang SUDAH ADA dan sudah dipakai daftar pohon serta
@@ -55,6 +63,28 @@ export default function OwnerCreateTreeScreen() {
   const [takenCodes, setTakenCodes] = React.useState<Set<string> | null>(null);
 
   const farmId = currentFarm?.farmId;
+
+  // PENJAGA PERUBAHAN BELUM DISIMPAN (batch 7b, langkah 2a).
+  //
+  // Dibandingkan lewat JSON, bukan lewat identitas objek: TreeForm mengirim
+  // objek BARU pada tiap ketikan, jadi `values !== initialFormValues` akan
+  // benar bahkan setelah pengguna mengetik lalu menghapus kembali — dan dialog
+  // "buang isian" untuk formulir yang isinya persis seperti semula adalah
+  // pertanyaan yang tidak punya jawaban benar.
+  const hasUnsavedChanges =
+    JSON.stringify(values) !== JSON.stringify(initialFormValues) || selectedPhoto !== null;
+
+  const { handleBackPress } = useUnsavedChangesGuard({
+    hasUnsavedChanges: hasUnsavedChanges && !submitting && !processingPhoto,
+    onBlocked: () => setConfirmDiscard(true),
+    onLeave: () => {
+      if (submitting) {
+        return;
+      }
+
+      router.back();
+    },
+  });
 
   React.useEffect(() => {
     if (!farmId) {
@@ -216,10 +246,16 @@ export default function OwnerCreateTreeScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerShown: false }} />
+      {/* gestureEnabled:false — pasangan wajib useUnsavedChangesGuard di atas.
+          Swipe-back iOS tidak bisa dicegat lewat API publik expo-router, jadi
+          ia dimatikan supaya isian yang belum disimpan tidak bisa hilang lewat
+          gestur. Dipasang DI SINI, bukan di app/(owner)/_layout.tsx, karena
+          layar ini memang sudah memegang <Stack.Screen>-nya sendiri — pola yang
+          sama dengan layar Edit Pohon. */}
+      <Stack.Screen options={{ gestureEnabled: false, headerShown: false }} />
       <Screen
         footer={<Button title="Simpan pohon" loading={submitting} onPress={handleSubmit} />}
-        header={<TopAppBar title="Tambah pohon" onBack={() => router.back()} />}
+        header={<TopAppBar title="Tambah pohon" onBack={handleBackPress} />}
       >
         <ErrorBanner message={error} />
         <TreeForm
@@ -236,6 +272,20 @@ export default function OwnerCreateTreeScreen() {
           onCameraPress={handleTakePhotoFromCamera}
           onGalleryPress={handlePickPhotoFromGallery}
           onRemoveSelected={() => setSelectedPhoto(null)}
+        />
+
+        <ConfirmDialog
+          cancelLabel="Buang isian"
+          cancelTone="danger"
+          confirmLabel="Lanjut isi"
+          message="Pohon ini belum disimpan. Kalau keluar sekarang, isian itu hilang."
+          onCancel={() => {
+            setConfirmDiscard(false);
+            router.back();
+          }}
+          onConfirm={() => setConfirmDiscard(false)}
+          title="Isian belum disimpan"
+          visible={confirmDiscard}
         />
       </Screen>
     </>

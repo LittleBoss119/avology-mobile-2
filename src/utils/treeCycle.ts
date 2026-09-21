@@ -107,23 +107,49 @@ export function findLastEndedPlanting(plantings: TreePlanting[]): TreePlanting |
   return ended.reduce((latest, planting) => (planting.cycleNo > latest.cycleNo ? planting : latest));
 }
 
-// Teks pembatas siklus di riwayat: 'Ditanam ulang · 12 Mar 2023 · Aligator'.
-// Siklus pertama berbunyi 'Ditanam' — belum ada yang diulang.
+// Teks pembatas siklus di riwayat: 'Siklus sebelumnya · 12 Mar 2023 – 4 Jan 2025'.
+//
+// KATA-KATANYA BERUBAH DI BATCH 7B, dari 'Ditanam ulang · 12 Mar 2023 ·
+// Aligator'. Dua hal yang berbeda, dan keduanya soal letak pembatasnya:
+//
+//   * Pembatas kini duduk DI ATAS kejadian-kejadian milik siklus yang
+//     diperkenalkannya, bukan di bawahnya. Riwayat tersusun menurun (terbaru
+//     dulu), jadi membacanya ke bawah berarti mundur ke masa lalu — dan sebuah
+//     judul yang memperkenalkan apa yang akan dibaca harus berdiri lebih dulu.
+//     'Ditanam ulang' adalah nama KEJADIAN, yang cocok untuk penutup; 'Siklus
+//     sebelumnya' nama BAGIAN, yang cocok untuk pembuka.
+//   * Rentangnya disebut utuh, bukan tanggal tanamnya saja. Yang dibutuhkan
+//     pembaca untuk menempatkan catatan di bawahnya adalah batas awal DAN batas
+//     akhir bagian itu.
+//
+// Varietas ikut dicabut dari label. Ia keterangan tentang POHONNYA, bukan
+// tentang rentang waktunya, dan pada pembatas selebar layar ia jadi bagian
+// ketiga yang tidak dicari siapa pun.
+//
+// Siklus yang BELUM berakhir tidak menulis tanda pisah menggantung: kalau
+// endedAt kosong, yang tersisa tanggal mulainya saja.
 export function formatCycleDividerLabel(planting: TreePlanting): string {
-  const parts = [planting.cycleNo <= 1 ? 'Ditanam' : 'Ditanam ulang'];
-  const plantedAt = planting.plantedAt ? formatFullDate(planting.plantedAt) : null;
+  const startedAt = planting.plantedAt ? formatFullDate(planting.plantedAt) : null;
+  const endedAt = planting.endedAt ? formatFullDate(planting.endedAt) : null;
+  const range = [startedAt, endedAt].filter((part): part is string => Boolean(part)).join(' – ');
 
-  if (plantedAt) {
-    parts.push(plantedAt);
+  return range ? `Siklus sebelumnya · ${range}` : 'Siklus sebelumnya';
+}
+
+// Baris konteks di atas timeline: 'Siklus tanam sejak 12 Mar 2023'.
+//
+// Mengembalikan null kalau tanggal tanamnya tidak diketahui — kalimat 'Siklus
+// tanam sejak -' tidak memberi tahu pembacanya apa pun yang tidak sudah ia tahu.
+export function formatCurrentCycleLine(plantings: TreePlanting[]): string | null {
+  if (plantings.length === 0) {
+    return null;
   }
 
-  const variety = planting.variety?.trim();
+  const latest = plantings.reduce((current, planting) =>
+    planting.cycleNo > current.cycleNo ? planting : current
+  );
 
-  if (variety) {
-    parts.push(variety);
-  }
-
-  return parts.join(' · ');
+  return latest.plantedAt ? `Siklus tanam sejak ${formatFullDate(latest.plantedAt)}` : null;
 }
 
 // Kalimat pembuka kotak keterangan pada posisi kosong.

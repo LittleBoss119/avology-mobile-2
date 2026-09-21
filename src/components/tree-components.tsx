@@ -26,7 +26,11 @@ import {
   getTodayIsoDate,
   toWibIsoDate,
 } from '../utils/taskDueDate';
-import { formatCycleDividerLabel, groupTreeHistoryByCycle } from '../utils/treeCycle';
+import {
+  formatCurrentCycleLine,
+  formatCycleDividerLabel,
+  groupTreeHistoryByCycle,
+} from '../utils/treeCycle';
 import {
   buildTreeDisplayCode,
   formatGrowthPhase,
@@ -48,15 +52,12 @@ import {
   PhotoPickerCard,
   StatusMarker,
 } from './ui';
-import {
-  AlertTriangleIcon,
-  BasketIcon,
-  ChevronRightIcon,
-  FlowerIcon,
-  Icon,
-  SprayIcon,
-  type IconName,
-} from './icons';
+// AlertTriangleIcon, BasketIcon, FlowerIcon, dan SprayIcon DICABUT di batch 7b.
+// Keempatnya hanya pernah dipakai getTimelineIcon, yaitu glif di dalam cakram
+// yang kini tidak ada lagi: penanda baris riwayat sekarang BENTUK 11px di atas
+// rel garis, bukan ikon bergaris 18px di dalam lingkaran berlatar. Definisinya
+// tetap berdiri di icons.tsx.
+import { ChevronRightIcon, Icon, type IconName } from './icons';
 
 export type TreeFormValues = {
   rowPosition: string;
@@ -70,6 +71,19 @@ export type TreeCardProps = {
   children?: React.ReactNode;
   photoUrl?: string | null;
   onPress?: () => void;
+  /**
+   * Satu keterangan pendek di KOLOM KANAN, tepat di atas badge kondisi.
+   *
+   * Ditambahkan di batch 7b untuk "N hari" pada layar Fase pohon (§17), dan
+   * sengaja tidak memakai slot `children` yang sudah ada: `children` jatuh di
+   * kolom tengah, di bawah baris meta, sedangkan angka yang dipindai baris demi
+   * baris harus berdiri di tepi yang sama pada setiap baris — kolom kiri
+   * panjangnya berubah-ubah mengikuti nama varietas.
+   *
+   * Bawaannya kosong, jadi dua pemanggil TreeCard yang sudah ada tidak bergeser
+   * sepiksel pun.
+   */
+  trailing?: React.ReactNode;
 };
 
 export type TreeFormErrors = {
@@ -277,11 +291,7 @@ const TREE_ROW_CODE_LINE_HEIGHT = 24;
 // dua tempat yang bisa berbeda bunyi.
 const NO_VARIETY_TEXT = 'Varietas belum diisi';
 
-// Cukup redup untuk terbaca sebagai lapisan kedua, masih cukup pekat untuk
-// dibaca — kejadian siklus lama tetap harus bisa dibuka dan dibaca isinya.
-const PAST_CYCLE_OPACITY = 0.55;
-
-export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
+export function TreeCard({ children, onPress, photoUrl, trailing, tree }: TreeCardProps) {
   const displayCode = formatTreeDisplayCode(tree);
   const isInactive = tree.currentCondition === 'dead';
   // formatGrowthPhase(null) sudah mengembalikan 'Belum dicatat' — dipanggil
@@ -370,7 +380,11 @@ export function TreeCard({ children, onPress, photoUrl, tree }: TreeCardProps) {
 
           flexShrink 0: kondisi adalah alasan utama baris ini dipindai, jadi
           teks di kolom tengah yang terpotong duluan saat ruang sempit. */}
-      <View style={{ flexShrink: 0 }}>
+      {/* alignItems 'flex-end': keterangan `trailing` dan badge di bawahnya
+          rata di tepi kanan yang sama, jadi angka yang panjangnya berbeda
+          ("7 hari" vs "128 hari") tetap berakhir di garis yang sama. */}
+      <View style={{ alignItems: 'flex-end', flexShrink: 0, gap: 4 }}>
+        {trailing}
         <ConditionStatusBadge status={tree.currentCondition} />
       </View>
     </View>
@@ -983,69 +997,93 @@ export function TreeHistoryTimeline({
     );
   }
 
+  // SELURUH SIKLUS TANAM DITAMPILKAN, TIDAK DIFILTER KE SIKLUS AKTIF.
+  //
+  // Spek §15 menulis "timeline kronologis gabungan, difilter siklus tanam
+  // aktif", dan bagian itu KELIRU terhadap keputusan yang sudah diambil di
+  // revisi Bab 3: penanaman ulang pada satu posisi tidak boleh menghapus jejak
+  // pengelolaan sebelumnya. Memfilter ke siklus aktif berarti tiga tahun
+  // catatan lenyap dari layar begitu satu pohon diganti — kehilangan data yang
+  // terlihat, akibat sebuah filter.
+  //
+  // Yang berlaku, dan yang dipertahankan di sini: seluruh siklus ditampilkan,
+  // dipisah pembatas per siklus, dan siklus lama DIREDUPKAN supaya tetap
+  // terbaca mana yang milik pohon yang sekarang.
+  //
+  // PENEMPATANNYA PERKIRAAN, bukan fakta tersimpan — lihat catatan panjang pada
+  // groupTreeHistoryByCycle. Karena itu pembatasnya ditulis sebagai penanda
+  // bacaan ("Siklus sebelumnya · rentang tanggal"), bukan sebagai angka yang
+  // dipakai menghitung apa pun.
+  //
   // Pembatas hanya muncul kalau memang ADA yang dipisahkan. Posisi yang baru
   // sekali ditanami — dan itu keadaan hampir semua pohon — tidak mendapat garis
-  // apa pun, karena satu pembatas tunggal di dasar riwayat tidak memberi tahu
-  // pembacanya hal baru dan cuma menambah baris yang harus dilewati.
+  // apa pun.
   const cycleGroups = (plantings?.length ?? 0) > 1 ? groupTreeHistoryByCycle(history, plantings ?? []) : [];
   const entries = buildTimelineEntries(history, cycleGroups);
+  // Satu baris konteks di atas timeline. Hanya dirender kalau `plantings`
+  // benar-benar dioper — pada pratinjau dua baris di layar detail pohon ia
+  // sengaja tidak dioper, dan kalimat "Siklus tanam sejak ..." di atas dua baris
+  // catatan terbaru akan menjanjikan daftar yang jauh lebih panjang daripada
+  // yang sedang ditampilkan.
+  const currentCycleLine = plantings ? formatCurrentCycleLine(plantings) : null;
 
-  // SATU kartu, bukan satu kartu per kejadian.
+  // KARTU PEMBUNGKUS DICABUT (batch 7b). Yang mengikat baris-baris ini jadi satu
+  // benda sekarang adalah REL GARIS 1px yang menembus seluruh kolom penanda —
+  // dan rel itu mengerjakannya lebih baik daripada bingkai kartu, karena ia juga
+  // menyatakan URUTAN, bukan cuma kebersamaan. Dua pengikat untuk satu daftar
+  // berarti satu di antaranya menganggur.
   //
-  // Sebelumnya tiap kejadian duduk dalam kartunya sendiri: bingkai, sudut
-  // membulat, dan jarak di antaranya. Pada pohon dengan riwayat panjang itu
-  // menghasilkan tumpukan kotak yang tiap kotaknya membayar ~2px bingkai dan
-  // 12px jarak untuk memisahkan hal-hal yang memang sudah berurutan. Sebagai
-  // baris di dalam satu kartu, pemisahnya cukup garis rambut selebar kartu dan
-  // satu layar memuat jauh lebih banyak kejadian.
-  //
-  // padding 0 + gap 0 lewat prop dan style: Card bawaannya memberi padding 16
-  // dan gap 12 kepada anak-anaknya, dan keduanya harus pergi supaya baris bisa
-  // menempel satu sama lain serta garis rambutnya mencapai tepi kartu. Padding
-  // horizontalnya dipindah ke tiap baris (lihat TIMELINE_ROW_PADDING_X).
+  // Garis rambut antar baris ikut pergi bersama kartunya, dengan alasan yang
+  // sama: rel sudah menyambungkan baris-barisnya, dan garis melintang yang
+  // memotongnya tiap beberapa puluh piksel justru melawan penyambungan itu.
   return (
-    <Card padding={0} style={{ gap: 0, overflow: 'hidden' }}>
-      {entries.map((entry, index) => {
-        // Garis rambut HANYA di antara dua baris kejadian. Pembatas siklus sudah
-        // berupa garis, jadi menaruh garis rambut menempel padanya menghasilkan
-        // dua garis sejajar yang memisahkan hal yang sama.
-        const previous = entries[index - 1];
-        const showHairline = Boolean(previous) && previous.kind === 'item' && entry.kind === 'item';
+    <View style={{ gap: spacing.md }}>
+      {currentCycleLine ? (
+        <Text selectable style={{ ...tokens.type.meta, color: tokens.color.text.tertiary }}>
+          {currentCycleLine}
+        </Text>
+      ) : null}
 
-        if (entry.kind === 'divider') {
+      <View>
+        {entries.map((entry, index) => {
+          if (entry.kind === 'divider') {
+            return <TreeCycleDivider key={entry.key} label={entry.label} />;
+          }
+
+          // Rel tidak digambar menembus pembatas siklus: pembatasnya adalah
+          // GARIS MELINTANG berlabel, dan rel yang menyeberanginya akan
+          // mengabarkan kesinambungan yang justru sedang dipotong.
+          const previous = entries[index - 1];
+          const next = entries[index + 1];
+
           return (
-            <View key={entry.key} style={{ paddingHorizontal: TIMELINE_ROW_PADDING_X }}>
-              <TreeCycleDivider label={entry.label} />
-            </View>
+            <TreeHistoryTimelineItem
+              key={entry.key}
+              currentUserId={currentUserId}
+              dimmed={entry.dimmed}
+              item={entry.item}
+              railBottom={next?.kind === 'item'}
+              railTop={previous?.kind === 'item'}
+              viewerMode={viewerMode}
+              onRecordPress={onRecordPress}
+            />
           );
-        }
-
-        return (
-          <TreeHistoryTimelineItem
-            key={entry.key}
-            currentUserId={currentUserId}
-            dimmed={entry.dimmed}
-            item={entry.item}
-            onRecordPress={onRecordPress}
-            showHairline={showHairline}
-            viewerMode={viewerMode}
-          />
-        );
-      })}
-    </Card>
+        })}
+      </View>
+    </View>
   );
 }
 
 // Baris kejadian dan pembatas siklus diratakan jadi SATU daftar berurutan.
 //
-// Alasannya bentuk kartunya: seluruh riwayat kini tinggal di dalam satu kartu,
-// jadi tidak ada lagi tempat untuk sarang <View> per siklus — dan garis rambut
-// antar-baris hanya bisa diputuskan kalau tiap unsur tahu apa yang mendahuluinya.
-// Daftar datar membuat pertanyaan itu sekadar melihat entries[index - 1].
+// Daftar datar, bukan sarang <View> per siklus: tiap unsur perlu tahu apa yang
+// mendahului dan mengikutinya untuk memutuskan apakah potongan rel di atas dan
+// di bawah penandanya digambar, dan pertanyaan itu jadi sekadar melihat
+// entries[index ± 1].
 //
-// Kedua bentuk masukan bermuara ke sini: tanpa pengelompokan siklus (satu-satunya
-// keadaan untuk hampir semua pohon) hasilnya daftar kejadian polos tanpa satu pun
-// pembatas, persis seperti cabang terpisah yang dulu ada.
+// Kedua bentuk masukan bermuara ke sini: tanpa pengelompokan siklus
+// (satu-satunya keadaan untuk hampir semua pohon) hasilnya daftar kejadian polos
+// tanpa satu pun pembatas.
 type TimelineEntry =
   | { dimmed: boolean; item: TreeHistoryItem; key: string; kind: 'item' }
   | { key: string; kind: 'divider'; label: string };
@@ -1066,48 +1104,75 @@ function buildTimelineEntries(
   const entries: TimelineEntry[] = [];
 
   for (const group of cycleGroups) {
+    // Siklus TANPA kejadian tidak mendapat pembatas. Sebuah judul yang tidak
+    // memperkenalkan apa pun cuma menambah baris yang harus dilewati — dan
+    // siklus yang seluruh catatannya sudah terhapus memang mungkin terjadi.
+    if (group.items.length === 0) {
+      continue;
+    }
+
+    // Pembatas duduk DI ATAS kejadian milik siklusnya, bukan di bawah. Riwayat
+    // tersusun menurun (terbaru dulu), jadi membacanya ke bawah berarti mundur
+    // ke masa lalu, dan judul yang memperkenalkan sebuah bagian harus berdiri
+    // sebelum bagian itu dibaca. Siklus terbaru tidak mendapat pembatas: ia
+    // yang sedang berjalan, dan baris konteks di atas timeline sudah menamainya.
+    if (!group.isLatestCycle) {
+      entries.push({
+        key: `divider-${group.planting.id}`,
+        kind: 'divider',
+        label: formatCycleDividerLabel(group.planting),
+      });
+    }
+
     group.items.forEach((item, index) => {
       entries.push({
         // Kejadian milik siklus lama diredupkan supaya terlihat mana yang milik
-        // pohon yang sekarang. Lewat opacity, bukan warna teks pengganti: satu
-        // nilai meredupkan seluruh isi baris sekaligus — ikon, judul, dan meta
-        // ikut — tanpa memaksa setiap teks di dalamnya punya varian warna kedua.
+        // pohon yang sekarang. Judulnya memakai textMuted dan penandanya
+        // beropasitas 60% — DUA saluran, bukan satu opacity untuk seluruh baris:
+        // meredupkan semuanya sekaligus juga meredupkan tanggal dan label jenis
+        // sampai di bawah ambang keterbacaan, sedangkan yang perlu dibedakan
+        // hanyalah "ini bukan pohon yang sekarang".
         dimmed: !group.isLatestCycle,
         item,
         key: `${group.planting.id}-${buildHistoryItemKey(item, index)}`,
         kind: 'item',
       });
     });
-
-    entries.push({
-      key: `divider-${group.planting.id}`,
-      kind: 'divider',
-      label: formatCycleDividerLabel(group.planting),
-    });
   }
 
   return entries;
 }
 
-// Pembatas awal sebuah siklus: '-- Ditanam ulang * 12 Mar 2023 * Aligator --'.
+// Pembatas antarsiklus: garis, label huruf besar di tengah, garis.
 //
-// Duduk di BAWAH kejadian-kejadian milik siklusnya, bukan di atas. Riwayat
-// tersusun menurun (terbaru dulu), jadi membacanya ke bawah berarti mundur ke
-// masa lalu — dan penanaman adalah hal paling awal yang terjadi pada siklus itu.
+// 12/600 huruf besar `textMuted` (§15). Bentuk yang sama dengan label jenis di
+// tiap baris, dan itu disengaja: keduanya menamai KATEGORI dari apa yang ada di
+// bawahnya, bukan isinya.
 function TreeCycleDivider({ label }: { label: string }) {
   return (
-    <View style={{ alignItems: 'center', flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.xs }}>
+    <View
+      style={{
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.md,
+        paddingVertical: spacing.lg,
+      }}
+    >
       <View style={{ backgroundColor: colors.border, flex: 1, height: 1 }} />
+      {/* toUpperCase() pada nilainya, bukan textTransform: sebagian Android
+          menerapkan textTransform SESUDAH pengukuran teks dan menghasilkan baris
+          yang terpotong satu huruf di ujungnya. */}
       <Text
         selectable
         style={{
-          color: colors.textMuted,
-          fontSize: typography.meta.fontSize,
-          fontWeight: '700',
-          lineHeight: typography.meta.lineHeight,
+          color: palette.textMuted,
+          fontFamily: fonts.sansSemiBold,
+          fontSize: tokens.type.caption.fontSize,
+          letterSpacing: 0.6,
+          lineHeight: tokens.type.caption.lineHeight,
         }}
       >
-        {label}
+        {label.toUpperCase()}
       </Text>
       <View style={{ backgroundColor: colors.border, flex: 1, height: 1 }} />
     </View>
@@ -1147,24 +1212,46 @@ export function ConditionReportItem({
   );
 }
 
-// Padding kiri-kanan tiap baris riwayat. Dipegang baris, BUKAN kartunya:
-// kartunya berpadding 0 supaya garis rambut antar-baris mencapai kedua tepi
-// alih-alih berhenti 16px di dalamnya dan terlihat seperti garis menggantung.
-const TIMELINE_ROW_PADDING_X = spacing.cardPadding;
+// Lebar kolom tanggal, dan lebar kolom rel. Keduanya angka spek §4: tanggal
+// 64, rel selebar penanda 11px yang dipusatkan dengan sisa ruang secukupnya.
+const TIMELINE_DATE_WIDTH = 64;
+const TIMELINE_RAIL_WIDTH = 20;
 
+// Peredupan kejadian milik siklus lama, pada PENANDANYA saja. Judulnya
+// diredupkan lewat warna teks (textMuted), bukan lewat opacity yang sama —
+// lihat catatan pada `dimmed` di buildTimelineEntries.
+const PAST_CYCLE_MARKER_OPACITY = 0.6;
+
+// SATU BENTUK BARIS, EMPAT PEMBEDA (§4):
+//
+//   1. Kolom tanggal 64px di kiri.
+//   2. Rel garis 1px di tengah, dengan penanda bentuk 11px.
+//   3. Isi di kanan.
+//   4. Label jenis 12/600 huruf besar di atas judulnya.
+//
+// Panen mendapat pembeda kelima: beratnya dicetak sebagai ANGKA SERIF 28,
+// menggantikan judul biasa. Ia satu-satunya jenis catatan yang nilainya berupa
+// angka yang dibandingkan antarpanen, dan angka yang dibandingkan pantas
+// dibaca tanpa harus dieja dari dalam kalimat.
+//
+// CAKRAM DI BELAKANG PENANDA DICABUT. Perbaikan sementara di batch 5 membuatnya
+// netral untuk semua jenis supaya ia berhenti berbohong (lingkaran "Sehat" di
+// atas cakram ambar); sekarang ia hilang seluruhnya, diganti rel garis 1px.
 function TreeHistoryTimelineItem({
   currentUserId,
   dimmed = false,
   item,
   onRecordPress,
-  showHairline = false,
+  railBottom = false,
+  railTop = false,
   viewerMode,
 }: {
   currentUserId?: string | null;
   dimmed?: boolean;
   item: TreeHistoryItem;
   onRecordPress?: (item: TreeHistoryItem, recordType: TreeHistoryRouteRecordType) => void;
-  showHairline?: boolean;
+  railBottom?: boolean;
+  railTop?: boolean;
   viewerMode: TreeHistoryViewerMode;
 }) {
   const routeRecordType = getRouteRecordType(item);
@@ -1176,83 +1263,141 @@ function TreeHistoryTimelineItem({
     currentUserId,
     viewerMode,
   });
-  // 'Inisiatif · Adit', 'Kondisi · Anda'. Jenis lalu pencatat, satu baris abu.
+  // Berat panen sebagai angka tunggal ('21 kg' atau '12 buah'), BUKAN ruas
+  // lengkap 'Jumlah buah: 12, Berat: 21 kg' yang dipakai judul biasa. Aturannya
+  // milik formatHarvestFactValue: berat kalau ada, kalau tidak jumlah buah,
+  // tidak pernah keduanya — angka serif 28 hanya muat untuk satu nilai.
   //
-  // Menggantikan DUA chip yang dulu berdiri di puncak kartu — satu untuk jenis
-  // catatan, satu lagi untuk asal perawatan. Keduanya membayar kotak berbingkai
-  // untuk kata yang sudah dibawa saluran lain: jenisnya ada pada ikon di kiri,
-  // dan sekarang juga tertulis di baris ini. Prefiks 'Dicatat oleh'/'Dipanen
-  // oleh' ikut pergi bersama chip-nya; pada baris sesempit ini ia tiga kata yang
-  // sama di setiap baris.
-  const metaLine = `${formatHistoryKindLabel(item)} · ${actorName}`;
-  const rowStyle = {
-    alignItems: 'center' as const,
-    borderTopColor: tokens.color.line.hairline,
-    borderTopWidth: showHairline ? 1 : 0,
-    flexDirection: 'row' as const,
-    gap: spacing.md,
-    paddingHorizontal: TIMELINE_ROW_PADDING_X,
-    paddingVertical: spacing.md,
-  };
+  // null berarti bentuk kalimatnya di luar dugaan, dan barisnya jatuh ke judul
+  // biasa alih-alih mencetak kalimat panjang dengan ukuran 28.
+  const harvestValue =
+    item.historyType === 'harvest' ? formatHarvestFactValue(item.description) : null;
+  const titleColor = dimmed ? palette.textMuted : colors.text;
 
   const content = (
     <>
-      <View
+      {/* KOLOM TANGGAL, lebar tetap 64. Tetap, bukan menyesuaikan isi: yang
+          membuat kolom ini berguna adalah tanggalnya berakhir di garis yang
+          SAMA pada setiap baris, sehingga mata bisa menyusurinya ke bawah tanpa
+          membaca. */}
+      <Text
+        selectable
         style={{
-          alignItems: 'center',
-          backgroundColor: getTimelineDotColor(item.historyType),
-          borderRadius: 999,
-          height: 34,
-          justifyContent: 'center',
-          width: 34,
+          color: palette.textMuted,
+          fontFamily: fonts.sans,
+          fontSize: typography.meta.fontSize,
+          lineHeight: typography.meta.lineHeight,
+          width: TIMELINE_DATE_WIDTH,
         }}
       >
-        {getTimelineIcon(item, getTimelineTextColor(item.historyType))}
+        {formatHistoryRowDate(item.happenedAt)}
+      </Text>
+
+      <View style={{ alignItems: 'center', width: TIMELINE_RAIL_WIDTH }}>
+        {/* Potongan rel di ATAS penanda. Tingginya TETAP, bukan flex: ia yang
+            menentukan di ketinggian berapa penanda duduk, dan penanda semua
+            baris harus duduk pada ketinggian yang SAMA — sejajar dengan baris
+            pertama isinya, bukan mengambang di tengah isi yang tingginya
+            berubah-ubah mengikuti panjang judul.
+
+            4 bukan angka yang dikarang: label jenis (12/16) dan tanggal (13/18)
+            sama-sama berpusat sekitar 8-9px dari tepi atas baris, dan penanda
+            11px yang pusatnya di sana berarti tepi atasnya di ~3,5. */}
+        <View
+          style={{
+            backgroundColor: railTop ? tokens.color.line.hairline : 'transparent',
+            height: spacing.xs,
+            width: 1,
+          }}
+        />
+        <View style={{ opacity: dimmed ? PAST_CYCLE_MARKER_OPACITY : 1 }}>
+          <TimelineMarker item={item} />
+        </View>
+        {/* Potongan rel di BAWAH penanda melar mengisi sisa tinggi baris. */}
+        <View
+          style={{
+            backgroundColor: railBottom ? tokens.color.line.hairline : 'transparent',
+            flex: 1,
+            width: 1,
+          }}
+        />
       </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <View style={{ alignItems: 'baseline', flexDirection: 'row', gap: spacing.sm }}>
-          {/* Judulnya isi catatannya sendiri, bukan nama kategorinya — kategori
-              sudah dibawa ikon di kiri dan baris meta di bawah. numberOfLines 2
-              supaya nama jadwal yang panjang tidak mendorong tanggalnya keluar
-              layar, tanpa memotongnya sedini satu baris. */}
+
+      <View style={{ flex: 1, gap: 2, minWidth: 0, paddingBottom: spacing.lg }}>
+        {/* LABEL JENIS, 12/600 huruf besar. Menggantikan kata pertama baris meta
+            yang dulu berbunyi 'Kondisi · Anda'. Sebagai label di ATAS judul ia
+            mengerjakan hal yang sama dengan lebih sedikit: jenisnya terbaca
+            sebelum isinya, bukan sesudah. */}
+        <Text
+          selectable
+          style={{
+            color: palette.textMuted,
+            fontFamily: fonts.sansSemiBold,
+            fontSize: tokens.type.caption.fontSize,
+            letterSpacing: 0.6,
+            lineHeight: tokens.type.caption.lineHeight,
+          }}
+        >
+          {formatHistoryKindLabel(item).toUpperCase()}
+        </Text>
+
+        {harvestValue ? (
+          <Text
+            selectable
+            numberOfLines={1}
+            style={{ color: titleColor, fontFamily: fonts.serif, fontSize: 28, lineHeight: 34 }}
+          >
+            {harvestValue}
+          </Text>
+        ) : (
+          /* Judulnya ISI catatannya sendiri, bukan nama kategorinya — kategori
+             sudah dibawa label di atasnya. numberOfLines 2 supaya nama jadwal
+             yang panjang tidak mendorong isi lain keluar layar, tanpa
+             memotongnya sedini satu baris. */
           <Text
             numberOfLines={2}
             selectable
             style={{
-              color: colors.text,
-              flex: 1,
+              color: titleColor,
+              fontFamily: fonts.sansSemiBold,
               fontSize: typography.bodyStrong.fontSize,
-              fontWeight: '700',
               lineHeight: typography.bodyStrong.lineHeight,
             }}
           >
             {formatHistoryRowTitle(item)}
           </Text>
-          <Text selectable style={{ color: colors.textMuted, fontSize: typography.meta.fontSize }}>
-            {formatHistoryRowDate(item.happenedAt)}
-          </Text>
-        </View>
+        )}
+
         <Text
           selectable
           style={{
-            color: colors.textMuted,
+            color: palette.textMuted,
+            fontFamily: fonts.sans,
             fontSize: typography.meta.fontSize,
             lineHeight: typography.meta.lineHeight,
           }}
         >
-          {metaLine}
+          {actorName}
         </Text>
       </View>
-      {/* Chevron WAJIB ADA di baris yang bisa dibuka.
-          Dulu ada dua isyarat "bisa ditekan": bingkai kartu yang berubah jadi
-          hijau, dan chevron ini. Bingkainya hilang bersama kartunya, jadi
-          chevron kini satu-satunya isyarat yang tersisa — dan pembacanya pekerja
-          lanjut usia dengan literasi teknologi rendah. Umpan balik tekan di
-          bawah adalah saluran ketiga, tapi ia baru muncul SETELAH disentuh;
-          chevron yang memberi tahu sebelum disentuh. */}
-      {canOpenRecord ? <ChevronRightIcon color={colors.textSoft} size={20} /> : null}
+
+      {/* Chevron WAJIB ADA di baris yang bisa dibuka. Sejak kartunya dicabut, ia
+          satu-satunya isyarat "bisa ditekan" yang muncul SEBELUM disentuh — dan
+          pembacanya pekerja lanjut usia dengan literasi teknologi rendah.
+          Disejajarkan dengan baris pertama isinya lewat paddingTop, bukan ke
+          tengah baris yang tingginya berubah-ubah. */}
+      {canOpenRecord ? (
+        <View style={{ flexShrink: 0, paddingTop: spacing.sm }}>
+          <ChevronRightIcon color={colors.textSoft} size={20} />
+        </View>
+      ) : null}
     </>
   );
+
+  const rowStyle = {
+    flexDirection: 'row' as const,
+    gap: spacing.sm,
+  };
 
   if (canOpenRecord && routeRecordType) {
     return (
@@ -1263,7 +1408,6 @@ function TreeHistoryTimelineItem({
         style={({ pressed }) => ({
           ...rowStyle,
           backgroundColor: pressed ? tokens.color.surface.subtle : 'transparent',
-          opacity: dimmed ? PAST_CYCLE_OPACITY : 1,
         })}
       >
         {content}
@@ -1271,9 +1415,52 @@ function TreeHistoryTimelineItem({
     );
   }
 
-  return (
-    <View style={{ ...rowStyle, opacity: dimmed ? PAST_CYCLE_OPACITY : 1 }}>{content}</View>
-  );
+  return <View style={rowStyle}>{content}</View>;
+}
+
+// PENANDA BARIS TIMELINE, satu bentuk per jenis catatan (§4):
+//
+//   Kondisi   -> bentuk menurut STATUSNYA, dibaca dari CONDITION_BADGE.
+//   Fase      -> belah ketupat, markerFase.
+//   Perawatan -> kotak, markerPerawatan.
+//   Panen     -> lingkaran, markerPanen (= accent).
+//
+// Baris kondisi MEMBACA CONDITION_BADGE, bukan memetakan sendiri kondisi ke
+// rupanya. Tabel itu sudah melayani badge kondisi, sel denah, dan baris daftar
+// pohon; pemetaan kedua di sini berarti dua sumber untuk satu pertanyaan, dan
+// dua sumber selalu berakhir menyimpang — persis yang pernah terjadi sebelum
+// batch 5, saat setiap baris kondisi mendapat segitiga ambar apa pun kondisinya
+// sehingga baris "Sehat" tampil dengan penanda "perlu perhatian".
+//
+// markerPerawatan dan markerFase SENGAJA bukan warna status: jenis catatan bukan
+// masalah, dan aturan warna yang mengikat menyimpan warna status untuk masalah.
+// Keduanya rona netral yang berbeda gelapnya, dan yang membedakannya BENTUK.
+//
+// item.title pada baris kondisi berisi nilai enum mentah ('healthy',
+// 'needs_attention', ...) — lihat tree_history_view, yang menaruh
+// tcr.condition_status::text di kolom title. isTreeConditionStatus yang
+// menjaganya; kalau bentuknya ternyata lain, baris itu jatuh ke lingkaran netral
+// alih-alih menabrak indeks yang tidak ada.
+function TimelineMarker({ item }: { item: TreeHistoryItem }) {
+  if (item.historyType === 'condition') {
+    if (isTreeConditionStatus(item.title)) {
+      const visual = CONDITION_BADGE[item.title];
+
+      return <StatusMarker color={visual.markerColor} shape={visual.shape} />;
+    }
+
+    return <StatusMarker color={palette.textMuted} shape="circle-filled" />;
+  }
+
+  if (item.historyType === 'phase') {
+    return <StatusMarker color={palette.markerFase} shape="diamond" />;
+  }
+
+  if (item.historyType === 'harvest') {
+    return <StatusMarker color={palette.markerPanen} shape="circle-filled" />;
+  }
+
+  return <StatusMarker color={palette.markerPerawatan} shape="square" />;
 }
 
 // Judul baris riwayat: ISI catatannya, bukan nama jenisnya.
@@ -1538,93 +1725,10 @@ function PhotoThumbnail({ photoUrl }: { photoUrl: string }) {
   );
 }
 
-// Warna cakram di belakang penanda baris riwayat. NETRAL untuk SEMUA jenis.
-//
-// Dulu ia bercabang menurut jenis catatan, dan cabang `condition` mengembalikan
-// record.condition.bg — ambar. Sejak penanda kondisi membaca CONDITION_BADGE,
-// baris "Sehat" merender lingkaran kosong netral DI ATAS cakram ambar: penanda
-// berkata "tidak ada masalah", latarnya berkata "perlu perhatian", dan yang
-// kedua lebih besar dan lebih dulu terlihat. Satu baris tidak boleh membawa dua
-// jawaban untuk satu pertanyaan.
-//
-// Netral untuk semua, bukan hanya untuk kondisi: cakram berwarna menurut JENIS
-// catatan melanggar aturan warna yang mengikat — warna hanya muncul bila ada
-// masalah, dan "ini catatan panen" bukan masalah. Pembeda jenisnya tetap utuh
-// di tiga saluran lain: glif di dalam cakram (segitiga, bunga, keranjang,
-// semprot), nama jenis di baris meta, dan judul barisnya sendiri.
-//
-// PERBAIKAN SEMENTARA. Cakramnya dicabut seluruhnya di batch 7 bersama layar
-// Riwayat Pohon; yang dikerjakan di sini hanya menghentikannya berbohong.
-function getTimelineDotColor(_type: TreeHistoryType): string {
-  return palette.surfaceSunken;
-}
-
-function getTimelineTextColor(type: TreeHistoryType): string {
-  if (type === 'condition') {
-    return tokens.color.record.condition.text;
-  }
-
-  if (type === 'phase') {
-    return tokens.color.record.phase.text;
-  }
-
-  if (type === 'harvest') {
-    return tokens.color.record.harvest.text;
-  }
-
-  return tokens.color.record.care.text;
-}
-
-// Penanda baris timeline.
-//
-// BARIS KONDISI MEMBACA CONDITION_BADGE, tabel rupa kondisi pohon yang dibangun
-// di batch 1a — bukan ikon tetap menurut jenis catatan.
-//
-// Yang diperbaiki: sebelum ini SETIAP baris kondisi mendapat segitiga ambar,
-// apa pun kondisinya, karena fungsi ini hanya menerima `historyType` dan tidak
-// pernah melihat kondisi apa yang dicatat. Baris "Sehat" karena itu tampil
-// dengan penanda "perlu perhatian" — bukan kurang tepat, melainkan MENGABARKAN
-// KEBALIKANNYA, di layar yang gunanya membaca riwayat satu pohon.
-//
-// CONDITION_BADGE adalah satu-satunya tabel yang boleh memetakan kondisi ke
-// rupanya. Ia sudah melayani badge kondisi (ConditionStatusBadge), sel denah,
-// dan baris daftar pohon; pemetaan kedua di sini berarti dua sumber untuk satu
-// pertanyaan, dan dua sumber selalu berakhir menyimpang — persis seperti yang
-// baru saja terjadi.
-//
-// item.title pada baris kondisi berisi nilai enum mentah ('healthy',
-// 'needs_attention', ...) — lihat tree_history_view, yang menaruh
-// tcr.condition_status::text di kolom title. isTreeConditionStatus yang
-// menjaganya; kalau bentuknya ternyata lain, baris itu jatuh ke ikon lama
-// alih-alih menabrak indeks yang tidak ada.
-//
-// KETIGA JENIS LAIN TIDAK BERUBAH. Fase, panen, dan perawatan tidak punya
-// ragam yang perlu dibedakan di kiri baris — ikon jenisnya sudah benar.
-//
-// RUPA TIMELINE SELEBIHNYA SENGAJA TIDAK DISENTUH: lingkaran berlatar,
-// pembungkus Card, dan susunan barisnya dikerjakan di batch 7 bersama layar
-// Riwayat Pohon. Yang diperbaiki di sini hanya pemetaan yang SALAH.
-function getTimelineIcon(item: TreeHistoryItem, color: string) {
-  if (item.historyType === 'condition') {
-    if (isTreeConditionStatus(item.title)) {
-      const visual = CONDITION_BADGE[item.title];
-
-      return <StatusMarker color={visual.markerColor} shape={visual.shape} size={14} />;
-    }
-
-    return <AlertTriangleIcon color={color} size={18} />;
-  }
-
-  if (item.historyType === 'phase') {
-    return <FlowerIcon color={color} size={18} />;
-  }
-
-  if (item.historyType === 'harvest') {
-    return <BasketIcon color={color} size={18} />;
-  }
-
-  return <SprayIcon color={color} size={18} />;
-}
+// getTimelineDotColor, getTimelineTextColor, dan getTimelineIcon DICABUT di
+// batch 7b. Ketiganya melayani cakram berlatar di belakang penanda baris
+// riwayat; cakramnya hilang bersama pembungkus Card, dan penanda barisnya kini
+// dirakit TimelineMarker di atas. Tidak ada pemanggil lain di luar timeline itu.
 
 type BadgeTone = 'danger' | 'muted' | 'success' | 'warning';
 

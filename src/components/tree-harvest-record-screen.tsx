@@ -16,7 +16,9 @@ import { PHOTO_PROCESSING_MESSAGE, pickImageFromGallery, takePhotoFromCamera } f
 import type { Tree } from '../types/domain';
 import type { PickedPhotoAsset } from '../types/media';
 import { MAX_ANGKA_DESIMAL, parseDecimalInput, sanitizeDecimalInput } from '../utils/decimalInput';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { formatTreeContextLine } from '../utils/treeFormat';
+import { ConfirmDialog } from './bottom-sheet';
 import { useSnackbar } from './snackbar';
 import {
   Button,
@@ -40,8 +42,13 @@ export function TreeHarvestRecordScreen({
   treeId?: string;
 }) {
   const showSnackbar = useSnackbar();
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
+  // Titik nol pembanding "ada perubahan". Penginisialisasi useState hanya
+  // dibaca pada render pertama, jadi nilainya terkunci pada tanggal yang
+  // PERTAMA ditampilkan — bukan tanggal hari ini yang dihitung ulang.
+  const [initialEventDate] = React.useState(eventDate);
   const [fieldErrors, setFieldErrors] = React.useState<HarvestFormErrors>({});
   const [grade, setGrade] = React.useState<GradePanen | null>(null);
   const [beratKg, setBeratKg] = React.useState('');
@@ -280,6 +287,38 @@ export function TreeHarvestRecordScreen({
     return null;
   }
 
+  // PENJAGA PERUBAHAN BELUM DISIMPAN (batch 7b, langkah 2a).
+  //
+  // Sebelum ini, menekan chevron kembali di tengah pengisian membuang seluruh
+  // isian tanpa sepatah kata pun — termasuk foto yang baru saja diambil di
+  // kebun, yang tidak bisa diambil ulang begitu pohonnya ditinggalkan.
+  //
+  // Pola dan kata-katanya sama persis dengan lima layar edit yang sudah
+  // berpenjaga sejak batch 6; yang berbeda hanya kalimat dialognya, karena di
+  // sini yang hilang adalah CATATAN BARU, bukan perubahan atas catatan lama.
+  const hasUnsavedChanges = grade !== null ||
+    beratKg.trim() !== '' ||
+    fruitCount.trim() !== '' ||
+    note.trim() !== '' ||
+    selectedPhoto !== null ||
+    eventDate !== initialEventDate;
+
+  const { handleBackPress } = useUnsavedChangesGuard({
+    // Saat penyimpanan atau pemrosesan foto berjalan, dialog tidak ditawarkan:
+    // tidak ada gunanya menanyakan "buang isian" untuk isian yang sedang
+    // dikirim, dan keluar di tengah pemrosesan foto akan meninggalkan pekerjaan
+    // yang hasilnya tidak punya tujuan.
+    hasUnsavedChanges: hasUnsavedChanges && !submitting && !processingPhoto,
+    onBlocked: () => setConfirmDiscard(true),
+    onLeave: () => {
+      if (submitting) {
+        return;
+      }
+
+      router.back();
+    },
+  });
+
   if (loading) {
     return (
       <LoadingState
@@ -295,7 +334,7 @@ export function TreeHarvestRecordScreen({
     // lalu isian angkanya, lalu tanggal, foto, catatan, Simpan.
     <Screen
       autoScrollOnFocus
-      header={<TopAppBar title="Catat panen" onBack={() => router.back()} />}
+      header={<TopAppBar title="Catat panen" onBack={handleBackPress} />}
       stickyFooter={<Button title="Simpan" loading={submitting} onPress={handleSubmit} />}
     >
       <ErrorBanner message={error} />
@@ -420,6 +459,23 @@ export function TreeHarvestRecordScreen({
         onChangeText={setNote}
         placeholder="Keterangan tambahan tentang panen ini"
         value={note}
+      />
+
+      {/* Dialog penjaga. Tombol batalnya yang merusak ("Buang isian"), dan
+          tombol utamanya yang aman ("Lanjut isi") — susunan yang sama dengan
+          seluruh dialog penjaga lain di aplikasi ini. */}
+      <ConfirmDialog
+        cancelLabel="Buang isian"
+        cancelTone="danger"
+        confirmLabel="Lanjut isi"
+        message="Catatan panen ini belum disimpan. Kalau keluar sekarang, isian itu hilang."
+        onCancel={() => {
+          setConfirmDiscard(false);
+          router.back();
+        }}
+        onConfirm={() => setConfirmDiscard(false)}
+        title="Isian belum disimpan"
+        visible={confirmDiscard}
       />
     </Screen>
   );

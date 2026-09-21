@@ -15,6 +15,7 @@ import { formatCareCategory } from '../utils/displayFormat';
 // kedua melewatkan string itu ke new Date(), yang menafsirkannya sebagai tengah
 // malam UTC. Kalimat konfirmasi ini yang dibaca orang sebelum menulis sesuatu
 // yang tidak bisa dibatalkan — tanggalnya tidak boleh meleset.
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { formatFullDate } from '../utils/taskDueDate';
 import { formatTreeDisplayCode } from '../utils/treeFormat';
 import { ConfirmDialog } from './bottom-sheet';
@@ -217,7 +218,12 @@ export function FarmCareRecordScreen() {
   const [confirmVisible, setConfirmVisible] = React.useState(false);
   const [dropped, setDropped] = React.useState<DroppedPositions>(NO_DROPPED);
   const [error, setError] = React.useState<string | null>(null);
+  const [discardVisible, setDiscardVisible] = React.useState(false);
   const [eventDate, setEventDate] = React.useState(formatDateInput(new Date()));
+  // Titik nol pembanding "ada perubahan". Penginisialisasi useState hanya
+  // dibaca pada render pertama, jadi nilainya terkunci pada tanggal yang
+  // PERTAMA ditampilkan.
+  const [initialEventDate] = React.useState(eventDate);
   const [expanded, setExpanded] = React.useState(false);
   const [fieldErrors, setFieldErrors] = React.useState<CareFormErrors>({});
   const [loading, setLoading] = React.useState(true);
@@ -428,6 +434,29 @@ export function FarmCareRecordScreen() {
     setRecordedCount(stillPlanted.length);
   }
 
+  // PENJAGA PERUBAHAN BELUM DISIMPAN (batch 7b, langkah 2a).
+  //
+  // recordedCount TERISI berarti catatannya sudah tersimpan dan modal hasil
+  // sedang terbuka; sejak titik itu tidak ada lagi isian yang bisa hilang, dan
+  // penjaga yang tetap menyala hanya akan menghalangi jalan pulang.
+  const hasUnsavedChanges =
+    category !== '' ||
+    produk.trim() !== '' ||
+    note.trim() !== '' ||
+    eventDate !== initialEventDate;
+
+  const { handleBackPress } = useUnsavedChangesGuard({
+    hasUnsavedChanges: hasUnsavedChanges && !submitting && recordedCount === null,
+    onBlocked: () => setDiscardVisible(true),
+    onLeave: () => {
+      if (submitting) {
+        return;
+      }
+
+      goBackToMap();
+    },
+  });
+
   if (loading) {
     return (
       <LoadingState
@@ -439,7 +468,7 @@ export function FarmCareRecordScreen() {
 
   return (
     <Screen
-      header={<TopAppBar title="Catat perawatan" onBack={goBackToMap} />}
+      header={<TopAppBar title="Catat perawatan" onBack={handleBackPress} />}
       stickyFooter={
         <Button
           disabled={trees.length === 0}
@@ -615,6 +644,22 @@ export function FarmCareRecordScreen() {
           }
         }}
         onConfirm={() => void handleConfirmedSave()}
+      />
+
+      {/* Dialog KEDUA, terpisah dari konfirmasi simpan di atas: yang satu
+          menanyakan "jadi dicatat?", yang ini "jadi dibuang?". */}
+      <ConfirmDialog
+        cancelLabel="Buang isian"
+        cancelTone="danger"
+        confirmLabel="Lanjut isi"
+        message="Catatan perawatan ini belum disimpan. Kalau keluar sekarang, isian itu hilang."
+        onCancel={() => {
+          setDiscardVisible(false);
+          goBackToMap();
+        }}
+        onConfirm={() => setDiscardVisible(false)}
+        title="Isian belum disimpan"
+        visible={discardVisible}
       />
 
       <CareRecordedModal categoryLabel={categoryLabel} onDone={goBackToMap} treeCount={recordedCount} />

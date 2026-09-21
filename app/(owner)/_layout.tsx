@@ -98,16 +98,44 @@ export default function OwnerLayout() {
           <Stack.Screen name="owner/trees/index" options={{ headerShown: false, title: 'Pohon' }} />
           <Stack.Screen name="owner/trees/create" options={{ headerShown: false, title: 'Tambah Pohon' }} />
           <Stack.Screen name="owner/trees/map" options={{ headerShown: false, title: 'Denah Kebun' }} />
-          <Stack.Screen name="owner/trees/record-care" options={{ headerShown: false, title: 'Catat Perawatan' }} />
-          <Stack.Screen name="owner/trees/add-trees" options={{ headerShown: false, title: 'Tambah Pohon Massal' }} />
+          {/* gestureEnabled:false — pasangan wajib useUnsavedChangesGuard yang
+              dipasang di dalam ketujuh layar catat/buat di batch 7b. Alasannya
+              sama persis dengan layar edit di atas: swipe-back iOS tidak bisa
+              dicegat lewat API publik expo-router, jadi ia dimatikan supaya
+              isian yang belum disimpan tidak bisa hilang lewat gestur. Back
+              tetap ada di chevron, dan chevron itulah yang menanyakan
+              konfirmasinya. */}
+          <Stack.Screen
+            name="owner/trees/record-care"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Catat Perawatan' }}
+          />
+          <Stack.Screen
+            name="owner/trees/add-trees"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Tambah Pohon Massal' }}
+          />
           <Stack.Screen name="owner/trees/[treeId]" options={{ headerShown: false, title: 'Detail Pohon' }} />
           <Stack.Screen name="owner/trees/[treeId]/edit" options={{ headerShown: false, title: 'Edit Pohon' }} />
-          <Stack.Screen name="owner/trees/[treeId]/report" options={{ headerShown: false, title: 'Catat Kondisi' }} />
-          <Stack.Screen name="owner/trees/[treeId]/phase" options={{ headerShown: false, title: 'Catat Fase' }} />
-          <Stack.Screen name="owner/trees/[treeId]/care" options={{ headerShown: false, title: 'Catat Perawatan' }} />
-          <Stack.Screen name="owner/trees/[treeId]/harvest" options={{ headerShown: false, title: 'Catat Panen' }} />
+          <Stack.Screen
+            name="owner/trees/[treeId]/report"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Catat Kondisi' }}
+          />
+          <Stack.Screen
+            name="owner/trees/[treeId]/phase"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Catat Fase' }}
+          />
+          <Stack.Screen
+            name="owner/trees/[treeId]/care"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Catat Perawatan' }}
+          />
+          <Stack.Screen
+            name="owner/trees/[treeId]/harvest"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Catat Panen' }}
+          />
           <Stack.Screen name="owner/schedules/index" options={{ headerShown: false, title: 'Jadwal Perawatan' }} />
-          <Stack.Screen name="owner/schedules/create" options={{ headerShown: false, title: 'Jadwal Manual' }} />
+          <Stack.Screen
+            name="owner/schedules/create"
+            options={{ gestureEnabled: false, headerShown: false, title: 'Jadwal Manual' }}
+          />
           <Stack.Screen name="owner/schedules/[scheduleId]" options={{ headerShown: false, title: 'Detail Jadwal' }} />
           {/* gestureEnabled:false — pasangan wajib useUnsavedChangesGuard di
               dalam layar itu (batch 6b), alasan yang sama persis dengan
