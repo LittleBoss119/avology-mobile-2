@@ -58,7 +58,21 @@ export const colors = {
   photoPlaceholderB: '#EFEAE2',
   photoFailBg: '#F0E7E4',
 
-  // HANYA untuk logo dan splash. Antarmuka tidak memakai hijau sama sekali.
+  // Hijau merek. Sejak latar ikon dan splash berganti ke terakota, hijau HANYA
+  // hidup DI DALAM tanda alpukat — tidak lagi sebagai bidang latar di mana pun,
+  // termasuk ikon, splash, dan kotak BrandMark. Antarmuka tetap tanpa hijau.
+  //
+  // KENAPA LATARNYA PINDAH: #1E5134 adalah hijau DINGIN, sedangkan seluruh palet
+  // ini hangat (kertas #F7F4EF, tinta #211D18, terakota #B4552E), sehingga
+  // bidang hijau terbaca sebagai benda asing yang ditempel dari aplikasi lain.
+  // Latar ikon dan splash kini `accent` (#B4552E) — warna tombol utama — jadi
+  // splash mengalir langsung ke layar Pembuka tanpa lompatan warna.
+  //
+  // TOKEN INI SENGAJA DIBIARKAN. Catatan terus terang: nilainya tidak persis
+  // warna daun pada aset tanda (daun di icon.png dan adaptive-icon.png berwarna
+  // #97C459, badan #EAF3DE). Tidak ada kode yang membacanya lagi sejak BrandMark
+  // pindah ke accent; ia dipertahankan sebagai catatan hijau merek, bukan
+  // sebagai warna yang sedang dipakai layar mana pun.
   brandGreen: '#1E5134',
 
   // Penanda timeline riwayat pohon. markerPerawatan sengaja bernilai sama

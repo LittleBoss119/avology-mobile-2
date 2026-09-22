@@ -903,13 +903,17 @@ export function BrandMark({
       <View
         style={{
           alignItems: 'center',
-          // brandGreen, BUKAN palette.accent. Ini satu-satunya tempat di seluruh
-          // antarmuka yang boleh memakai hijau, bersama splash — dan ia bukan
-          // warna baru di layar, melainkan KOREKSI: kotak ini cuma cadangan di
-          // belakang icon.png, dan icon.png itu sendiri berlatar hijau. Selama
-          // cadangannya jingga, satu-satunya keadaan yang menampilkannya —
-          // aset gagal dimuat — menampilkan warna yang salah.
-          backgroundColor: palette.brandGreen,
+          // accent, BUKAN lagi brandGreen. Kotak ini cadangan di belakang
+          // icon.png, dan icon.png kini berlatar terakota #B4552E — nilai yang
+          // SAMA PERSIS dengan accent. Cadangan yang warnanya berbeda dari aset
+          // di depannya akan tampil salah justru pada satu-satunya keadaan yang
+          // memperlihatkannya: aset gagal dimuat.
+          //
+          // Hijau #1E5134 dicabut dari latar karena ia hijau dingin di tengah
+          // palet yang seluruhnya hangat, dan terbaca sebagai benda asing.
+          // Terakota adalah warna tombol utama, jadi splash, ikon, dan layar
+          // Pembuka kini satu keluarga warna tanpa lompatan.
+          backgroundColor: palette.accent,
           borderColor: colors.primaryBorder,
           borderCurve: 'continuous',
           borderRadius: compact ? radius.lg : radius['2xl'],
@@ -920,7 +924,7 @@ export function BrandMark({
         }}
       >
         <Image
-          // icon.png sudah membawa latar hijaunya sendiri, jadi backgroundColor
+          // icon.png sudah membawa latar terakotanya sendiri, jadi backgroundColor
           // kotak di atas tinggal berfungsi sebagai fallback kalau aset gagal
           // dimuat — dalam keadaan normal ia tertutup penuh oleh gambar.
           source={require('../../assets/icon.png')}

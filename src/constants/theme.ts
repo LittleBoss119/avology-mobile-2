@@ -11,8 +11,9 @@ import { colors as palette } from '../theme/tokens';
 // peran DOMINAN-nya. Titik pakai minoritas sudah dialihkan langsung ke token
 // yang benar di berkas masing-masing — lihat catatan batch 0.
 //
-// Hijau tidak dipakai di antarmuka sama sekali. palette.brandGreen hanya untuk
-// logo dan splash.
+// Hijau tidak dipakai di antarmuka sama sekali. Sejak latar ikon dan splash
+// berganti ke terakota (accent), hijau hanya hidup di dalam tanda alpukat —
+// lihat catatan palette.brandGreen di src/theme/tokens.ts.
 
 export const colors = {
   primaryGreen: palette.accentText,

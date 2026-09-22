@@ -3,7 +3,7 @@
     "name": "Avology",
     "slug": "avology-mobile-v2",
     "scheme": "avology",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -18,7 +18,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/adaptive-icon-monochrome.png",
-        "backgroundColor": "#1E5134"
+        "backgroundColor": "#B4552E"
       }
     },
     "plugins": [
@@ -35,7 +35,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#1E5134",
+          "backgroundColor": "#B4552E",
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain"
         }

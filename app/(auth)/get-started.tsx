@@ -45,9 +45,10 @@ export default function GetStartedScreen() {
             sama lain memikul satu tanda merek, sehingga jarak antara logo dan
             namanya ditentukan gap layar ini, bukan oleh merek itu sendiri.
 
-            Ini satu-satunya layar selain splash yang menampilkan hijau, dan
-            hijaunya ada DI DALAM BrandMark. Jangan membawa brandGreen ke layar
-            mana pun yang lain. */}
+            Kotak BrandMark kini berlatar terakota (accent), SAMA dengan latar
+            splash — jadi saat splash selesai, logonya tidak berganti warna di
+            bawah jari. Hijau yang tersisa di layar ini hanya daun di dalam
+            tanda alpukat. Jangan membawa bidang hijau ke layar mana pun. */}
         <BrandMark align="center" tagline="Kelola kebun alpukat dengan lebih rapi." />
       </View>
     </Screen>
